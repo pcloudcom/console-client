@@ -38,9 +38,10 @@ typedef struct {
 #define PSTATUS_ACCOUNT_FULL            6
 #define PSTATUS_DISK_FULL               7
 #define PSTATUS_PAUSED                  8
-#define PSTATUS_OFFLINE                 9
-#define PSTATUS_CONNECTING             10
-#define PSTATUS_USER_MISMATCH          11
+#define PSTATUS_STOPPED                 9
+#define PSTATUS_OFFLINE                10
+#define PSTATUS_CONNECTING             11
+#define PSTATUS_USER_MISMATCH          12
 
 typedef struct {
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */
@@ -74,6 +75,7 @@ typedef struct {
 
 #define PERROR_LOCAL_FOLDER_NOT_FOUND  1
 #define PERROR_REMOTE_FOLDER_NOT_FOUND 2
+#define PERROR_DATABASE_OPEN           3
 
 typedef struct {
   const char *localname;
@@ -93,6 +95,10 @@ typedef struct {
 #ifdef __cplusplus
 extern "C" {
 #endif
+  
+typedef void *(*psync_malloc_t)(size_t);
+typedef void *(*psync_realloc_t)(void *, size_t);
+typedef void (*psync_free_t)(void *);
   
 /* Status change callback is called every time value is changed. It may be called quite often
  * when there are active uploads/downloads. Callbacks are issued from a special callback thread
@@ -116,9 +122,35 @@ typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *
  * run of psync_init(). 
  * 
  * Returns 0 on success and -1 otherwise.
+ * 
+ * psync_destroy is to be called before application exit. This is not neccessary.
+ * In any case psync_destroy will return relatively fast, regardless of blocked
+ * network calls and other potentially slow to finish tasks.
+ * 
+ * psync_set_alloc can set the allocator to be used by the library. To be called
+ * BEFORE psync_init if ever.
+ * 
+ * psync_database_path can set a full path to database file. If it does not exists
+ * it will be created. The function should be only called before psync_init. If
+ * database path is not set, appropriate location for the given OS will be chosen.
+ * The library will make it's own copy of the path, so the memory can be free()d/reused
+ * after the function returns. The path is not checked by the function itself, if it is
+ * invalid (directory does not exist, it is not writable, etc) psync_init will return
+ * -1 and the error code will be PERROR_DATABASE_OPEN. In this condition it is safe to
+ * call psync_database_path and psync_init again. A special value of ":memory:" for 
+ * databasepath will create in-memory database that will not be preserved between runs.
+ * An empty string will create the database in a temporary file, the net effect being
+ * similar to the ":memory:" option with less pressure on the required memory. The
+ * underlying database is in fact SQLite, so any other options that work for SQLite will
+ * work here.
+ * 
  */
 
+void psync_database_path(const char *databasepath);
+void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call);
+
 int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
+void psync_destroy();
 
 /* returns current status.
  */
@@ -136,9 +168,9 @@ void psync_get_status(pstatus_t *status);
  */
 
 char *psync_get_username();
-void psync_set_user_pass(const char *username, const char *password);
-void psync_set_pass(const char *password);
-void psync_set_auth(const char *auth);
+void psync_set_user_pass(const char *username, const char *password, int save);
+void psync_set_pass(const char *password, int save);
+void psync_set_auth(const char *auth, int save);
 void psync_unlink();
 
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,
@@ -175,16 +207,23 @@ pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid);
 
 /* Returns the code of the last error that occured when calling psync_* functions
  * in the given thread. The error is one of PERROR_* constants.
- * 
  */
 
 uint32_t psync_get_last_error();
 
-/* Pause and resume the sync.
+/* Pause stops the sync, but both local and remote directories are still
+ * monitored for updates and status updates are still received with updated
+ * filestoupload/filestodownload and others.
  * 
+ * Stop stops all the actions of the library. No network traffic and no local
+ * scans are to be expected after this call. No status updates callback except
+ * the one setting PSTATUS_STOPPED status.
+ * 
+ * Resume will restart all operations in both paused and stopped state.
  */
 
 int psync_pause();
+int psync_stop();
 int psync_resume();
 
 
