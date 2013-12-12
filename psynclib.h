@@ -40,7 +40,7 @@ typedef struct {
 #define PSTATUS_PAUSED                  8
 #define PSTATUS_OFFLINE                 9
 #define PSTATUS_CONNECTING             10
-#define PSTATUS_USER_MISTMATCH         11
+#define PSTATUS_USER_MISMATCH          11
 
 typedef struct {
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */
@@ -120,9 +120,14 @@ typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *
 
 int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
 
+/* returns current status.
+ */
+
+void psync_get_status(pstatus_t *status);
+
 /* psync_set_user_pass and psync_set_auth functions can be used for initial login 
  * (PSTATUS_LOGIN_REQUIRED) and when PSTATUS_BAD_LOGIN_DATA error is returned, however
- * if the username do not match previously logged in user, PSTATUS_USER_MISTMATCH event
+ * if the username do not match previously logged in user, PSTATUS_USER_MISMATCH event
  * will be generated. Preferably on PSTATUS_BAD_LOGIN_DATA the user should be only prompted
  * for new password and psync_set_pass should be called. To change the current user, psync_unlink
  * is to be called first and then the new user may log in.
@@ -174,6 +179,15 @@ pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid);
  */
 
 uint32_t psync_get_last_error();
+
+/* Pause and resume the sync.
+ * 
+ */
+
+int psync_pause();
+int psync_resume();
+
+
   
 #ifdef __cplusplus
 }
