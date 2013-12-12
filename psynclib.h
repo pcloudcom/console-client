@@ -76,6 +76,7 @@ typedef struct {
 #define PERROR_LOCAL_FOLDER_NOT_FOUND  1
 #define PERROR_REMOTE_FOLDER_NOT_FOUND 2
 #define PERROR_DATABASE_OPEN           3
+#define PERROR_NO_HOMEDIR              4
 
 typedef struct {
   const char *localname;
