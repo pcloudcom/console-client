@@ -3,17 +3,23 @@
 
 #include <stdint.h>
 
+#if (defined(LINUX) || defined(MACOSX)) && !defined(POSIX)
+#define POSIX
+#endif
+
 #if defined(POSIX)
 
 #include <sys/socket.h>
 
-typedef psync_socket_t int;
+typedef int psync_socket_t;
+
 #elif defined(WINDOWS)
 
 #include <winsock2.h>
 #include <Ws2tcpip.h>
 
-typedef psync_socket_t SOCKET;
+typedef SOCKET psync_socket_t;
+
 #else
 #error "Need to define types for your operating system"
 #endif

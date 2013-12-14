@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <time.h>
 #include <pthread.h>
-#include <sqlite3.h>
 #include "plibs.h"
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]"};
@@ -257,6 +256,95 @@ psync_variant *psync_sql_row(const char *sql){
     psync_sql_unlock();
     if (code!=SQLITE_DONE)
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
+    return NULL;
+  }
+}
+
+psync_sql_res *psync_sql_query(const char *sql){
+  sqlite3_stmt *stmt;
+  psync_sql_res *res;
+  int code, cnt;
+  psync_sql_lock();
+  code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
+  if (code!=SQLITE_OK){
+    psync_sql_unlock();
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    return NULL;
+  }
+  cnt=sqlite3_column_count(stmt);
+  res=(psync_sql_res *)psync_malloc(sizeof(psync_sql_res)+cnt*sizeof(psync_variant));
+  res->stmt=stmt;
+  res->column_count=cnt;
+  return res;
+}
+
+void psync_sql_free_result(psync_sql_res *res){
+  sqlite3_finalize(res->stmt);
+  psync_sql_unlock();
+  psync_free(res);
+}
+
+psync_variant *psync_sql_fetch_row(psync_sql_res *res){
+  int code, i;
+  code=sqlite3_step(res->stmt);
+  if (code==SQLITE_ROW){
+    for (i=0; i<res->column_count; i++){
+      code=sqlite3_column_type(res->stmt, i);
+      if (code==SQLITE_INTEGER){
+        res->row[i].type=PSYNC_TNUMBER;
+        res->row[i].snum=sqlite3_column_int64(res->stmt, i);
+      }
+      else if (code==SQLITE_TEXT || code==SQLITE_BLOB){
+        res->row[i].type=PSYNC_TSTRING;
+        res->row[i].length=sqlite3_column_bytes(res->stmt, i);
+        res->row[i].str=(char *)sqlite3_column_text(res->stmt, i);
+      }
+      else if (code==SQLITE_FLOAT){
+        res->row[i].type=PSYNC_TREAL;
+        res->row[i].real=sqlite3_column_double(res->stmt, i);
+      }
+      else
+        res->row[i].type=PSYNC_TNULL;
+    }
+    return res->row;
+  }
+  else {
+    if (code!=SQLITE_DONE)
+      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+    return NULL;
+  }
+}
+
+char **psync_sql_fetch_rowstr(psync_sql_res *res){
+  int code, i;
+  char **strs;
+  code=sqlite3_step(res->stmt);
+  if (code==SQLITE_ROW){
+    strs=(char **)res->row;
+    for (i=0; i<res->column_count; i++)
+      strs[i]=(char *)sqlite3_column_text(res->stmt, i);
+    return strs;
+  }
+  else {
+    if (code!=SQLITE_DONE)
+      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+    return NULL;
+  }
+}
+
+int64_t *psync_sql_fetch_rowint(psync_sql_res *res){
+  int code, i;
+  int64_t *ret;
+  code=sqlite3_step(res->stmt);
+  if (code==SQLITE_ROW){
+    ret=(int64_t *)res->row;
+    for (i=0; i<res->column_count; i++)
+      ret[i]=sqlite3_column_int64(res->stmt, i);
+    return ret;
+  }
+  else {
+    if (code!=SQLITE_DONE)
+      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
     return NULL;
   }
 }

@@ -1,6 +1,8 @@
 #ifndef _PSYNC_LIBS_H
 #define _PSYNC_LIBS_H
 
+#include <sqlite3.h>
+
 #include "pcompat.h"
 #include "psynclib.h"
 
@@ -49,6 +51,12 @@ typedef struct {
   };
 } psync_variant;
 
+typedef struct {
+  sqlite3_stmt *stmt;
+  int column_count;
+  psync_variant row[];
+} psync_sql_res;
+
 extern int psync_do_run;
 extern pstatus_t psync_status;
 
@@ -65,6 +73,11 @@ char *psync_sql_cellstr(const char *sql);
 int64_t psync_sql_cellint(const char *sql, int64_t dflt);
 char **psync_sql_rowstr(const char *sql);
 psync_variant *psync_sql_row(const char *sql);
+psync_sql_res *psync_sql_query(const char *sql);
+void psync_sql_free_result(psync_sql_res *res);
+psync_variant *psync_sql_fetch_row(psync_sql_res *res);
+char **psync_sql_fetch_rowstr(psync_sql_res *res);
+int64_t *psync_sql_fetch_rowint(psync_sql_res *res);
 
 void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...)
 #if defined(__GNUC__)
