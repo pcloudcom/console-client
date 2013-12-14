@@ -42,7 +42,16 @@ char *psync_get_default_database_path(){
 #endif
 }
 
+void psync_yield_cpu(){
+#if defined(_POSIX_PRIORITY_SCHEDULING)
+  sched_yield();
+#else
+  psync_milisleep(1);
+#endif
+}
+
 static void thread_started(){
+  psync_yield_cpu();
 }
 
 static void thread_exited(){

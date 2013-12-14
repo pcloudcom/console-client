@@ -41,6 +41,7 @@ char *psync_get_default_database_path();
 void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t milisec);
+void psync_yield_cpu();
 
 #if defined(WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

@@ -11,6 +11,7 @@ static int statusthreadrunning=0;
 
 static void status_change_thread(void *ptr){
   pstatus_change_callback_t callback=(pstatus_change_callback_t)ptr;
+  psync_milisleep(5);
   while (1){
     pthread_mutex_lock(&statusmutex);
     while (!statuschanges)

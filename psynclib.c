@@ -39,12 +39,12 @@ int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t even
   }
   if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE))
     return_error(PERROR_DATABASE_OPEN);
+  psync_status_init();
+  psync_run_thread(psync_diff_thread);
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
     psync_set_event_callback(event_callback);
-  psync_status_init();
-  psync_run_thread(psync_diff_thread);
   return 0;
 }
 
