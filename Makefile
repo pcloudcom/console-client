@@ -22,7 +22,7 @@ else
     endif
 endif
 
-OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o
+OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o
 
 all: $(LIB_A)
 

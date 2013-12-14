@@ -47,3 +47,11 @@ int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t even
   psync_run_thread(psync_diff_thread);
   return 0;
 }
+
+void psync_destroy(){
+  psync_do_run=0;
+  psync_send_status_update();
+  psync_milisleep(20);
+  psync_sql_lock();
+  psync_sql_close();
+}

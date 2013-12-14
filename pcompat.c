@@ -103,8 +103,16 @@ void psync_milisleep(uint64_t milisec){
   tm.tv_nsec=(milisec%1000)*1000000;
   nanosleep(&tm, NULL);
 #elif defined(WINDOWS)
-#error "Need Windows implementation"
+  Sleep(milisec);
 #else
 #error "Function not implemented for your operating system"
 #endif
 }
+
+#if defined(WINDOWS)
+struct tm *gmtime_r(const time_t *timep, struct tm *result){
+  struct tm *res=gmtime(timep);
+  *result=*res;
+  return result;
+}
+#endif

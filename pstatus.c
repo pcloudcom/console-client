@@ -6,6 +6,8 @@
 #define RUN_STATUS_PAUSE 2
 #define RUN_STATUS_STOP  3
 
+#define TO_STR(s) #s
+
 static int run_status;
 
 void psync_status_init(){
@@ -13,7 +15,7 @@ void psync_status_init(){
   run_status=psync_sql_cellint("SELECT value FROM settings WHERE id='runstatus'", 0);
   if (run_status<RUN_STATUS_RUN || run_status>RUN_STATUS_STOP){
     run_status=RUN_STATUS_RUN;
-    psync_sql_statement("REPLACE INTO settings (id, value) VALUES ('runstatus', " #RUN_STATUS_RUN ")");
+    psync_sql_statement("REPLACE INTO settings (id, value) VALUES ('runstatus', " TO_STR(RUN_STATUS_RUN) ")");
   }
 }
 
