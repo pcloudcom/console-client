@@ -305,6 +305,48 @@ psync_sql_res *psync_sql_query(const char *sql){
   return res;
 }
 
+psync_sql_res *psync_sql_prep_statement(const char *sql){
+  sqlite3_stmt *stmt;
+  psync_sql_res *res;
+  int code;
+  psync_sql_lock();
+  code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
+  if (code!=SQLITE_OK){
+    psync_sql_unlock();
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    return NULL;
+  }
+  res=(psync_sql_res *)psync_malloc(sizeof(psync_sql_res));
+  res->stmt=stmt;
+  return res;
+}
+
+void psync_sql_run(psync_sql_res *res){
+  int code=sqlite3_step(res->stmt);
+  if (code!=SQLITE_DONE)
+    debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+  code=sqlite3_reset(res->stmt);
+  if (code!=SQLITE_OK)
+    debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
+}
+
+void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val){
+  int code=sqlite3_bind_int64(res->stmt, n, val);
+  if (code!=SQLITE_OK)
+    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
+}
+
+void psync_sql_bind_string(psync_sql_res *res, int n, const char *str){
+  int code=sqlite3_bind_text(res->stmt, n, str, -1, SQLITE_STATIC);
+  if (code!=SQLITE_OK)
+    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));}
+
+void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len){
+  int code=sqlite3_bind_blob(res->stmt, n, str, len, SQLITE_STATIC);
+  if (code!=SQLITE_OK)
+    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
+}
+
 void psync_sql_free_result(psync_sql_res *res){
   sqlite3_finalize(res->stmt);
   psync_sql_unlock();
@@ -451,26 +493,26 @@ static const char *get_type_name(uint32_t t){
 }
 
 uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v){
-  if (D_ERROR<=DEBUG_LEVEL)
-    psync_debug(file, function, line, D_ERROR, "type error, wanted %s got %s", get_type_name(PSYNC_TNUMBER), get_type_name(v->type));
+  if (D_CRITICAL<=DEBUG_LEVEL)
+    psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TNUMBER), get_type_name(v->type));
   return 0;
 }
 
 const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v){
-  if (D_ERROR<=DEBUG_LEVEL)
-    psync_debug(file, function, line, D_ERROR, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
+  if (D_CRITICAL<=DEBUG_LEVEL)
+    psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
   return "";
 }
 
 const char *psync_err_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len){
-  if (D_ERROR<=DEBUG_LEVEL)
-    psync_debug(file, function, line, D_ERROR, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
+  if (D_CRITICAL<=DEBUG_LEVEL)
+    psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
   *len=0;
   return "";
 }
 
 double psync_err_real_expected(const char *file, const char *function, int unsigned line, psync_variant *v){
-  if (D_ERROR<=DEBUG_LEVEL)
-    psync_debug(file, function, line, D_ERROR, "type error, wanted %s got %s", get_type_name(PSYNC_TREAL), get_type_name(v->type));
+  if (D_CRITICAL<=DEBUG_LEVEL)
+    psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TREAL), get_type_name(v->type));
   return 0.0;
 }

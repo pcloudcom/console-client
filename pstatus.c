@@ -49,6 +49,18 @@ static uint32_t psync_calc_status(){
       return -1;
     }
   }
+  if (statuses[PSTATUS_TYPE_AUTH]!=PSTATUS_AUTH_PROVIDED){
+    if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_REQURED)
+      return PSTATUS_LOGIN_REQUIRED;
+    else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_MISMATCH)
+      return PSTATUS_USER_MISMATCH;
+    else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_BADLOGIN)
+      return PSTATUS_BAD_LOGIN_DATA;
+    else {
+      debug(D_BUG, "invalid PSTATUS_TYPE_AUTH %d", statuses[PSTATUS_TYPE_AUTH]);
+      return -1;
+    }
+  }
   if (statuses[PSTATUS_TYPE_ONLINE]!=PSTATUS_ONLINE_ONLINE){
     if (statuses[PSTATUS_TYPE_ONLINE]==PSTATUS_ONLINE_CONNECTING)
       return PSTATUS_CONNECTING;

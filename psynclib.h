@@ -87,7 +87,6 @@ typedef struct {
   uint32_t downloadspeed; /* in bytes/sec */
   uint8_t remoteisfull; /* account is full and no files will be synced upwards*/
   uint8_t localisfull; /* (some) local hard drive is full and no files will be synced from the cloud */
-  uint8_t needaction; /* current state requires an action in order to resume/start sync, e.g. login is required */
 } pstatus_t;
 
 #define PEVENT_LOCAL_FOLDER_CREATED   1
@@ -150,12 +149,21 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
 
 typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *localpath, const char *remotepath);
 
-/* Init the sync library. Both callbacks can be NULL, but most of the time setting
- * at least status_callback will make sense. Applications should expect immediate
- * status_callback with needaction set and status of PSTATUS_LOGIN_REQUIRED after first
- * run of psync_init(). 
+/* psync_init inits the sync library. No network or local scan operations are initiated
+ * by this call, call psync_start_sync to start those. However listing remote folders,
+ * listing and editing syncs is supported.
  * 
  * Returns 0 on success and -1 otherwise.
+ * 
+ * psync_start_sync starts remote sync, both callbacks can be NULL, but most of the time setting
+ * at least status_callback will make sense. Applications should expect immediate
+ * status_callback with status of PSTATUS_LOGIN_REQUIRED after first run of psync_start_sync().
+ * 
+ * psync_download_state is to be called after psync_init but before/instead of psync_start_sync.
+ * This function downloads the directory structure into the local state in foreground (e.g. it can
+ * take time to complete). It returns one of PSTATUS_-es, specifically PSTATUS_READY, PSTATUS_OFFLINE
+ * or one of login-related statuses. After a successful call to this function remote folder listing can
+ * be preformed.
  * 
  * psync_destroy is to be called before application exit. This is not neccessary.
  * In any case psync_destroy will return relatively fast, regardless of blocked
@@ -164,14 +172,14 @@ typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *
  * psync_set_alloc can set the allocator to be used by the library. To be called
  * BEFORE psync_init if ever.
  * 
- * psync_database_path can set a full path to database file. If it does not exists
+ * psync_set_database_path can set a full path to database file. If it does not exists
  * it will be created. The function should be only called before psync_init. If
  * database path is not set, appropriate location for the given OS will be chosen.
  * The library will make it's own copy of the path, so the memory can be free()d/reused
  * after the function returns. The path is not checked by the function itself, if it is
  * invalid (directory does not exist, it is not writable, etc) psync_init will return
  * -1 and the error code will be PERROR_DATABASE_OPEN. In this condition it is safe to
- * call psync_database_path and psync_init again. A special value of ":memory:" for 
+ * call psync_set_database_path and psync_init again. A special value of ":memory:" for 
  * databasepath will create in-memory database that will not be preserved between runs.
  * An empty string will create the database in a temporary file, the net effect being
  * similar to the ":memory:" option with less pressure on the required memory. The
@@ -180,10 +188,12 @@ typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *
  * 
  */
 
-void psync_database_path(const char *databasepath);
+void psync_set_database_path(const char *databasepath);
 void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call);
 
-int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
+int psync_init();
+void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
+uint32_t psync_download_state();
 void psync_destroy();
 
 /* returns current status.
@@ -259,6 +269,12 @@ uint32_t psync_get_last_error();
 int psync_pause();
 int psync_stop();
 int psync_resume();
+
+/* 
+ * 
+ * List of settings: 
+ * usessl (int, 0 or 1) - use SSL connections to remote servers 
+ */
 
 
   

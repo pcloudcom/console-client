@@ -49,7 +49,7 @@ uint32_t psync_get_last_error(){
   return psync_error;
 }
 
-void psync_database_path(const char *databasepath){
+void psync_set_database_path(const char *databasepath){
   psync_database=psync_strdup(databasepath);
 }
 
@@ -59,7 +59,7 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
   psync_free=free_call;
 }
 
-int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t event_callback){
+int psync_init(){
   if (psync_ssl_init())
     return_error(PERROR_SSL_INIT_FAILED);
   if (!psync_database){
@@ -70,11 +70,18 @@ int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t even
   if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE))
     return_error(PERROR_DATABASE_OPEN);
   psync_status_init();
+  return 0;
+}
+
+void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback){
   psync_run_thread(psync_diff_thread);
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
     psync_set_event_callback(event_callback);
+}
+
+uint32_t psync_download_state(){
   return 0;
 }
 

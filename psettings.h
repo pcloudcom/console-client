@@ -28,6 +28,10 @@
 #ifndef _PSYNC_SETTINGS_H
 #define _PSYNC_SETTINGS_H
 
+#define PSYNC_API_HOST     "binapi.pcloud.com"
+#define PSYNC_API_PORT     80
+#define PSYNC_API_PORT_SSL 443
+
 #define PSYNC_SOCK_CONNECT_TIMEOUT 15
 #define PSYNC_SOCK_READ_TIMEOUT    30
 #define PSYNC_SOCK_WRITE_TIMEOUT   120
@@ -35,5 +39,10 @@
 #define PSYNC_STACK_SIZE 64*1024
 
 #define PSYNC_DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
+
+#define PSYNC_USE_SSL_DEFAULT 1
+
+/* in miliseconds */
+#define PSYNC_SLEEP_BEFORE_RECONNECT 5000
 
 #endif
