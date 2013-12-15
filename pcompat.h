@@ -3,25 +3,68 @@
 
 #include <stdint.h>
 
-#if (defined(LINUX) || defined(MACOSX)) && !defined(POSIX)
-#define POSIX
+#if (defined(P_OS_LINUX) || defined(P_OS_MACOSX)) && !defined(P_OS_POSIX)
+#define P_OS_POSIX
 #endif
 
-#if defined(POSIX)
+#if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_POSIX)
+#warning "You OS may not be supported, trying to build POSIX compatible source"
+#define P_OS_POSIX
+#endif
+
+#if defined(P_OS_POSIX)
 
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/select.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <errno.h>
+
+#define psync_sock_err() errno
+#define psync_sock_set_err(e) errno=(e)
+
+#define P_WOULDBLOCK EWOULDBLOCK
+#define P_AGAIN      EAGAIN
+#define P_INPROGRESS EINPROGRESS
+#define P_TIMEDOUT   ETIMEDOUT
+#define P_INVAL      EINVAL
+#define P_CONNRESET  ECONNRESET
 
 typedef int psync_socket_t;
 
-#elif defined(WINDOWS)
+#elif defined(P_OS_WINDOWS)
 
 #include <winsock2.h>
 #include <Ws2tcpip.h>
+
+#define psync_sock_err() WSAGetLastError()
+#define psync_sock_set_err(e) WSASetLastError(e)
+
+#define P_WOULDBLOCK WSAEWOULDBLOCK
+#define P_AGAIN      WSAEWOULDBLOCK
+#define P_INPROGRESS WSAEWOULDBLOCK
+#define P_TIMEDOUT   WSAETIMEDOUT
+#define P_INVAL      WSAEINVAL
+#define P_CONNRESET  WSAECONNRESET
 
 typedef SOCKET psync_socket_t;
 
 #else
 #error "Need to define types for your operating system"
+#endif
+
+typedef struct {
+  void *ssl;
+  psync_socket_t sock;
+} psync_socket;
+
+#ifndef INVALID_SOCKET
+#define INVALID_SOCKET -1
+#endif
+
+#ifndef SOCKET_ERROR
+#define SOCKET_ERROR -1
 #endif
 
 #define PSYNC_THREAD __thread
@@ -43,7 +86,12 @@ void psync_run_thread1(psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t milisec);
 void psync_yield_cpu();
 
-#if defined(WINDOWS)
+psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
+void psync_socket_close(psync_socket *sock);
+int psync_socket_readall(psync_socket *sock, void *buff, int num);
+int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
+
+#if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
 #endif
 

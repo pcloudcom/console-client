@@ -6,6 +6,7 @@
 #include "pdatabase.h"
 #include "pstatus.h"
 #include "pdiff.h"
+#include "pssl.h"
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
@@ -32,6 +33,8 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 int psync_init(pstatus_change_callback_t status_callback, pevent_callback_t event_callback){
+  if (psync_ssl_init())
+    return_error(PERROR_SSL_INIT_FAILED);
   if (!psync_database){
     psync_database=psync_get_default_database_path();
     if (!psync_database)

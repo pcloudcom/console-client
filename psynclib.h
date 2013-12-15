@@ -78,6 +78,7 @@ typedef struct {
 #define PERROR_REMOTE_FOLDER_NOT_FOUND 2
 #define PERROR_DATABASE_OPEN           3
 #define PERROR_NO_HOMEDIR              4
+#define PERROR_SSL_INIT_FAILED         5
 
 typedef struct {
   const char *localname;

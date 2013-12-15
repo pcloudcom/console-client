@@ -1,21 +1,29 @@
 #include <pthread.h>
+#include <string.h>
+#include <stdio.h>
 #include <time.h>
 #include "pcompat.h"
 #include "psynclib.h"
 #include "plibs.h"
+#include "psettings.h"
+#include "pssl.h"
 
-#if defined(POSIX)
+#if defined(P_OS_POSIX)
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pwd.h>
-#elif defined(WINDOWS)
+
+#define psync_close_socket close
+
+#elif defined(P_OS_WINDOWS)
+
 #include <process.h>
+
+#define psync_close_socket closesocket
+
 #endif
-
-#define STACK_SIZE 64*1024
-
-#define DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
 
 typedef struct {
  psync_thread_start1 run;
@@ -23,7 +31,7 @@ typedef struct {
 } psync_run_data1;
 
 char *psync_get_default_database_path(){
-#if defined(POSIX)
+#if defined(P_OS_POSIX)
   struct passwd pwd;
   struct passwd *result;
   const char *dir;
@@ -34,8 +42,8 @@ char *psync_get_default_database_path(){
       return NULL;
     dir=result->pw_dir;
   }
-  return psync_strcat(dir, "/", DEFAULT_POSIX_DBNAME, NULL);
-#elif defined(WINDOWS)
+  return psync_strcat(dir, "/", PSYNC_DEFAULT_POSIX_DBNAME, NULL);
+#elif defined(P_OS_WINDOWS)
 #error "Need Windows implementation"
 #else
 #error "Function not implemented for your operating system"
@@ -69,7 +77,7 @@ void psync_run_thread(psync_thread_start0 run){
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-  pthread_attr_setstacksize(&attr, STACK_SIZE);
+  pthread_attr_setstacksize(&attr, PSYNC_STACK_SIZE);
   pthread_create(&thread, &attr, thread_entry0, run);
 }
 
@@ -94,24 +102,325 @@ void psync_run_thread1(psync_thread_start1 run, void *ptr){
   data->ptr=ptr;
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-  pthread_attr_setstacksize(&attr, STACK_SIZE);
+  pthread_attr_setstacksize(&attr, PSYNC_STACK_SIZE);
   pthread_create(&thread, &attr, thread_entry1, data);
 }
 
 void psync_milisleep(uint64_t milisec){
-#if defined(POSIX)
+#if defined(P_OS_POSIX)
   struct timespec tm;
   tm.tv_sec=milisec/1000;
   tm.tv_nsec=(milisec%1000)*1000000;
   nanosleep(&tm, NULL);
-#elif defined(WINDOWS)
+#elif defined(P_OS_WINDOWS)
   Sleep(milisec);
 #else
 #error "Function not implemented for your operating system"
 #endif
 }
 
-#if defined(WINDOWS)
+static int psync_wait_socket_writable_microsec(psync_socket_t sock, long sec, long usec){
+  fd_set wfds;
+  struct timeval tv;
+  int res;
+  tv.tv_sec=sec;
+  tv.tv_usec=usec;
+  FD_ZERO(&wfds);
+  FD_SET(sock, &wfds);
+  res=select(sock+1, NULL, &wfds, NULL, &tv);
+  if (res==1)
+    return 0;
+  if (res==0)
+    psync_sock_set_err(P_TIMEDOUT);
+  return SOCKET_ERROR;
+}
+
+#define psync_wait_socket_writable(sock, sec) psync_wait_socket_writable_microsec(sock, sec, 0)
+#define psync_wait_socket_write_timeout(sock) psync_wait_socket_writable(sock, PSYNC_SOCK_WRITE_TIMEOUT)
+
+static int psync_wait_socket_readable_microsec(psync_socket_t sock, long sec, long usec){
+  fd_set rfds;
+  struct timeval tv;
+  int res;
+  tv.tv_sec=sec;
+  tv.tv_usec=usec;
+  FD_ZERO(&rfds);
+  FD_SET(sock, &rfds);
+  res=select(sock+1, &rfds, NULL, NULL, &tv);
+  if (res==1)
+    return 0;
+  if (res==0)
+    psync_sock_set_err(P_TIMEDOUT);
+  return SOCKET_ERROR;
+}
+
+#define psync_wait_socket_readable(sock, sec) psync_wait_socket_readable_microsec(sock, sec, 0)
+#define psync_wait_socket_read_timeout(sock) psync_wait_socket_readable(sock, PSYNC_SOCK_READ_TIMEOUT)
+
+static psync_socket_t connect_res(struct addrinfo *res){
+  psync_socket_t sock;
+#if defined(P_OS_WINDOWS)
+  static const unsigned long non_blocking_mode=1;
+#endif
+#if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
+#define SOCK_TYPE_OR (SOCK_NONBLOCK|SOCK_CLOEXEC)
+#else
+#define SOCK_TYPE_OR 0
+#define SOCK_NEED_NOBLOCK
+#endif
+  while (res){
+    sock=socket(res->ai_family, res->ai_socktype|SOCK_TYPE_OR, res->ai_protocol);
+    if (sock!=INVALID_SOCKET){
+#if defined(SOCK_NEED_NOBLOCK)
+#if defined(P_OS_WINDOWS)
+      ioctlsocket(sock, FIONBIO, &non_blocking_mode);
+#elif defined(P_OS_POSIX) 
+      fcntl(sock, F_SETFD, FD_CLOEXEC);
+      fcntl(sock, F_SETFL, fcntl(sock, F_GETFL)|O_NONBLOCK);
+#else
+#error "Need to set non-blocking for your OS"
+#endif
+#endif
+      if ((connect(sock, res->ai_addr, res->ai_addrlen)!=SOCKET_ERROR) ||
+          (psync_sock_err()==P_INPROGRESS && !psync_wait_socket_writable(sock, PSYNC_SOCK_CONNECT_TIMEOUT)))
+        return sock;
+      close(sock);
+    }
+    res=res->ai_next;
+  }
+  return INVALID_SOCKET;
+}
+
+
+static psync_socket_t connect_socket(const char *host, const char *port){
+  struct addrinfo *res=NULL;
+  struct addrinfo hints;
+  psync_socket_t sock;
+  int rc;
+  debug(D_NOTICE, "connecting to %s:%s", host, port);
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family=AF_UNSPEC;
+  hints.ai_socktype=SOCK_STREAM;
+  rc=getaddrinfo(host, port, &hints, &res);
+#if defined(P_OS_WINDOWS)
+  if (rc==WSANOTINITIALISED){
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData)) 
+      return INVALID_SOCKET;
+    rc=getaddrinfo(host, port, &hints, &res);
+  }
+#endif
+  if (rc!=0){
+    debug(D_WARNING, "failed to resolve %s", host);
+    return INVALID_SOCKET;
+  }
+  sock=connect_res(res);
+  freeaddrinfo(res);
+  if (sock!=INVALID_SOCKET){
+    int sock_opt=1;
+#if defined(SO_KEEPALIVE) && defined(SOL_SOCKET)
+    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
+#endif
+#if defined(TCP_KEEPALIVE) && defined(IPPROTO_TCP)
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
+#endif
+#if defined(SOL_TCP)
+#if defined(TCP_KEEPCNT)
+    sock_opt=3;
+    setsockopt(sock, SOL_TCP, TCP_KEEPCNT, (char*)&sock_opt, sizeof(sock_opt));
+#endif
+#if defined(TCP_KEEPIDLE)
+    sock_opt=60;
+    setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, (char*)&sock_opt, sizeof(sock_opt));
+#endif
+#if defined(TCP_KEEPINTVL)
+    sock_opt=20;
+    setsockopt(sock, SOL_TCP, TCP_KEEPINTVL, (char*)&sock_opt, sizeof(sock_opt));
+#endif
+#endif
+  }
+  else
+    debug(D_WARNING, "failed to connect to %s:%s", host, port);
+  return sock;
+}
+
+static int wait_sock_ready_for_ssl(psync_socket_t sock){
+  fd_set fds, *rfds, *wfds;
+  struct timeval tv;
+  int res;
+  FD_ZERO(&fds);
+  FD_SET(sock, &fds);
+  if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ){
+    rfds=&fds;
+    wfds=NULL;
+    tv.tv_sec=PSYNC_SOCK_READ_TIMEOUT;
+  }
+  else if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ){
+    rfds=NULL;
+    wfds=&fds;
+    tv.tv_sec=PSYNC_SOCK_WRITE_TIMEOUT;
+  }
+  else{
+    debug(D_BUG, "this functions should only be called when SSL returns WANT_READ/WANT_WRITE");
+    psync_sock_set_err(P_INVAL);
+    return SOCKET_ERROR;
+  }
+  tv.tv_usec=0;
+  res=select(sock+1, rfds, wfds, NULL, &tv);
+  if (res==1)
+    return 0;
+  if (res==0)
+    psync_sock_set_err(P_TIMEDOUT);
+  return SOCKET_ERROR;
+}
+
+psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl){
+  psync_socket *ret;
+  void *sslc;
+  psync_socket_t sock;
+  char sport[24];
+  sprintf(sport, "%d", port);
+  sock=connect_socket(host, sport);
+  if (sock==INVALID_SOCKET)
+    return NULL;
+  if (ssl){
+    ssl=psync_ssl_connect(sock, &sslc);
+    while (ssl==PSYNC_SSL_NEED_FINISH){
+      if (wait_sock_ready_for_ssl(sock)){
+        psync_ssl_free(sslc);
+        break;
+      }
+      ssl=psync_ssl_connect_finish(sslc);
+    }
+    if (ssl!=PSYNC_SSL_SUCCESS){
+      psync_close_socket(sock);
+      return NULL;
+    }
+  }
+  else
+    sslc=NULL;
+  ret=(psync_socket *)psync_malloc(sizeof(psync_socket));
+  ret->ssl=sslc;
+  ret->sock=sock;
+  return ret;
+}
+
+void psync_socket_close(psync_socket *sock){
+  if (sock->ssl)
+    while (psync_ssl_shutdown(sock->ssl)==PSYNC_SSL_NEED_FINISH)
+      if (wait_sock_ready_for_ssl(sock->sock)){
+        psync_ssl_free(sock->ssl);
+        break;
+      }
+  psync_close_socket(sock->sock);
+  psync_free(sock);
+}
+
+static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  if (!psync_ssl_pendingdata(sock->ssl) && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  while (br<num){
+    r=psync_ssl_read(sock->ssl, (char *)buff+br, num-br);
+    if (r==PSYNC_SSL_FAIL){
+      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_readall_plain(psync_socket_t sock, void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    if (psync_wait_socket_read_timeout(sock))
+      return -1;
+    r=recv(sock, (char *)buff+br, num-br, 0);
+    if (r==SOCKET_ERROR){
+      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN)
+        continue;
+      else
+        return -1;
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_readall(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_readall_ssl(sock, buff, num);
+  else
+    return psync_socket_readall_plain(sock->sock, buff, num);
+}
+static int psync_socket_writeall_ssl(psync_socket *sock, const void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    r=psync_ssl_write(sock->ssl, (char *)buff+br, num-br);
+    if (r==PSYNC_SSL_FAIL){
+      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_writeall_plain(psync_socket_t sock, const void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    r=send(sock, (const char *)buff+br, num-br, 0);
+    if (r==SOCKET_ERROR){
+      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN){
+        if (psync_wait_socket_write_timeout(sock))
+          return -1;
+        else
+          continue;
+      }
+      else
+        return -1;
+    }
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_writeall(psync_socket *sock, const void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_writeall_ssl(sock, buff, num);
+  else
+    return psync_socket_writeall_plain(sock->sock, buff, num);
+}
+
+
+#if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result){
   struct tm *res=gmtime(timep);
   *result=*res;
