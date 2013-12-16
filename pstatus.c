@@ -77,7 +77,7 @@ static uint32_t psync_calc_status(){
     }
   }
   if (statuses[PSTATUS_TYPE_ACCFULL]!=PSTATUS_ACCFULL_QUOTAOK){
-    if (statuses[PSTATUS_TYPE_ONLINE]==PSTATUS_ACCFULL_OVERQUOTA)
+    if (statuses[PSTATUS_TYPE_ACCFULL]==PSTATUS_ACCFULL_OVERQUOTA)
       return PSTATUS_ACCOUNT_FULL;
     else {
       debug(D_BUG, "invalid PSTATUS_TYPE_ACCFULL %d", statuses[PSTATUS_TYPE_ACCFULL]);

@@ -23,7 +23,7 @@ else
     endif
 endif
 
-OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o
+OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o
 
 ifeq ($(USESSL),openssl)
   OBJ += pssl-openssl.o

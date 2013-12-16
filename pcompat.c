@@ -523,6 +523,35 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
 #endif
 }
 
+int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec){
+  fd_set rfds;
+  struct timeval tv, *ptv;
+  psync_socket_t max;
+  int i;
+  if (timeoutmilisec<0)
+    ptv=NULL;
+  else{
+    tv.tv_sec=timeoutmilisec/1000;
+    tv.tv_usec=(timeoutmilisec%1000)*1000;
+    ptv=&tv;
+  }
+  FD_ZERO(&rfds);
+  max=0;
+  for (i=0; i<cnt; i++){
+    FD_SET(sockets[i], &rfds);
+    if (sockets[i]>=max)
+      max=sockets[i]+1;
+  }
+  i=select(max, &rfds, NULL, NULL, ptv);
+  if (i>0){
+    for (i=0; i<cnt; i++)
+      if (FD_ISSET(sockets[i], &rfds))
+        return i;
+  }
+  else if (i==0)
+    psync_sock_set_err(P_TIMEDOUT);
+  return SOCKET_ERROR;
+}
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result){

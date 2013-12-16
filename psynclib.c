@@ -34,6 +34,7 @@
 #include "pstatus.h"
 #include "pdiff.h"
 #include "pssl.h"
+#include "ptimer.h"
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
@@ -74,6 +75,7 @@ int psync_init(){
 }
 
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback){
+  psync_timer_init();
   psync_run_thread(psync_diff_thread);
   if (status_callback)
     psync_set_status_callback(status_callback);

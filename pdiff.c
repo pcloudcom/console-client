@@ -107,6 +107,7 @@ static psync_socket *get_connected_socket(){
       continue;
     }
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
+    current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     if (luserid){
       if (luserid!=userid){
@@ -125,7 +126,6 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_uint(q, 2, userid);
         psync_sql_run(q);
         psync_sql_bind_string(q, 1, "quota");
-        current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
         psync_sql_bind_uint(q, 2, current_quota);
         psync_sql_run(q);
         psync_sql_bind_string(q, 1, "usedquota");
@@ -380,7 +380,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
 
 static void check_overquota(){
   static int lisover=0;
-  int isover=used_quota>=current_quota;
+  int isover=(used_quota>=current_quota);
   if (isover!=lisover){
     lisover=isover;
     if (isover)
