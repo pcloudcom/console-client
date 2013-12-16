@@ -94,22 +94,22 @@ void psync_destroy(){
 }
 
 char *psync_get_username(){
-  return psync_sql_cellstr("SELECT value FROM settings WHERE id='user'");
+  return psync_sql_cellstr("SELECT value FROM setting WHERE id='user'");
 }
 
 static void clear_db(int save){
   char *sql;
-  psync_sql_statement("DELETE FROM settings WHERE id IN ('pass', 'auth')");
+  psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
   if (save)
-    sql="REPLACE INTO settings (id, value) VALUES ('saveauth', 1)";
+    sql="REPLACE INTO setting (id, value) VALUES ('saveauth', 1)";
   else
-    sql="REPLACE INTO settings (id, value) VALUES ('saveauth', 0)";
+    sql="REPLACE INTO setting (id, value) VALUES ('saveauth', 0)";
   psync_sql_statement(sql);
 }
 
 static void save_to_db(const char *key, const char *val){
   psync_sql_res *q;
-  q=psync_sql_prep_statement("REPLACE INTO settings (id, value) VALUES (?, ?)");
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   if (q){
     psync_sql_bind_string(q, 1, key);
     psync_sql_bind_string(q, 2, val);

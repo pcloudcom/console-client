@@ -62,6 +62,8 @@ typedef int psync_socket_t;
 
 #elif defined(P_OS_WINDOWS)
 
+#define _WIN32_WINNT 0x0400
+
 #include <winsock2.h>
 #include <Ws2tcpip.h>
 

@@ -39,6 +39,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 #include <pwd.h>
 
@@ -47,6 +48,7 @@
 #elif defined(P_OS_WINDOWS)
 
 #include <process.h>
+#include <WinBase.h>
 
 #define psync_close_socket closesocket
 
@@ -80,6 +82,8 @@ char *psync_get_default_database_path(){
 void psync_yield_cpu(){
 #if defined(_POSIX_PRIORITY_SCHEDULING)
   sched_yield();
+#elif defined(P_OS_WINDOWS)
+  SwitchToThread();
 #else
   psync_milisleep(1);
 #endif

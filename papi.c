@@ -75,8 +75,24 @@ static const binresult DATA_EMPTY={PARAM_DATA, 0, {0}};
 static const binresult *empty_types[]={&STR_EMPTY, &NUM_ZERO, &BOOL_FALSE, &ARRAY_EMPTY, &HASH_EMPTY, &DATA_EMPTY};
 static const char *type_names[]={"string", "number", "boolean", "array", "hash", "data"};
 
+static uint32_t connfailures=0;
+
 psync_socket *psync_api_connect(int usessl){
-  return psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+  if (connfailures%5==4)
+    return psync_socket_connect(PSYNC_API_AHOST, usessl?PSYNC_API_APORT_SSL:PSYNC_API_APORT, usessl);
+  else
+    return psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+}
+
+void psync_api_conn_fail_inc(){
+  connfailures++;
+}
+
+void psync_api_conn_fail_reset(){
+  if (connfailures%5==4)
+    connfailures=4;
+  else
+    connfailures=0;
 }
 
 #define _NEED_DATA(cnt) if (*datalen<(cnt)) return -1
@@ -392,7 +408,8 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
     else if (params[i].paramtype==PARAM_BOOL)
       *data++=params[i].num&1;
   }
-  if (psync_socket_writeall(sock, sdata, plen+2)){
+  plen+=2;
+  if (psync_socket_writeall(sock, sdata, plen)!=plen){
     psync_free(sdata);
     return NULL;
   }
@@ -426,4 +443,27 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
   if (D_CRITICAL<=DEBUG_LEVEL)
     psync_debug(file, function, line, D_CRITICAL, "could not find key %s", name);
   return empty_types[type];
+}
+
+const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
+  uint32_t i;
+  if (!res || res->type!=PARAM_HASH){
+    const char *nm="NULL";
+    if (res)
+      nm=type_names[res->type];
+    if (D_CRITICAL<=DEBUG_LEVEL)
+      psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
+    return NULL;
+  }
+  for (i=0; i<res->length; i++)
+    if (!strcmp(res->hash[i].key, name)){
+      if (res->hash[i].value->type==type)
+        return res->hash[i].value;
+      else{
+        if (D_CRITICAL<=DEBUG_LEVEL)
+          psync_debug(file, function, line, D_CRITICAL, "type error for key %s, expected %s got %s", name, type_names[type], type_names[res->hash[i].value->type]);
+        return NULL;
+      }
+    }
+  return NULL;
 }

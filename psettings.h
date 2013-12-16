@@ -32,7 +32,11 @@
 #define PSYNC_API_PORT     80
 #define PSYNC_API_PORT_SSL 443
 
-#define PSYNC_DIFF_LIMIT   10000
+#define PSYNC_API_AHOST     "api.pcloud.com"
+#define PSYNC_API_APORT     8398
+#define PSYNC_API_APORT_SSL 8399
+
+#define PSYNC_DIFF_LIMIT   25000
 
 #define PSYNC_SOCK_CONNECT_TIMEOUT 15
 #define PSYNC_SOCK_READ_TIMEOUT    30
@@ -44,7 +48,16 @@
 
 #define PSYNC_USE_SSL_DEFAULT 1
 
+#define PSYNC_DIFF_FILTER_META "parentfolderid,ismine,userid,name,fileid,folderid,deletedfileid,created,modified,size,hash,canread,canmodify,candelete,cancreate"
+
 /* in miliseconds */
 #define PSYNC_SLEEP_BEFORE_RECONNECT 5000
+
+#define PSYNC_PERM_READ   1
+#define PSYNC_PERM_CREATE 2
+#define PSYNC_PERM_MODIFY 4
+#define PSYNC_PERM_DELETE 8
+
+#define PSYNC_PERM_ALL (PSYNC_PERM_READ|PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 
 #endif

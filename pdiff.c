@@ -47,9 +47,9 @@ static psync_socket *get_connected_socket(){
     psync_free(user);
     psync_free(pass);
     psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
-    auth=psync_sql_cellstr("SELECT value FROM settings WHERE id='auth'");
-    user=psync_sql_cellstr("SELECT value FROM settings WHERE id='user'");
-    pass=psync_sql_cellstr("SELECT value FROM settings WHERE id='pass'");
+    auth=psync_sql_cellstr("SELECT value FROM setting WHERE id='auth'");
+    user=psync_sql_cellstr("SELECT value FROM setting WHERE id='user'");
+    pass=psync_sql_cellstr("SELECT value FROM setting WHERE id='pass'");
     if (!auth && psync_my_auth)
       auth=psync_strdup(psync_my_auth);
     if (!user && psync_my_user)
@@ -61,8 +61,8 @@ static psync_socket *get_connected_socket(){
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }
-    usessl=psync_sql_cellint("SELECT value FROM settings WHERE id='usessl'", PSYNC_USE_SSL_DEFAULT);
-    saveauth=psync_sql_cellint("SELECT value FROM settings WHERE id='saveauth'", 1);
+    usessl=psync_sql_cellint("SELECT value FROM setting WHERE id='usessl'", PSYNC_USE_SSL_DEFAULT);
+    saveauth=psync_sql_cellint("SELECT value FROM setting WHERE id='saveauth'", 1);
     sock=psync_api_connect(usessl);
     if (!sock){
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
@@ -70,19 +70,28 @@ static psync_socket *get_connected_socket(){
       continue;
     }
     if (user && pass){
-      binparam params[]={P_STR("timeformat", "timestamp"), P_STR("username", user), P_STR("password", pass), P_BOOL("getauth", 1)};
+      binparam params[]={P_STR("timeformat", "timestamp"), 
+                         P_STR("filtermeta", PSYNC_DIFF_FILTER_META),  
+                         P_STR("username", user), 
+                         P_STR("password", pass), 
+                         P_BOOL("getauth", 1)};
       res=send_command(sock, "userinfo", params);
     }
     else {
-      binparam params[]={P_STR("timeformat", "timestamp"), P_STR("auth", auth)};
+      binparam params[]={P_STR("timeformat", "timestamp"), 
+                         P_STR("filtermeta", PSYNC_DIFF_FILTER_META),  
+                         P_STR("auth", auth),
+                         P_BOOL("getauth", 1)};
       res=send_command(sock, "userinfo", params);
     }
     if (!res){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
+      psync_api_conn_fail_inc();
       continue;
     }
+    psync_api_conn_fail_reset();
     result=psync_find_result(res, "result", PARAM_NUM)->num;
     if (result){
       psync_socket_close(sock);
@@ -97,8 +106,8 @@ static psync_socket *get_connected_socket(){
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
-    userid=psync_find_result(res, "userid", PARAM_NUM)->num;
-    luserid=psync_sql_cellint("SELECT value FROM settings WHERE id='userid'", 0);
+    psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
+    luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     if (luserid){
       if (luserid!=userid){
         psync_socket_close(sock);
@@ -110,7 +119,7 @@ static psync_socket *get_connected_socket(){
     }
     else{
       used_quota=0;
-      q=psync_sql_prep_statement("REPLACE INTO settings (id, value) VALUES (?, ?)");
+      q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
       if (q){
         psync_sql_bind_string(q, 1, "userid");
         psync_sql_bind_uint(q, 2, userid);
@@ -159,9 +168,9 @@ static psync_socket *get_connected_socket(){
     psync_my_pass=NULL;
     pthread_mutex_unlock(&psync_my_auth_mutex);
     if (saveauth)
-      psync_sql_statement("DELETE FROM settings WHERE id='pass'");
+      psync_sql_statement("DELETE FROM setting WHERE id='pass'");
     else
-      psync_sql_statement("DELETE FROM settings WHERE id IN ('pass', 'auth')");
+      psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
     psync_free(res);
     psync_free(auth);
     psync_free(user);
@@ -170,7 +179,118 @@ static psync_socket *get_connected_socket(){
   }
 }
 
-static uint64_t process_entries(const binresult *entries, uint64_t olddiffid, uint64_t newdiffid){
+static void set_diff_id(uint64_t newdiffid){
+  psync_sql_res *q;
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('diffid', ?)");
+  if (q){
+    psync_sql_bind_uint(q, 1, newdiffid);
+    psync_sql_run(q);
+    psync_sql_free_result(q);
+  }
+}
+
+static uint64_t get_permissions(const binresult *meta){
+  return 
+    (psync_find_result(meta, "canread", PARAM_BOOL)->num?PSYNC_PERM_READ:0)+
+    (psync_find_result(meta, "canmodify", PARAM_BOOL)->num?PSYNC_PERM_MODIFY:0)+
+    (psync_find_result(meta, "candelete", PARAM_BOOL)->num?PSYNC_PERM_DELETE:0)+
+    (psync_find_result(meta, "cancreate", PARAM_BOOL)->num?PSYNC_PERM_CREATE:0);
+}
+
+static void process_createfolder(const binresult *entry){
+  static psync_sql_res *st=NULL;
+  const binresult *meta, *name;
+  uint64_t userid, perms;
+  if (!entry){
+    if (st){
+      psync_sql_free_result(st);
+      st=NULL;
+    }
+    return;
+  }
+  if (!st){
+    st=psync_sql_prep_statement("REPLACE INTO folder (id, parentfolderid, userid, permissons, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    if (!st)
+      return;
+  }
+  meta=psync_find_result(entry, "metadata", PARAM_HASH);
+  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
+    userid=psync_my_userid;
+    perms=PSYNC_PERM_ALL;
+  }
+  else{
+    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+    perms=get_permissions(meta);
+  }
+  name=psync_find_result(meta, "name", PARAM_STR);
+  psync_sql_bind_uint(st, 1, psync_find_result(meta, "folderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 3, userid);
+  psync_sql_bind_uint(st, 4, perms);
+  psync_sql_bind_lstring(st, 5, name->str, name->length);
+  psync_sql_bind_uint(st, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_run(st);
+}
+
+static void process_modifyfolder(const binresult *entry){
+  process_createfolder(entry);
+}
+
+static void process_deletefolder(const binresult *entry){
+  static psync_sql_res *st=NULL;
+  uint64_t folderid;
+  if (!entry){
+    if (st){
+      psync_sql_free_result(st);
+      st=NULL;
+    }
+    return;
+  }
+  if (!st){
+    st=psync_sql_prep_statement("DELETE FROM folder WHERE id=?");
+    if (!st)
+      return;
+  }
+  folderid=psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, folderid);
+  psync_sql_run(st);
+}
+
+#define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
+
+static struct {
+  void (*process)(const binresult *);
+  const char *name;
+  uint32_t len;
+  uint8_t used;
+} event_list[] = {
+  FN(createfolder),
+  FN(modifyfolder),
+  FN(deletefolder)
+};
+
+#define event_list_size sizeof(event_list)/sizeof(event_list[0])
+
+static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
+  const binresult *entry, *etype;
+  uint32_t i, j;
+  psync_sql_start_transaction();
+  for (i=0; i<entries->length; i++){
+    entry=entries->array[i];
+    etype=psync_find_result(entry, "event", PARAM_STR);
+    for (j=0; j<event_list_size; j++)
+      if (etype->length==event_list[j].len && !memcmp(etype->str, event_list[j].name, etype->length)){
+        event_list[j].process(entry);
+        event_list[j].used=1;
+      }
+  }
+  for (j=0; j<event_list_size; j++)
+    if (event_list[j].used)
+      event_list[j].process(NULL);
+  set_diff_id(newdiffid);
+  psync_sql_commit_transaction();
+  return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
 }
 
 void psync_diff_thread(){
@@ -183,7 +303,7 @@ void psync_diff_thread(){
 restart:
   sock=get_connected_socket();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
-  diffid=psync_sql_cellint("SELECT value FROM settings WHERE id='diffid'", 0);
+  diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};
     res=send_command(sock, "diff", diffparams);
@@ -202,7 +322,7 @@ restart:
     entries=psync_find_result(res, "entries", PARAM_ARRAY);
     if (entries->length){
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
-      diffid=process_entries(entries, diffid, newdiffid);
+      diffid=process_entries(entries, newdiffid);
     }
     result=entries->length;
     psync_free(res);

@@ -88,6 +88,7 @@ typedef struct {
 extern int psync_do_run;
 extern pstatus_t psync_status;
 extern char *psync_my_auth, *psync_my_user, *psync_my_pass;
+extern uint64_t psync_my_userid;
 extern pthread_mutex_t psync_my_auth_mutex;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC;
@@ -97,6 +98,9 @@ int psync_sql_connect(const char *db);
 void psync_sql_close();
 void psync_sql_lock();
 void psync_sql_unlock();
+int psync_sql_start_transaction();
+int psync_sql_commit_transaction();
+int psync_sql_rollback_transaction();
 
 int psync_sql_statement(const char *sql);
 char *psync_sql_cellstr(const char *sql);

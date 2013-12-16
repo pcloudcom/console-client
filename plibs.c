@@ -34,6 +34,7 @@
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]"};
 
 char *psync_my_auth=NULL, *psync_my_user=NULL, *psync_my_pass=NULL;
+uint64_t psync_my_userid=0;
 pthread_mutex_t psync_my_auth_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t psync_db_mutex;
@@ -121,6 +122,28 @@ int psync_sql_statement(const char *sql){
     sqlite3_free(errmsg);
     return -1;
   }
+}
+
+int psync_sql_start_transaction(){
+  psync_sql_lock();
+  if (psync_sql_statement("BEGIN")){
+    psync_sql_unlock();
+    return -1;
+  }
+  else
+    return 0;
+}
+
+int psync_sql_commit_transaction(){
+  int code=psync_sql_statement("COMMIT");
+  psync_sql_unlock();
+  return code;
+}
+
+int psync_sql_rollback_transaction(){
+  int code=psync_sql_statement("ROLLBACK");
+  psync_sql_unlock();
+  return code;
 }
 
 char *psync_sql_cellstr(const char *sql){

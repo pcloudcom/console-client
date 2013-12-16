@@ -80,10 +80,10 @@ static uint32_t psync_calc_status(){
 
 void psync_status_init(){
   memset(&psync_status, 0, sizeof(psync_status));
-  statuses[PSTATUS_TYPE_RUN]=psync_sql_cellint("SELECT value FROM settings WHERE id='runstatus'", 0);
+  statuses[PSTATUS_TYPE_RUN]=psync_sql_cellint("SELECT value FROM setting WHERE id='runstatus'", 0);
   if (statuses[PSTATUS_TYPE_RUN]<PSTATUS_RUN_RUN || statuses[PSTATUS_TYPE_RUN]>PSTATUS_RUN_STOP){
     statuses[PSTATUS_TYPE_RUN]=PSTATUS_RUN_RUN;
-    psync_sql_statement("REPLACE INTO settings (id, value) VALUES ('runstatus', " TO_STR(PSTATUS_RUN_RUN) ")");
+    psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('runstatus', " TO_STR(PSTATUS_RUN_RUN) ")");
   }
   psync_status.status=psync_calc_status();
 }

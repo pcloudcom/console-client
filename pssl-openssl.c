@@ -94,8 +94,10 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn){
   }
   err=SSL_get_error(ssl, res);
   psync_set_ssl_error(err);
-  if (err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE)
+  if (err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE){
+    *sslconn=ssl;
     return PSYNC_SSL_NEED_FINISH;
+  }
   SSL_free(ssl);
   return PSYNC_SSL_FAIL;
 }
