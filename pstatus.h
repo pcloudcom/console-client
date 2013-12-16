@@ -36,6 +36,8 @@
 #define PSTATUS_TYPE_ONLINE 1
 #define PSTATUS_TYPE_AUTH   2
 
+#define PSTATUS_INVALID   0
+
 #define PSTATUS_RUN_RUN   1
 #define PSTATUS_RUN_PAUSE 2
 #define PSTATUS_RUN_STOP  4

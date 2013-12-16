@@ -92,3 +92,74 @@ void psync_destroy(){
   psync_sql_lock();
   psync_sql_close();
 }
+
+char *psync_get_username(){
+  return psync_sql_cellstr("SELECT value FROM settings WHERE id='user'");
+}
+
+static void clear_db(int save){
+  char *sql;
+  psync_sql_statement("DELETE FROM settings WHERE id IN ('pass', 'auth')");
+  if (save)
+    sql="REPLACE INTO settings (id, value) VALUES ('saveauth', 1)";
+  else
+    sql="REPLACE INTO settings (id, value) VALUES ('saveauth', 0)";
+  psync_sql_statement(sql);
+}
+
+static void save_to_db(const char *key, const char *val){
+  psync_sql_res *q;
+  q=psync_sql_prep_statement("REPLACE INTO settings (id, value) VALUES (?, ?)");
+  if (q){
+    psync_sql_bind_string(q, 1, key);
+    psync_sql_bind_string(q, 2, val);
+    psync_sql_run(q);
+    psync_sql_free_result(q);
+  }
+}
+
+void psync_set_user_pass(const char *username, const char *password, int save){
+  clear_db(save);
+  if (save){
+    save_to_db("user", username);
+    save_to_db("pass", password);
+  }
+  else{
+    pthread_mutex_lock(&psync_my_auth_mutex);
+    psync_free(psync_my_user);
+    psync_my_user=psync_strdup(username);
+    psync_free(psync_my_pass);
+    psync_my_pass=psync_strdup(password);
+    pthread_mutex_unlock(&psync_my_auth_mutex);
+  }
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+}
+
+void psync_set_pass(const char *password, int save){
+  clear_db(save);
+  if (save)
+    save_to_db("pass", password);
+  else{
+    pthread_mutex_lock(&psync_my_auth_mutex);
+    psync_free(psync_my_pass);
+    psync_my_pass=psync_strdup(password);
+    pthread_mutex_unlock(&psync_my_auth_mutex);
+  }
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+}
+
+void psync_set_auth(const char *auth, int save){
+  clear_db(save);
+  if (save)
+    save_to_db("auth", auth);
+  else{
+    pthread_mutex_lock(&psync_my_auth_mutex);
+    psync_free(psync_my_auth);
+    psync_my_pass=psync_strdup(auth);
+    pthread_mutex_unlock(&psync_my_auth_mutex);
+  }
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+}
+
+void psync_unlink(){
+}

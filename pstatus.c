@@ -33,7 +33,8 @@
 
 #define TO_STR(s) #s
 
-static uint32_t statuses[PSTATUS_NUM_STATUSES];
+static uint32_t statuses[PSTATUS_NUM_STATUSES]={PSTATUS_INVALID, PSTATUS_ONLINE_OFFLINE, PSTATUS_AUTH_PROVIDED};
+
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
 static uint32_t status_waiters=0;
@@ -84,7 +85,6 @@ void psync_status_init(){
     statuses[PSTATUS_TYPE_RUN]=PSTATUS_RUN_RUN;
     psync_sql_statement("REPLACE INTO settings (id, value) VALUES ('runstatus', " TO_STR(PSTATUS_RUN_RUN) ")");
   }
-  statuses[PSTATUS_TYPE_ONLINE]=PSTATUS_ONLINE_OFFLINE;
   psync_status.status=psync_calc_status();
 }
 

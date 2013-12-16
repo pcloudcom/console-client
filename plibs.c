@@ -29,10 +29,12 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
-#include <pthread.h>
 #include "plibs.h"
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]"};
+
+char *psync_my_auth=NULL, *psync_my_user=NULL, *psync_my_pass=NULL;
+pthread_mutex_t psync_my_auth_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t psync_db_mutex;
 sqlite3 *psync_db;

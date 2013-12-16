@@ -29,6 +29,7 @@
 #define _PSYNC_LIBS_H
 
 #include <sqlite3.h>
+#include <pthread.h>
 
 #include "pcompat.h"
 #include "psynclib.h"
@@ -86,6 +87,8 @@ typedef struct {
 
 extern int psync_do_run;
 extern pstatus_t psync_status;
+extern char *psync_my_auth, *psync_my_user, *psync_my_pass;
+extern pthread_mutex_t psync_my_auth_mutex;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC;
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
