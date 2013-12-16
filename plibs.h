@@ -109,6 +109,7 @@ char **psync_sql_rowstr(const char *sql);
 psync_variant *psync_sql_row(const char *sql);
 psync_sql_res *psync_sql_query(const char *sql);
 psync_sql_res *psync_sql_prep_statement(const char *sql);
+void psync_sql_reset(psync_sql_res *res);
 void psync_sql_run(psync_sql_res *res);
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val);
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str);
@@ -116,7 +117,7 @@ void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t l
 void psync_sql_free_result(psync_sql_res *res);
 psync_variant *psync_sql_fetch_row(psync_sql_res *res);
 char **psync_sql_fetch_rowstr(psync_sql_res *res);
-int64_t *psync_sql_fetch_rowint(psync_sql_res *res);
+uint64_t *psync_sql_fetch_rowint(psync_sql_res *res);
 
 void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...)
 #if defined(__GNUC__)

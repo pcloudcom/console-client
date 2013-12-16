@@ -347,6 +347,13 @@ void psync_socket_close(psync_socket *sock){
   psync_free(sock);
 }
 
+int psync_socket_pendingdata(psync_socket *sock){
+  if (sock->ssl)
+    return psync_ssl_pendingdata(sock->ssl);
+  else
+    return 0;
+}
+
 static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
   int br, r;
   br=0;
@@ -448,6 +455,72 @@ int psync_socket_writeall(psync_socket *sock, const void *buff, int num){
     return psync_socket_writeall_ssl(sock, buff, num);
   else
     return psync_socket_writeall_plain(sock->sock, buff, num);
+}
+
+int psync_pipe(psync_socket_t pipefd[2]){
+#if defined(P_OS_POSIX)
+  return pipe(pipefd);
+#else
+  psync_socket_t sock;
+  struct sockaddr_in addr;
+  socklen_t addrlen;
+  sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (sock==INVALID_SOCKET){
+#if defined(P_OS_WINDOWS)
+    if (psync_sock_err()==WSANOTINITIALISED){
+      WSADATA wsaData;
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData) || (sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET) 
+        goto err0;
+    }
+    else
+#endif
+      goto err0;
+  }
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family=AF_INET;
+  addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+  addrlen=sizeof(addr);
+  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr))==SOCKET_ERROR || 
+      listen(sock, 1)==SOCKET_ERROR ||
+      getsockname(sock, (struct sockaddr *)&addr, &addrlen)==SOCKET_ERROR ||
+      (pipefd[0]=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET)
+    goto err1;
+  if (connect(pipefd[0], (struct sockaddr *)&addr, addrlen)==SOCKET_ERROR ||
+      (pipefd[1]=accept(sock, NULL, NULL))==INVALID_SOCKET)
+    goto err2;
+  psync_close_socket(sock);
+  return 0;
+err2:
+  psync_close_socket(pipefd[0]);
+err1:
+  psync_close_socket(sock);
+err0:
+  return SOCKET_ERROR;
+#endif
+}
+
+int psync_pipe_close(psync_socket_t pfd){
+  return psync_close_socket(pfd);
+}
+
+int psync_pipe_read(psync_socket_t pfd, void *buff, int num){
+#if defined(P_OS_POSIX)
+  return read(pfd, buff, num);
+#elif defined(P_OS_WINDOWS)
+  return recv(pfd, buff, num, 0);
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
+#if defined(P_OS_POSIX)
+  return write(pfd, buff, num);
+#elif defined(P_OS_WINDOWS)
+  return send(pfd, buff, num, 0);
+#else
+#error "Function not implemented for your operating system"
+#endif
 }
 
 

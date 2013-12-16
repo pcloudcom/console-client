@@ -30,11 +30,12 @@
 
 #include <stdint.h>
 
-#define PSTATUS_NUM_STATUSES 3
+#define PSTATUS_NUM_STATUSES 4
 
-#define PSTATUS_TYPE_RUN    0
-#define PSTATUS_TYPE_ONLINE 1
-#define PSTATUS_TYPE_AUTH   2
+#define PSTATUS_TYPE_RUN     0
+#define PSTATUS_TYPE_ONLINE  1
+#define PSTATUS_TYPE_AUTH    2
+#define PSTATUS_TYPE_ACCFULL 3
 
 #define PSTATUS_INVALID   0
 
@@ -51,6 +52,9 @@
 #define PSTATUS_AUTH_REQURED  2
 #define PSTATUS_AUTH_MISMATCH 4
 #define PSTATUS_AUTH_BADLOGIN 8
+
+#define PSTATUS_ACCFULL_QUOTAOK   1
+#define PSTATUS_ACCFULL_OVERQUOTA 2
 
 void psync_status_init();
 void psync_set_status(uint32_t statusid, uint32_t status);

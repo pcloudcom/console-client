@@ -117,8 +117,14 @@ void psync_yield_cpu();
 
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
+int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
+
+int psync_pipe(psync_socket_t pipefd[2]);
+int psync_pipe_close(psync_socket_t pfd);
+int psync_pipe_read(psync_socket_t pfd, void *buff, int num);
+int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

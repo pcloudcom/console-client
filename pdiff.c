@@ -32,7 +32,7 @@
 #include "plibs.h"
 #include "papi.h"
 
-static uint64_t used_quota=0;
+static uint64_t used_quota=0, current_quota=0;
 
 static psync_socket *get_connected_socket(){
   char *auth, *user, *pass;
@@ -125,7 +125,8 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_uint(q, 2, userid);
         psync_sql_run(q);
         psync_sql_bind_string(q, 1, "quota");
-        psync_sql_bind_uint(q, 2, psync_find_result(res, "quota", PARAM_NUM)->num);
+        current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
+        psync_sql_bind_uint(q, 2, current_quota);
         psync_sql_run(q);
         psync_sql_bind_string(q, 1, "usedquota");
         psync_sql_bind_uint(q, 2, 0);
@@ -135,7 +136,7 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_uint(q, 2, result);
         psync_sql_run(q);
         if (result)
-          result=psync_find_result(res, "premiumexpires", PARAM_BOOL)->num;
+          result=psync_find_result(res, "premiumexpires", PARAM_NUM)->num;
         else
           result=0;
         psync_sql_bind_string(q, 1, "premiumexpires");
@@ -176,16 +177,6 @@ static psync_socket *get_connected_socket(){
     psync_free(user);
     psync_free(pass);
     return sock;
-  }
-}
-
-static void set_diff_id(uint64_t newdiffid){
-  psync_sql_res *q;
-  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('diffid', ?)");
-  if (q){
-    psync_sql_bind_uint(q, 1, newdiffid);
-    psync_sql_run(q);
-    psync_sql_free_result(q);
   }
 }
 
@@ -257,6 +248,84 @@ static void process_deletefolder(const binresult *entry){
   psync_sql_run(st);
 }
 
+static void process_createfile(const binresult *entry){
+  static psync_sql_res *st=NULL;
+  const binresult *meta, *name;
+  uint64_t size, userid;
+  if (!entry){
+    if (st){
+      psync_sql_free_result(st);
+      st=NULL;
+    }
+    return;
+  }
+  if (!st){
+    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!st)
+      return;
+  }
+  meta=psync_find_result(entry, "metadata", PARAM_HASH);
+  size=psync_find_result(meta, "size", PARAM_NUM)->num;
+  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
+    userid=psync_my_userid;
+    used_quota+=size;
+  }
+  else
+    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  name=psync_find_result(meta, "name", PARAM_STR);
+  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 3, userid);
+  psync_sql_bind_uint(st, 4, size);
+  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_lstring(st, 6, name->str, name->length);
+  psync_sql_bind_uint(st, 7, psync_find_result(meta, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 8, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_run(st);
+}
+
+static void process_modifyfile(const binresult *entry){
+  static psync_sql_res *st=NULL;
+  uint64_t *arr;
+  if (!entry){
+    if (st){
+      psync_sql_free_result(st);
+      st=NULL;
+    }
+  }
+  else {
+    if (st)
+      psync_sql_reset(st);
+    else
+      st=psync_sql_query("SELECT userid, size FROM file WHERE id=?");
+    if (st){
+      psync_sql_bind_uint(st, 1, psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "fileid", PARAM_NUM)->num);
+      arr=psync_sql_fetch_rowint(st);
+      if (arr && arr[0]==psync_my_userid)
+        used_quota-=arr[1];
+    }
+  }
+  process_createfile(entry);
+}
+
+static void process_deletefile(const binresult *entry){
+  static psync_sql_res *st=NULL;
+  if (!entry){
+    if (st){
+      psync_sql_free_result(st);
+      st=NULL;
+    }
+    return;
+  }
+  if (!st){
+    st=psync_sql_prep_statement("DELETE FROM file WHERE id=?");
+    if (!st)
+      return;
+  }
+  psync_sql_bind_uint(st, 1, psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "fileid", PARAM_NUM)->num);
+  psync_sql_run(st);
+}
+
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
 
 static struct {
@@ -267,10 +336,24 @@ static struct {
 } event_list[] = {
   FN(createfolder),
   FN(modifyfolder),
-  FN(deletefolder)
+  FN(deletefolder),
+  FN(createfile),
+  FN(modifyfile),
+  FN(deletefile)
 };
 
 #define event_list_size sizeof(event_list)/sizeof(event_list[0])
+
+static void set_num_setting(const char *key, uint64_t val){
+  psync_sql_res *q;
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  if (q){
+    psync_sql_bind_string(q, 1, key);
+    psync_sql_bind_uint(q, 2, val);
+    psync_sql_run(q);
+    psync_sql_free_result(q);
+  }
+}
 
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
@@ -288,9 +371,23 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   for (j=0; j<event_list_size; j++)
     if (event_list[j].used)
       event_list[j].process(NULL);
-  set_diff_id(newdiffid);
+  set_num_setting("diffid", newdiffid);
+  set_num_setting("usedquota", used_quota);
   psync_sql_commit_transaction();
+  used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+}
+
+static void check_overquota(){
+  static int lisover=0;
+  int isover=used_quota>=current_quota;
+  if (isover!=lisover){
+    lisover=isover;
+    if (isover)
+      psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_OVERQUOTA);
+    else
+      psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
+  }
 }
 
 void psync_diff_thread(){
@@ -304,8 +401,11 @@ restart:
   sock=get_connected_socket();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
   diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+  used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};
+    if (!psync_do_run)
+      break;
     res=send_command(sock, "diff", diffparams);
     if (!res){
       psync_socket_close(sock);
@@ -327,5 +427,9 @@ restart:
     result=entries->length;
     psync_free(res);
   } while (result);
+  check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  while (psync_do_run){
+  }
+  psync_socket_close(sock);
 }

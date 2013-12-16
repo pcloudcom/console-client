@@ -31,9 +31,11 @@
 #include "pcallbacks.h"
 #include "plibs.h"
 
+
+#define NTO_STR(s) TO_STR(s)
 #define TO_STR(s) #s
 
-static uint32_t statuses[PSTATUS_NUM_STATUSES]={PSTATUS_INVALID, PSTATUS_ONLINE_OFFLINE, PSTATUS_AUTH_PROVIDED};
+static uint32_t statuses[PSTATUS_NUM_STATUSES]={PSTATUS_INVALID, PSTATUS_ONLINE_OFFLINE, PSTATUS_AUTH_PROVIDED, PSTATUS_ACCFULL_QUOTAOK};
 
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
@@ -74,6 +76,14 @@ static uint32_t psync_calc_status(){
       return -1;
     }
   }
+  if (statuses[PSTATUS_TYPE_ACCFULL]!=PSTATUS_ACCFULL_QUOTAOK){
+    if (statuses[PSTATUS_TYPE_ONLINE]==PSTATUS_ACCFULL_OVERQUOTA)
+      return PSTATUS_ACCOUNT_FULL;
+    else {
+      debug(D_BUG, "invalid PSTATUS_TYPE_ACCFULL %d", statuses[PSTATUS_TYPE_ACCFULL]);
+      return -1;
+    }
+  }
   
   return PSTATUS_READY;
 }
@@ -83,7 +93,7 @@ void psync_status_init(){
   statuses[PSTATUS_TYPE_RUN]=psync_sql_cellint("SELECT value FROM setting WHERE id='runstatus'", 0);
   if (statuses[PSTATUS_TYPE_RUN]<PSTATUS_RUN_RUN || statuses[PSTATUS_TYPE_RUN]>PSTATUS_RUN_STOP){
     statuses[PSTATUS_TYPE_RUN]=PSTATUS_RUN_RUN;
-    psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('runstatus', " TO_STR(PSTATUS_RUN_RUN) ")");
+    psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('runstatus', " NTO_STR(PSTATUS_RUN_RUN) ")");
   }
   psync_status.status=psync_calc_status();
 }

@@ -346,6 +346,12 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
   return res;
 }
 
+void psync_sql_reset(psync_sql_res *res){
+  int code=sqlite3_reset(res->stmt);
+  if (code!=SQLITE_OK)
+    debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
+}
+
 void psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (code!=SQLITE_DONE)
@@ -426,12 +432,12 @@ char **psync_sql_fetch_rowstr(psync_sql_res *res){
   }
 }
 
-int64_t *psync_sql_fetch_rowint(psync_sql_res *res){
+uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
   int code, i;
-  int64_t *ret;
+  uint64_t *ret;
   code=sqlite3_step(res->stmt);
   if (code==SQLITE_ROW){
-    ret=(int64_t *)res->row;
+    ret=(uint64_t *)res->row;
     for (i=0; i<res->column_count; i++)
       ret[i]=sqlite3_column_int64(res->stmt, i);
     return ret;
