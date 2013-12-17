@@ -35,6 +35,7 @@ time_t psync_current_time;
 struct exception_list {
   struct exception_list *next;
   timer_callback func;
+  pthread_t threadid;
 };
 
 struct timer_list {
@@ -47,22 +48,27 @@ struct timer_list {
 static struct exception_list *excepions=NULL;
 static struct timer_list *timers=NULL;
 static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
 
 static void timer_thread(){
-  struct exception_list *e;
   struct timer_list *t;
+  struct timespec tm;
   time_t lt;
   lt=psync_current_time;
+  tm.tv_nsec=500000000;
   while (psync_do_run){
-    psync_milisleep(1000);
+    /* pthread_cond_timedwait is better than sleep as it waits for absolute time and therefore no
+     * matter how much time actual timers wasted, they get called every second sharply
+     */
+    tm.tv_sec=psync_current_time+1;
+    pthread_mutex_lock(&timer_mutex);
+    pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
+    pthread_mutex_unlock(&timer_mutex);
     time(&psync_current_time);
-    if (psync_current_time-lt>=5){
-      e=excepions;
-      while (e){
-        e->func();
-        e=e->next;
-      }
-    }
+    if (psync_current_time-lt>=5)
+      timer_notify_exception();
+    else if (psync_current_time==lt)
+      psync_milisleep(1000);
     lt=psync_current_time;
     t=timers;
     while (t){
@@ -78,6 +84,10 @@ static void timer_thread(){
 void psync_timer_init(){
   time(&psync_current_time);
   psync_run_thread(timer_thread);
+}
+
+void timer_wake(){
+  pthread_cond_signal(&timer_cond);
 }
 
 void psync_timer_register(timer_callback func, time_t numsec){
@@ -98,8 +108,21 @@ void psync_timer_exception_handler(timer_callback func){
   t=(struct exception_list *)psync_malloc(sizeof(struct exception_list));
   t->next=NULL;
   t->func=func;
+  t->threadid=pthread_self();
   pthread_mutex_lock(&timer_mutex);
   t->next=excepions;
   excepions=t->next;
   pthread_mutex_unlock(&timer_mutex);
+}
+
+void timer_notify_exception(){
+  struct exception_list *e;
+  pthread_t threadid;
+  e=excepions;
+  threadid=pthread_self();
+  while (e){
+    if (!pthread_equal(threadid, e->threadid))
+      e->func();
+    e=e->next;
+  }
 }
