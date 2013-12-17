@@ -78,6 +78,7 @@ typedef struct _binresult{
 #define P_BOOL(name, val) {PARAM_BOOL, strlen(name), 0, (name), {(val)?1:0}}
 
 #define send_command(sock, cmd, params) do_send_command(sock, cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), -1, 1)
+#define send_command_no_res(sock, cmd, params) do_send_command(sock, cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), -1, 0)
 
 #define psync_find_result(res, name, type) psync_do_find_result(res, name, type, __FILE__, __FUNCTION__, __LINE__)
 #define psync_check_result(res, name, type) psync_do_check_result(res, name, type, __FILE__, __FUNCTION__, __LINE__)
@@ -87,7 +88,7 @@ void psync_api_conn_fail_inc();
 void psync_api_conn_fail_reset();
 
 binresult *get_result(psync_socket *sock);
-binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, binparam *params, size_t paramcnt, int64_t datalen, int readres);
+binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres);
 const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line);
 const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line);
 

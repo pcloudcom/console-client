@@ -348,6 +348,8 @@ void psync_socket_close(psync_socket *sock){
 }
 
 int psync_socket_pendingdata(psync_socket *sock){
+  if (sock->pending)
+    return 1;
   if (sock->ssl)
     return psync_ssl_pendingdata(sock->ssl);
   else
@@ -357,8 +359,9 @@ int psync_socket_pendingdata(psync_socket *sock){
 static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
   int br, r;
   br=0;
-  if (!psync_ssl_pendingdata(sock->ssl) && psync_wait_socket_read_timeout(sock->sock))
+  if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
     return -1;
+  sock->pending=0;
   while (br<num){
     r=psync_ssl_read(sock->ssl, (char *)buff+br, num-br);
     if (r==PSYNC_SSL_FAIL){
@@ -380,15 +383,16 @@ static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
   return br;
 }
 
-static int psync_socket_readall_plain(psync_socket_t sock, void *buff, int num){
+static int psync_socket_readall_plain(psync_socket *sock, void *buff, int num){
   int br, r;
   br=0;
+  if (!sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
   while (br<num){
-    if (psync_wait_socket_read_timeout(sock))
-      return -1;
-    r=recv(sock, (char *)buff+br, num-br, 0);
+    r=recv(sock->sock, (char *)buff+br, num-br, 0);
     if (r==SOCKET_ERROR){
-      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN)
+      if ((psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN) && !psync_wait_socket_read_timeout(sock->sock))
         continue;
       else
         return -1;
@@ -404,7 +408,7 @@ int psync_socket_readall(psync_socket *sock, void *buff, int num){
   if (sock->ssl)
     return psync_socket_readall_ssl(sock, buff, num);
   else
-    return psync_socket_readall_plain(sock->sock, buff, num);
+    return psync_socket_readall_plain(sock, buff, num);
 }
 static int psync_socket_writeall_ssl(psync_socket *sock, const void *buff, int num){
   int br, r;

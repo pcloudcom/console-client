@@ -65,8 +65,10 @@ static void timer_thread(){
     pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
     pthread_mutex_unlock(&timer_mutex);
     time(&psync_current_time);
-    if (psync_current_time-lt>=5)
-      timer_notify_exception();
+    if (psync_current_time-lt>=5){
+      debug(D_NOTICE, "sleep detected");
+      psync_timer_notify_exception();
+    }
     else if (psync_current_time==lt)
       psync_milisleep(1000);
     lt=psync_current_time;
@@ -86,7 +88,7 @@ void psync_timer_init(){
   psync_run_thread(timer_thread);
 }
 
-void timer_wake(){
+void psync_timer_wake(){
   pthread_cond_signal(&timer_cond);
 }
 
@@ -99,7 +101,7 @@ void psync_timer_register(timer_callback func, time_t numsec){
   t->runevery=numsec;
   pthread_mutex_lock(&timer_mutex);
   t->next=timers;
-  timers=t->next;
+  timers=t;
   pthread_mutex_unlock(&timer_mutex);
 }
 
@@ -111,11 +113,11 @@ void psync_timer_exception_handler(timer_callback func){
   t->threadid=pthread_self();
   pthread_mutex_lock(&timer_mutex);
   t->next=excepions;
-  excepions=t->next;
+  excepions=t;
   pthread_mutex_unlock(&timer_mutex);
 }
 
-void timer_notify_exception(){
+void psync_timer_notify_exception(){
   struct exception_list *e;
   pthread_t threadid;
   e=excepions;

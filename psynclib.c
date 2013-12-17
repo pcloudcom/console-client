@@ -90,8 +90,8 @@ uint32_t psync_download_state(){
 void psync_destroy(){
   psync_do_run=0;
   psync_send_status_update();
-  timer_wake();
-  timer_notify_exception();
+  psync_timer_wake();
+  psync_timer_notify_exception();
   psync_milisleep(20);
   psync_sql_lock();
   psync_sql_close();

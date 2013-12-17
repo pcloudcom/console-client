@@ -361,7 +361,7 @@ binresult *get_result(psync_socket *sock){
   return res;
 }
 
-binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, binparam *params, size_t paramcnt, int64_t datalen, int readres){
+binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres){
   size_t i, plen;
   unsigned char *data;
   void *sdata;

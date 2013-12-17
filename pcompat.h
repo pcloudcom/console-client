@@ -86,6 +86,7 @@ typedef SOCKET psync_socket_t;
 typedef struct {
   void *ssl;
   psync_socket_t sock;
+  int pending;
 } psync_socket;
 
 #ifndef INVALID_SOCKET
@@ -121,10 +122,13 @@ int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
 
+/* pipefd[0] is the read end, pipefd[1] is for writing */
 int psync_pipe(psync_socket_t pipefd[2]);
 int psync_pipe_close(psync_socket_t pfd);
 int psync_pipe_read(psync_socket_t pfd, void *buff, int num);
 int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
+
+int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

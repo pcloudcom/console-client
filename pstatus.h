@@ -57,6 +57,7 @@
 #define PSTATUS_ACCFULL_OVERQUOTA 2
 
 void psync_status_init();
+uint32_t psync_status_get(uint32_t statusid);
 void psync_set_status(uint32_t statusid, uint32_t status);
 void psync_wait_status(uint32_t statusid, uint32_t status);
 

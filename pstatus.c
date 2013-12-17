@@ -98,6 +98,14 @@ void psync_status_init(){
   psync_status.status=psync_calc_status();
 }
 
+uint32_t psync_status_get(uint32_t statusid){
+  pthread_mutex_lock(&statusmutex);
+  statusid=statuses[statusid];
+  pthread_mutex_unlock(&statusmutex);
+  return statusid;
+}
+
+
 void psync_set_status(uint32_t statusid, uint32_t status){
   pthread_mutex_lock(&statusmutex);
   statuses[statusid]=status;
@@ -120,4 +128,5 @@ void psync_wait_status(uint32_t statusid, uint32_t status){
   }
   pthread_mutex_unlock(&statusmutex);
 }
+
 

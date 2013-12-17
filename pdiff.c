@@ -31,8 +31,10 @@
 #include "psettings.h"
 #include "plibs.h"
 #include "papi.h"
+#include "ptimer.h"
 
 static uint64_t used_quota=0, current_quota=0;
+static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 
 static psync_socket *get_connected_socket(){
   char *auth, *user, *pass;
@@ -390,11 +392,52 @@ static void check_overquota(){
   }
 }
 
+static void diff_exception_handler(){
+  debug(D_NOTICE, "exception sent");
+  if (exceptionsockwrite!=INVALID_SOCKET)
+    psync_pipe_write(exceptionsockwrite, "e", 1);
+}
+
+static psync_socket_t setup_exeptions(){
+  psync_socket_t pfds[2];
+  if (psync_pipe(pfds)==SOCKET_ERROR)
+    return INVALID_SOCKET;
+  exceptionsockwrite=pfds[1];
+  psync_timer_exception_handler(diff_exception_handler);
+  return pfds[0];
+}
+
+static void handle_exception(psync_socket **sock, char ex){
+  if (ex=='r' || psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP){
+    psync_socket_close(*sock);
+    *sock=get_connected_socket();
+    psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  }
+  else if (ex=='e'){
+    binparam diffparams[]={P_STR("id", "ignore")};
+    if (!send_command_no_res(*sock, "nop", diffparams) || psync_select_in(&(*sock)->sock, 1, PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000)!=0){
+      psync_socket_close(*sock);
+      *sock=get_connected_socket();
+      psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+    }
+    else
+      (*sock)->pending=1;
+  }
+}
+
+static int send_diff_command(psync_socket *sock, uint64_t diffid){
+  binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid), P_BOOL("block", 1)};
+  return send_command_no_res(sock, "diff", diffparams)?0:-1;
+}
+
 void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
   const binresult *entries;
   uint64_t diffid, newdiffid, result;
+  psync_socket_t exceptionsock, socks[2];
+  int sel;
+  char ex;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_milisleep(2);
 restart:
@@ -429,7 +472,57 @@ restart:
   } while (result);
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  exceptionsock=setup_exeptions();
+  if (exceptionsock==INVALID_SOCKET){
+    debug(D_ERROR, "could not create pipe");
+    psync_socket_close(sock);
+    return;
+  }
+  socks[0]=exceptionsock;
+  socks[1]=sock->sock;
+  send_diff_command(sock, diffid);
   while (psync_do_run){
+    if (psync_socket_pendingdata(sock))
+      sel=1;
+    else
+      sel=psync_select_in(socks, 2, -1);
+    if (sel==0){
+      if (!psync_do_run)
+        break;
+      if (psync_pipe_read(exceptionsock, &ex, 1)!=1)
+        continue;
+      handle_exception(&sock, ex);
+      socks[1]=sock->sock;
+    }
+    else if (sel==1){
+      sock->pending=1;
+      res=get_result(sock);
+      if (!res){
+        psync_timer_notify_exception();
+        handle_exception(&sock, 'r');
+        socks[1]=sock->sock;
+        continue;
+      }
+      result=psync_find_result(res, "result", PARAM_NUM)->num;
+      if (result){
+        debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
+        psync_free(res);
+        handle_exception(&sock, 'r');
+        socks[1]=sock->sock;
+        continue;
+      }
+      entries=psync_check_result(res, "entries", PARAM_ARRAY);
+      if (entries){
+        if (entries->length){
+          newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
+          diffid=process_entries(entries, newdiffid);
+        }
+        send_diff_command(sock, diffid);
+      }
+      psync_free(res);
+    }
   }
   psync_socket_close(sock);
+  psync_pipe_close(exceptionsock);
+  psync_pipe_close(exceptionsockwrite);
 }
