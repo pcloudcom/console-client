@@ -69,8 +69,11 @@ static void timer_thread(){
       debug(D_NOTICE, "sleep detected");
       psync_timer_notify_exception();
     }
-    else if (psync_current_time==lt)
+    else if (psync_current_time==lt){
+      if (!psync_do_run)
+        break;
       psync_milisleep(1000);
+    }
     lt=psync_current_time;
     t=timers;
     while (t){
