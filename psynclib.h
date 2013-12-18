@@ -31,13 +31,19 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef uint64_t psync_folderid_t;
+typedef uint64_t psync_fileid_t;
+typedef uint32_t psync_syncid_t;
+typedef uint32_t psync_synctype_t;
+typedef uint32_t psync_listtype_t;
+
 typedef struct {
-  uint64_t fileid;
+  psync_fileid_t fileid;
   uint64_t size;
 } pfile_t;
 
 typedef struct {
-  uint64_t folderid;
+  psync_folderid_t folderid;
   uint8_t cansyncup;
   uint8_t cansyncdown;
 } pfolder_t;
@@ -48,6 +54,7 @@ typedef struct {
     pfolder_t folder;
     pfile_t file;
   };
+  uint16_t namelen;
   uint8_t isfolder;
 } pentry_t;
 
@@ -105,6 +112,7 @@ typedef struct {
 #define PERROR_DATABASE_OPEN           3
 #define PERROR_NO_HOMEDIR              4
 #define PERROR_SSL_INIT_FAILED         5
+#define PERROR_DATABASE_ERROR          6
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
@@ -115,9 +123,9 @@ typedef struct {
   const char *localpath;
   const char *remotename;
   const char *remotepath;
-  uint64_t folderid;
-  uint32_t syncid;
-  uint32_t synctype;
+  psync_folderid_t folderid;
+  psync_syncid_t syncid;
+  psync_synctype_t synctype;
 } psync_folder_t;
 
 typedef struct {
@@ -174,7 +182,8 @@ typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *
  * network calls and other potentially slow to finish tasks.
  * 
  * psync_set_alloc can set the allocator to be used by the library. To be called
- * BEFORE psync_init if ever.
+ * BEFORE psync_init if ever. If allocator is provided, its free() function is to
+ * be used to free any memory that is said to be freed when returned by the library.
  * 
  * psync_set_database_path can set a full path to database file. If it does not exists
  * it will be created. The function should be only called before psync_init. If
@@ -236,10 +245,10 @@ void psync_unlink();
  * 
  */
 
-int32_t psync_add_sync_by_path(const char *localpath, const char *remotepath, uint32_t synctype);
-int32_t psync_add_sync_by_folderid(const char *localpath, uint64_t folderid, uint32_t synctype);
-int psync_change_synctype(uint32_t syncid, uint32_t synctype);
-int psync_delete_sync(uint32_t syncid);
+psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype);
+psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype);
+int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
+int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();
 
 /* Use the following functions to list local or remote folders.
@@ -248,11 +257,13 @@ psync_folder_list_t *psync_get_sync_list();
  * In case of success the returned folder list is to be freed with a
  * single call to free(). In case of error NULL is returned. Parameter
  * listtype should be one of PLIST_FILES, PLIST_FOLDERS or PLIST_ALL.
+ * 
+ * Remote root folder has 0 folderid.
  */
 
-pfolder_list_t *psync_list_local_folder(const char *localpath, uint32_t listtype);
-pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, uint32_t listtype);
-pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid, uint32_t listtype);
+pfolder_list_t *psync_list_local_folder(const char *localpath, psync_listtype_t listtype);
+pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
+pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
 
 /* Returns the code of the last error that occured when calling psync_* functions
  * in the given thread. The error is one of PERROR_* constants.

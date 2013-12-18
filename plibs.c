@@ -41,6 +41,7 @@ pthread_mutex_t psync_db_mutex;
 sqlite3 *psync_db;
 pstatus_t psync_status;
 int psync_do_run=1;
+PSYNC_THREAD uint32_t psync_error=0;
 
 char *psync_strdup(const char *str){
   size_t len;
@@ -535,11 +536,17 @@ const char *psync_err_string_expected(const char *file, const char *function, in
   return "";
 }
 
-const char *psync_err_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len){
-  if (D_CRITICAL<=DEBUG_LEVEL)
-    psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
-  *len=0;
-  return "";
+const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len){
+  if (v->type==PSYNC_TSTRING){
+    *len=v->length;
+    return v->str;
+  }
+  else{
+    if (D_CRITICAL<=DEBUG_LEVEL)
+      psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
+    *len=0;
+    return "";
+  }
 }
 
 double psync_err_real_expected(const char *file, const char *function, int unsigned line, psync_variant *v){

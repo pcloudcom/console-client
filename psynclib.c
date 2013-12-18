@@ -36,14 +36,13 @@
 #include "pssl.h"
 #include "ptimer.h"
 #include "pupload.h"
+#include "pfolder.h"
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
 psync_free_t psync_free=free;
 
 const char *psync_database=NULL;
-
-PSYNC_THREAD uint32_t psync_error=0;
 
 #define return_error(err) do {psync_error=err; return -1;} while (0)
 
@@ -172,15 +171,25 @@ void psync_set_auth(const char *auth, int save){
 
 void psync_unlink();
 
-int32_t psync_add_sync_by_path(const char *localpath, const char *remotepath, uint32_t synctype);
-int32_t psync_add_sync_by_folderid(const char *localpath, uint64_t folderid, uint32_t synctype);
-int psync_change_synctype(uint32_t syncid, uint32_t synctype);
-int psync_delete_sync(uint32_t syncid);
+psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype);
+psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype);
+int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
+int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();
 
-pfolder_list_t *psync_list_local_folder(const char *localpath, uint32_t listtype);
-pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, uint32_t listtype);
-pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid, uint32_t listtype);
+pfolder_list_t *psync_list_local_folder(const char *localpath, psync_listtype_t listtype);
+
+pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype){
+  psync_folderid_t folderid=psync_get_folderid_by_path(remotepath);
+  if (folderid!=PSYNC_INVALID_FOLDERID)
+    return psync_list_remote_folder(folderid, listtype);
+  else
+    return NULL;
+}
+
+pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype){
+  return psync_list_remote_folder(folderid, listtype);
+}
 
 int psync_pause(){
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_PAUSE);

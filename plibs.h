@@ -65,8 +65,8 @@
 
 #define psync_get_number(v) ((v).type==PSYNC_TNUMBER?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_string(v) ((v).type==PSYNC_TSTRING?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
-#define psync_get_lstring(v, l) ((v).type==PSYNC_TSTRING?((v).str, *l=(v).length):psync_err_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l))
-#define psync_get_real(v) ((v).type==PSYNC_TREAL?(v).num:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_lstring(v, l) psync_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l)
+#define psync_get_real(v) ((v).type==PSYNC_TREAL?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0])) 
 
@@ -92,6 +92,7 @@ extern pstatus_t psync_status;
 extern char *psync_my_auth, *psync_my_user, *psync_my_pass;
 extern uint64_t psync_my_userid;
 extern pthread_mutex_t psync_my_auth_mutex;
+extern PSYNC_THREAD uint32_t psync_error;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC;
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
@@ -136,7 +137,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
 
 uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
 const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
-const char *psync_err_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len) PSYNC_COLD;
+const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len) PSYNC_COLD;
 double psync_err_real_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
 
 #endif
