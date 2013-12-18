@@ -333,6 +333,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
   ret=(psync_socket *)psync_malloc(sizeof(psync_socket));
   ret->ssl=sslc;
   ret->sock=sock;
+  ret->pending=0;
   return ret;
 }
 
