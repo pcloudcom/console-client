@@ -106,6 +106,10 @@ typedef struct {
 #define PERROR_NO_HOMEDIR              4
 #define PERROR_SSL_INIT_FAILED         5
 
+#define PLIST_FILES   1
+#define PLIST_FOLDERS 2
+#define PLIST_ALL     3
+
 typedef struct {
   const char *localname;
   const char *localpath;
@@ -242,12 +246,13 @@ psync_folder_list_t *psync_get_sync_list();
  * For local folders fileid and folderid will have undefined values.
  * Remote paths use slashes (/) and start with one.
  * In case of success the returned folder list is to be freed with a
- * single call to free(). In case of error NULL is returned.
+ * single call to free(). In case of error NULL is returned. Parameter
+ * listtype should be one of PLIST_FILES, PLIST_FOLDERS or PLIST_ALL.
  */
 
-pfolder_list_t *psync_list_local_folder(const char *localpath);
-pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath);
-pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid);
+pfolder_list_t *psync_list_local_folder(const char *localpath, uint32_t listtype);
+pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, uint32_t listtype);
+pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid, uint32_t listtype);
 
 /* Returns the code of the last error that occured when calling psync_* functions
  * in the given thread. The error is one of PERROR_* constants.

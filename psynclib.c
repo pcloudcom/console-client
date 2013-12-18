@@ -35,6 +35,7 @@
 #include "pdiff.h"
 #include "pssl.h"
 #include "ptimer.h"
+#include "pupload.h"
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
@@ -76,7 +77,8 @@ int psync_init(){
 
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback){
   psync_timer_init();
-  psync_run_thread(psync_diff_thread);
+  psync_diff_init();
+  psync_upload_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
@@ -95,6 +97,9 @@ void psync_destroy(){
   psync_milisleep(20);
   psync_sql_lock();
   psync_sql_close();
+}
+
+void psync_get_status(pstatus_t *status){
 }
 
 char *psync_get_username(){
@@ -165,5 +170,31 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
-void psync_unlink(){
+void psync_unlink();
+
+int32_t psync_add_sync_by_path(const char *localpath, const char *remotepath, uint32_t synctype);
+int32_t psync_add_sync_by_folderid(const char *localpath, uint64_t folderid, uint32_t synctype);
+int psync_change_synctype(uint32_t syncid, uint32_t synctype);
+int psync_delete_sync(uint32_t syncid);
+psync_folder_list_t *psync_get_sync_list();
+
+pfolder_list_t *psync_list_local_folder(const char *localpath, uint32_t listtype);
+pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, uint32_t listtype);
+pfolder_list_t *psync_list_remote_folder_by_folderid(uint64_t folderid, uint32_t listtype);
+
+int psync_pause(){
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_PAUSE);
+  return 0;
 }
+
+int psync_stop(){
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
+  psync_timer_notify_exception();
+  return 0;
+}
+
+int psync_resume(){
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
+  return 0;
+}
+

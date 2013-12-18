@@ -25,44 +25,42 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_STATUS_H
-#define _PSYNC_STATUS_H
+#include "pupload.h"
+#include "pstatus.h"
+#include "ptimer.h"
+#include "plibs.h"
 
-#include <stdint.h>
+static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t upload_cond=PTHREAD_COND_INITIALIZER;
+static uint32_t upload_wakes=0;
 
-#define PSTATUS_NUM_STATUSES 4
+static void upload_thread(){
+  static const uint32_t requiredstatuses[]={
+    PSTATUS_COMBINE(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN),
+    PSTATUS_COMBINE(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE),
+    PSTATUS_COMBINE(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK)
+  };
+  while (psync_do_run){
+    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
+    
+    //TODO: check for upload tasks
+    
+    pthread_mutex_lock(&upload_mutex);
+    if (!upload_wakes)
+      pthread_cond_wait(&upload_cond, &upload_mutex);
+    upload_wakes=0;
+    pthread_mutex_unlock(&upload_mutex);
+  }
+}
 
-#define PSTATUS_TYPE_RUN     0
-#define PSTATUS_TYPE_ONLINE  1
-#define PSTATUS_TYPE_AUTH    2
-#define PSTATUS_TYPE_ACCFULL 3
+void psync_wake_upload(){
+  pthread_mutex_lock(&upload_mutex);
+  upload_wakes++;
+  pthread_cond_signal(&upload_cond);
+  pthread_mutex_unlock(&upload_mutex);  
+}
 
-#define PSTATUS_INVALID   0
-
-#define PSTATUS_RUN_RUN   1
-#define PSTATUS_RUN_PAUSE 2
-#define PSTATUS_RUN_STOP  4
-
-#define PSTATUS_ONLINE_CONNECTING 1
-#define PSTATUS_ONLINE_SCANNING   2
-#define PSTATUS_ONLINE_ONLINE     4
-#define PSTATUS_ONLINE_OFFLINE    8
-
-#define PSTATUS_AUTH_PROVIDED 1
-#define PSTATUS_AUTH_REQURED  2
-#define PSTATUS_AUTH_MISMATCH 4
-#define PSTATUS_AUTH_BADLOGIN 8
-
-#define PSTATUS_ACCFULL_QUOTAOK   1
-#define PSTATUS_ACCFULL_OVERQUOTA 2
-
-#define PSTATUS_COMBINE(type, statuses) (((type)<<24)+(statuses))
-
-void psync_status_init();
-uint32_t psync_status_get(uint32_t statusid);
-void psync_set_status(uint32_t statusid, uint32_t status);
-void psync_wait_status(uint32_t statusid, uint32_t status);
-void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt);
-void psync_wait_statuses(uint32_t first, ...);
-
-#endif
+void psync_upload_init(){
+  psync_timer_exception_handler(psync_wake_upload);
+  psync_run_thread(upload_thread);
+}

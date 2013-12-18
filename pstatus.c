@@ -27,6 +27,7 @@
 
 #include <string.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include "pstatus.h"
 #include "pcallbacks.h"
 #include "plibs.h"
@@ -112,6 +113,7 @@ void psync_set_status(uint32_t statusid, uint32_t status){
   if (status_waiters)
     pthread_cond_broadcast(&statuscond);
   pthread_mutex_unlock(&statusmutex);
+  psync_status.remoteisfull=(statuses[PSTATUS_TYPE_ACCFULL]==PSTATUS_ACCFULL_OVERQUOTA);
   status=psync_calc_status();
   if (psync_status.status!=status){
     psync_status.status=status;
@@ -129,4 +131,35 @@ void psync_wait_status(uint32_t statusid, uint32_t status){
   pthread_mutex_unlock(&statusmutex);
 }
 
+void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt){
+  uint32_t waited, i, statusid, status;
+  pthread_mutex_lock(&statusmutex);
+  do {
+    waited=0;
+    for (i=0; i<cnt; i++){
+      statusid=combinedstatuses[i]>>24;
+      status=combinedstatuses[i]&0x00ffffff;
+      while ((statuses[statusid]&status)==0){
+        waited=1;
+        status_waiters++;
+        pthread_cond_wait(&statuscond, &statusmutex);
+        status_waiters--;
+      }
+    }
+  } while (waited);
+  pthread_mutex_unlock(&statusmutex);
+}
+
+void psync_wait_statuses(uint32_t first, ...){
+  uint32_t arr[PSTATUS_NUM_STATUSES];
+  uint32_t cnt;
+  va_list ap;
+  cnt=0;
+  va_start(ap, first);
+  do {
+    arr[cnt++]=first;
+  } while ((first=va_arg(ap, uint32_t)));
+  va_end(ap);
+  psync_wait_statuses_array(arr, cnt);
+}
 

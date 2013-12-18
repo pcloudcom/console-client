@@ -68,6 +68,8 @@
 #define psync_get_lstring(v, l) ((v).type==PSYNC_TSTRING?((v).str, *l=(v).length):psync_err_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l))
 #define psync_get_real(v) ((v).type==PSYNC_TREAL?(v).num:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 
+#define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0])) 
+
 typedef struct {
   uint32_t type;
   uint32_t length;

@@ -430,7 +430,7 @@ static int send_diff_command(psync_socket *sock, uint64_t diffid){
   return send_command_no_res(sock, "diff", diffparams)?0:-1;
 }
 
-void psync_diff_thread(){
+static void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
   const binresult *entries;
@@ -525,4 +525,8 @@ restart:
   psync_socket_close(sock);
   psync_pipe_close(exceptionsock);
   psync_pipe_close(exceptionsockwrite);
+}
+
+void psync_diff_init(){
+  psync_run_thread(psync_diff_thread);
 }
