@@ -47,6 +47,7 @@
 #define PSYNC_STACK_SIZE 64*1024
 
 #define PSYNC_DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
+#define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloudsync.db"
 
 #define PSYNC_USE_SSL_DEFAULT 1
 

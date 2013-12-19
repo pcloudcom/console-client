@@ -61,6 +61,7 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 int psync_init(){
+  psync_compat_init();
   if (psync_ssl_init())
     return_error(PERROR_SSL_INIT_FAILED);
   if (!psync_database){

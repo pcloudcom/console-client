@@ -8,7 +8,7 @@
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
+ *       documentation and/or sudo materials provided with the distribution.
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
@@ -41,6 +41,8 @@
 #include <sys/stat.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <fcntl.h>
 #include <pwd.h>
 
 #define psync_close_socket close
@@ -48,7 +50,7 @@
 #elif defined(P_OS_WINDOWS)
 
 #include <process.h>
-#include <WinBase.h>
+#include <windows.h>
 
 #define psync_close_socket closesocket
 
@@ -59,21 +61,67 @@ typedef struct {
   void *ptr;
 } psync_run_data1;
 
+#if defined(P_OS_POSIX)
+static uid_t psync_uid;
+static gid_t psync_gid;
+static gid_t *psync_gids;
+static int psync_gids_cnt;
+#endif
+
+void psync_compat_init(){
+#if defined(P_OS_POSIX)
+  psync_uid=getuid();
+  psync_gid=getgid();
+  psync_gids_cnt=getgroups(0, NULL);
+  psync_gids=(gid_t *)psync_malloc(sizeof(gid_t)*psync_gids_cnt);
+  if (getgroups(psync_gids_cnt, psync_gids)!=psync_gids_cnt)
+    psync_gids_cnt=0;
+#endif
+}
+
+#if defined(P_OS_POSIX)
+static int psync_stat_mode_ok(struct stat *buf, unsigned int bits){
+  int i;
+  if (psync_uid==0)
+    return 1;
+  if (buf->st_uid==psync_uid){
+    bits<<=6;
+    return buf->st_mode&bits==bits;
+  }
+  if (buf->st_gid==psync_gid){
+    bits<<=3;
+    return buf->st_mode&bits==bits;
+  }
+  for (i=0; i<psync_gids_cnt; i++)
+    if (buf->st_gid==psync_gids[i]){
+      bits<<=3;
+      return buf->st_mode&bits==bits;
+    }
+  buf->st_mode&bits==bits;
+}
+#endif
+
 char *psync_get_default_database_path(){
 #if defined(P_OS_POSIX)
-  struct passwd pwd;
-  struct passwd *result;
+  struct stat st;
   const char *dir;
-  char buff[4096];
   dir=getenv("HOME");
-  if (!dir || access(dir, W_OK)){
-    if (getpwuid_r(getuid(), &pwd, buff, sizeof(buff), &result) || access(result->pw_dir, W_OK))
+  if (!dir || stat(dir, &st) || !psync_stat_mode_ok(&st, 7)){
+    struct passwd pwd;
+    struct passwd *result;
+    char buff[4096];
+    if (getpwuid_r(getuid(), &pwd, buff, sizeof(buff), &result) || stat(result->pw_dir, &st) || !psync_stat_mode_ok(&st, 7))
       return NULL;
     dir=result->pw_dir;
   }
-  return psync_strcat(dir, "/", PSYNC_DEFAULT_POSIX_DBNAME, NULL);
+  return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_POSIX_DBNAME, NULL);
 #elif defined(P_OS_WINDOWS)
-#error "Need Windows implementation"
+#warning "should we create pCloud directory in user's home directory and put the file there on Windows?"
+  const char *dir;
+  dir=getenv("UserProfile");
+  if (!dir)
+    return NULL;
+  return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_WINDOWS_DBNAME, NULL);
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -194,15 +242,15 @@ static psync_socket_t connect_res(struct addrinfo *res){
   static const unsigned long non_blocking_mode=1;
 #endif
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
-#define SOCK_TYPE_OR (SOCK_NONBLOCK|SOCK_CLOEXEC)
+#define PSOCK_TYPE_OR (SOCK_NONBLOCK|SOCK_CLOEXEC)
 #else
-#define SOCK_TYPE_OR 0
-#define SOCK_NEED_NOBLOCK
+#define PSOCK_TYPE_OR 0
+#define PSOCK_NEED_NOBLOCK
 #endif
   while (res){
-    sock=socket(res->ai_family, res->ai_socktype|SOCK_TYPE_OR, res->ai_protocol);
+    sock=socket(res->ai_family, res->ai_socktype|PSOCK_TYPE_OR, res->ai_protocol);
     if (sock!=INVALID_SOCKET){
-#if defined(SOCK_NEED_NOBLOCK)
+#if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
       ioctlsocket(sock, FIONBIO, &non_blocking_mode);
 #elif defined(P_OS_POSIX) 

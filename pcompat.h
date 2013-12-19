@@ -51,6 +51,9 @@
 #define psync_sock_err() errno
 #define psync_sock_set_err(e) errno=(e)
 
+#define PSYNC_DIRECTORY_SEPARATOR "/"
+#define PSYNC_DIRECTORY_SEPARATORC '/'
+
 #define P_WOULDBLOCK EWOULDBLOCK
 #define P_AGAIN      EAGAIN
 #define P_INPROGRESS EINPROGRESS
@@ -64,11 +67,14 @@ typedef int psync_socket_t;
 
 #define _WIN32_WINNT 0x0400
 
-#include <Winsock2.h>
-#include <Ws2tcpip.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
+
+#define PSYNC_DIRECTORY_SEPARATOR "\\"
+#define PSYNC_DIRECTORY_SEPARATORC '\\'
 
 #define P_WOULDBLOCK WSAEWOULDBLOCK
 #define P_AGAIN      WSAEWOULDBLOCK
@@ -88,6 +94,10 @@ typedef struct {
   psync_socket_t sock;
   int pending;
 } psync_socket;
+
+typedef struct {
+  const char *name;
+} psync_stat;
 
 #ifndef INVALID_SOCKET
 #define INVALID_SOCKET -1
@@ -110,6 +120,7 @@ typedef struct {
 typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
+void psync_compat_init();
 char *psync_get_default_database_path();
 void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);
