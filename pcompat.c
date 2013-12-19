@@ -8,7 +8,7 @@
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or sudo materials provided with the distribution.
+ *       documentation and/or materials provided with the distribution.
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
@@ -86,18 +86,18 @@ static int psync_stat_mode_ok(struct stat *buf, unsigned int bits){
     return 1;
   if (buf->st_uid==psync_uid){
     bits<<=6;
-    return buf->st_mode&bits==bits;
+    return (buf->st_mode&bits)==bits;
   }
   if (buf->st_gid==psync_gid){
     bits<<=3;
-    return buf->st_mode&bits==bits;
+    return (buf->st_mode&bits)==bits;
   }
   for (i=0; i<psync_gids_cnt; i++)
     if (buf->st_gid==psync_gids[i]){
       bits<<=3;
-      return buf->st_mode&bits==bits;
+      return (buf->st_mode&bits)==bits;
     }
-  buf->st_mode&bits==bits;
+  return (buf->st_mode&bits)==bits;
 }
 #endif
 
@@ -613,3 +613,60 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result){
   return result;
 }
 #endif
+
+int psync_list_dir(const char *path, psync_list_dir_callback callback){
+#if defined(P_OS_POSIX)
+  struct stat st;
+  psync_stat pst;
+  DIR *dh;
+  char *cpath;
+  size_t pl;
+  struct dirent entry, *de;
+  if (stat(path, &st))
+    return -1;
+  pst.canmodifyparent=psync_stat_mode_ok(&st, 2);
+  dh=opendir(path);
+  if (!dh)
+    return -1;
+  pl=strlen(path);
+  cpath=(char *)psync_malloc(pl+sizeof(entry.d_name)+2);
+  cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
+  while (!readdir_r(dh, &entry, &de))
+    if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
+      strcpy(cpath+pl, de->d_name);
+      if (!stat(cpath, &st)){
+        pst.name=de->d_name;
+        pst.size=st.st_size;
+        pst.lastmod=st.st_mtime;
+        pst.isfolder=S_ISDIR(st.st_mode);
+        pst.canread=psync_stat_mode_ok(&st, 4);
+        pst.canwrite=psync_stat_mode_ok(&st, 2);
+        callback(&pst);
+      }
+    }
+  psync_free(cpath);
+  closedir(dh);
+  return 0;
+#elif defined(P_OS_WINDOWS)
+  char *spath;
+  WIN32_FIND_DATA st;
+  HANDLE dh;
+  spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
+  dh=FindFirstFile(spath, &st);
+  psync_free(spath);
+  if (dh==INVALID_HANDLE_VALUE)
+    return GetLastError()==ERROR_FILE_NOT_FOUND?0:-1;
+  pst.name=st.cFileName;
+  pst.canread=1;
+  pst.canwrite=1;
+  pst.canmodifyparent=1;
+  do {
+    pst.size=st.nFileSizeHigh*(MAXDWORD+1)+st.nFileSizeLow;
+    //lastmod??
+    pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY;
+  } while (FindNextFile(dh, &st));
+  FindClose(dh);
+#else
+#error "Function not implemented for your operating system"
+#endif
+}

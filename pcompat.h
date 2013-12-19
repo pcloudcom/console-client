@@ -97,6 +97,12 @@ typedef struct {
 
 typedef struct {
   const char *name;
+  uint64_t size;
+  time_t lastmod;
+  uint8_t isfolder;
+  uint8_t canread;
+  uint8_t canwrite;
+  uint8_t canmodifyparent;
 } psync_stat;
 
 #ifndef INVALID_SOCKET
@@ -117,6 +123,7 @@ typedef struct {
 #define PSYNC_SENTINEL
 #endif
 
+typedef void (*psync_list_dir_callback)(psync_stat *);
 typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
@@ -140,6 +147,8 @@ int psync_pipe_read(psync_socket_t pfd, void *buff, int num);
 int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
+
+int psync_list_dir(const char *path, psync_list_dir_callback callback);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
