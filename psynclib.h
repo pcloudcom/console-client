@@ -133,6 +133,8 @@ typedef struct {
   psync_folder_t folders[];
 } psync_folder_list_t;
 
+#define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -261,7 +263,7 @@ psync_folder_list_t *psync_get_sync_list();
  * Remote root folder has 0 folderid.
  */
 
-pfolder_list_t *psync_list_local_folder(const char *localpath, psync_listtype_t listtype);
+pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
 

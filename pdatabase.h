@@ -41,5 +41,14 @@ CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
 COMMIT;\
 "
 
+#define PSYNC_DATABASE_DELETE \
+"DROP INDEX kfolderfolderid;\
+DROP INDEX kfilefolderid;\
+DROP TABLE setting;\
+DROP TABLE folder;\
+DROP TABLE file;\
+VACUUM;\
+" PSYNC_DATABASE_STRUCTURE
+
 
 #endif

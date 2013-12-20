@@ -43,6 +43,11 @@ typedef struct {
   uint32_t entriesalloc;
 } folder_list;
 
+typedef struct {
+  folder_list *folderlist;
+  psync_listtype_t listtype;
+} flist_ltype;
+
 psync_folderid_t psync_get_folderid_by_path(const char *path){
   psync_folderid_t cfolderid;
   const char *sl;
@@ -117,6 +122,12 @@ static void folder_list_add(folder_list *list, pentry_t *entry){
   list->namebuff[list->nameoff++]=0;
 }
 
+static void folder_list_free(folder_list *list){
+  psync_free(list->entries);
+  psync_free(list->namebuff);
+  psync_free(list);
+}
+
 static pfolder_list_t *folder_list_finalize(folder_list *list){
   pfolder_list_t *ret;
   char *name;
@@ -130,9 +141,7 @@ static pfolder_list_t *folder_list_finalize(folder_list *list){
     ret->entries[i].name=name;
     name+=list->entries[i].namelen+1;
   }
-  psync_free(list->entries);
-  psync_free(list->namebuff);
-  psync_free(list);
+  folder_list_free(list);
   return ret;
 }
 
@@ -177,4 +186,35 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
     }
   }  
   return folder_list_finalize(list);
+}
+
+static void add_to_folderlist(void *ptr, psync_stat *stat){
+  flist_ltype *ft=(flist_ltype *)ptr;
+  pentry_t entry;
+  if (((ft->listtype&PLIST_FOLDERS) && stat->isfolder) || ((ft->listtype&PLIST_FILES) && !stat->isfolder)){
+    entry.name=stat->name;
+    entry.namelen=strlen(stat->name);
+    if (stat->isfolder){
+      entry.isfolder=1;
+      entry.folder.cansyncup=stat->canread;
+      entry.folder.cansyncdown=stat->canwrite;
+    }
+    else{
+      entry.isfolder=0;
+      entry.file.size=stat->size;
+    }
+    folder_list_add(ft->folderlist, &entry);
+  }
+}
+
+pfolder_list_t *psync_list_local_folder(const char *path, psync_listtype_t listtype){
+  flist_ltype ft;
+  ft.folderlist=folder_list_init();
+  ft.listtype=listtype;
+  if (psync_list_dir(path, add_to_folderlist, &ft)){
+    folder_list_free(ft.folderlist);
+    return NULL;
+  }
+  else
+    return folder_list_finalize(ft.folderlist);
 }

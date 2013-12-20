@@ -59,7 +59,7 @@ static psync_socket *get_connected_socket(){
     if (!pass && psync_my_pass)
       pass=psync_strdup(psync_my_pass);
     if (!auth && (!pass || !user)){
-      psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQURED);
+      psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }

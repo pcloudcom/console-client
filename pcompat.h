@@ -123,7 +123,7 @@ typedef struct {
 #define PSYNC_SENTINEL
 #endif
 
-typedef void (*psync_list_dir_callback)(psync_stat *);
+typedef void (*psync_list_dir_callback)(void *, psync_stat *);
 typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
@@ -148,7 +148,7 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
 
-int psync_list_dir(const char *path, psync_list_dir_callback callback);
+int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

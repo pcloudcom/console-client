@@ -170,15 +170,33 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
-void psync_unlink();
+void psync_unlink(){
+  uint32_t runstatus;
+  runstatus=psync_status_get(PSTATUS_TYPE_RUN);
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
+  psync_timer_notify_exception();
+  psync_milisleep(20);
+  psync_sql_statement(PSYNC_DATABASE_DELETE);
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
+  psync_set_status(PSTATUS_TYPE_RUN, runstatus);
+}
 
-psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype);
+psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype){
+  psync_folderid_t folderid=psync_get_folderid_by_path(remotepath);
+  if (folderid!=PSYNC_INVALID_FOLDERID)
+    return psync_add_sync_by_folderid(localpath, folderid, synctype);
+  else
+    return PSYNC_INVALID_SYNCID;
+}
+
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype);
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();
 
-pfolder_list_t *psync_list_local_folder(const char *localpath, psync_listtype_t listtype);
+pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype){
+  return psync_list_local_folder(localpath, listtype);
+}
 
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype){
   psync_folderid_t folderid=psync_get_folderid_by_path(remotepath);

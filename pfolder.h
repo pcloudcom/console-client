@@ -34,5 +34,6 @@
 
 psync_folderid_t psync_get_folderid_by_path(const char *path);
 pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listtype_t listtype);
+pfolder_list_t *psync_list_local_folder(const char *path, psync_listtype_t listtype);
 
 #endif

@@ -612,9 +612,13 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result){
   *result=*res;
   return result;
 }
+
+static time_t filetime_to_timet(const FILETIME *ft){
+  return (ft->dwHighDateTime*(MAXDWORD+1ULL)+ft->dwLowDateTime)/10000000ULL-11644473600ULL;
+}
 #endif
 
-int psync_list_dir(const char *path, psync_list_dir_callback callback){
+int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
 #if defined(P_OS_POSIX)
   struct stat st;
   psync_stat pst;
@@ -623,11 +627,11 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback){
   size_t pl;
   struct dirent entry, *de;
   if (stat(path, &st))
-    return -1;
+    goto err1;
   pst.canmodifyparent=psync_stat_mode_ok(&st, 2);
   dh=opendir(path);
   if (!dh)
-    return -1;
+    goto err1;
   pl=strlen(path);
   cpath=(char *)psync_malloc(pl+sizeof(entry.d_name)+2);
   cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
@@ -641,12 +645,15 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback){
         pst.isfolder=S_ISDIR(st.st_mode);
         pst.canread=psync_stat_mode_ok(&st, 4);
         pst.canwrite=psync_stat_mode_ok(&st, 2);
-        callback(&pst);
+        callback(ptr, &pst);
       }
     }
   psync_free(cpath);
   closedir(dh);
   return 0;
+err1:
+  psync_error=PERROR_LOCAL_FOLDER_NOT_FOUND;
+  return -1;
 #elif defined(P_OS_WINDOWS)
   char *spath;
   WIN32_FIND_DATA st;
@@ -654,18 +661,26 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback){
   spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
   dh=FindFirstFile(spath, &st);
   psync_free(spath);
-  if (dh==INVALID_HANDLE_VALUE)
-    return GetLastError()==ERROR_FILE_NOT_FOUND?0:-1;
+  if (dh==INVALID_HANDLE_VALUE){
+    if (GetLastError()==ERROR_FILE_NOT_FOUND)
+      return 0;
+    else{
+      psync_error=PERROR_LOCAL_FOLDER_NOT_FOUND;
+      return -1;
+    }
+  }
   pst.name=st.cFileName;
   pst.canread=1;
   pst.canwrite=1;
   pst.canmodifyparent=1;
   do {
-    pst.size=st.nFileSizeHigh*(MAXDWORD+1)+st.nFileSizeLow;
-    //lastmod??
+    pst.size=st.nFileSizeHigh*(MAXDWORD+1ULL)+st.nFileSizeLow;
+    pst.lastmod=filetime_to_timet(&st.ftLastWriteTime);
     pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY;
+    callback(ptr, &pst);
   } while (FindNextFile(dh, &st));
   FindClose(dh);
+  return 0;
 #else
 #error "Function not implemented for your operating system"
 #endif
