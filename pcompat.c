@@ -79,8 +79,8 @@ void psync_compat_init(){
 #endif
 }
 
+int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits){
 #if defined(P_OS_POSIX)
-static int psync_stat_mode_ok(struct stat *buf, unsigned int bits){
   int i;
   if (psync_uid==0)
     return 1;
@@ -98,8 +98,10 @@ static int psync_stat_mode_ok(struct stat *buf, unsigned int bits){
       return (buf->st_mode&bits)==bits;
     }
   return (buf->st_mode&bits)==bits;
-}
+#else
+  return 1;
 #endif
+}
 
 char *psync_get_default_database_path(){
 #if defined(P_OS_POSIX)
@@ -621,11 +623,12 @@ static time_t filetime_to_timet(const FILETIME *ft){
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
 #if defined(P_OS_POSIX)
   struct stat st;
-  psync_stat pst;
+  psync_pstat pst;
   DIR *dh;
   char *cpath;
-  size_t pl;
-  struct dirent entry, *de;
+  size_t pl, entrylen;
+  long namelen;
+  struct dirent *entry, *de;
   if (stat(path, &st))
     goto err1;
   pst.canmodifyparent=psync_stat_mode_ok(&st, 2);
@@ -633,9 +636,16 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   if (!dh)
     goto err1;
   pl=strlen(path);
-  cpath=(char *)psync_malloc(pl+sizeof(entry.d_name)+2);
-  cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
-  while (!readdir_r(dh, &entry, &de))
+  namelen=pathconf(path, _PC_NAME_MAX);
+  if (namelen==-1)
+    namelen=255;
+  entrylen=offsetof(struct dirent, d_name)+namelen+1;
+  cpath=(char *)psync_malloc(pl+namelen+2);
+  entry=(struct dirent *)psync_malloc(entrylen);
+  memcpy(cpath, path, pl);
+  if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
+    cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
+  while (!readdir_r(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
       strcpy(cpath+pl, de->d_name);
       if (!stat(cpath, &st)){
@@ -648,6 +658,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
         callback(ptr, &pst);
       }
     }
+  psync_free(entry);
   psync_free(cpath);
   closedir(dh);
   return 0;
@@ -655,6 +666,7 @@ err1:
   psync_error=PERROR_LOCAL_FOLDER_NOT_FOUND;
   return -1;
 #elif defined(P_OS_WINDOWS)
+  psync_pstat pst;
   char *spath;
   WIN32_FIND_DATA st;
   HANDLE dh;

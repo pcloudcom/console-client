@@ -107,12 +107,14 @@ typedef struct {
 #define PSYNC_UPLOAD_ONLY    2
 #define PSYNC_FULL           3
 
-#define PERROR_LOCAL_FOLDER_NOT_FOUND  1
-#define PERROR_REMOTE_FOLDER_NOT_FOUND 2
-#define PERROR_DATABASE_OPEN           3
-#define PERROR_NO_HOMEDIR              4
-#define PERROR_SSL_INIT_FAILED         5
-#define PERROR_DATABASE_ERROR          6
+#define PERROR_LOCAL_FOLDER_NOT_FOUND   1
+#define PERROR_REMOTE_FOLDER_NOT_FOUND  2
+#define PERROR_DATABASE_OPEN            3
+#define PERROR_NO_HOMEDIR               4
+#define PERROR_SSL_INIT_FAILED          5
+#define PERROR_DATABASE_ERROR           6
+#define PERROR_LOCAL_FOLDER_ACC_DENIED  7
+#define PERROR_REMOTE_FOLDER_ACC_DENIED 8
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2

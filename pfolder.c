@@ -132,6 +132,8 @@ static pfolder_list_t *folder_list_finalize(folder_list *list){
   pfolder_list_t *ret;
   char *name;
   uint32_t i;
+  debug(D_NOTICE, "allocating %u bytes for folder list, %u of which for names", 
+        (unsigned)(offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt+list->nameoff), (unsigned)list->nameoff);
   ret=(pfolder_list_t *)psync_malloc(offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt+list->nameoff);
   name=((char *)ret)+offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt;
   ret->entrycnt=list->entriescnt;
@@ -188,7 +190,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
   return folder_list_finalize(list);
 }
 
-static void add_to_folderlist(void *ptr, psync_stat *stat){
+static void add_to_folderlist(void *ptr, psync_pstat *stat){
   flist_ltype *ft=(flist_ltype *)ptr;
   pentry_t entry;
   if (((ft->listtype&PLIST_FOLDERS) && stat->isfolder) || ((ft->listtype&PLIST_FILES) && !stat->isfolder)){

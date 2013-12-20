@@ -28,4 +28,14 @@
 #ifndef _PSYNC_OPENSSL_H
 #define _PSYNC_OPENSSL_H
 
+#include <openssl/sha.h>
+
+#define psync_sha1_digest_len 20
+#define psync_sha1_digest_hexlen 40
+#define psync_sha1_ctx SHA_CTX
+#define psync_sha1(data, datalen, checksum) SHA1(data, datalen, checksum)
+#define psync_sha1_init(pctx) SHA1_Init(pctx)
+#define psync_sha1_update(pctx, data, datalen) SHA1_Update(pctx, data, datalen)
+#define psync_sha1_final(checksum, pctx) SHA1_Final(checksum, pctx)
+
 #endif

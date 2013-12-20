@@ -39,14 +39,22 @@
 #define P_OS_POSIX
 #endif
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
+
 #if defined(P_OS_POSIX)
 
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/select.h>
 #include <netdb.h>
 #include <fcntl.h>
-#include <errno.h>
+
+#define psync_stat stat
+#define psync_stat_isfolder(s) (((s)->st_mode&S_IFDIR)==S_IFDIR)
+#define psync_stat_size(s) ((s)->st_size)
+#define psync_stat_mtime(s) ((s)->st_mtime)
+typedef struct stat psync_stat_t;
 
 #define psync_sock_err() errno
 #define psync_sock_set_err(e) errno=(e)
@@ -69,6 +77,12 @@ typedef int psync_socket_t;
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
+#define psync_stat _stat64
+#define psync_stat_isfolder(s) (((s)->st_mode&_S_IFDIR)==_S_IFDIR)
+#define psync_stat_size(s) ((s)->st_size)
+#define psync_stat_mtime(s) ((s)->st_mtime)
+typedef struct __stat64 psync_stat_t;
 
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
@@ -103,7 +117,7 @@ typedef struct {
   uint8_t canread;
   uint8_t canwrite;
   uint8_t canmodifyparent;
-} psync_stat;
+} psync_pstat;
 
 #ifndef INVALID_SOCKET
 #define INVALID_SOCKET -1
@@ -123,11 +137,12 @@ typedef struct {
 #define PSYNC_SENTINEL
 #endif
 
-typedef void (*psync_list_dir_callback)(void *, psync_stat *);
+typedef void (*psync_list_dir_callback)(void *, psync_pstat *);
 typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
 void psync_compat_init();
+int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits);
 char *psync_get_default_database_path();
 void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);

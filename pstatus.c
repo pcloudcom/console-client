@@ -54,7 +54,7 @@ static uint32_t psync_calc_status(){
     }
   }
   if (statuses[PSTATUS_TYPE_AUTH]!=PSTATUS_AUTH_PROVIDED){
-    if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_REQURED)
+    if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_REQUIRED)
       return PSTATUS_LOGIN_REQUIRED;
     else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_MISMATCH)
       return PSTATUS_USER_MISMATCH;

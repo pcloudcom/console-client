@@ -189,7 +189,20 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
     return PSYNC_INVALID_SYNCID;
 }
 
-psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype);
+psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
+  psync_stat_t st;
+  int unsigned md;
+  if (psync_stat(localpath, &st) || !psync_stat_isfolder(&st))
+    return_error(PERROR_LOCAL_FOLDER_NOT_FOUND);
+  if (synctype&PSYNC_DOWNLOAD_ONLY)
+    md=6;
+  else
+    md=4;
+  if (!psync_stat_mode_ok(&st, md))
+    return_error(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  return 0;
+}
+
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();
