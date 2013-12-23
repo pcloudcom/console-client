@@ -59,6 +59,8 @@ typedef struct stat psync_stat_t;
 #define psync_sock_err() errno
 #define psync_sock_set_err(e) errno=(e)
 
+#define psync_fs_err() errno
+
 #define PSYNC_DIRECTORY_SEPARATOR "/"
 #define PSYNC_DIRECTORY_SEPARATORC '/'
 
@@ -68,6 +70,12 @@ typedef struct stat psync_stat_t;
 #define P_TIMEDOUT   ETIMEDOUT
 #define P_INVAL      EINVAL
 #define P_CONNRESET  ECONNRESET
+
+#define P_NOENT      ENOENT
+#define P_EXIST      EEXIST
+#define P_NOSPC      ENOSPC
+#define P_DQUOT      EDQUOT
+
 
 typedef int psync_socket_t;
 
@@ -87,6 +95,8 @@ typedef struct __stat64 psync_stat_t;
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
 
+#define psync_fs_err() GetLastError()
+
 #define PSYNC_DIRECTORY_SEPARATOR "\\"
 #define PSYNC_DIRECTORY_SEPARATORC '\\'
 
@@ -96,6 +106,11 @@ typedef struct __stat64 psync_stat_t;
 #define P_TIMEDOUT   WSAETIMEDOUT
 #define P_INVAL      WSAEINVAL
 #define P_CONNRESET  WSAECONNRESET
+
+#define P_NOENT      ERROR_PATH_NOT_FOUND
+#define P_EXIST      ERROR_ALREADY_EXISTS
+#define P_NOSPC      ERROR_HANDLE_DISK_FULL
+#define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
 
 typedef SOCKET psync_socket_t;
 
@@ -164,6 +179,9 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr);
+
+int psync_mkdir(const char *path);
+int psync_rename(const char *oldpath, const char *newpath);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

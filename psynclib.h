@@ -106,6 +106,8 @@ typedef struct {
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
 #define PSYNC_FULL           3
+#define PSYNC_SYNCTYPE_MIN   1
+#define PSYNC_SYNCTYPE_MAX   3
 
 #define PERROR_LOCAL_FOLDER_NOT_FOUND   1
 #define PERROR_REMOTE_FOLDER_NOT_FOUND  2
@@ -115,6 +117,8 @@ typedef struct {
 #define PERROR_DATABASE_ERROR           6
 #define PERROR_LOCAL_FOLDER_ACC_DENIED  7
 #define PERROR_REMOTE_FOLDER_ACC_DENIED 8
+#define PERROR_FOLDER_ALREADY_SYNCING   9
+#define PERROR_INVALID_SYNCTYPE        10
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
@@ -163,7 +167,7 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * job. Event callbacks will not overlap.
  */
 
-typedef void (*pevent_callback_t)(uint32_t event, const char *name, const char *localpath, const char *remotepath);
+typedef void (*pevent_callback_t)(uint32_t event, psync_syncid_t syncid, const char *name, const char *localpath, const char *remotepath);
 
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,

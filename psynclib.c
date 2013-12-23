@@ -36,7 +36,10 @@
 #include "pssl.h"
 #include "ptimer.h"
 #include "pupload.h"
+#include "pdownload.h"
 #include "pfolder.h"
+#include "psettings.h"
+#include "psyncer.h"
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
@@ -45,6 +48,7 @@ psync_free_t psync_free=free;
 const char *psync_database=NULL;
 
 #define return_error(err) do {psync_error=err; return -1;} while (0)
+#define return_isyncid(err) do {psync_error=err; return PSYNC_INVALID_SYNCID;} while (0)
 
 uint32_t psync_get_last_error(){
   return psync_error;
@@ -79,6 +83,8 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_timer_init();
   psync_diff_init();
   psync_upload_init();
+  psync_download_init();
+  psync_syncer_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
@@ -100,6 +106,7 @@ void psync_destroy(){
 }
 
 void psync_get_status(pstatus_t *status){
+  memcpy(status, &psync_status, sizeof(pstatus_t));
 }
 
 char *psync_get_username(){
@@ -190,17 +197,55 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
 }
 
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
+  psync_sql_res *res;
+  uint64_t *row, perms;
   psync_stat_t st;
+  psync_syncid_t ret;
   int unsigned md;
+  if (synctype<PSYNC_SYNCTYPE_MIN || synctype>PSYNC_SYNCTYPE_MAX)
+    return_isyncid(PERROR_INVALID_SYNCTYPE);
   if (psync_stat(localpath, &st) || !psync_stat_isfolder(&st))
-    return_error(PERROR_LOCAL_FOLDER_NOT_FOUND);
+    return_isyncid(PERROR_LOCAL_FOLDER_NOT_FOUND);
   if (synctype&PSYNC_DOWNLOAD_ONLY)
     md=6;
   else
     md=4;
   if (!psync_stat_mode_ok(&st, md))
-    return_error(PERROR_LOCAL_FOLDER_ACC_DENIED);
-  return 0;
+    return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  if (folderid){
+    res=psync_sql_query("SELECT permissons FROM folder WHERE id=?");
+    if (!res)
+      return_isyncid(PERROR_DATABASE_ERROR);
+    psync_sql_bind_uint(res, 1, folderid);
+    row=psync_sql_fetch_rowint(res);
+    if (!row){
+      psync_sql_free_result(res);
+      return_isyncid(PERROR_REMOTE_FOLDER_NOT_FOUND);
+    }
+    perms=row[0];
+    psync_sql_free_result(res);
+  }
+  else
+    perms=PSYNC_PERM_ALL;
+  if ((synctype&PSYNC_DOWNLOAD_ONLY && (perms&PSYNC_PERM_READ)!=PSYNC_PERM_READ) ||
+      (synctype&PSYNC_UPLOAD_ONLY && (perms&PSYNC_PERM_WRITE)!=PSYNC_PERM_WRITE))
+    return_isyncid(PERROR_REMOTE_FOLDER_ACC_DENIED);
+  res=psync_sql_prep_statement("INSERT IGNORE INTO syncfolder (folderid, localpath, synctype, flags) VALUES (?, ?, ?, 0)");
+  if (!res)
+    return_isyncid(PERROR_DATABASE_ERROR);
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_string(res, 2, localpath);
+  psync_sql_bind_uint(res, 3, synctype);
+  psync_sql_run(res);
+  if (psync_sql_affected_rows())
+    ret=psync_sql_insertid();
+  else
+    ret=PSYNC_INVALID_SYNCID;
+  psync_sql_free_result(res);
+  if (ret==PSYNC_INVALID_SYNCID)
+    return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
+  psync_syncer_new(ret);
+  return ret;
 }
 
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);

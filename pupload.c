@@ -55,8 +55,8 @@ static void upload_thread(){
 
 void psync_wake_upload(){
   pthread_mutex_lock(&upload_mutex);
-  upload_wakes++;
-  pthread_cond_signal(&upload_cond);
+  if (!upload_wakes++)
+    pthread_cond_signal(&upload_cond);
   pthread_mutex_unlock(&upload_mutex);  
 }
 

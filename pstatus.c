@@ -32,11 +32,13 @@
 #include "pcallbacks.h"
 #include "plibs.h"
 
-
-#define NTO_STR(s) TO_STR(s)
-#define TO_STR(s) #s
-
-static uint32_t statuses[PSTATUS_NUM_STATUSES]={PSTATUS_INVALID, PSTATUS_ONLINE_OFFLINE, PSTATUS_AUTH_PROVIDED, PSTATUS_ACCFULL_QUOTAOK};
+static uint32_t statuses[PSTATUS_NUM_STATUSES]={
+  PSTATUS_INVALID, 
+  PSTATUS_ONLINE_OFFLINE, 
+  PSTATUS_AUTH_PROVIDED, 
+  PSTATUS_ACCFULL_QUOTAOK,
+  PSTATUS_DISKFULL_OK
+};
 
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
@@ -85,6 +87,14 @@ static uint32_t psync_calc_status(){
       return -1;
     }
   }
+  if (statuses[PSTATUS_TYPE_DISKFULL]!=PSTATUS_DISKFULL_OK){
+    if (statuses[PSTATUS_TYPE_DISKFULL]==PSTATUS_DISKFULL_FULL)
+      return PSTATUS_DISK_FULL;
+    else {
+      debug(D_BUG, "invalid PSTATUS_TYPE_DISKFULL %d", statuses[PSTATUS_TYPE_DISKFULL]);
+      return -1;
+    }
+  }
   
   return PSTATUS_READY;
 }
@@ -114,6 +124,7 @@ void psync_set_status(uint32_t statusid, uint32_t status){
     pthread_cond_broadcast(&statuscond);
   pthread_mutex_unlock(&statusmutex);
   psync_status.remoteisfull=(statuses[PSTATUS_TYPE_ACCFULL]==PSTATUS_ACCFULL_OVERQUOTA);
+  psync_status.localisfull=(statuses[PSTATUS_TYPE_DISKFULL]==PSTATUS_DISK_FULL);
   status=psync_calc_status();
   if (psync_status.status!=status){
     psync_status.status=status;

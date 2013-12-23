@@ -697,3 +697,30 @@ err1:
 #error "Function not implemented for your operating system"
 #endif
 }
+
+int psync_mkdir(const char *path){
+#if defined(P_OS_POSIX)
+  return mkdir(path, PSYNC_DEFAULT_POSIX_FOLDER_MODE);
+#elif defined(P_OS_WINDOWS)
+  if (CreateDirectory(path, NULL))
+    return 0;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_rename(const char *oldpath, const char *newpath){
+#if defined(P_OS_POSIX)
+  return rename(oldpath, newpath);
+#elif defined(P_OS_WINDOWS) // should we just use rename() here?
+  if (MoveFile(oldpath, newpath))
+    return 0;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+

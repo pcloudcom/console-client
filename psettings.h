@@ -49,12 +49,17 @@
 #define PSYNC_DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
 #define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloudsync.db"
 
+#define PSYNC_DEFAULT_POSIX_FOLDER_MODE 0755
+#define PSYNC_DEFAULT_POSIX_FILE_MODE 0644
+
 #define PSYNC_USE_SSL_DEFAULT 1
 
 #define PSYNC_DIFF_FILTER_META "parentfolderid,ismine,userid,name,fileid,folderid,deletedfileid,created,modified,size,hash,canread,canmodify,candelete,cancreate"
 
 /* in miliseconds */
-#define PSYNC_SLEEP_BEFORE_RECONNECT 5000
+#define PSYNC_SLEEP_BEFORE_RECONNECT   5000
+#define PSYNC_SLEEP_ON_DISK_FULL       10000
+#define PSYNC_SLEEP_ON_FAILED_DOWNLOAD 200
 
 #define PSYNC_PERM_READ   1
 #define PSYNC_PERM_CREATE 2

@@ -450,6 +450,45 @@ uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
   }
 }
 
+uint32_t psync_sql_affected_rows(){
+  return sqlite3_changes(psync_db);
+}
+
+uint64_t psync_sql_insertid(){
+  return sqlite3_last_insert_rowid(psync_db);
+}
+
+int psync_rename_conflicted_file(const char *path){
+  char *npath;
+  size_t plen, dotidx;
+  psync_stat_t st;
+  int num, l;
+  plen=strlen(path);
+  dotidx=plen;
+  while (dotidx && path[dotidx]!='.')
+    dotidx--;
+  if (!dotidx)
+    dotidx=plen;
+  npath=(char *)psync_malloc(plen+32);
+  memcpy(npath, path, dotidx);
+  num=0;
+  while (1){
+    if (num)
+      l=sprintf(npath+dotidx, "(conflicted %d)", num);
+    else{
+      l=12;
+      memcpy(npath+dotidx, "(conflicted)", l);
+    }
+    memcpy(npath+dotidx+l, path+dotidx, plen-dotidx+1);
+    if (!psync_stat(npath, &st)){
+      l=psync_rename(path, npath);
+      psync_free(npath);
+      return l;
+    }
+    num++;
+  }
+}
+
 static void time_format(time_t tm, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};

@@ -25,48 +25,30 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_STATUS_H
-#define _PSYNC_STATUS_H
+#include "ptasks.h"
+#include "plibs.h"
+#include "pdownload.h"
 
-#include <stdint.h>
+void psync_task_create_local_folder(const char *path, uint64_t folderid, psync_syncid_t syncid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localpath) VALUES (?, ?, ?, ?)");
+  psync_sql_bind_uint(res, 1, PSYNC_CREATE_LOCAL_FOLDER);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_bind_uint(res, 3, folderid);
+  psync_sql_bind_string(res, 4, path);
+  psync_sql_run(res);
+  psync_sql_free_result(res);
+  psync_wake_download();
+}
 
-#define PSTATUS_NUM_STATUSES 5
-
-#define PSTATUS_TYPE_RUN      0
-#define PSTATUS_TYPE_ONLINE   1
-#define PSTATUS_TYPE_AUTH     2
-#define PSTATUS_TYPE_ACCFULL  3
-#define PSTATUS_TYPE_DISKFULL 4
-
-#define PSTATUS_INVALID   0
-
-#define PSTATUS_RUN_RUN   1
-#define PSTATUS_RUN_PAUSE 2
-#define PSTATUS_RUN_STOP  4
-
-#define PSTATUS_ONLINE_CONNECTING 1
-#define PSTATUS_ONLINE_SCANNING   2
-#define PSTATUS_ONLINE_ONLINE     4
-#define PSTATUS_ONLINE_OFFLINE    8
-
-#define PSTATUS_AUTH_PROVIDED 1
-#define PSTATUS_AUTH_REQUIRED 2
-#define PSTATUS_AUTH_MISMATCH 4
-#define PSTATUS_AUTH_BADLOGIN 8
-
-#define PSTATUS_ACCFULL_QUOTAOK   1
-#define PSTATUS_ACCFULL_OVERQUOTA 2
-
-#define PSTATUS_DISKFULL_OK   1
-#define PSTATUS_DISKFULL_FULL 2
-
-#define PSTATUS_COMBINE(type, statuses) (((type)<<24)+(statuses))
-
-void psync_status_init();
-uint32_t psync_status_get(uint32_t statusid);
-void psync_set_status(uint32_t statusid, uint32_t status);
-void psync_wait_status(uint32_t statusid, uint32_t status);
-void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt);
-void psync_wait_statuses(uint32_t first, ...);
-
-#endif
+void psync_task_download_file(const char *path, uint64_t fileid, psync_syncid_t syncid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localpath) VALUES (?, ?, ?, ?)");
+  psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_bind_uint(res, 3, fileid);
+  psync_sql_bind_string(res, 4, path);
+  psync_sql_run(res);
+  psync_sql_free_result(res);
+  psync_wake_download();
+}

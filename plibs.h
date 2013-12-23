@@ -70,6 +70,10 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0])) 
 
+
+#define NTO_STR(s) TO_STR(s)
+#define TO_STR(s) #s
+
 typedef struct {
   uint32_t type;
   uint32_t length;
@@ -121,6 +125,10 @@ void psync_sql_free_result(psync_sql_res *res);
 psync_variant *psync_sql_fetch_row(psync_sql_res *res);
 char **psync_sql_fetch_rowstr(psync_sql_res *res);
 uint64_t *psync_sql_fetch_rowint(psync_sql_res *res);
+uint32_t psync_sql_affected_rows();
+uint64_t psync_sql_insertid();
+
+int psync_rename_conflicted_file(const char *path);
 
 void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...)
 #if defined(__GNUC__)
