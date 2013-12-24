@@ -398,6 +398,13 @@ void psync_socket_close(psync_socket *sock){
   psync_free(sock);
 }
 
+int psync_socket_isssl(psync_socket *sock){
+  if (sock->ssl)
+    return 1;
+  else
+    return 0;
+}
+
 int psync_socket_pendingdata(psync_socket *sock){
   if (sock->pending)
     return 1;

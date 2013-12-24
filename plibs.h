@@ -55,6 +55,10 @@
 
 #define DEBUG_FILE "/tmp/psync_err.log"
 
+#if !defined(__FUNCTION__)
+#define __FUNCTION__ "not_supported"
+#endif
+
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
 #define assert(cond, ...) do {if (!(cond)) debug(D_ERROR, __VA_ARGS__);} while (0)
 
@@ -62,6 +66,7 @@
 #define PSYNC_TSTRING 2
 #define PSYNC_TREAL   3
 #define PSYNC_TNULL   4
+#define PSYNC_TBOOL   5
 
 #define psync_get_number(v) ((v).type==PSYNC_TNUMBER?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_string(v) ((v).type==PSYNC_TSTRING?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
@@ -129,6 +134,9 @@ uint32_t psync_sql_affected_rows();
 uint64_t psync_sql_insertid();
 
 int psync_rename_conflicted_file(const char *path);
+
+void psync_libs_init();
+void psync_free_after_sec(void *ptr, uint32_t seconds);
 
 void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...)
 #if defined(__GNUC__)

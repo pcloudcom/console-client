@@ -32,12 +32,12 @@
 
 extern time_t psync_current_time;
 
-typedef void (*timer_callback)();
+typedef void (*psync_timer_callback)();
 
 void psync_timer_init();
 void psync_timer_wake();
-void psync_timer_register(timer_callback func, time_t numsec);
-void psync_timer_exception_handler(timer_callback func);
+void psync_timer_register(psync_timer_callback func, time_t numsec);
+void psync_timer_exception_handler(psync_timer_callback func);
 void psync_timer_notify_exception();
 
 #endif

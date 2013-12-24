@@ -34,13 +34,13 @@ time_t psync_current_time;
 
 struct exception_list {
   struct exception_list *next;
-  timer_callback func;
+  psync_timer_callback func;
   pthread_t threadid;
 };
 
 struct timer_list {
   struct timer_list *next;
-  timer_callback func;
+  psync_timer_callback func;
   time_t nextrun;
   time_t runevery;
 };
@@ -95,7 +95,7 @@ void psync_timer_wake(){
   pthread_cond_signal(&timer_cond);
 }
 
-void psync_timer_register(timer_callback func, time_t numsec){
+void psync_timer_register(psync_timer_callback func, time_t numsec){
   struct timer_list *t;
   t=(struct timer_list *)psync_malloc(sizeof(struct timer_list));
   t->next=NULL; /* this is needed as in the timer there is no lock and the two operations between lock and unlock can be reordered*/
@@ -108,7 +108,7 @@ void psync_timer_register(timer_callback func, time_t numsec){
   pthread_mutex_unlock(&timer_mutex);
 }
 
-void psync_timer_exception_handler(timer_callback func){
+void psync_timer_exception_handler(psync_timer_callback func){
   struct exception_list *t;
   t=(struct exception_list *)psync_malloc(sizeof(struct exception_list));
   t->next=NULL;

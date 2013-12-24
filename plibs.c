@@ -28,10 +28,19 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <time.h>
 #include "plibs.h"
+#include "ptimer.h"
 
-const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]"};
+struct free_after_ptr {
+  struct free_after_ptr *next;
+  void *ptr;
+  time_t freeafter;
+};
+
+static struct free_after_ptr *ptrs_to_free=NULL;
+static pthread_mutex_t ptrs_to_free_mutex=PTHREAD_MUTEX_INITIALIZER;
+
+const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
 char *psync_my_auth=NULL, *psync_my_user=NULL, *psync_my_pass=NULL;
 uint64_t psync_my_userid=0;
@@ -487,6 +496,43 @@ int psync_rename_conflicted_file(const char *path){
     }
     num++;
   }
+}
+
+static void psync_free_pointers_timer(){
+  if (ptrs_to_free){
+    struct free_after_ptr *fp, **pfp;
+    pthread_mutex_lock(&ptrs_to_free_mutex);
+    fp=ptrs_to_free;
+    pfp=&ptrs_to_free;
+    while (fp){
+      if (fp->freeafter<=psync_current_time){
+        *pfp=fp->next;
+        psync_free(fp->ptr);
+        psync_free(fp);
+        fp=*pfp;
+      }
+      else{
+        pfp=&fp->next;
+        fp=fp->next;
+      }
+    }
+    pthread_mutex_unlock(&ptrs_to_free_mutex);
+  }  
+}
+
+void psync_libs_init(){
+  psync_timer_register(psync_free_pointers_timer, 10);
+}
+
+void psync_free_after_sec(void *ptr, uint32_t seconds){
+  struct free_after_ptr *fp;
+  fp=(struct free_after_ptr *)psync_malloc(sizeof(struct free_after_ptr));
+  fp->ptr=ptr;
+  fp->freeafter=psync_current_time+seconds;
+  pthread_mutex_lock(&ptrs_to_free_mutex);
+  fp->next=ptrs_to_free;
+  ptrs_to_free=fp;
+  pthread_mutex_unlock(&ptrs_to_free_mutex);
 }
 
 static void time_format(time_t tm, char *result){

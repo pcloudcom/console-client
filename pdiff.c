@@ -42,7 +42,7 @@ static psync_socket *get_connected_socket(){
   binresult *res;
   psync_sql_res *q;
   uint64_t result, userid, luserid;
-  int usessl, saveauth;
+  int saveauth;
   auth=user=pass=NULL;
   while (1){
     psync_free(auth);
@@ -63,9 +63,8 @@ static psync_socket *get_connected_socket(){
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }
-    usessl=psync_sql_cellint("SELECT value FROM setting WHERE id='usessl'", PSYNC_USE_SSL_DEFAULT);
-    saveauth=psync_sql_cellint("SELECT value FROM setting WHERE id='saveauth'", 1);
-    sock=psync_api_connect(usessl);
+    saveauth=psync_setting_get_bool(_PS(saveauth));
+    sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
     if (!sock){
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
@@ -408,7 +407,7 @@ static psync_socket_t setup_exeptions(){
 }
 
 static void handle_exception(psync_socket **sock, char ex){
-  if (ex=='r' || psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP){
+  if (ex=='r' || psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
     psync_socket_close(*sock);
     *sock=get_connected_socket();
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);

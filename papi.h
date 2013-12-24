@@ -80,6 +80,10 @@ typedef struct _binresult{
 #define send_command(sock, cmd, params) do_send_command(sock, cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), -1, 1)
 #define send_command_no_res(sock, cmd, params) do_send_command(sock, cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), -1, 0)
 
+#if !defined(__FUNCTION__)
+#define __FUNCTION__ "not_supported"
+#endif
+
 #define psync_find_result(res, name, type) psync_do_find_result(res, name, type, __FILE__, __FUNCTION__, __LINE__)
 #define psync_check_result(res, name, type) psync_do_check_result(res, name, type, __FILE__, __FUNCTION__, __LINE__)
 

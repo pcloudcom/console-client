@@ -75,6 +75,8 @@ int psync_init(){
   }
   if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE))
     return_error(PERROR_DATABASE_OPEN);
+  psync_libs_init();
+  psync_settings_init();
   psync_status_init();
   return 0;
 }
@@ -114,13 +116,8 @@ char *psync_get_username(){
 }
 
 static void clear_db(int save){
-  char *sql;
   psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
-  if (save)
-    sql="REPLACE INTO setting (id, value) VALUES ('saveauth', 1)";
-  else
-    sql="REPLACE INTO setting (id, value) VALUES ('saveauth', 0)";
-  psync_sql_statement(sql);
+  psync_setting_set_bool(_PS(saveauth), save);
 }
 
 static void save_to_db(const char *key, const char *val){

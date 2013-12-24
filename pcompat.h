@@ -35,8 +35,14 @@
 #endif
 
 #if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_POSIX)
+#if defined(__unix__)
+#define P_OS_POSIX
+#elif defined(_WIN32) || defined(WIN32)
+#define P_OS_WINDOWS
+#else
 #warning "You OS may not be supported, trying to build POSIX compatible source"
 #define P_OS_POSIX
+#endif
 #endif
 
 #include <sys/types.h>
@@ -166,6 +172,7 @@ void psync_yield_cpu();
 
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
+int psync_socket_isssl(psync_socket *sock);
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);

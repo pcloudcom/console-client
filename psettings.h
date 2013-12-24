@@ -28,6 +28,8 @@
 #ifndef _PSYNC_SETTINGS_H
 #define _PSYNC_SETTINGS_H
 
+#include <stdint.h>
+
 #define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
 #define PSYNC_API_PORT_SSL 443
@@ -52,8 +54,6 @@
 #define PSYNC_DEFAULT_POSIX_FOLDER_MODE 0755
 #define PSYNC_DEFAULT_POSIX_FILE_MODE 0644
 
-#define PSYNC_USE_SSL_DEFAULT 1
-
 #define PSYNC_DIFF_FILTER_META "parentfolderid,ismine,userid,name,fileid,folderid,deletedfileid,created,modified,size,hash,canread,canmodify,candelete,cancreate"
 
 /* in miliseconds */
@@ -68,5 +68,28 @@
 
 #define PSYNC_PERM_ALL (PSYNC_PERM_READ|PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 #define PSYNC_PERM_WRITE (PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
+
+/* defaults for database settings */
+#define PSYNC_USE_SSL_DEFAULT 1
+
+#define _PS(s) PSYNC_SETTING_##s
+
+#define PSYNC_SETTING_usessl   0
+#define PSYNC_SETTING_saveauth 1
+
+typedef int psync_settingid_t;
+
+#define PSYNC_INVALID_SETTINGID -1
+
+void psync_settings_init();
+
+psync_settingid_t psync_setting_getid(const char *name);
+
+int psync_setting_get_bool(psync_settingid_t settingid);
+int psync_setting_set_bool(psync_settingid_t settingid, int value);
+uint64_t psync_setting_get_number(psync_settingid_t settingid);
+int psync_setting_set_number(psync_settingid_t settingid, uint64_t value);
+const char *psync_setting_get_string(psync_settingid_t settingid);
+int psync_setting_set_string(psync_settingid_t settingid, const char *value);
 
 #endif
