@@ -165,12 +165,8 @@ void psync_set_auth(const char *auth, int save){
   clear_db(save);
   if (save)
     save_to_db("auth", auth);
-  else{
-    pthread_mutex_lock(&psync_my_auth_mutex);
-    psync_free(psync_my_auth);
-    psync_my_pass=psync_strdup(auth);
-    pthread_mutex_unlock(&psync_my_auth_mutex);
-  }
+  else
+    strcpy(psync_my_auth, auth);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 

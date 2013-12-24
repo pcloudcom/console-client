@@ -42,7 +42,7 @@ static pthread_mutex_t ptrs_to_free_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
-char *psync_my_auth=NULL, *psync_my_user=NULL, *psync_my_pass=NULL;
+char psync_my_auth[64]="", *psync_my_user=NULL, *psync_my_pass=NULL;
 uint64_t psync_my_userid=0;
 pthread_mutex_t psync_my_auth_mutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -369,6 +369,12 @@ void psync_sql_run(psync_sql_res *res){
   code=sqlite3_reset(res->stmt);
   if (code!=SQLITE_OK)
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
+}
+
+void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val){
+  int code=sqlite3_bind_int64(res->stmt, n, val);
+  if (code!=SQLITE_OK)
+    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
 }
 
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val){

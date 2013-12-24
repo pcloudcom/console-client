@@ -29,6 +29,7 @@
 #define _PSYNC_SETTINGS_H
 
 #include <stdint.h>
+#include "pcompat.h"
 
 #define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
@@ -69,13 +70,27 @@
 #define PSYNC_PERM_ALL (PSYNC_PERM_READ|PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 #define PSYNC_PERM_WRITE (PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 
+#define PSYNC_CHECKSUM "sha1"
+
+#define psync_hash_digest_len    psync_sha1_digest_len
+#define psync_hash_digest_hexlen psync_sha1_digest_hexlen
+#define psync_hash_ctx           psync_sha1_ctx
+#define psync_hash               psync_sha1
+#define psync_hash_init          psync_sha1_init
+#define psync_hash_update        psync_sha1_update
+#define psync_hash_final         psync_sha1_final
+
 /* defaults for database settings */
 #define PSYNC_USE_SSL_DEFAULT 1
+#define PSYNC_DWL_SHAPER_DEFAULT 0
+#define PSYNC_UPL_SHAPER_DEFAULT 0
 
 #define _PS(s) PSYNC_SETTING_##s
 
-#define PSYNC_SETTING_usessl   0
-#define PSYNC_SETTING_saveauth 1
+#define PSYNC_SETTING_usessl           0
+#define PSYNC_SETTING_saveauth         1
+#define PSYNC_SETTING_maxdownloadspeed 2
+#define PSYNC_SETTING_maxuploadspeed   3
 
 typedef int psync_settingid_t;
 
@@ -83,12 +98,14 @@ typedef int psync_settingid_t;
 
 void psync_settings_init();
 
-psync_settingid_t psync_setting_getid(const char *name);
+psync_settingid_t psync_setting_getid(const char *name) PSYNC_PURE;
 
 int psync_setting_get_bool(psync_settingid_t settingid);
 int psync_setting_set_bool(psync_settingid_t settingid, int value);
-uint64_t psync_setting_get_number(psync_settingid_t settingid);
-int psync_setting_set_number(psync_settingid_t settingid, uint64_t value);
+int64_t psync_setting_get_int(psync_settingid_t settingid);
+int psync_setting_set_int(psync_settingid_t settingid, int64_t value);
+uint64_t psync_setting_get_uint(psync_settingid_t settingid);
+int psync_setting_set_uint(psync_settingid_t settingid, uint64_t value);
 const char *psync_setting_get_string(psync_settingid_t settingid);
 int psync_setting_set_string(psync_settingid_t settingid, const char *value);
 

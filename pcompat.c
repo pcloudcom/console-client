@@ -731,3 +731,112 @@ int psync_rename(const char *oldpath, const char *newpath){
 #endif
 }
 
+psync_file_t psync_file_open(const char *path, int access, int flags){
+#if defined(P_OS_POSIX)
+  return open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
+#elif defined(P_OS_WINDOWS)
+  DWORD cdis;
+  if (flags&P_O_EXCL)
+    cdis=CREATE_NEW;
+  else if (flags&(P_O_CREAT|P_O_TRUNC))
+    cdis=CREATE_ALWAYS;
+  else if (flags&P_O_CREAT)
+    cdis=OPEN_ALWAYS;
+  else if (flags&P_O_TRUNC)
+    cdis=TRUNCATE_EXISTING;
+  else
+    cdis=OPEN_EXISTING;
+  return CreateFile(path, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_ATTRIBUTE_NORMAL, NULL);
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_file_close(psync_file_t fd){
+#if defined(P_OS_POSIX)
+  return close(fd);
+#elif defined(P_OS_WINDOWS)
+  if (CloseHandle(fd))
+    return 0;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_file_sync(psync_file_t fd){
+#if defined(P_OS_POSIX)
+  return fsync(fd);
+#elif defined(P_OS_WINDOWS) 
+  if (FlushFileBuffers(fd))
+    return 0;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count){
+#if defined(P_OS_POSIX)
+  return read(fd, buf, count);
+#elif defined(P_OS_WINDOWS)
+  DWORD ret;
+  if (ReadFile(fd, buf, count, &ret, NULL))
+    return ret;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count){
+#if defined(P_OS_POSIX)
+  return write(fd, buf, count);
+#elif defined(P_OS_WINDOWS)
+  DWORD ret;
+  if (ReadFile(fd, buf, count, &ret, NULL))
+    return ret;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence){
+#if defined(P_OS_POSIX)
+  return lseek(fd, offset, whence);
+#elif defined(P_OS_WINDOWS)
+   LARGE_INTEGER li;
+   li.QuadPart=offset;
+   li.LowPart=SetFilePointer(fd, li.LowPart, &li.HighPart, whence);
+   if (li.LowPart==INVALID_SET_FILE_POINTER && GetLastError()!=NO_ERROR)
+     return -1;
+   else
+     return li.QuadPart;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int64_t psync_file_size(psync_file_t fd){
+#if defined(P_OS_POSIX)
+  struct stat st;
+  if (fstat(fd, &st))
+    return -1;
+  else
+    return st.st_size;
+#elif defined(P_OS_WINDOWS)
+   LARGE_INTEGER li;
+   li.LowPart=GetFileSize(fd, &li.HighPart);
+   if (li.LowPart==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR)
+     return -1;
+   else
+     return li.QuadPart;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}

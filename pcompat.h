@@ -29,6 +29,7 @@
 #define _PSYNC_COMPAT_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #if (defined(P_OS_LINUX) || defined(P_OS_MACOSX)) && !defined(P_OS_POSIX)
 #define P_OS_POSIX
@@ -82,8 +83,17 @@ typedef struct stat psync_stat_t;
 #define P_NOSPC      ENOSPC
 #define P_DQUOT      EDQUOT
 
+#define P_O_RDONLY O_RDONLY
+#define P_O_WRONLY O_WRONLY
+#define P_O_RDWR   O_RDWR 
+#define P_O_CREAT  O_CREAT
+
+#define P_SEEK_SET SEEK_SET
+#define P_SEEK_CUR SEEK_CUR
+#define P_SEEK_END SEEK_END
 
 typedef int psync_socket_t;
+typedef int psync_file_t;
 
 #elif defined(P_OS_WINDOWS)
 
@@ -118,7 +128,19 @@ typedef struct __stat64 psync_stat_t;
 #define P_NOSPC      ERROR_HANDLE_DISK_FULL
 #define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
 
+#define P_O_RDONLY GENERIC_READ
+#define P_O_WRONLY GENERIC_WRITE
+#define P_O_RDWR   (GENERIC_READ|GENERIC_WRITE)
+#define P_O_CREAT  1
+#define P_O_TRUNC  2
+#define P_O_EXCL   4
+
+#define P_SEEK_SET FILE_BEGIN
+#define P_SEEK_CUR FILE_CURRENT
+#define P_SEEK_END FILE_END
+
 typedef SOCKET psync_socket_t;
+typedef HANDLE psync_file_t;
 
 #else
 #error "Need to define types for your operating system"
@@ -148,14 +170,24 @@ typedef struct {
 #define SOCKET_ERROR -1
 #endif
 
+#ifndef INVALID_HANDLE_VALUE
+#define INVALID_HANDLE_VALUE -1
+#endif
+
 #define PSYNC_THREAD __thread
 
 #ifdef __GNUC__
 #define PSYNC_MALLOC __attribute__((malloc))
 #define PSYNC_SENTINEL __attribute__ ((sentinel))
+#define PSYNC_PURE __attribute__ ((pure))
+#define PSYNC_COLD __attribute__ ((cold))
+#define PSYNC_FORMAT(a, b, c) __attribute__ ((format (a, b, c)))
 #else
 #define PSYNC_MALLOC
 #define PSYNC_SENTINEL
+#define PSYNC_PURE
+#define PSYNC_COLD
+#define PSYNC_FORMAT(a, b, c)
 #endif
 
 typedef void (*psync_list_dir_callback)(void *, psync_pstat *);
@@ -189,6 +221,13 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
 
 int psync_mkdir(const char *path);
 int psync_rename(const char *oldpath, const char *newpath);
+
+psync_file_t psync_file_open(const char *path, int access, int flags);
+int psync_file_close(psync_file_t fd);
+int psync_file_sync(psync_file_t fd);
+ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
+ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count);
+int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

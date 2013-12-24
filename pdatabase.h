@@ -45,6 +45,8 @@ CREATE UNIQUE IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);\
 CREATE TABLE IF NOT EXISTS syncfolderdown (syncid INTEGER, folderid INTEGER, localpath VARCHAR(4096));\
 CREATE UNIQUE IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncfolderdown(syncid, folderid);\
 CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localpath VARCHAR(4096));\
+CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT);\
+CREATE UNIQUE IF NOT EXISTS khashchecksumhashsize ON hashchecksum(hash, size);\
 COMMIT;\
 "
 
@@ -54,12 +56,14 @@ DROP INDEX kfilefolderid;\
 DROP INDEX ksyncfolderfolderid;\
 DROP INDEX ksyncfolderlocalpath;\
 DROP INDEX ksyncfolderdownsyncidfolderid;\
+DROP INDEX khashchecksumhashsize;\
 DROP TABLE setting;\
 DROP TABLE folder;\
 DROP TABLE file;\
 DROP TABLE syncfolder;\
 DROP TABLE syncfolderdown;\
 DROP TABLE task;\
+DROP TABLE hashchecksum;\
 VACUUM;\
 " PSYNC_DATABASE_STRUCTURE
 

@@ -52,7 +52,7 @@ static psync_socket *get_connected_socket(){
     auth=psync_sql_cellstr("SELECT value FROM setting WHERE id='auth'");
     user=psync_sql_cellstr("SELECT value FROM setting WHERE id='user'");
     pass=psync_sql_cellstr("SELECT value FROM setting WHERE id='pass'");
-    if (!auth && psync_my_auth)
+    if (!auth && psync_my_auth[0])
       auth=psync_strdup(psync_my_auth);
     if (!user && psync_my_user)
       user=psync_strdup(psync_my_user);
@@ -153,10 +153,7 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_string(q, 1, "language");
         psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
         psync_sql_run(q);
-        pthread_mutex_lock(&psync_my_auth_mutex);
-        psync_free(psync_my_auth);
-        psync_my_auth=psync_strdup(psync_find_result(res, "auth", PARAM_STR)->str);
-        pthread_mutex_unlock(&psync_my_auth_mutex);
+        strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
         if (saveauth){
           psync_sql_bind_string(q, 1, "auth");
           psync_sql_bind_string(q, 2, psync_my_auth);
@@ -407,7 +404,10 @@ static psync_socket_t setup_exeptions(){
 }
 
 static void handle_exception(psync_socket **sock, char ex){
-  if (ex=='r' || psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
+  if (ex=='r' || 
+      psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || 
+      psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED ||
+      psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
     psync_socket_close(*sock);
     *sock=get_connected_socket();
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);

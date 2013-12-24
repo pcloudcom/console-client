@@ -37,6 +37,7 @@ typedef struct {
   setting_callback change_callback;
   union {
     uint64_t num;
+    int64_t snum;
     char *str;
     int boolean;
   };
@@ -45,7 +46,9 @@ typedef struct {
 
 static psync_setting_t settings[]={
   {"usessl", psync_timer_notify_exception, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
-  {"saveauth", NULL, {1}, PSYNC_TBOOL}
+  {"saveauth", NULL, {1}, PSYNC_TBOOL},
+  {"maxdownloadspeed", NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"maxuploadspeed", NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER}
 };
 
 void psync_settings_init(){
@@ -122,18 +125,37 @@ int psync_setting_set_bool(psync_settingid_t settingid, int value){
   return 0;
 }
 
-uint64_t psync_setting_get_number(psync_settingid_t settingid){
+uint64_t psync_setting_get_uint(psync_settingid_t settingid){
   CHECK_SETTINGID_AND_TYPE(0, PSYNC_TNUMBER);
   return settings[settingid].num;
 }
 
-int psync_setting_set_number(psync_settingid_t settingid, uint64_t value){
+int psync_setting_set_uint(psync_settingid_t settingid, uint64_t value){
   psync_sql_res *res;
   CHECK_SETTINGID_AND_TYPE(-1, PSYNC_TNUMBER);
   settings[settingid].num=value;
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
   psync_sql_bind_uint(res, 2, value);
+  psync_sql_run(res);
+  psync_sql_free_result(res);
+  if (settings[settingid].change_callback)
+    settings[settingid].change_callback();
+  return 0;
+}
+
+int64_t psync_setting_get_int(psync_settingid_t settingid){
+  CHECK_SETTINGID_AND_TYPE(0, PSYNC_TNUMBER);
+  return settings[settingid].snum;
+}
+
+int psync_setting_set_int(psync_settingid_t settingid, int64_t value){
+  psync_sql_res *res;
+  CHECK_SETTINGID_AND_TYPE(-1, PSYNC_TNUMBER);
+  settings[settingid].snum=value;
+  res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  psync_sql_bind_string(res, 1, settings[settingid].name);
+  psync_sql_bind_int(res, 2, value);
   psync_sql_run(res);
   psync_sql_free_result(res);
   if (settings[settingid].change_callback)

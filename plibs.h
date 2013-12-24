@@ -98,7 +98,7 @@ typedef struct {
 
 extern int psync_do_run;
 extern pstatus_t psync_status;
-extern char *psync_my_auth, *psync_my_user, *psync_my_pass;
+extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
 extern uint64_t psync_my_userid;
 extern pthread_mutex_t psync_my_auth_mutex;
 extern PSYNC_THREAD uint32_t psync_error;
@@ -124,6 +124,7 @@ psync_sql_res *psync_sql_prep_statement(const char *sql);
 void psync_sql_reset(psync_sql_res *res);
 void psync_sql_run(psync_sql_res *res);
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val);
+void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val);
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str);
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len);
 void psync_sql_free_result(psync_sql_res *res);
@@ -138,18 +139,8 @@ int psync_rename_conflicted_file(const char *path);
 void psync_libs_init();
 void psync_free_after_sec(void *ptr, uint32_t seconds);
 
-void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...)
-#if defined(__GNUC__)
-  __attribute__ ((cold))
-  __attribute__ ((format (printf, 5, 6)))
-#endif
-;
+void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6);
 
-#if defined(__GNUC__)
-#define PSYNC_COLD __attribute__ ((cold))
-#else
-#define PSYNC_COLD
-#endif
 
 uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
 const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
