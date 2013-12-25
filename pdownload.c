@@ -32,6 +32,7 @@
 #include "ptasks.h"
 #include "pstatus.h"
 #include "psettings.h"
+#include "pnetlibs.h"
 
 static pthread_mutex_t download_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t download_cond=PTHREAD_COND_INITIALIZER;
@@ -41,29 +42,18 @@ static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE)
 };
 
-static void set_space(int over){
-  static int isover=0;
-  if (over!=isover){
-    isover=over;
-    if (isover)
-      psync_set_status(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_FULL);
-    else
-      psync_set_status(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_OK);
-  }
-}
-
 static int task_mkdir(const char *path){
   while (1){
     if (!psync_mkdir(path)){
-      set_space(0);
+      psync_set_local_full(0);
       return 0;
     }
     if (psync_fs_err()==P_NOSPC || psync_fs_err()==P_DQUOT){
-      set_space(1);
+      psync_set_local_full(1);
       psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
     }
     else {
-      set_space(0);
+      psync_set_local_full(0);
       if (psync_fs_err()==P_NOENT)
         return 0; // do we have a choice? the user deleted the directory
       else if (psync_fs_err()==P_EXIST){

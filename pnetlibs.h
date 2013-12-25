@@ -29,11 +29,14 @@
 #define _PSYNC_NETLIBS_H
 
 #include <stdint.h>
+#include "pcompat.h"
 
 #define PSYNC_NET_OK        0
 #define PSYNC_NET_PERMFAIL -1
 #define PSYNC_NET_TEMPFAIL -2
 
+void psync_set_local_full(int over);
 int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint64_t *fsize);
+int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
 
 #endif

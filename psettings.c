@@ -53,29 +53,27 @@ static psync_setting_t settings[]={
 
 void psync_settings_init(){
   psync_sql_res *res;
-  psync_variant *row;
+  char **row;
   const char *name;
   psync_settingid_t i;
   for (i=0; i<ARRAY_SIZE(settings); i++)
     if (settings[i].type==PSYNC_TSTRING)
       settings[i].str=psync_strdup(settings[i].str);
-  res=psync_sql_query("SELECT id, value FROM settings");
-  while ((row=psync_sql_fetch_row(res))){
-    name=psync_get_string(row[0]);
+  res=psync_sql_query("SELECT id, value FROM setting");
+  while ((row=psync_sql_fetch_rowstr(res))){
+    name=row[0];
     for (i=0; i<ARRAY_SIZE(settings); i++)
       if (!strcmp(name, settings[i].name)){
-        if (settings[i].type==PSYNC_TSTRING && row[1].type==PSYNC_TSTRING){
+        if (settings[i].type==PSYNC_TSTRING){
           psync_free(settings[i].str);
-          settings[i].str=psync_strdup(row[1].str);
+          settings[i].str=psync_strdup(row[1]);
         }
-        else if ((settings[i].type==PSYNC_TNUMBER || settings[i].type==PSYNC_TBOOL) && row[1].type==PSYNC_TNUMBER){
-          if (settings[i].type==PSYNC_TNUMBER)
-            settings[i].num=row[1].num;
-          else
-            settings[i].boolean=row[1].num?1:0;
-        }
+        else if (settings[i].type==PSYNC_TNUMBER)
+          settings[i].num=atoll(row[1]);
+        else if (settings[i].type==PSYNC_TBOOL)
+          settings[i].boolean=atoll(row[1])?1:0;
         else
-          debug(D_BUG, "bad setting type for settingid %d (%s)", i, name);
+          debug(D_BUG, "bad setting type for settingid %d (%s) expected %u", i, name, settings[i].type);
       }
   }
   psync_sql_free_result(res);

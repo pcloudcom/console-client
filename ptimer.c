@@ -49,6 +49,8 @@ static struct exception_list *excepions=NULL;
 static struct timer_list *timers=NULL;
 static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
+static pthread_cond_t timer_wait_cond=PTHREAD_COND_INITIALIZER;
+static uint32_t timer_waiters=0;
 
 static void timer_thread(){
   struct timer_list *t;
@@ -62,6 +64,8 @@ static void timer_thread(){
      */
     tm.tv_sec=psync_current_time+1;
     pthread_mutex_lock(&timer_mutex);
+    if (timer_waiters)
+      pthread_cond_broadcast(&timer_wait_cond);
     pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
     pthread_mutex_unlock(&timer_mutex);
     time(&psync_current_time);
@@ -130,4 +134,16 @@ void psync_timer_notify_exception(){
       e->func();
     e=e->next;
   }
+}
+
+void psync_timer_wait_next_sec(){
+  time_t ct;
+  ct=psync_current_time;
+  pthread_mutex_lock(&timer_mutex);
+  do {
+    timer_waiters++;
+    pthread_cond_wait(&timer_wait_cond, &timer_mutex);
+    timer_waiters--;
+  } while (ct==psync_current_time);
+  pthread_mutex_unlock(&timer_mutex);
 }

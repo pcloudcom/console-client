@@ -55,10 +55,6 @@
 
 #define DEBUG_FILE "/tmp/psync_err.log"
 
-#if !defined(__FUNCTION__)
-#define __FUNCTION__ "not_supported"
-#endif
-
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
 #define assert(cond, ...) do {if (!(cond)) debug(D_ERROR, __VA_ARGS__);} while (0)
 
@@ -75,6 +71,15 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0])) 
 
+#define psync_binhex(dst, src, cnt) \
+  do {\
+    size_t it__;\
+    size_t cnt__=(cnt);\
+    const uint8_t *src__=(const uint8_t *)(src);\
+    uint16_t *dst__=(uint16_t *)(dst);\
+    for (it__=0; it__<cnt__; it__++)\
+      dst__[it__]=__hex_lookup[src__[it__]];\
+  } while (0)
 
 #define NTO_STR(s) TO_STR(s)
 #define TO_STR(s) #s
@@ -102,6 +107,7 @@ extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
 extern uint64_t psync_my_userid;
 extern pthread_mutex_t psync_my_auth_mutex;
 extern PSYNC_THREAD uint32_t psync_error;
+extern uint16_t const *__hex_lookup;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC;
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;

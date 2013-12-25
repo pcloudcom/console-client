@@ -174,3 +174,20 @@ void psync_wait_statuses(uint32_t first, ...){
   psync_wait_statuses_array(arr, cnt);
 }
 
+void psync_status_set_download_speed(uint32_t speed){
+  if (psync_status.downloadspeed!=speed){
+    psync_status.downloadspeed=speed;
+    psync_send_status_update();
+  }
+}
+
+void psync_status_inc_downloads_count(){
+  psync_status.filesdownloading++;
+  psync_send_status_update();
+}
+
+void psync_status_dec_downloads_count(){
+  psync_status.filesdownloading++;
+  psync_send_status_update();
+}
+

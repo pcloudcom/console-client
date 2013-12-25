@@ -39,5 +39,6 @@ void psync_timer_wake();
 void psync_timer_register(psync_timer_callback func, time_t numsec);
 void psync_timer_exception_handler(psync_timer_callback func);
 void psync_timer_notify_exception();
+void psync_timer_wait_next_sec();
 
 #endif

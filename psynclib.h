@@ -298,8 +298,8 @@ int psync_resume();
  * 
  * List of settings: 
  * usessl (bool) - use SSL connections to remote servers 
- * maxdownloadspeed (int) - maximum download speed in bytes, 0 for auto-shaper, -1 for no limit
- * maxuploadspeed (int) - maximum upload speed in bytes, 0 for auto-shaper, -1 for no limit
+ * maxdownloadspeed (int) - maximum download speed in bytes per second, 0 for auto-shaper, -1 for no limit
+ * maxuploadspeed (int) - maximum upload speed in bytes per second, 0 for auto-shaper, -1 for no limit
  * 
  */
 

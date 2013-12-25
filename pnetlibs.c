@@ -31,6 +31,29 @@
 #include "ptimer.h"
 #include "pstatus.h"
 #include "papi.h"
+#include "pssl.h"
+
+static time_t current_download_sec=0;
+static uint32_t download_bytes_this_sec=0;
+static uint32_t download_bytes_off=0;
+
+struct time_bytes {
+  time_t tm;
+  uint32_t bytes;
+};
+
+static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
+
+void psync_set_local_full(int over){
+  static int isover=0;
+  if (over!=isover){
+    isover=over;
+    if (isover)
+      psync_set_status(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_FULL);
+    else
+      psync_set_status(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_OK);
+  }
+}
 
 static int handle_result(uint64_t result){
   if (result==2000){
@@ -92,3 +115,174 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint6
   psync_free(res);
   return PSYNC_NET_OK;
 }
+
+static int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count){
+  ssize_t wr;
+  while (count){
+    wr=psync_file_write(fd, buf, count);
+    if (wr==count){
+      psync_set_local_full(0);
+      return 0;
+    }
+    else if (wr==-1){
+      if (psync_fs_err()==P_NOSPC || psync_fs_err()==P_DQUOT){
+        psync_set_local_full(1);
+        psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
+      }
+      return -1;
+    }
+    buf+=wr;
+    count-=wr;
+  }
+  return 0;
+}
+
+int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const char *hexsum, uint64_t fsize){
+  psync_file_t sfd, dfd;
+  psync_hash_ctx hctx;
+  void *buff;
+  size_t rrd;
+  ssize_t rd;
+  unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
+  char hashhex[PSYNC_HASH_DIGEST_HEXLEN];
+  sfd=psync_file_open(source, P_O_RDONLY, 0);
+  if (sfd==INVALID_HANDLE_VALUE)
+    goto err0;
+  if (psync_file_size(sfd)!=fsize)
+    goto err1;
+  dfd=psync_file_open(destination, P_O_WRONLY, P_O_CREAT|P_O_TRUNC);
+  if (dfd==INVALID_HANDLE_VALUE)
+    goto err1;
+  psync_hash_init(&hctx);
+  buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
+  while (fsize){
+    if (fsize>PSYNC_COPY_BUFFER_SIZE)
+      rrd=PSYNC_COPY_BUFFER_SIZE;
+    else
+      rrd=fsize;
+    rd=psync_file_read(sfd, buff, rrd);
+    if (rd<=0)
+      goto err2;
+    if (psync_file_writeall_checkoverquota(dfd, buff, rd))
+      goto err2;
+    psync_hash_update(&hctx, buff, rd);
+  }
+  psync_hash_final(hashbin, &hctx);
+  psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
+  if (memcmp(hexsum, hashhex, PSYNC_HASH_DIGEST_HEXLEN))
+    goto err2;
+  psync_free(buff);
+  psync_file_close(dfd);
+  psync_file_close(sfd);
+  return PSYNC_NET_OK;
+err2:
+  psync_free(buff);
+  psync_file_close(dfd);
+  psync_file_delete(destination);
+err1:
+  psync_file_close(sfd);
+err0:
+  return PSYNC_NET_PERMFAIL;
+}
+
+psync_socket *psync_socket_connect_download(const char *host, int unsigned port, int usessl){
+  psync_socket *sock;
+  int64_t dwlspeed;
+  sock=psync_socket_connect(host, port, usessl);
+  if (sock){
+    dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
+    if (dwlspeed!=-1 && dwlspeed<PSYNC_MAX_SPEED_RECV_BUFFER){
+      if (dwlspeed==0)
+        dwlspeed=PSYNC_RECV_BUFFER_SHAPED;
+      psync_socket_set_recvbuf(sock, (uint32_t)dwlspeed);
+    }
+    psync_status_inc_downloads_count();
+  }
+  return sock;
+}
+
+psync_socket *psync_api_connect_download(){
+  psync_socket *sock;
+  int64_t dwlspeed;
+  sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+  if (sock){
+    dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
+    if (dwlspeed!=-1 && dwlspeed<PSYNC_MAX_SPEED_RECV_BUFFER){
+      if (dwlspeed==0)
+        dwlspeed=PSYNC_RECV_BUFFER_SHAPED;
+      psync_socket_set_recvbuf(sock, (uint32_t)dwlspeed);
+    }
+    psync_status_inc_downloads_count();
+  }
+  return sock;
+}
+
+void psync_socket_close_download(psync_socket *sock){
+  psync_status_dec_downloads_count();
+  psync_socket_close(sock);
+}
+
+static void account_downloaded_bytes(int unsigned bytes){
+  if (current_download_sec==psync_current_time)
+    download_bytes_this_sec+=bytes;
+  else{
+    uint64_t sum;
+    uint32_t i;
+    download_bytes_sec[download_bytes_off].tm=current_download_sec;
+    download_bytes_sec[download_bytes_off].bytes=download_bytes_this_sec;
+    download_bytes_off=(download_bytes_off+1)%PSYNC_SPEED_CALC_AVERAGE_SEC;
+    current_download_sec=psync_current_time;
+    download_bytes_this_sec=bytes;
+    sum=0;
+    for (i=0; i<PSYNC_SPEED_CALC_AVERAGE_SEC; i++)
+      if (download_bytes_sec[i].tm>=psync_current_time-PSYNC_SPEED_CALC_AVERAGE_SEC)
+        sum+=download_bytes_sec[i].bytes;
+    psync_status_set_download_speed(sum/PSYNC_SPEED_CALC_AVERAGE_SEC);
+  }
+}
+
+static int unsigned get_download_bytes_this_sec(){
+  if (current_download_sec==psync_current_time)
+    return download_bytes_this_sec;
+  else
+    return 0;
+}
+
+int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
+  int dwlspeed, readbytes, pending, lpending, rd, rrd;
+  int unsigned thissec;
+  dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
+  if (dwlspeed==0){
+    lpending=psync_socket_pendingdata_buf(sock);
+    while (1){
+      psync_milisleep(PSYNC_SLEEP_AUTO_SHAPER);
+      pending=psync_socket_pendingdata_buf(sock);
+      if (pending==lpending)
+        break;
+      else
+        lpending=pending;
+    }
+  }
+  else if (dwlspeed>0){
+    readbytes=0;
+    while (num){
+      while ((thissec=get_download_bytes_this_sec())>=dwlspeed)
+        psync_timer_wait_next_sec();
+      if (num>dwlspeed-thissec)
+        rrd=dwlspeed-thissec;
+      else
+        rrd=num;
+      rd=psync_socket_read(sock, buff, rrd);
+      if (rd<=0)
+        return readbytes?readbytes:rd;
+      account_downloaded_bytes(rd);
+    }
+    return readbytes;
+  }
+  readbytes=psync_socket_readall(sock, buff, num);
+  if (readbytes>0)
+    account_downloaded_bytes(readbytes);
+  return readbytes;
+}
+
+

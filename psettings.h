@@ -49,6 +49,12 @@
 
 #define PSYNC_STACK_SIZE 64*1024
 
+#define PSYNC_COPY_BUFFER_SIZE 64*1024
+#define PSYNC_RECV_BUFFER_SHAPED 128*1024
+#define PSYNC_MAX_SPEED_RECV_BUFFER 1024*1024
+
+#define PSYNC_SPEED_CALC_AVERAGE_SEC 10
+
 #define PSYNC_DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
 #define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloudsync.db"
 
@@ -61,6 +67,7 @@
 #define PSYNC_SLEEP_BEFORE_RECONNECT   5000
 #define PSYNC_SLEEP_ON_DISK_FULL       10000
 #define PSYNC_SLEEP_ON_FAILED_DOWNLOAD 200
+#define PSYNC_SLEEP_AUTO_SHAPER        100
 
 #define PSYNC_PERM_READ   1
 #define PSYNC_PERM_CREATE 2
@@ -72,8 +79,8 @@
 
 #define PSYNC_CHECKSUM "sha1"
 
-#define psync_hash_digest_len    psync_sha1_digest_len
-#define psync_hash_digest_hexlen psync_sha1_digest_hexlen
+#define PSYNC_HASH_DIGEST_LEN    PSYNC_SHA1_DIGEST_LEN
+#define PSYNC_HASH_DIGEST_HEXLEN PSYNC_SHA1_DIGEST_HEXLEN
 #define psync_hash_ctx           psync_sha1_ctx
 #define psync_hash               psync_sha1
 #define psync_hash_init          psync_sha1_init

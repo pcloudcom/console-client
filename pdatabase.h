@@ -40,13 +40,12 @@ name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
 CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE CASCADE,\
 localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
-CREATE UNIQUE IF NOT EXISTS ksyncfolderfolderid ON syncfolder(folderid);\
-CREATE UNIQUE IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderid ON syncfolder(folderid);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);\
 CREATE TABLE IF NOT EXISTS syncfolderdown (syncid INTEGER, folderid INTEGER, localpath VARCHAR(4096));\
-CREATE UNIQUE IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncfolderdown(syncid, folderid);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncfolderdown(syncid, folderid);\
 CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localpath VARCHAR(4096));\
-CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT);\
-CREATE UNIQUE IF NOT EXISTS khashchecksumhashsize ON hashchecksum(hash, size);\
+CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size));\
 COMMIT;\
 "
 
@@ -56,7 +55,6 @@ DROP INDEX kfilefolderid;\
 DROP INDEX ksyncfolderfolderid;\
 DROP INDEX ksyncfolderlocalpath;\
 DROP INDEX ksyncfolderdownsyncidfolderid;\
-DROP INDEX khashchecksumhashsize;\
 DROP TABLE setting;\
 DROP TABLE folder;\
 DROP TABLE file;\

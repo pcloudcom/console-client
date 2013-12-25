@@ -39,6 +39,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -243,8 +244,12 @@ static psync_socket_t connect_res(struct addrinfo *res){
 #if defined(P_OS_WINDOWS)
   static const unsigned long non_blocking_mode=1;
 #endif
-#if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
+#if defined(SOCK_NONBLOCK)
+#if defined(SOCK_CLOEXEC)
 #define PSOCK_TYPE_OR (SOCK_NONBLOCK|SOCK_CLOEXEC)
+#else
+#define PSOCK_TYPE_OR SOCK_NONBLOCK
+#endif
 #else
 #define PSOCK_TYPE_OR 0
 #define PSOCK_NEED_NOBLOCK
@@ -398,6 +403,14 @@ void psync_socket_close(psync_socket *sock){
   psync_free(sock);
 }
 
+int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
+#if defined(SO_RCVBUF) && defined(SOL_SOCKET)
+  return setsockopt(sock->sock, SOL_SOCKET, SO_RCVBUF, &bufsize, sizeof(bufsize));
+#else
+  return -1;
+#endif
+}
+
 int psync_socket_isssl(psync_socket *sock){
   if (sock->ssl)
     return 1;
@@ -412,6 +425,80 @@ int psync_socket_pendingdata(psync_socket *sock){
     return psync_ssl_pendingdata(sock->ssl);
   else
     return 0;
+}
+
+int psync_socket_pendingdata_buf(psync_socket *sock){
+  int ret;
+#if defined(P_OS_POSIX) && defined(FIONREAD)
+  if (ioctl(sock->sock, FIONREAD, &ret))
+    return -1;
+#elif defined(P_OS_WINDOWS)
+  u_long l;
+  if (ioctlsocket(sock->sock, FIONREAD, &l))
+    return -1;
+  else
+    ret=l;
+#else
+  return -1;
+#endif
+  if (sock->ssl)
+    ret+=psync_ssl_pendingdata(sock->ssl);
+  return ret;  
+}
+
+static int psync_socket_read_ssl(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
+  while (!br){
+    r=psync_ssl_read(sock->ssl, (char *)buff+br, num-br);
+    if (r==PSYNC_SSL_FAIL){
+      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_read_plain(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  if (!sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
+  while (!br){
+    r=recv(sock->sock, (char *)buff+br, num-br, 0);
+    if (r==SOCKET_ERROR){
+      if ((psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN) && !psync_wait_socket_read_timeout(sock->sock))
+        continue;
+      else
+        return -1;
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_read(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_read_ssl(sock, buff, num);
+  else
+    return psync_socket_read_plain(sock, buff, num);
 }
 
 static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
@@ -468,6 +555,8 @@ int psync_socket_readall(psync_socket *sock, void *buff, int num){
   else
     return psync_socket_readall_plain(sock, buff, num);
 }
+
+
 static int psync_socket_writeall_ssl(psync_socket *sock, const void *buff, int num){
   int br, r;
   br=0;
@@ -718,7 +807,20 @@ int psync_mkdir(const char *path){
 #endif
 }
 
-int psync_rename(const char *oldpath, const char *newpath){
+int psync_rmdir(const char *path){
+#if defined(P_OS_POSIX)
+  return rmdir(path);
+#elif defined(P_OS_WINDOWS)
+  if (RemoveDirectory(path))
+    return 0;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_file_rename(const char *oldpath, const char *newpath){
 #if defined(P_OS_POSIX)
   return rename(oldpath, newpath);
 #elif defined(P_OS_WINDOWS) // should we just use rename() here?
@@ -731,8 +833,24 @@ int psync_rename(const char *oldpath, const char *newpath){
 #endif
 }
 
+int psync_file_delete(const char *path){
+#if defined(P_OS_POSIX)
+  return unlink(path);
+#elif defined(P_OS_WINDOWS)
+  if (DeleteFile(path))
+    return 0;
+  else
+    return -1;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
 psync_file_t psync_file_open(const char *path, int access, int flags){
 #if defined(P_OS_POSIX)
+#if defined(O_CLOEXEC)
+  flags|=O_CLOEXEC;
+#endif
   return open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
 #elif defined(P_OS_WINDOWS)
   DWORD cdis;

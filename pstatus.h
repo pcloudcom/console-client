@@ -69,4 +69,8 @@ void psync_wait_status(uint32_t statusid, uint32_t status);
 void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt);
 void psync_wait_statuses(uint32_t first, ...);
 
+void psync_status_set_download_speed(uint32_t speed);
+void psync_status_inc_downloads_count();
+void psync_status_dec_downloads_count();
+
 #endif

@@ -30,8 +30,8 @@
 
 #include <openssl/sha.h>
 
-#define psync_sha1_digest_len 20
-#define psync_sha1_digest_hexlen 40
+#define PSYNC_SHA1_DIGEST_LEN 20
+#define PSYNC_SHA1_DIGEST_HEXLEN 40
 #define psync_sha1_ctx SHA_CTX
 #define psync_sha1(data, datalen, checksum) SHA1(data, datalen, checksum)
 #define psync_sha1_init(pctx) SHA1_Init(pctx)

@@ -87,6 +87,8 @@ typedef struct stat psync_stat_t;
 #define P_O_WRONLY O_WRONLY
 #define P_O_RDWR   O_RDWR 
 #define P_O_CREAT  O_CREAT
+#define P_O_TRUNC  O_TRUNC
+#define P_O_EXCL   O_EXCL
 
 #define P_SEEK_SET SEEK_SET
 #define P_SEEK_CUR SEEK_CUR
@@ -204,8 +206,11 @@ void psync_yield_cpu();
 
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
+int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_isssl(psync_socket *sock);
 int psync_socket_pendingdata(psync_socket *sock);
+int psync_socket_pendingdata_buf(psync_socket *sock);
+int psync_socket_read(psync_socket *sock, void *buff, int num);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
 
@@ -220,7 +225,9 @@ int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr);
 
 int psync_mkdir(const char *path);
-int psync_rename(const char *oldpath, const char *newpath);
+int psync_rmdir(const char *path);
+int psync_file_rename(const char *oldpath, const char *newpath);
+int psync_file_delete(const char *path);
 
 psync_file_t psync_file_open(const char *path, int access, int flags);
 int psync_file_close(psync_file_t fd);
@@ -228,6 +235,7 @@ int psync_file_sync(psync_file_t fd);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
 ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count);
 int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence);
+int64_t psync_file_size(psync_file_t fd);
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
