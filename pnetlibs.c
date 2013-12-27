@@ -25,6 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdio.h>
+#include <ctype.h>
 #include "pnetlibs.h"
 #include "psettings.h"
 #include "plibs.h"
@@ -36,6 +38,7 @@
 static time_t current_download_sec=0;
 static uint32_t download_bytes_this_sec=0;
 static uint32_t download_bytes_off=0;
+static uint32_t download_speed=0;
 
 struct time_bytes {
   time_t tm;
@@ -237,7 +240,8 @@ static void account_downloaded_bytes(int unsigned bytes){
     for (i=0; i<PSYNC_SPEED_CALC_AVERAGE_SEC; i++)
       if (download_bytes_sec[i].tm>=psync_current_time-PSYNC_SPEED_CALC_AVERAGE_SEC)
         sum+=download_bytes_sec[i].bytes;
-    psync_status_set_download_speed(sum/PSYNC_SPEED_CALC_AVERAGE_SEC);
+    download_speed=sum/PSYNC_SPEED_CALC_AVERAGE_SEC;
+    psync_status_set_download_speed(download_speed);
   }
 }
 
@@ -250,18 +254,24 @@ static int unsigned get_download_bytes_this_sec(){
 
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
   int dwlspeed, readbytes, pending, lpending, rd, rrd;
-  int unsigned thissec;
+  int unsigned thissec, ds;
   dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
   if (dwlspeed==0){
     lpending=psync_socket_pendingdata_buf(sock);
+    if (download_speed>100*1024)
+      ds=download_speed/1024;
+    else
+      ds=100;
     while (1){
-      psync_milisleep(PSYNC_SLEEP_AUTO_SHAPER);
+      psync_milisleep(PSYNC_SLEEP_AUTO_SHAPER*100/ds);
       pending=psync_socket_pendingdata_buf(sock);
       if (pending==lpending)
         break;
       else
         lpending=pending;
     }
+    if (pending>0)
+      sock->pending=1;
   }
   else if (dwlspeed>0){
     readbytes=0;
@@ -283,6 +293,92 @@ int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
   if (readbytes>0)
     account_downloaded_bytes(readbytes);
   return readbytes;
+}
+
+psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to){
+  psync_socket *sock;
+  psync_http_socket *hsock;
+  char *readbuff, *ptr;
+  int usessl, rl, rb;
+  usessl=psync_setting_get_bool(_PS(usessl));
+  sock=psync_socket_connect_download(host, usessl?443:80, usessl);
+  if (!sock)
+    goto err0;
+  readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);
+  if (from || to){
+    if (to)
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%llu-%llu\015\012Connection: close\015\012\015\012", 
+                  path, host, (unsigned long long)from, (unsigned long long)to);
+    else
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%llu-\015\012Connection: close\015\012\015\012", 
+                  path, host, (unsigned long long)from);
+  }
+  else
+    rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Connection: close\015\012\015\012", path, host);
+  if (psync_socket_writeall(sock, readbuff, rl)!=rl || (rb=psync_socket_readall_download(sock, readbuff, PSYNC_HTTP_RESP_BUFFER-1))==-1)
+    goto err1;
+  readbuff[rb]=0;
+  ptr=readbuff;
+  while (*ptr && !isspace(*ptr))
+    ptr++;
+  while (*ptr && isspace(*ptr))
+    ptr++;
+  if (!isdigit(*ptr) || atoi(ptr)/10!=20)
+    goto err1;
+  if ((ptr=strstr(readbuff, "\015\012\015\12")))
+    ptr+=4;
+  else if ((ptr=strstr(readbuff, "\012\012")))
+    ptr+=2;
+  else
+    goto err1;
+  rl=ptr-readbuff;
+  if (rl==rb){
+    psync_free(readbuff);
+    readbuff=NULL;
+  }
+  hsock=(psync_http_socket *)psync_malloc(sizeof(psync_http_socket));
+  hsock->sock=sock;
+  hsock->readbuff=readbuff;
+  hsock->readbuffoff=rl;
+  hsock->readbuffsize=rb;
+  return hsock;
+err1:
+  psync_free(readbuff);
+  psync_socket_close_download(sock);
+err0:
+  return NULL;
+}
+
+void psync_http_close(psync_http_socket *http){
+  psync_socket_close_download(http->sock);
+  if (http->readbuff)
+    psync_free(http->readbuff);
+  psync_free(http);
+}
+
+int psync_http_readall(psync_http_socket *http, void *buff, int num){
+  if (http->readbuff){
+    int cp;
+    if (num<http->readbuffsize-http->readbuffoff)
+      cp=num;
+    else
+      cp=http->readbuffsize-http->readbuffoff;
+    memcpy(buff, http->readbuff+http->readbuffoff, cp);
+    http->readbuffoff+=cp;
+    if (http->readbuffoff>=http->readbuffsize){
+      psync_free(http->readbuff);
+      http->readbuff=NULL;
+    }
+    if (cp==num)
+      return cp;
+    num=psync_socket_readall_download(http->sock, buff+cp, num-cp);
+    if (num<=0)
+      return cp;
+    else
+      return cp+num;
+  }
+  else
+    return psync_socket_readall_download(http->sock, buff, num);
 }
 
 

@@ -28,15 +28,25 @@
 #ifndef _PSYNC_NETLIBS_H
 #define _PSYNC_NETLIBS_H
 
-#include <stdint.h>
 #include "pcompat.h"
 
 #define PSYNC_NET_OK        0
 #define PSYNC_NET_PERMFAIL -1
 #define PSYNC_NET_TEMPFAIL -2
 
+typedef struct {
+  psync_socket *sock;
+  void *readbuff;
+  uint32_t readbuffoff;
+  uint32_t readbuffsize;
+} psync_http_socket;
+
 void psync_set_local_full(int over);
 int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint64_t *fsize);
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
+
+psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);
+void psync_http_close(psync_http_socket *http);
+int psync_http_readall(psync_http_socket *http, void *buff, int num);
 
 #endif
