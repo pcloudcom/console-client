@@ -285,6 +285,9 @@ int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
       rd=psync_socket_read(sock, buff, rrd);
       if (rd<=0)
         return readbytes?readbytes:rd;
+      num-=rd;
+      buff+=rd;
+      readbytes+=rd;
       account_downloaded_bytes(rd);
     }
     return readbytes;
@@ -325,7 +328,7 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
     ptr++;
   if (!isdigit(*ptr) || atoi(ptr)/10!=20)
     goto err1;
-  if ((ptr=strstr(readbuff, "\015\012\015\12")))
+  if ((ptr=strstr(readbuff, "\015\012\015\012")))
     ptr+=4;
   else if ((ptr=strstr(readbuff, "\012\012")))
     ptr+=2;
