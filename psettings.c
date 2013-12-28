@@ -29,12 +29,15 @@
 #include "plibs.h"
 #include "ptimer.h"
 #include <string.h>
+#include <ctype.h>
 
 typedef void (*setting_callback)();
+typedef void (*filter_callback)(void *);
 
 typedef struct {
   const char *name;
   setting_callback change_callback;
+  filter_callback fix_callback;
   union {
     uint64_t num;
     int64_t snum;
@@ -44,11 +47,14 @@ typedef struct {
   uint32_t type;
 } psync_setting_t;
 
+static void lower_patterns(void *ptr);
+
 static psync_setting_t settings[]={
-  {"usessl", psync_timer_notify_exception, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
-  {"saveauth", NULL, {1}, PSYNC_TBOOL},
-  {"maxdownloadspeed", NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"maxuploadspeed", NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER}
+  {"usessl", psync_timer_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
+  {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
+  {"maxdownloadspeed", NULL, NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"ignorepatterns", NULL, lower_patterns, {(uint64_t)PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
 };
 
 void psync_settings_init(){
@@ -56,9 +62,19 @@ void psync_settings_init(){
   char **row;
   const char *name;
   psync_settingid_t i;
-  for (i=0; i<ARRAY_SIZE(settings); i++)
-    if (settings[i].type==PSYNC_TSTRING)
+  for (i=0; i<ARRAY_SIZE(settings); i++){
+    if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);
+      if (settings[i].fix_callback)
+        settings[i].fix_callback(&settings[i].str);
+    }
+    else if (settings[i].fix_callback){
+      if (settings[i].type==PSYNC_TNUMBER)
+        settings[i].fix_callback(&settings[i].num);
+      else if (settings[i].type==PSYNC_TBOOL)
+        settings[i].fix_callback(&settings[i].boolean);
+    }
+  }
   res=psync_sql_query("SELECT id, value FROM setting");
   while ((row=psync_sql_fetch_rowstr(res))){
     name=row[0];
@@ -67,11 +83,19 @@ void psync_settings_init(){
         if (settings[i].type==PSYNC_TSTRING){
           psync_free(settings[i].str);
           settings[i].str=psync_strdup(row[1]);
+          if (settings[i].fix_callback)
+            settings[i].fix_callback(&settings[i].str);
         }
-        else if (settings[i].type==PSYNC_TNUMBER)
+        else if (settings[i].type==PSYNC_TNUMBER){
           settings[i].num=atoll(row[1]);
-        else if (settings[i].type==PSYNC_TBOOL)
+          if (settings[i].fix_callback)
+            settings[i].fix_callback(&settings[i].num);
+        }
+        else if (settings[i].type==PSYNC_TBOOL){
           settings[i].boolean=atoll(row[1])?1:0;
+          if (settings[i].fix_callback)
+            settings[i].fix_callback(&settings[i].boolean);
+        }
         else
           debug(D_BUG, "bad setting type for settingid %d (%s) expected %u", i, name, settings[i].type);
       }
@@ -112,6 +136,8 @@ int psync_setting_set_bool(psync_settingid_t settingid, int value){
     value=1;
   else
     value=0;
+  if (settings[settingid].fix_callback)
+    settings[settingid].fix_callback(&value);
   settings[settingid].boolean=value;
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
@@ -131,6 +157,8 @@ uint64_t psync_setting_get_uint(psync_settingid_t settingid){
 int psync_setting_set_uint(psync_settingid_t settingid, uint64_t value){
   psync_sql_res *res;
   CHECK_SETTINGID_AND_TYPE(-1, PSYNC_TNUMBER);
+  if (settings[settingid].fix_callback)
+    settings[settingid].fix_callback(&value);
   settings[settingid].num=value;
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
@@ -150,6 +178,8 @@ int64_t psync_setting_get_int(psync_settingid_t settingid){
 int psync_setting_set_int(psync_settingid_t settingid, int64_t value){
   psync_sql_res *res;
   CHECK_SETTINGID_AND_TYPE(-1, PSYNC_TNUMBER);
+  if (settings[settingid].fix_callback)
+    settings[settingid].fix_callback(&value);
   settings[settingid].snum=value;
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
@@ -168,10 +198,13 @@ const char *psync_setting_get_string(psync_settingid_t settingid){
 
 int psync_setting_set_string(psync_settingid_t settingid, const char *value){
   psync_sql_res *res;
-  char *oldval;
+  char *oldval, *newval;
   CHECK_SETTINGID_AND_TYPE(-1, PSYNC_TSTRING);
   oldval=settings[settingid].str;
-  settings[settingid].str=psync_strdup(value);
+  newval=psync_strdup(value);
+  if (settings[settingid].fix_callback)
+    settings[settingid].fix_callback(&newval);
+  settings[settingid].str=newval;
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
   psync_sql_bind_string(res, 2, value);
@@ -181,4 +214,13 @@ int psync_setting_set_string(psync_settingid_t settingid, const char *value){
     settings[settingid].change_callback();
   psync_free_after_sec(oldval, 600);
   return 0;
+}
+
+static void lower_patterns(void *ptr){
+  unsigned char *str;
+  str=*((unsigned char **)ptr);
+  while (*str){
+    *str=tolower(*str);
+    str++;
+  }
 }

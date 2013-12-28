@@ -35,6 +35,7 @@ static int running=0;
 static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t folderid, const char *localpath){
   psync_sql_res *res;
   psync_variant *row;
+  const char *name;
   char *path;
   uint64_t cfolderid;
   res=psync_sql_prep_statement("INSERT INTO syncfolderdown (syncid, folderid, localpath) VALUES (?, ?, ?)");
@@ -47,8 +48,11 @@ static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t fo
   psync_sql_bind_uint(res, 1, folderid);
   while ((row=psync_sql_fetch_row(res))){
     if (psync_get_number(row[1])&PSYNC_PERM_READ){
+      name=psync_get_string(row[2]);
+      if (psync_is_name_to_ignore(name))
+        continue;
       cfolderid=psync_get_number(row[0]);
-      path=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, psync_get_string(row[2]), NULL);
+      path=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
       psync_add_folder_for_downloadsync(syncid, cfolderid, path);
       psync_task_create_local_folder(path, cfolderid, syncid);
       psync_free(path);
@@ -58,8 +62,11 @@ static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t fo
   res=psync_sql_query("SELECT id, name FROM file WHERE parentfolderid=?");
   psync_sql_bind_uint(res, 1, folderid);
   while ((row=psync_sql_fetch_row(res))){
+    name=psync_get_string(row[1]);
+    if (psync_is_name_to_ignore(name))
+      continue;
     cfolderid=psync_get_number(row[0]);
-    path=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, psync_get_string(row[1]), NULL);
+    path=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
     psync_task_download_file(path, cfolderid, syncid);
     psync_free(path);
   }

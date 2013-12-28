@@ -26,6 +26,7 @@
  */
 
 #include <string.h>
+#include <ctype.h>
 #include "psynclib.h"
 #include "pcompat.h"
 #include "plibs.h"
@@ -259,6 +260,66 @@ pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_l
 
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype){
   return psync_list_remote_folder(folderid, listtype);
+}
+
+static int match_pattern(const char *name, const char *pattern, size_t plen){
+  size_t i;
+  for (i=0; i<plen; i++){
+    if (pattern[i]=='?')
+      continue;
+    else if (pattern[i]=='*'){
+      i++;
+      plen-=i;
+      if (!plen)
+        return 1;
+      pattern+=i;
+      do {
+        if (match_pattern(name, pattern, plen))
+          return 1;
+      } while (*name++);
+      return 0;
+    }
+    else if (pattern[i]!=name[i])
+      return 0;
+  }
+  return name[i]==0;
+}
+
+int psync_is_name_to_ignore(const char *name){
+  const char *ign, *sc, *pt;
+  char *namelower;
+  unsigned char *lp;
+  size_t ilen, off, pl;
+  namelower=psync_strdup(name);
+  lp=(unsigned char *)namelower;
+  while (*lp){
+    *lp=tolower(*lp);
+    lp++;
+  }
+  ign=psync_setting_get_string(_PS(ignorepatterns));
+  ilen=strlen(ign);
+  off=0;
+  do {
+    sc=(const char *)memchr(ign+off, ';', ilen-off);
+    if (sc)
+      pl=sc-ign-off;
+    else
+      pl=ilen-off;
+    pt=ign+off;
+    off+=pl+1;
+    while (pl && isspace((unsigned char)*pt)){
+      pt++;
+      pl--;
+    }
+    while (pl && isspace((unsigned char)pt[pl-1]))
+      pl--;
+    if (match_pattern(namelower, pt, pl)){
+      psync_free(namelower);
+      return 1;
+    }
+  } while (sc);
+  psync_free(namelower);
+  return 0;
 }
 
 int psync_pause(){

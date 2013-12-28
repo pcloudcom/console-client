@@ -266,12 +266,20 @@ psync_folder_list_t *psync_get_sync_list();
  * single call to free(). In case of error NULL is returned. Parameter
  * listtype should be one of PLIST_FILES, PLIST_FOLDERS or PLIST_ALL.
  * 
+ * Folders do not contain "." or ".." entries.
+ * 
+ * All files/folders are listed regardless if they are to be ignored 
+ * based on 'ignorepatterns' setting. If needed, pass the names to
+ * psync_is_name_to_ignore that returns 1 for files tha are to be
+ * ignored and 0 for others.
+ * 
  * Remote root folder has 0 folderid.
  */
 
 pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
+int psync_is_name_to_ignore(const char *name);
 
 /* Returns the code of the last error that occured when calling psync_* functions
  * in the given thread. The error is one of PERROR_* constants.
@@ -300,6 +308,9 @@ int psync_resume();
  * usessl (bool) - use SSL connections to remote servers 
  * maxdownloadspeed (int) - maximum download speed in bytes per second, 0 for auto-shaper, -1 for no limit
  * maxuploadspeed (int) - maximum upload speed in bytes per second, 0 for auto-shaper, -1 for no limit
+ * ignorepatterns (string) - patterns of files and folders to be ignored when syncing, separated by ";" supported widcards are
+ *                          * - matches any number of characters (even zero)
+ *                          ? - matches exactly one character
  * 
  */
 

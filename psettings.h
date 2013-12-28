@@ -93,6 +93,20 @@
 #define PSYNC_USE_SSL_DEFAULT 1
 #define PSYNC_DWL_SHAPER_DEFAULT 0
 #define PSYNC_UPL_SHAPER_DEFAULT 0
+#define PSYNC_IGNORE_PATTERNS_DEFAULT ".DS_Store;\
+.DS_Store?;\
+.AppleDouble;\
+._*;\
+.Spotlight-V100;\
+.DocumentRevisions-V100;\
+.TemporaryItems;\
+.Trashes;\
+.fseventsd;\
+ehThumbs.db;\
+Thumbs.db;\
+hiberfil.sys;\
+pagefile.sys;\
+$RECYCLE.BIN"
 
 #define _PS(s) PSYNC_SETTING_##s
 
@@ -100,6 +114,7 @@
 #define PSYNC_SETTING_saveauth         1
 #define PSYNC_SETTING_maxdownloadspeed 2
 #define PSYNC_SETTING_maxuploadspeed   3
+#define PSYNC_SETTING_ignorepatterns   4
 
 typedef int psync_settingid_t;
 
