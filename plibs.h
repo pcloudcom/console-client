@@ -101,6 +101,8 @@ typedef struct {
   psync_variant row[];
 } psync_sql_res;
 
+typedef void (*psync_run_after_t)(void *);
+
 extern int psync_do_run;
 extern pstatus_t psync_status;
 extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
@@ -143,6 +145,7 @@ uint64_t psync_sql_insertid();
 int psync_rename_conflicted_file(const char *path);
 
 void psync_libs_init();
+void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds);
 void psync_free_after_sec(void *ptr, uint32_t seconds);
 
 void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6);

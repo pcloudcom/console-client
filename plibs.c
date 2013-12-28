@@ -31,10 +31,11 @@
 #include "plibs.h"
 #include "ptimer.h"
 
-struct free_after_ptr {
-  struct free_after_ptr *next;
+struct run_after_ptr {
+  struct run_after_ptr *next;
+  psync_run_after_t run;
   void *ptr;
-  time_t freeafter;
+  time_t runat;
 };
 
 static const uint8_t __hex_lookupl[513]={
@@ -58,8 +59,8 @@ static const uint8_t __hex_lookupl[513]={
 
 uint16_t const *__hex_lookup=(uint16_t *)__hex_lookupl;
 
-static struct free_after_ptr *ptrs_to_free=NULL;
-static pthread_mutex_t ptrs_to_free_mutex=PTHREAD_MUTEX_INITIALIZER;
+static struct run_after_ptr *ptrs_to_run=NULL;
+static pthread_mutex_t ptrs_to_run_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
@@ -525,16 +526,16 @@ int psync_rename_conflicted_file(const char *path){
   }
 }
 
-static void psync_free_pointers_timer(){
-  if (ptrs_to_free){
-    struct free_after_ptr *fp, **pfp;
-    pthread_mutex_lock(&ptrs_to_free_mutex);
-    fp=ptrs_to_free;
-    pfp=&ptrs_to_free;
+static void psync_run_pointers_timer(){
+  if (ptrs_to_run){
+    struct run_after_ptr *fp, **pfp;
+    pthread_mutex_lock(&ptrs_to_run_mutex);
+    fp=ptrs_to_run;
+    pfp=&ptrs_to_run;
     while (fp){
-      if (fp->freeafter<=psync_current_time){
+      if (fp->runat<=psync_current_time){
         *pfp=fp->next;
-        psync_free(fp->ptr);
+        fp->run(fp->ptr);
         psync_free(fp);
         fp=*pfp;
       }
@@ -543,23 +544,28 @@ static void psync_free_pointers_timer(){
         fp=fp->next;
       }
     }
-    pthread_mutex_unlock(&ptrs_to_free_mutex);
+    pthread_mutex_unlock(&ptrs_to_run_mutex);
   }  
 }
 
 void psync_libs_init(){
-  psync_timer_register(psync_free_pointers_timer, 10);
+  psync_timer_register(psync_run_pointers_timer, 10);
+}
+
+void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds){
+  struct run_after_ptr *fp;
+  fp=(struct run_after_ptr *)psync_malloc(sizeof(struct run_after_ptr));
+  fp->run=run;
+  fp->ptr=ptr;
+  fp->runat=psync_current_time+seconds;
+  pthread_mutex_lock(&ptrs_to_run_mutex);
+  fp->next=ptrs_to_run;
+  ptrs_to_run=fp;
+  pthread_mutex_unlock(&ptrs_to_run_mutex);
 }
 
 void psync_free_after_sec(void *ptr, uint32_t seconds){
-  struct free_after_ptr *fp;
-  fp=(struct free_after_ptr *)psync_malloc(sizeof(struct free_after_ptr));
-  fp->ptr=ptr;
-  fp->freeafter=psync_current_time+seconds;
-  pthread_mutex_lock(&ptrs_to_free_mutex);
-  fp->next=ptrs_to_free;
-  ptrs_to_free=fp;
-  pthread_mutex_unlock(&ptrs_to_free_mutex);
+  psync_run_after_sec(psync_free, ptr, seconds);
 }
 
 static void time_format(time_t tm, char *result){

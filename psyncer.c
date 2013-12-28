@@ -53,8 +53,8 @@ static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t fo
         continue;
       cfolderid=psync_get_number(row[0]);
       path=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
-      psync_add_folder_for_downloadsync(syncid, cfolderid, path);
       psync_task_create_local_folder(path, cfolderid, syncid);
+      psync_add_folder_for_downloadsync(syncid, cfolderid, path);
       psync_free(path);
     }
   }

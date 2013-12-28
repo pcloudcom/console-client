@@ -169,6 +169,7 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
     if (psync_file_writeall_checkoverquota(dfd, buff, rd))
       goto err2;
     psync_hash_update(&hctx, buff, rd);
+    psync_yield_cpu();
   }
   psync_hash_final(hashbin, &hctx);
   psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
