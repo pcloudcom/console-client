@@ -350,3 +350,88 @@ pfolder_list_t *psync_list_local_folder(const char *path, psync_listtype_t listt
   else
     return folder_list_finalize(ft.folderlist);
 }
+
+typedef struct {
+  char *localpath;
+  char *remotepath;
+  size_t locallen;
+  size_t remotelen;
+  psync_folderid_t folderid;
+  psync_syncid_t syncid;
+  psync_synctype_t synctype;
+} psync_tmp_folder_t;
+
+psync_folder_list_t *psync_list_get_list(){
+  psync_sql_res *res;
+  psync_variant *row;
+  psync_tmp_folder_t *folders;
+  const char *cstr;
+  char *str;
+  psync_folder_list_t *ret;
+  size_t strlens, l;
+  psync_folderid_t folderid;
+  uint32_t alloced, lastfolder, i;
+  folders=NULL;
+  alloced=lastfolder=0;
+  strlens=0;
+  res=psync_sql_query("SELECT id, folderid, localpath, synctype FROM syncfolder");
+  while ((row=psync_sql_fetch_row(res))){
+    if (alloced==lastfolder){
+      alloced=(alloced+32)*2;
+      folders=(psync_tmp_folder_t *)psync_realloc(folders, sizeof(psync_tmp_folder_t)*alloced);
+    }
+    cstr=psync_get_lstring(row[2], &l);
+    l++;
+    str=(char *)psync_malloc(l);
+    memcpy(str, cstr, l);
+    strlens+=l;
+    folders[lastfolder].localpath=str;
+    folders[lastfolder].locallen=l;
+    folderid=psync_get_number(row[1]);
+    str=psync_get_path_by_folderid(folderid, &l);
+    if (unlikely(!str)){
+      str=psync_strdup("/Invalid/Path");
+      l=strlen(str);
+    }
+    l++;
+    strlens+=l;
+    folders[lastfolder].remotepath=str;
+    folders[lastfolder].remotelen=l;
+    folders[lastfolder].folderid=folderid;
+    folders[lastfolder].syncid=psync_get_number(row[0]);
+    folders[lastfolder].synctype=psync_get_number(row[3]);
+    lastfolder++;
+  }
+  psync_sql_free_result(res);
+  l=offsetof(psync_folder_list_t, folders)+sizeof(psync_folder_t)*lastfolder;
+  ret=(psync_folder_list_t *)psync_malloc(l+strlens);
+  str=((char *)ret)+l;
+  ret->foldercnt=lastfolder;
+  for (i=0; i<lastfolder; i++){
+    l=folders[i].locallen;
+    memcpy(str, folders[i].localpath, l);
+    psync_free(folders[i].localpath);
+    ret->folders[i].localpath=str;
+    while (l && str[l]!=PSYNC_DIRECTORY_SEPARATORC && str[l]!='/')
+      l--;
+    if (str[l]==PSYNC_DIRECTORY_SEPARATORC || str[l]=='/')
+      l++;
+    ret->folders[i].localname=str+l;
+    str+=folders[i].locallen;
+    l=folders[i].remotelen;
+    memcpy(str, folders[i].remotepath, l);
+    psync_free(folders[i].remotepath);
+    ret->folders[i].remotepath=str;
+    while (l && str[l]!='/')
+      l--;
+    if (str[l]=='/')
+      l++;
+    ret->folders[i].remotename=str+l;
+    str+=folders[i].remotelen;
+    ret->folders[i].folderid=folders[i].folderid;
+    ret->folders[i].syncid=folders[i].syncid;
+    ret->folders[i].synctype=folders[i].synctype;
+  }
+  psync_free(folders);
+  return ret;
+}

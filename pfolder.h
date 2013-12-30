@@ -40,4 +40,6 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen);
 pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listtype_t listtype);
 pfolder_list_t *psync_list_local_folder(const char *path, psync_listtype_t listtype) PSYNC_NONNULL(1);
 
+psync_folder_list_t *psync_list_get_list();
+
 #endif

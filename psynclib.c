@@ -244,7 +244,10 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
 
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 int psync_delete_sync(psync_syncid_t syncid);
-psync_folder_list_t *psync_get_sync_list();
+
+psync_folder_list_t *psync_get_sync_list(){
+  return psync_list_get_list();
+}
 
 pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype){
   return psync_list_local_folder(localpath, listtype);
