@@ -85,7 +85,7 @@ static psync_socket *get_connected_socket(){
                          P_BOOL("getauth", 1)};
       res=send_command(sock, "userinfo", params);
     }
-    if (!res){
+    if (unlikely(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
@@ -94,7 +94,7 @@ static psync_socket *get_connected_socket(){
     }
     psync_api_conn_fail_reset();
     result=psync_find_result(res, "result", PARAM_NUM)->num;
-    if (result){
+    if (unlikely(result)){
       psync_socket_close(sock);
       psync_free(res);
       if (result==2000){
@@ -111,7 +111,7 @@ static psync_socket *get_connected_socket(){
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     if (luserid){
-      if (luserid!=userid){
+      if (unlikely(luserid!=userid)){
         psync_socket_close(sock);
         psync_free(res);
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_MISMATCH);
@@ -122,45 +122,43 @@ static psync_socket *get_connected_socket(){
     else{
       used_quota=0;
       q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-      if (q){
-        psync_sql_bind_string(q, 1, "userid");
-        psync_sql_bind_uint(q, 2, userid);
+      psync_sql_bind_string(q, 1, "userid");
+      psync_sql_bind_uint(q, 2, userid);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "quota");
+      psync_sql_bind_uint(q, 2, current_quota);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "usedquota");
+      psync_sql_bind_uint(q, 2, 0);
+      psync_sql_run(q);
+      result=psync_find_result(res, "premium", PARAM_BOOL)->num;
+      psync_sql_bind_string(q, 1, "premium");
+      psync_sql_bind_uint(q, 2, result);
+      psync_sql_run(q);
+      if (result)
+        result=psync_find_result(res, "premiumexpires", PARAM_NUM)->num;
+      else
+        result=0;
+      psync_sql_bind_string(q, 1, "premiumexpires");
+      psync_sql_bind_uint(q, 2, result);
+      psync_sql_run(q);
+      result=psync_find_result(res, "emailverified", PARAM_BOOL)->num;
+      psync_sql_bind_string(q, 1, "emailverified");
+      psync_sql_bind_uint(q, 2, result);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "username");
+      psync_sql_bind_string(q, 2, psync_find_result(res, "email", PARAM_STR)->str);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "language");
+      psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
+      psync_sql_run(q);
+      strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
+      if (saveauth){
+        psync_sql_bind_string(q, 1, "auth");
+        psync_sql_bind_string(q, 2, psync_my_auth);
         psync_sql_run(q);
-        psync_sql_bind_string(q, 1, "quota");
-        psync_sql_bind_uint(q, 2, current_quota);
-        psync_sql_run(q);
-        psync_sql_bind_string(q, 1, "usedquota");
-        psync_sql_bind_uint(q, 2, 0);
-        psync_sql_run(q);
-        result=psync_find_result(res, "premium", PARAM_BOOL)->num;
-        psync_sql_bind_string(q, 1, "premium");
-        psync_sql_bind_uint(q, 2, result);
-        psync_sql_run(q);
-        if (result)
-          result=psync_find_result(res, "premiumexpires", PARAM_NUM)->num;
-        else
-          result=0;
-        psync_sql_bind_string(q, 1, "premiumexpires");
-        psync_sql_bind_uint(q, 2, result);
-        psync_sql_run(q);
-        result=psync_find_result(res, "emailverified", PARAM_BOOL)->num;
-        psync_sql_bind_string(q, 1, "emailverified");
-        psync_sql_bind_uint(q, 2, result);
-        psync_sql_run(q);
-        psync_sql_bind_string(q, 1, "username");
-        psync_sql_bind_string(q, 2, psync_find_result(res, "email", PARAM_STR)->str);
-        psync_sql_run(q);
-        psync_sql_bind_string(q, 1, "language");
-        psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
-        psync_sql_run(q);
-        strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
-        if (saveauth){
-          psync_sql_bind_string(q, 1, "auth");
-          psync_sql_bind_string(q, 2, psync_my_auth);
-          psync_sql_run(q);
-        }
-        psync_sql_free_result(q);
       }
+      psync_sql_free_result(q);
     }
     pthread_mutex_lock(&psync_my_auth_mutex);
     psync_free(psync_my_pass);
@@ -340,17 +338,15 @@ static struct {
   FN(deletefile)
 };
 
-#define event_list_size sizeof(event_list)/sizeof(event_list[0])
+#define event_list_size ARRAY_SIZE(event_list)
 
 static void set_num_setting(const char *key, uint64_t val){
   psync_sql_res *q;
   q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-  if (q){
-    psync_sql_bind_string(q, 1, key);
-    psync_sql_bind_uint(q, 2, val);
-    psync_sql_run(q);
-    psync_sql_free_result(q);
-  }
+  psync_sql_bind_string(q, 1, key);
+  psync_sql_bind_uint(q, 2, val);
+  psync_sql_run(q);
+  psync_sql_free_result(q);
 }
 
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
@@ -390,7 +386,7 @@ static void check_overquota(){
 
 static void diff_exception_handler(){
   debug(D_NOTICE, "exception sent");
-  if (exceptionsockwrite!=INVALID_SOCKET)
+  if (likely(exceptionsockwrite!=INVALID_SOCKET))
     psync_pipe_write(exceptionsockwrite, "e", 1);
 }
 

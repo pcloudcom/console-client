@@ -29,6 +29,7 @@
 #define _PSYNC_SETTINGS_H
 
 #include <stdint.h>
+#include "pcompiler.h"
 #include "pcompat.h"
 
 #define PSYNC_API_HOST     "binapi.pcloud.com"
@@ -122,7 +123,7 @@ typedef int psync_settingid_t;
 
 void psync_settings_init();
 
-psync_settingid_t psync_setting_getid(const char *name) PSYNC_PURE;
+psync_settingid_t psync_setting_getid(const char *name) PSYNC_PURE PSYNC_NONNULL(1);
 
 int psync_setting_get_bool(psync_settingid_t settingid);
 int psync_setting_set_bool(psync_settingid_t settingid, int value);

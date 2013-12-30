@@ -29,6 +29,7 @@
 #define _PSYNC_API_H
 
 #include "pcompat.h"
+#include "pcompiler.h"
 #include <string.h>
 
 #define PARAM_STR   0
@@ -87,9 +88,9 @@ psync_socket *psync_api_connect(int usessl);
 void psync_api_conn_fail_inc();
 void psync_api_conn_fail_reset();
 
-binresult *get_result(psync_socket *sock);
-binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres);
-const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line);
-const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line);
+binresult *get_result(psync_socket *sock) PSYNC_NONNULL(1);
+binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres) PSYNC_NONNULL(1, 2);
+const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line) PSYNC_NONNULL(2);
+const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line)  PSYNC_NONNULL(2);
 
 #endif

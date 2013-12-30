@@ -28,6 +28,7 @@
 #ifndef _PSYNC_SSL_H
 #define _PSYNC_SSL_H
 
+#include "pcompiler.h"
 #include "pcompat.h"
 
 #if defined(P_SSL_OPENSSL)

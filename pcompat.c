@@ -260,7 +260,7 @@ static psync_socket_t connect_res(struct addrinfo *res){
 #endif
   while (res){
     sock=socket(res->ai_family, res->ai_socktype|PSOCK_TYPE_OR, res->ai_protocol);
-    if (sock!=INVALID_SOCKET){
+    if (likely(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
       ioctlsocket(sock, FIONBIO, &non_blocking_mode);
@@ -293,20 +293,20 @@ static psync_socket_t connect_socket(const char *host, const char *port){
   hints.ai_socktype=SOCK_STREAM;
   rc=getaddrinfo(host, port, &hints, &res);
 #if defined(P_OS_WINDOWS)
-  if (rc==WSANOTINITIALISED){
+  if (unlikely(rc==WSANOTINITIALISED)){
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData)) 
       return INVALID_SOCKET;
     rc=getaddrinfo(host, port, &hints, &res);
   }
 #endif
-  if (rc!=0){
+  if (unlikely(rc!=0)){
     debug(D_WARNING, "failed to resolve %s", host);
     return INVALID_SOCKET;
   }
   sock=connect_res(res);
   freeaddrinfo(res);
-  if (sock!=INVALID_SOCKET){
+  if (likely(sock!=INVALID_SOCKET)){
     int sock_opt=1;
 #if defined(SO_KEEPALIVE) && defined(SOL_SOCKET)
     setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
@@ -371,7 +371,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
   char sport[24];
   sprintf(sport, "%d", port);
   sock=connect_socket(host, sport);
-  if (sock==INVALID_SOCKET)
+  if (unlikely(sock==INVALID_SOCKET))
     return NULL;
   if (ssl){
     ssl=psync_ssl_connect(sock, &sslc);
@@ -729,7 +729,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
     goto err1;
   pst.canmodifyparent=psync_stat_mode_ok(&st, 2);
   dh=opendir(path);
-  if (!dh)
+  if (unlikely(!dh))
     goto err1;
   pl=strlen(path);
   namelen=pathconf(path, _PC_NAME_MAX);

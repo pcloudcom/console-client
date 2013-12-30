@@ -31,19 +31,42 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_POSIX)
+#if defined(__ANDROID__)
+#define P_OS_LINUX
+#define P_OS_POSIX
+#elif defined(__APPLE__)
+#define P_OS_MACOSX
+#define P_OS_POSIX
+#elif defined(__CYGWIN__)
+#define P_OS_POSIX
+#elif defined(__linux__)
+#define P_OS_LINUX
+#define P_OS_POSIX
+#elif defined(__sun)
+#define P_OS_POSIX
+#elif defined(__FreeBSD__)
+#define P_OS_POSIX
+#elif defined(__DragonFly__)
+#define P_OS_POSIX
+#elif defined(__NetBSD__)
+#define P_OS_POSIX
+#elif defined(__OpenBSD__)
+#define P_OS_POSIX
+#elif defined(__unix__)
+#define P_OS_POSIX
+#elif defined(_WIN32) || defined(WIN32)
+#define P_OS_WINDOWS
+#endif
+#endif
+
 #if (defined(P_OS_LINUX) || defined(P_OS_MACOSX)) && !defined(P_OS_POSIX)
 #define P_OS_POSIX
 #endif
 
 #if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_POSIX)
-#if defined(__unix__)
-#define P_OS_POSIX
-#elif defined(_WIN32) || defined(WIN32)
-#define P_OS_WINDOWS
-#else
 #warning "You OS may not be supported, trying to build POSIX compatible source"
 #define P_OS_POSIX
-#endif
 #endif
 
 #include <sys/types.h>
@@ -174,22 +197,6 @@ typedef struct {
 
 #ifndef INVALID_HANDLE_VALUE
 #define INVALID_HANDLE_VALUE -1
-#endif
-
-#define PSYNC_THREAD __thread
-
-#ifdef __GNUC__
-#define PSYNC_MALLOC __attribute__((malloc))
-#define PSYNC_SENTINEL __attribute__ ((sentinel))
-#define PSYNC_PURE __attribute__ ((pure))
-#define PSYNC_COLD __attribute__ ((cold))
-#define PSYNC_FORMAT(a, b, c) __attribute__ ((format (a, b, c)))
-#else
-#define PSYNC_MALLOC
-#define PSYNC_SENTINEL
-#define PSYNC_PURE
-#define PSYNC_COLD
-#define PSYNC_FORMAT(a, b, c)
 #endif
 
 typedef void (*psync_list_dir_callback)(void *, psync_pstat *);

@@ -51,6 +51,7 @@ static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
 static pthread_cond_t timer_wait_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t timer_waiters=0;
+static int timer_running=0;
 
 static void timer_thread(){
   struct timer_list *t;
@@ -67,13 +68,13 @@ static void timer_thread(){
     if (timer_waiters)
       pthread_cond_broadcast(&timer_wait_cond);
     pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
-    pthread_mutex_unlock(&timer_mutex);
     time(&psync_current_time);
-    if (psync_current_time-lt>=5){
+    pthread_mutex_unlock(&timer_mutex);
+    if (unlikely(psync_current_time-lt>=5)){
       debug(D_NOTICE, "sleep detected");
       psync_timer_notify_exception();
     }
-    else if (psync_current_time==lt){
+    else if (unlikely(psync_current_time==lt)){
       if (!psync_do_run)
         break;
       psync_milisleep(1000);
@@ -93,6 +94,14 @@ static void timer_thread(){
 void psync_timer_init(){
   time(&psync_current_time);
   psync_run_thread(timer_thread);
+  timer_running=1;
+}
+
+time_t psync_time(){
+  if (timer_running)
+    return psync_current_time;
+  else
+    return time(NULL);
 }
 
 void psync_timer_wake(){
@@ -138,8 +147,8 @@ void psync_timer_notify_exception(){
 
 void psync_timer_wait_next_sec(){
   time_t ct;
-  ct=psync_current_time;
   pthread_mutex_lock(&timer_mutex);
+  ct=psync_current_time;
   do {
     timer_waiters++;
     pthread_cond_wait(&timer_wait_cond, &timer_mutex);

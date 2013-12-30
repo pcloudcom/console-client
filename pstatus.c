@@ -96,7 +96,17 @@ static uint32_t psync_calc_status(){
     }
   }
   
-  return PSTATUS_READY;
+  /* This will work quite as well probably:
+   * return !!psync_status.filesdownloading+(!!psync_status.filesuploading)<<1;
+   */
+  if (psync_status.filesdownloading && psync_status.filesuploading)
+    return PSTATUS_DOWNLOADINGANDUPLOADING;
+  else if (psync_status.filesdownloading)
+    return PSTATUS_DOWNLOADING;
+  else if (psync_status.filesuploading)
+    return PSTATUS_UPLOADING;
+  else
+    return PSTATUS_READY;
 }
 
 void psync_status_init(){

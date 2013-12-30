@@ -28,6 +28,7 @@
 #ifndef _PSYNC_TASKS_H
 #define _PSYNC_TASKS_H
 
+#include "pcompiler.h"
 #include "psynclib.h"
 
 #define PSYNC_TASK_DOWNLOAD 0
@@ -45,7 +46,7 @@
 #define PSYNC_DOWNLOAD_FILE        ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
 
 
-void psync_task_create_local_folder(const char *path, uint64_t folderid, psync_syncid_t syncid);
-void psync_task_download_file(const char *path, uint64_t fileid, psync_syncid_t syncid);
+void psync_task_create_local_folder(const char *path, uint64_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
+void psync_task_download_file(const char *path, uint64_t fileid, psync_syncid_t syncid) PSYNC_NONNULL(1);
 
 #endif

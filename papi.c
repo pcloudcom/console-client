@@ -26,6 +26,7 @@
  */
 
 #include <string.h>
+#include <stddef.h>
 #include "psynclib.h"
 #include "plibs.h"
 #include "papi.h"
@@ -95,10 +96,10 @@ void psync_api_conn_fail_reset(){
     connfailures=0;
 }
 
-#define _NEED_DATA(cnt) if (*datalen<(cnt)) return -1
+#define _NEED_DATA(cnt) if (unlikely(*datalen<(cnt))) return -1
 #define ALIGN_BYTES sizeof(uint64_t)
 
-ssize_t calc_ret_len(unsigned char **data, size_t *datalen, size_t *strcnt){
+static ssize_t calc_ret_len(unsigned char **restrict data, size_t *restrict datalen, size_t *restrict strcnt){
   size_t type, len;
   long cond;
   _NEED_DATA(1);
@@ -200,7 +201,7 @@ ssize_t calc_ret_len(unsigned char **data, size_t *datalen, size_t *strcnt){
     return -1;
 }
 
-static binresult *do_parse_result(unsigned char **indata, unsigned char **odata, binresult **strings, size_t *nextstrid){
+static binresult *do_parse_result(unsigned char **restrict indata, unsigned char **restrict odata, binresult **restrict strings, size_t *restrict nextstrid){
   binresult *ret;
   long cond;
   uint32_t type, len;
@@ -422,7 +423,7 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
 
 const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
   uint32_t i;
-  if (!res || res->type!=PARAM_HASH){
+  if (unlikely(!res || res->type!=PARAM_HASH)){
     const char *nm="NULL";
     if (res)
       nm=type_names[res->type];
@@ -432,7 +433,7 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
   }
   for (i=0; i<res->length; i++)
     if (!strcmp(res->hash[i].key, name)){
-      if (res->hash[i].value->type==type)
+      if (likely(res->hash[i].value->type==type))
         return res->hash[i].value;
       else{
         if (D_CRITICAL<=DEBUG_LEVEL)
@@ -447,7 +448,7 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
 
 const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
   uint32_t i;
-  if (!res || res->type!=PARAM_HASH){
+  if (unlikely(!res || res->type!=PARAM_HASH)){
     const char *nm="NULL";
     if (res)
       nm=type_names[res->type];
@@ -457,7 +458,7 @@ const binresult *psync_do_check_result(const binresult *res, const char *name, u
   }
   for (i=0; i<res->length; i++)
     if (!strcmp(res->hash[i].key, name)){
-      if (res->hash[i].value->type==type)
+      if (likely(res->hash[i].value->type==type))
         return res->hash[i].value;
       else{
         if (D_CRITICAL<=DEBUG_LEVEL)

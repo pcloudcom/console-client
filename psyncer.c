@@ -83,7 +83,7 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   res=psync_sql_query("SELECT folderid, localpath, synctype FROM syncfolder WHERE id=? AND flags=0");
   psync_sql_bind_uint(res, 1, syncid);
   row=psync_sql_fetch_row(res);
-  if (!row){
+  if (unlikely(!row)){
     psync_sql_rollback_transaction();
     return;
   }

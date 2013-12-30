@@ -54,7 +54,7 @@ static psync_setting_t settings[]={
   {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
   {"maxdownloadspeed", NULL, NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"ignorepatterns", NULL, lower_patterns, {(uint64_t)PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
+  {"ignorepatterns", NULL, lower_patterns, {(uintptr_t)PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
 };
 
 void psync_settings_init(){
@@ -114,11 +114,11 @@ psync_settingid_t psync_setting_getid(const char *name){
 
 #define CHECK_SETTINGID_AND_TYPE(ret, stype) \
   do {\
-    if (settingid<0 || settingid>=ARRAY_SIZE(settings)){\
+    if (unlikely(settingid<0 || settingid>=ARRAY_SIZE(settings))){\
       debug(D_BUG, "invalid settingid %d", settingid);\
       return ret;\
     }\
-    if (settings[settingid].type!=stype){\
+    if (unlikely(settings[settingid].type!=stype)){\
       debug(D_BUG, "invalid setting type requested for settingid %d (%s)", settingid, settings[settingid].name);\
       return ret;\
     }\

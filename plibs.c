@@ -59,8 +59,9 @@ static const uint8_t __hex_lookupl[513]={
 
 uint16_t const *__hex_lookup=(uint16_t *)__hex_lookupl;
 
-static struct run_after_ptr *ptrs_to_run=NULL;
 static pthread_mutex_t ptrs_to_run_mutex=PTHREAD_MUTEX_INITIALIZER;
+static struct run_after_ptr *ptrs_to_run_next_min=NULL;
+static struct run_after_ptr *ptrs_to_run_this_min=NULL;
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
@@ -115,7 +116,7 @@ char *psync_strcat(const char *str, ...){
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
   int code=sqlite3_open(db, &psync_db);
-  if (code==SQLITE_OK){
+  if (likely(code==SQLITE_OK)){
     pthread_mutexattr_init(&mattr);
     pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&psync_db_mutex, &mattr);
@@ -129,7 +130,7 @@ int psync_sql_connect(const char *db){
 
 void psync_sql_close(){
   int code=sqlite3_close(psync_db);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "error when closing database: %s", sqlite3_errstr(code));
 }
 
@@ -147,7 +148,7 @@ int psync_sql_statement(const char *sql){
   psync_sql_lock();
   code=sqlite3_exec(psync_db, sql, NULL, NULL, &errmsg);
   psync_sql_unlock();
-  if (code==SQLITE_OK)
+  if (likely(code==SQLITE_OK))
     return 0;
   else{
     debug(D_ERROR, "error running sql statement: %s: %s", sql, errmsg);
@@ -158,7 +159,7 @@ int psync_sql_statement(const char *sql){
 
 int psync_sql_start_transaction(){
   psync_sql_lock();
-  if (psync_sql_statement("BEGIN")){
+  if (unlikely(psync_sql_statement("BEGIN"))){
     psync_sql_unlock();
     return -1;
   }
@@ -183,7 +184,7 @@ char *psync_sql_cellstr(const char *sql){
   int code;
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (code!=SQLITE_OK){
+  if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
@@ -234,7 +235,7 @@ char **psync_sql_rowstr(const char *sql){
   int code, cnt;
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (code!=SQLITE_OK){
+  if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
@@ -284,7 +285,7 @@ psync_variant *psync_sql_row(const char *sql){
   int code, cnt;
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (code!=SQLITE_OK){
+  if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
@@ -350,7 +351,7 @@ psync_sql_res *psync_sql_query(const char *sql){
   int code, cnt;
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (code!=SQLITE_OK){
+  if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
@@ -368,7 +369,7 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
   int code;
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (code!=SQLITE_OK){
+  if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
@@ -380,39 +381,39 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
 
 void psync_sql_reset(psync_sql_res *res){
   int code=sqlite3_reset(res->stmt);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
 }
 
 void psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
-  if (code!=SQLITE_DONE)
+  if (unlikely(code!=SQLITE_DONE))
     debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
   code=sqlite3_reset(res->stmt);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
 }
 
 void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val){
   int code=sqlite3_bind_int64(res->stmt, n, val);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
 }
 
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val){
   int code=sqlite3_bind_int64(res->stmt, n, val);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
 }
 
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str){
   int code=sqlite3_bind_text(res->stmt, n, str, -1, SQLITE_STATIC);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));}
 
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len){
   int code=sqlite3_bind_blob(res->stmt, n, str, len, SQLITE_STATIC);
-  if (code!=SQLITE_OK)
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
 }
 
@@ -447,7 +448,7 @@ psync_variant *psync_sql_fetch_row(psync_sql_res *res){
     return res->row;
   }
   else {
-    if (code!=SQLITE_DONE)
+    if (unlikely(code!=SQLITE_DONE))
       debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
     return NULL;
   }
@@ -464,7 +465,7 @@ char **psync_sql_fetch_rowstr(psync_sql_res *res){
     return strs;
   }
   else {
-    if (code!=SQLITE_DONE)
+    if (unlikely(code!=SQLITE_DONE))
       debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
     return NULL;
   }
@@ -481,7 +482,7 @@ uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
     return ret;
   }
   else {
-    if (code!=SQLITE_DONE)
+    if (unlikely(code!=SQLITE_DONE))
       debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
     return NULL;
   }
@@ -527,16 +528,38 @@ int psync_rename_conflicted_file(const char *path){
 }
 
 static void psync_run_pointers_timer(){
-  if (ptrs_to_run){
-    struct run_after_ptr *fp, **pfp;
+  struct run_after_ptr *fp, **pfp;
+  if (psync_current_time%60==0 && ptrs_to_run_next_min){
+    time_t nextmin=psync_current_time+60;
     pthread_mutex_lock(&ptrs_to_run_mutex);
-    fp=ptrs_to_run;
-    pfp=&ptrs_to_run;
+    fp=ptrs_to_run_next_min;
+    pfp=&ptrs_to_run_next_min;
+    while (fp){
+      if (fp->runat<nextmin){
+        *pfp=fp->next;
+        fp->next=ptrs_to_run_this_min;
+        ptrs_to_run_this_min=fp;
+        fp=*pfp;
+      }
+      else{
+        pfp=&fp->next;
+        fp=fp->next;
+      }
+    }
+    pthread_mutex_unlock(&ptrs_to_run_mutex);
+  }
+  if (ptrs_to_run_this_min){
+    pthread_mutex_lock(&ptrs_to_run_mutex);
+    fp=ptrs_to_run_this_min;
+    pfp=&ptrs_to_run_this_min;
     while (fp){
       if (fp->runat<=psync_current_time){
         *pfp=fp->next;
+        /* it is ok to unlock the mutex while running the callback as this function is the only place that deletes elements from the list */
+        pthread_mutex_unlock(&ptrs_to_run_mutex);
         fp->run(fp->ptr);
         psync_free(fp);
+        pthread_mutex_lock(&ptrs_to_run_mutex);
         fp=*pfp;
       }
       else{
@@ -549,7 +572,7 @@ static void psync_run_pointers_timer(){
 }
 
 void psync_libs_init(){
-  psync_timer_register(psync_run_pointers_timer, 10);
+  psync_timer_register(psync_run_pointers_timer, 1);
 }
 
 void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds){
@@ -559,8 +582,14 @@ void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds){
   fp->ptr=ptr;
   fp->runat=psync_current_time+seconds;
   pthread_mutex_lock(&ptrs_to_run_mutex);
-  fp->next=ptrs_to_run;
-  ptrs_to_run=fp;
+  if (seconds<60){
+    fp->next=ptrs_to_run_this_min;
+    ptrs_to_run_this_min=fp;
+  }
+  else{
+    fp->next=ptrs_to_run_next_min;
+    ptrs_to_run_next_min=fp;
+  }
   pthread_mutex_unlock(&ptrs_to_run_mutex);
 }
 
@@ -621,12 +650,12 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
       errname=debug_levels[i].name;
       break;
     }
-  if (!log){
+  if (unlikely(!log)){
     log=fopen(DEBUG_FILE, "a+");
     if (!log)
       return;
   }
-  time(&currenttime);
+  currenttime=psync_time();
   time_format(currenttime, dttime);
   snprintf(format, sizeof(format), "%s %s: %s:%u (function %s): %s\n", dttime, errname, file, line, function, fmt);
   format[sizeof(format)-1]=0;

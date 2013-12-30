@@ -31,6 +31,7 @@
 #include <sqlite3.h>
 #include <pthread.h>
 
+#include "pcompiler.h"
 #include "pcompat.h"
 #include "psynclib.h"
 
@@ -64,10 +65,10 @@
 #define PSYNC_TNULL   4
 #define PSYNC_TBOOL   5
 
-#define psync_get_number(v) ((v).type==PSYNC_TNUMBER?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
-#define psync_get_string(v) ((v).type==PSYNC_TSTRING?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_number(v) (likely((v).type==PSYNC_TNUMBER)?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_string(v) (likely((v).type==PSYNC_TSTRING)?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_lstring(v, l) psync_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l)
-#define psync_get_real(v) ((v).type==PSYNC_TREAL?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_real(v) (likely((v).type==PSYNC_TREAL)?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0])) 
 
@@ -111,10 +112,10 @@ extern pthread_mutex_t psync_my_auth_mutex;
 extern PSYNC_THREAD uint32_t psync_error;
 extern uint16_t const *__hex_lookup;
 
-char *psync_strdup(const char *str) PSYNC_MALLOC;
+char *psync_strdup(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
 
-int psync_sql_connect(const char *db);
+int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
 void psync_sql_close();
 void psync_sql_lock();
 void psync_sql_unlock();
@@ -122,23 +123,23 @@ int psync_sql_start_transaction();
 int psync_sql_commit_transaction();
 int psync_sql_rollback_transaction();
 
-int psync_sql_statement(const char *sql);
-char *psync_sql_cellstr(const char *sql);
-int64_t psync_sql_cellint(const char *sql, int64_t dflt);
-char **psync_sql_rowstr(const char *sql);
-psync_variant *psync_sql_row(const char *sql);
-psync_sql_res *psync_sql_query(const char *sql);
-psync_sql_res *psync_sql_prep_statement(const char *sql);
-void psync_sql_reset(psync_sql_res *res);
-void psync_sql_run(psync_sql_res *res);
-void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val);
-void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val);
-void psync_sql_bind_string(psync_sql_res *res, int n, const char *str);
-void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len);
-void psync_sql_free_result(psync_sql_res *res);
-psync_variant *psync_sql_fetch_row(psync_sql_res *res);
-char **psync_sql_fetch_rowstr(psync_sql_res *res);
-uint64_t *psync_sql_fetch_rowint(psync_sql_res *res);
+int psync_sql_statement(const char *sql) PSYNC_NONNULL(1);
+char *psync_sql_cellstr(const char *sql) PSYNC_NONNULL(1);
+int64_t psync_sql_cellint(const char *sql, int64_t dflt) PSYNC_NONNULL(1);
+char **psync_sql_rowstr(const char *sql) PSYNC_NONNULL(1);
+psync_variant *psync_sql_row(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
+void psync_sql_reset(psync_sql_res *res) PSYNC_NONNULL(1);
+void psync_sql_run(psync_sql_res *res) PSYNC_NONNULL(1);
+void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val) PSYNC_NONNULL(1);
+void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val) PSYNC_NONNULL(1);
+void psync_sql_bind_string(psync_sql_res *res, int n, const char *str) PSYNC_NONNULL(1);
+void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len) PSYNC_NONNULL(1);
+void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
+psync_variant *psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
+char **psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
+uint64_t *psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);
 uint32_t psync_sql_affected_rows();
 uint64_t psync_sql_insertid();
 
@@ -148,12 +149,11 @@ void psync_libs_init();
 void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds);
 void psync_free_after_sec(void *ptr, uint32_t seconds);
 
-void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6);
-
+void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
 uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
 const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
-const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len) PSYNC_COLD;
+const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len) PSYNC_NONNULL(4, 5);
 double psync_err_real_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
 
 #endif

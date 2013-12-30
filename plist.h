@@ -25,21 +25,50 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_TIMER_H
-#define _PSYNC_TIMER_H
+#ifndef _PSYNC_LIST_H
+#define _PSYNC_LIST_H
 
-#include <time.h>
+#include <stddef.h>
 
-extern time_t psync_current_time;
+typedef struct _psync_list {
+  struct _psync_list *next;
+  struct _psync_list *prev;
+} psync_list;
 
-typedef void (*psync_timer_callback)();
+#define psync_list_init(l)\
+  do {\
+    (l)->next=(l);\
+    (l)->prev=(l);\
+  } while (0)
+  
+#define psync_add_between(l1, l2, a)\
+  do {\
+    (a)->next=(l2);\
+    (a)->prev=(l1);\
+    (l2)->prev=(a);\
+    (l1)->next=(a);\
+  } while (0)
 
-void psync_timer_init();
-time_t psync_time();
-void psync_timer_wake();
-void psync_timer_register(psync_timer_callback func, time_t numsec);
-void psync_timer_exception_handler(psync_timer_callback func);
-void psync_timer_notify_exception();
-void psync_timer_wait_next_sec();
+#define psync_list_add_head(l, a) psync_add_between(l, (l)->next, a);
+#define psync_list_add_tail(l, a) psync_add_between((l)->prev, l, a);
 
+#define psync_list_del(a)\
+  do {\
+    (a)->next->prev=(a)->prev;\
+    (a)->prev->next=(a)->next;\
+  } while (0)
+  
+#define psync_list_element(a, t, n) ((t *)(char *)(a)-offsetof(t, n))
+
+#define psync_list_for_each(a, l) for (a=(l)->next; a!=(l); a=a->next)
+#define psync_list_for_each_safe(a, b, l) for (a=(l)->next, b=a->next; a!=(l); a=b, b=b->next)
+#define psync_list_for_each_element(a, l, t, n) for (a=psync_list_element((l)->next, t, n); &a->n!=(l); a=psync_list_element(a->n.next, t, n))
+
+#define psync_list_for_each_element_call(l, t, n, c)\
+  do {\
+    psync_list *___tmpa, *___tmpb;\
+    psync_list_for_each_safe(___tmpa, ___tmpb, l)\
+      c(psync_list_element(___tmpa, t, n));\
+  } while (0)
+  
 #endif
