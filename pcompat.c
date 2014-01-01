@@ -165,6 +165,7 @@ void psync_run_thread(psync_thread_start0 run){
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   pthread_attr_setstacksize(&attr, PSYNC_STACK_SIZE);
   pthread_create(&thread, &attr, thread_entry0, run);
+  pthread_attr_destroy(&attr);
 }
 
 static void *thread_entry1(void *data){
@@ -190,6 +191,7 @@ void psync_run_thread1(psync_thread_start1 run, void *ptr){
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   pthread_attr_setstacksize(&attr, PSYNC_STACK_SIZE);
   pthread_create(&thread, &attr, thread_entry1, data);
+  pthread_attr_destroy(&attr);
 }
 
 void psync_milisleep(uint64_t milisec){
@@ -202,6 +204,18 @@ void psync_milisleep(uint64_t milisec){
   Sleep(milisec);
 #else
 #error "Function not implemented for your operating system"
+#endif
+}
+
+time_t psync_time(){
+#if defined(_POSIX_TIMERS) && _POSIX_TIMERS>0
+  struct timespec ts;
+  if (likely(clock_gettime(CLOCK_REALTIME, &ts)==0))
+    return ts.tv_sec;
+  else
+    return time(NULL);
+#else
+  return time(NULL);
 #endif
 }
 

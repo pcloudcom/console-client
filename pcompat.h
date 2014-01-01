@@ -209,6 +209,7 @@ char *psync_get_default_database_path();
 void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t milisec);
+time_t psync_time();
 void psync_yield_cpu();
 
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);

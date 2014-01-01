@@ -35,7 +35,7 @@ extern time_t psync_current_time;
 typedef void (*psync_timer_callback)();
 
 void psync_timer_init();
-time_t psync_time();
+time_t psync_timer_time();
 void psync_timer_wake();
 void psync_timer_register(psync_timer_callback func, time_t numsec);
 void psync_timer_exception_handler(psync_timer_callback func);

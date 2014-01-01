@@ -68,7 +68,7 @@ static void timer_thread(){
     if (timer_waiters)
       pthread_cond_broadcast(&timer_wait_cond);
     pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
-    time(&psync_current_time);
+    psync_current_time=psync_time();
     pthread_mutex_unlock(&timer_mutex);
     if (unlikely(psync_current_time-lt>=5)){
       debug(D_NOTICE, "sleep detected");
@@ -92,16 +92,16 @@ static void timer_thread(){
 }
 
 void psync_timer_init(){
-  time(&psync_current_time);
+  psync_current_time=psync_time();
   psync_run_thread(timer_thread);
   timer_running=1;
 }
 
-time_t psync_time(){
+time_t psync_timer_time(){
   if (timer_running)
     return psync_current_time;
   else
-    return time(NULL);
+    return psync_time(NULL);
 }
 
 void psync_timer_wake(){

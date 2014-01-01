@@ -120,6 +120,7 @@ int psync_sql_connect(const char *db){
     pthread_mutexattr_init(&mattr);
     pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&psync_db_mutex, &mattr);
+    pthread_mutexattr_destroy(&mattr);
     return 0;
   }
   else{
@@ -655,7 +656,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
     if (!log)
       return;
   }
-  currenttime=psync_time();
+  currenttime=psync_timer_time();
   time_format(currenttime, dttime);
   snprintf(format, sizeof(format), "%s %s: %s:%u (function %s): %s\n", dttime, errname, file, line, function, fmt);
   format[sizeof(format)-1]=0;

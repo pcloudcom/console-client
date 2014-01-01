@@ -28,11 +28,16 @@
 #ifndef _PSYNC_COMPILER_H
 #define _PSYNC_COMPILER_H
 
-#ifndef __has_attribute
+#if !defined(__has_attribute)
 #if defined(__GNUC__)
 #define __has_attribute(x) 1
 #else
 #define __has_attribute(x) 0
+#endif
+#else
+#if defined(__GNUC__) && !__has_attribute(malloc)
+#undef __has_attribute
+#define __has_attribute(x) 1
 #endif
 #endif
 
@@ -40,7 +45,7 @@
 #define __has_builtin(x) 0
 #endif
 
-#if defined(__GNUC__) || (defined(__clang__) && __has_builtin(__builtin_expect))
+#if defined(__GNUC__) || __has_builtin(__builtin_expect)
 #define likely(expr) __builtin_expect(!!(expr), 1)
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
 #else
