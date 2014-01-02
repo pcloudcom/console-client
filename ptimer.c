@@ -110,7 +110,7 @@ void psync_timer_wake(){
 
 void psync_timer_register(psync_timer_callback func, time_t numsec){
   struct timer_list *t;
-  t=(struct timer_list *)psync_malloc(sizeof(struct timer_list));
+  t=psync_new(struct timer_list);
   t->next=NULL; /* this is needed as in the timer there is no lock and the two operations between lock and unlock can be reordered*/
   t->func=func;
   t->nextrun=0;
@@ -123,7 +123,7 @@ void psync_timer_register(psync_timer_callback func, time_t numsec){
 
 void psync_timer_exception_handler(psync_timer_callback func){
   struct exception_list *t;
-  t=(struct exception_list *)psync_malloc(sizeof(struct exception_list));
+  t=psync_new(struct exception_list);
   t->next=NULL;
   t->func=func;
   t->threadid=pthread_self();

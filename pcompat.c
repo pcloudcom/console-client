@@ -78,7 +78,7 @@ void psync_compat_init(){
   psync_uid=getuid();
   psync_gid=getgid();
   psync_gids_cnt=getgroups(0, NULL);
-  psync_gids=(gid_t *)psync_malloc(sizeof(gid_t)*psync_gids_cnt);
+  psync_gids=psync_new_cnt(gid_t, psync_gids_cnt);
   if (getgroups(psync_gids_cnt, psync_gids)!=psync_gids_cnt)
     psync_gids_cnt=0;
 #endif
@@ -184,7 +184,7 @@ void psync_run_thread1(psync_thread_start1 run, void *ptr){
   psync_run_data1 *data;
   pthread_t thread;
   pthread_attr_t attr;
-  data=(psync_run_data1 *)psync_malloc(sizeof(psync_run_data1));
+  data=psync_new(psync_run_data1);
   data->run=run;
   data->ptr=ptr;
   pthread_attr_init(&attr);
@@ -403,7 +403,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
   }
   else
     sslc=NULL;
-  ret=(psync_socket *)psync_malloc(sizeof(psync_socket));
+  ret=psync_new(psync_socket);
   ret->ssl=sslc;
   ret->sock=sock;
   ret->pending=0;

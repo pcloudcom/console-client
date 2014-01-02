@@ -33,5 +33,6 @@
 void psync_set_status_callback(pstatus_change_callback_t callback);
 void psync_send_status_update();
 void psync_set_event_callback(pevent_callback_t callback);
+void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, uint64_t remoteid);
 
 #endif

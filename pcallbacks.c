@@ -25,16 +25,31 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string.h>
 #include "pcallbacks.h"
 #include "pcompat.h"
 #include "plibs.h"
-#include <pthread.h>
+#include "plist.h"
+#include "pfolder.h"
 
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
 static uint32_t statuschanges=0;
-
 static int statusthreadrunning=0;
+
+static pthread_mutex_t eventmutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t eventcond=PTHREAD_COND_INITIALIZER;
+static psync_list eventlist;
+static int eventthreadrunning=0;
+
+typedef struct {
+  psync_list list;
+  char *localpath;
+  char *remotepath;
+  char *name;
+  psync_eventtype_t event;
+  psync_syncid_t syncid;
+} event_list_t;
 
 static void status_change_thread(void *ptr){
   pstatus_change_callback_t callback=(pstatus_change_callback_t)ptr;
@@ -58,11 +73,56 @@ void psync_set_status_callback(pstatus_change_callback_t callback){
 
 void psync_send_status_update(){
   if (statusthreadrunning){
-    /* I don't see a race or any kind of problem here even without lock */
+    pthread_mutex_lock(&statusmutex);
     statuschanges++;
+    pthread_mutex_unlock(&statusmutex);
     pthread_cond_signal(&statuscond);
   }
 }
 
+static void event_thread(void *ptr){
+  pevent_callback_t callback=(pevent_callback_t)ptr;
+  event_list_t *event;
+  while (1){
+    pthread_mutex_lock(&eventmutex);
+    while (psync_list_isempty(&eventlist))
+      pthread_cond_wait(&eventcond, &eventmutex);
+    event=psync_list_remove_head_element(&eventlist, event_list_t, list);
+    pthread_mutex_unlock(&eventmutex);
+    if (!psync_do_run)
+      break;
+    callback(event->event, event->syncid, event->name, event->localpath, event->remotepath);
+    psync_free(event->localpath);
+    psync_free(event->remotepath);
+    psync_free(event);
+  }
+}
+
 void psync_set_event_callback(pevent_callback_t callback){
+  psync_run_thread1(event_thread, callback);
+  psync_list_init(&eventlist);
+  eventthreadrunning=1;
+}
+
+void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, uint64_t remoteid){
+  if (eventthreadrunning){
+    event_list_t *event;
+    char *remotepath;
+    if (eventid&PEVENT_TYPE_FOLDER)
+      remotepath=psync_get_path_by_folderid(remoteid, NULL);
+    else
+      remotepath=psync_get_path_by_fileid(remoteid, NULL);
+    if (unlikely(!remotepath))
+      return;
+    event=psync_new(event_list_t);
+    event->localpath=psync_strdup(localpath);
+    event->remotepath=remotepath;
+    event->name=strrchr(remotepath, '/')+1;
+    event->event=eventid;
+    event->syncid=syncid;
+    pthread_mutex_lock(&eventmutex);
+    psync_list_add_head(&eventlist, &event->list);
+    pthread_mutex_unlock(&eventmutex);
+    pthread_cond_signal(&eventcond);
+  }
 }

@@ -340,7 +340,7 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
     psync_free(readbuff);
     readbuff=NULL;
   }
-  hsock=(psync_http_socket *)psync_malloc(sizeof(psync_http_socket));
+  hsock=psync_new(psync_http_socket);
   hsock->sock=sock;
   hsock->readbuff=readbuff;
   hsock->readbuffoff=rl;

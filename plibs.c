@@ -646,7 +646,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
   int unsigned i;
   time_t currenttime;
   errname="BAD_ERROR_CODE";
-  for (i=0; i<sizeof(debug_levels)/sizeof(debug_levels[0]); i++)
+  for (i=0; i<ARRAY_SIZE(debug_levels); i++)
     if (debug_levels[i].level==level){
       errname=debug_levels[i].name;
       break;
@@ -667,7 +667,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
 }
 
 static const char *get_type_name(uint32_t t){
-  if (t>=sizeof(psync_typenames)/sizeof(const char *))
+  if (t>=ARRAY_SIZE(psync_typenames))
     t=0;
   return psync_typenames[t];
 }

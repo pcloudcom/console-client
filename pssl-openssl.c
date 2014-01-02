@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include "pssl.h"
 #include "psynclib.h"
+#include "plibs.h"
 
 static SSL_CTX *globalctx=NULL;
 
@@ -51,7 +52,7 @@ void openssl_thread_id(CRYPTO_THREADID *id){
 static void openssl_thread_setup(){
   int i, n;
   n=CRYPTO_num_locks();
-  olocks=psync_malloc(n*sizeof(pthread_mutex_t));
+  olocks=psync_new_cnt(pthread_mutex_t, n);
   for (i=0; i<n; i++)
     pthread_mutex_init(&olocks[i], NULL);
   CRYPTO_THREADID_set_callback(openssl_thread_id);

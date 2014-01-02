@@ -107,7 +107,8 @@ ehThumbs.db;\
 Thumbs.db;\
 hiberfil.sys;\
 pagefile.sys;\
-$RECYCLE.BIN"
+$RECYCLE.BIN;\
+*.part"
 
 #define _PS(s) PSYNC_SETTING_##s
 

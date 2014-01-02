@@ -33,6 +33,7 @@
 #include "pstatus.h"
 #include "psettings.h"
 #include "pnetlibs.h"
+#include "pcallbacks.h"
 
 static pthread_mutex_t download_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t download_cond=PTHREAD_COND_INITIALIZER;
@@ -75,8 +76,13 @@ static int task_mkdir(const char *path){
 }
   
 static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, const char *localpath){
-  if (type==PSYNC_CREATE_LOCAL_FOLDER)
-    return task_mkdir(localpath);
+  int res;
+  if (type==PSYNC_CREATE_LOCAL_FOLDER){
+    res=task_mkdir(localpath);
+    if (!res)
+      psync_send_event_by_id(PEVENT_LOCAL_FOLDER_CREATED, syncid, localpath, itemid);
+    return res;
+  }
   else{
     debug(D_BUG, "invalid task type %u", (unsigned)type);
     return 0;
@@ -89,7 +95,7 @@ static void download_thread(){
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     
-    row=psync_sql_row("SELECT id, type, syncid, itemid, localpath FROM task WHERE type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_DOWNLOAD)" ORDER BY id");
+    row=psync_sql_row("SELECT id, type, syncid, itemid, localpath FROM task WHERE type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_DOWNLOAD)" ORDER BY id LIMIT 1");
     if (row){
       if (!download_task(psync_get_number(row[1]), psync_get_number(row[2]), psync_get_number(row[3]), psync_get_string(row[4]))){
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");

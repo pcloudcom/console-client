@@ -29,6 +29,7 @@
 #define _PSYNC_LIST_H
 
 #include <stddef.h>
+#include "pcompiler.h"
 
 typedef struct _psync_list {
   struct _psync_list *next;
@@ -40,6 +41,8 @@ typedef struct _psync_list {
     (l)->next=(l);\
     (l)->prev=(l);\
   } while (0)
+  
+#define psync_list_isempty(l) ((l)->next==(l))
   
 #define psync_add_between(l1, l2, a)\
   do {\
@@ -70,5 +73,13 @@ typedef struct _psync_list {
     psync_list_for_each_safe(___tmpa, ___tmpb, l)\
       c(psync_list_element(___tmpa, t, n));\
   } while (0)
+
+static inline psync_list *psync_list_remove_head(psync_list *l){
+  l=l->next;
+  psync_list_del(l);
+  return l;
+}
+
+#define psync_list_remove_head_element(l, t, n) psync_list_element(psync_list_remove_head(l), t, n)
   
 #endif

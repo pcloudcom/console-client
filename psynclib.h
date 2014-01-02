@@ -34,6 +34,7 @@
 typedef uint64_t psync_folderid_t;
 typedef uint64_t psync_fileid_t;
 typedef uint32_t psync_syncid_t;
+typedef uint32_t psync_eventtype_t;
 typedef uint32_t psync_synctype_t;
 typedef uint32_t psync_listtype_t;
 
@@ -96,12 +97,25 @@ typedef struct {
   uint8_t localisfull; /* (some) local hard drive is full and no files will be synced from the cloud */
 } pstatus_t;
 
-#define PEVENT_LOCAL_FOLDER_CREATED   1
-#define PEVENT_REMOTE_FOLDER_CREATED  2
-#define PEVENT_FILE_DOWNLOAD_STARTED  3
-#define PEVENT_FILE_DOWNLOAD_FINISHED 4
-#define PEVENT_FILE_UPLOAD_STARTED    5
-#define PEVENT_FILE_UPLOAD_FINISHED   6
+#define PEVENT_TYPE_LOCAL            (0<<0)
+#define PEVENT_TYPE_REMOTE           (1<<0)
+#define PEVENT_TYPE_FILE             (0<<1)
+#define PEVENT_TYPE_FOLDER           (1<<1)
+#define PEVENT_TYPE_CREATE           (0<<2)
+#define PEVENT_TYPE_DELETE           (1<<2)
+#define PEVENT_TYPE_START            (0<<3)
+#define PEVENT_TYPE_FINISH           (1<<3)
+
+#define PEVENT_LOCAL_FOLDER_CREATED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
+#define PEVENT_REMOTE_FOLDER_CREATED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
+#define PEVENT_FILE_DOWNLOAD_STARTED  (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_START)
+#define PEVENT_FILE_DOWNLOAD_FINISHED (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH)
+#define PEVENT_FILE_UPLOAD_STARTED    (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_START)
+#define PEVENT_FILE_UPLOAD_FINISHED   (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH)
+#define PEVENT_LOCAL_FOLDER_DELETED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_DELETE)
+#define PEVENT_REMOTE_FOLDER_DELETED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_DELETE)
+#define PEVENT_LOCAL_FILE_DELETED     (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_DELETE)
+#define PEVENT_REMOTE_FILE_DELETED    (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_DELETE)
 
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
@@ -167,7 +181,7 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * job. Event callbacks will not overlap.
  */
 
-typedef void (*pevent_callback_t)(uint32_t event, psync_syncid_t syncid, const char *name, const char *localpath, const char *remotepath);
+typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, const char *name, const char *localpath, const char *remotepath);
 
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,
