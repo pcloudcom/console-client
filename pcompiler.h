@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -47,10 +47,16 @@
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
 #define likely(expr) __builtin_expect(!!(expr), 1)
-#define unlikely(expr) __builtin_expect(!!(expr), 0)
+#define unlikely(expr) __builtin_expect(expr, 0)
 #else
 #define likely(expr) (expr)
 #define unlikely(expr) (expr)
+#endif
+
+#if defined(__GNUC__) || __has_builtin(__builtin_prefetch)
+#define psync_prefetch(expr) __builtin_prefetch(expr)
+#else
+#define psync_prefetch(expr)
 #endif
 
 #define PSYNC_THREAD __thread
@@ -71,6 +77,12 @@
 #define PSYNC_PURE __attribute__ ((pure))
 #else
 #define PSYNC_PURE
+#endif
+
+#if __has_attribute(const)
+#define PSYNC_CONST __attribute__ ((const))
+#else
+#define PSYNC_CONST
 #endif
 
 #if __has_attribute(cold)

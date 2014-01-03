@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -41,12 +41,15 @@
 #define PSYNC_TASK_TYPE_OFF 2
 
 #define PSYNC_TASK_TYPE_CREATE 0
+#define PSYNC_TASK_TYPE_DELETE 1
 
 #define PSYNC_CREATE_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
+#define PSYNC_DELETE_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_DELETE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
 #define PSYNC_DOWNLOAD_FILE        ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
 
 
-void psync_task_create_local_folder(const char *path, uint64_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
-void psync_task_download_file(const char *path, uint64_t fileid, psync_syncid_t syncid) PSYNC_NONNULL(1);
+void psync_task_create_local_folder(const char *path, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
+void psync_task_delete_local_folder(const char *path, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
+void psync_task_download_file(const char *path, psync_fileid_t fileid, psync_syncid_t syncid) PSYNC_NONNULL(1);
 
 #endif

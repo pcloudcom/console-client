@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,7 @@
 #ifndef _PSYNC_COMPAT_H
 #define _PSYNC_COMPAT_H
 
+#include "pcompiler.h"
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -105,6 +106,7 @@ typedef struct stat psync_stat_t;
 #define P_EXIST      EEXIST
 #define P_NOSPC      ENOSPC
 #define P_DQUOT      EDQUOT
+#define P_NOTEMPTY   ENOTEMPTY
 
 #define P_O_RDONLY O_RDONLY
 #define P_O_WRONLY O_WRONLY
@@ -152,6 +154,7 @@ typedef struct __stat64 psync_stat_t;
 #define P_EXIST      ERROR_ALREADY_EXISTS
 #define P_NOSPC      ERROR_HANDLE_DISK_FULL
 #define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
+#define P_NOTEMPTY   ERROR_DIR_NOT_EMPTY
 
 #define P_O_RDONLY GENERIC_READ
 #define P_O_WRONLY GENERIC_WRITE
@@ -204,7 +207,7 @@ typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
 void psync_compat_init();
-int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits);
+int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits) PSYNC_PURE;
 char *psync_get_default_database_path();
 void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);
@@ -215,7 +218,7 @@ void psync_yield_cpu();
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
-int psync_socket_isssl(psync_socket *sock);
+int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);
 int psync_socket_read(psync_socket *sock, void *buff, int num);
@@ -243,7 +246,7 @@ int psync_file_sync(psync_file_t fd);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
 ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count);
 int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence);
-int64_t psync_file_size(psync_file_t fd);
+int64_t psync_file_size(psync_file_t fd) PSYNC_PURE;
 
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);

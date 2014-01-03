@@ -52,7 +52,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn);
 int psync_ssl_connect_finish(void *sslconn);
 void psync_ssl_free(void *sslconn);
 int psync_ssl_shutdown(void *sslconn);
-int psync_ssl_pendingdata(void *sslconn);
+int psync_ssl_pendingdata(void *sslconn) PSYNC_PURE;
 int psync_ssl_read(void *sslconn, void *buf, int num);
 int psync_ssl_write(void *sslconn, const void *buf, int num);
 

@@ -99,8 +99,8 @@ static void event_thread(void *ptr){
 }
 
 void psync_set_event_callback(pevent_callback_t callback){
-  psync_run_thread1(event_thread, callback);
   psync_list_init(&eventlist);
+  psync_run_thread1(event_thread, callback);
   eventthreadrunning=1;
 }
 

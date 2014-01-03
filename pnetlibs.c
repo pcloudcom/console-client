@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,42 @@ struct time_bytes {
 };
 
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
+
+static void rm_all(void *vpath, psync_pstat *st){
+  char *path;
+  path=psync_strcat((char *)vpath, PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
+  if (st->isfolder){
+    psync_list_dir(path, rm_all, path);
+    psync_rmdir(path);
+  }
+  else
+    psync_file_delete(path);
+  psync_free(path);
+}
+
+static void rm_ign(void *vpath, psync_pstat *st){
+  char *path;
+  if (!psync_is_name_to_ignore(st->name))
+    return;
+  path=psync_strcat((char *)vpath, PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
+  if (st->isfolder){
+    psync_list_dir(path, rm_all, path);
+    psync_rmdir(path);
+  }
+  else
+    psync_file_delete(path);
+  psync_free(path);
+}
+
+int psync_rmdir_with_trashes(const char *path){
+  if (!psync_rmdir(path))
+    return 0;
+  if (psync_fs_err()!=P_NOTEMPTY && psync_fs_err()!=P_EXIST)
+    return -1;
+  if (!psync_list_dir(path, rm_ign, (void *)path))
+    return -1;
+  return psync_rmdir(path);
+}
 
 void psync_set_local_full(int over){
   static int isover=0;

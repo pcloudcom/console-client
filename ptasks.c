@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -29,26 +29,26 @@
 #include "plibs.h"
 #include "pdownload.h"
 
-void psync_task_create_local_folder(const char *path, uint64_t folderid, psync_syncid_t syncid){
+static void create_task(const char *path, uint64_t entryid, psync_syncid_t syncid, uint32_t type){
   psync_sql_res *res;
   res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localpath) VALUES (?, ?, ?, ?)");
-  psync_sql_bind_uint(res, 1, PSYNC_CREATE_LOCAL_FOLDER);
+  psync_sql_bind_uint(res, 1, type);
   psync_sql_bind_uint(res, 2, syncid);
-  psync_sql_bind_uint(res, 3, folderid);
+  psync_sql_bind_uint(res, 3, entryid);
   psync_sql_bind_string(res, 4, path);
   psync_sql_run(res);
   psync_sql_free_result(res);
   psync_wake_download();
 }
 
-void psync_task_download_file(const char *path, uint64_t fileid, psync_syncid_t syncid){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localpath) VALUES (?, ?, ?, ?)");
-  psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
-  psync_sql_bind_uint(res, 2, syncid);
-  psync_sql_bind_uint(res, 3, fileid);
-  psync_sql_bind_string(res, 4, path);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
-  psync_wake_download();
+void psync_task_create_local_folder(const char *path, psync_folderid_t folderid, psync_syncid_t syncid){
+  create_task(path, folderid, syncid, PSYNC_CREATE_LOCAL_FOLDER);
+}
+
+void psync_task_delete_local_folder(const char *path, psync_folderid_t folderid, psync_syncid_t syncid){
+  create_task(path, folderid, syncid, PSYNC_DELETE_LOCAL_FOLDER);
+}
+
+void psync_task_download_file(const char *path, psync_fileid_t fileid, psync_syncid_t syncid){
+  create_task(path, fileid, syncid, PSYNC_DOWNLOAD_FILE);
 }

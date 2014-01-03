@@ -25,12 +25,81 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string.h>
 #include "psyncer.h"
 #include "plibs.h"
 #include "psettings.h"
 #include "ptasks.h"
 
+static psync_folderid_t *synced_down_folders[PSYNC_DIR_HASH_SIZE];
+static uint32_t synced_down_folders_cnt[PSYNC_DIR_HASH_SIZE];
+
+static pthread_mutex_t sync_down_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 static int running=0;
+
+void psync_add_folder_to_downloadlist(psync_folderid_t folderid){
+  psync_folderid_t *a;
+  size_t h;
+  uint32_t i, c;
+  h=folderid%PSYNC_DIR_HASH_SIZE;
+  pthread_mutex_lock(&sync_down_mutex);
+  c=synced_down_folders_cnt[h];
+  a=synced_down_folders[h];
+  for (i=0; i<c; i++)
+    if (unlikely(a[i]==folderid)){
+      pthread_mutex_unlock(&sync_down_mutex);
+      return;
+    }
+  a=psync_realloc(a, sizeof(psync_folderid_t)*(c+1));
+  a[c]=folderid;
+  synced_down_folders_cnt[h]=c+1;
+  synced_down_folders[h]=a;
+  pthread_mutex_unlock(&sync_down_mutex);
+}
+
+void psync_del_folder_from_downloadlist(psync_folderid_t folderid){
+  psync_folderid_t *a, *b;
+  size_t h;
+  uint32_t i, c;
+  h=folderid%PSYNC_DIR_HASH_SIZE;
+  pthread_mutex_lock(&sync_down_mutex);
+  c=synced_down_folders_cnt[h];
+  a=synced_down_folders[h];
+  for (i=0; i<c; i++)
+    if (a[i]==folderid){
+      if (c==1)
+        b=NULL;
+      else{
+        b=psync_new_cnt(psync_folderid_t, c-1);
+        memcpy(b, a, sizeof(psync_folderid_t)*i);
+        memcpy(b+i, a+i+1, sizeof(psync_folderid_t)*(c-i-1));
+      }
+      synced_down_folders[h]=b;
+      synced_down_folders_cnt[h]=c-1;
+      psync_free(a);
+      pthread_mutex_unlock(&sync_down_mutex);
+      return;
+    }
+  pthread_mutex_unlock(&sync_down_mutex);
+}
+
+int psync_is_folder_in_downloadlist(psync_folderid_t folderid){
+  psync_folderid_t *a;
+  size_t h;
+  uint32_t i, c;
+  h=folderid%PSYNC_DIR_HASH_SIZE;
+  pthread_mutex_lock(&sync_down_mutex);
+  c=synced_down_folders_cnt[h];
+  a=synced_down_folders[h];
+  for (i=0; i<c; i++)
+    if (a[i]==folderid){
+      pthread_mutex_unlock(&sync_down_mutex);
+      return 1;
+    }
+  pthread_mutex_unlock(&sync_down_mutex);
+  return 0;
+}
 
 static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t folderid, const char *localpath){
   psync_sql_res *res;
@@ -38,12 +107,12 @@ static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t fo
   const char *name;
   char *path;
   uint64_t cfolderid;
-  res=psync_sql_prep_statement("INSERT INTO syncfolderdown (syncid, folderid, localpath) VALUES (?, ?, ?)");
+  res=psync_sql_prep_statement("INSERT INTO syncfolderdown (syncid, folderid) VALUES (?, ?)");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, folderid);
-  psync_sql_bind_string(res, 3, localpath);
   psync_sql_run(res);
   psync_sql_free_result(res);
+  psync_add_folder_to_downloadlist(folderid);
   res=psync_sql_query("SELECT id, permissions, name FROM folder WHERE parentfolderid=?");
   psync_sql_bind_uint(res, 1, folderid);
   while ((row=psync_sql_fetch_row(res))){
@@ -128,5 +197,13 @@ static void psync_syncer_thread(){
 }
 
 void psync_syncer_init(){
+  psync_sql_res *res;
+  uint64_t *row;
+  memset(synced_down_folders, 0, sizeof(synced_down_folders));
+  memset(synced_down_folders_cnt, 0, sizeof(synced_down_folders_cnt));
+  res=psync_sql_query("SELECT folderid FROM syncfolderdown");
+  while ((row=psync_sql_fetch_rowint(res)))
+    psync_add_folder_to_downloadlist(row[0]);
+  psync_sql_free_result(res);
   psync_run_thread(psync_syncer_thread);
 }

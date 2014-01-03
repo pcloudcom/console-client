@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,9 @@
 #include "plibs.h"
 #include "papi.h"
 #include "ptimer.h"
+#include "psyncer.h"
+#include "ptasks.h"
+#include "pfolder.h"
 
 static uint64_t used_quota=0, current_quota=0;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
@@ -186,8 +189,12 @@ static uint64_t get_permissions(const binresult *meta){
 
 static void process_createfolder(const binresult *entry){
   static psync_sql_res *st=NULL;
+  psync_sql_res *res, *stmt;
   const binresult *meta, *name;
-  uint64_t userid, perms;
+  uint64_t userid, perms, *row;
+  psync_folderid_t parentfolderid, folderid;
+  char *localname;
+  psync_syncid_t syncid;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -210,14 +217,35 @@ static void process_createfolder(const binresult *entry){
     perms=get_permissions(meta);
   }
   name=psync_find_result(meta, "name", PARAM_STR);
-  psync_sql_bind_uint(st, 1, psync_find_result(meta, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
+  parentfolderid=psync_find_result(meta, "parentfolderid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, folderid);
+  psync_sql_bind_uint(st, 2, parentfolderid);
   psync_sql_bind_uint(st, 3, userid);
   psync_sql_bind_uint(st, 4, perms);
   psync_sql_bind_lstring(st, 5, name->str, name->length);
   psync_sql_bind_uint(st, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(st, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
   psync_sql_run(st);
+  if (psync_is_folder_in_downloadlist(parentfolderid)){
+    psync_add_folder_to_downloadlist(folderid);
+    res=psync_sql_query("SELECT syncid FROM syncfolderdown WHERE folderid=?");
+    psync_sql_bind_uint(res, 1, parentfolderid);
+    while ((row=psync_sql_fetch_rowint(res))){
+      syncid=row[0];
+      stmt=psync_sql_prep_statement("INSERT IGNORE INTO syncfolderdown (syncid, folderid) VALUES (?, ?)");
+      psync_sql_bind_uint(stmt, 1, syncid);
+      psync_sql_bind_uint(stmt, 2, folderid);
+      psync_sql_run(stmt);
+      assert(psync_sql_affected_rows()==1);
+      psync_sql_free_result(stmt);
+      localname=psync_local_path_for_remote_folder(folderid, syncid, NULL);
+      assert(localname!=NULL);
+      psync_task_create_local_folder(localname, folderid, syncid);
+      psync_free(localname);
+    }
+    psync_sql_free_result(res);
+  }
 }
 
 static void process_modifyfolder(const binresult *entry){
@@ -226,7 +254,11 @@ static void process_modifyfolder(const binresult *entry){
 
 static void process_deletefolder(const binresult *entry){
   static psync_sql_res *st=NULL;
-  uint64_t folderid;
+  psync_sql_res *res, *stmt;
+  psync_folderid_t folderid;
+  uint64_t *row;
+  char *localname;
+  psync_syncid_t syncid;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -240,6 +272,25 @@ static void process_deletefolder(const binresult *entry){
       return;
   }
   folderid=psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
+  if (psync_is_folder_in_downloadlist(folderid)){
+    psync_del_folder_from_downloadlist(folderid);
+    res=psync_sql_query("SELECT syncid FROM syncfolderdown WHERE folderid=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    while ((row=psync_sql_fetch_rowint(res))){
+      syncid=row[0];
+      stmt=psync_sql_prep_statement("DELETE FROM syncfolderdown WHERE syncid=? AND folderid=?");
+      psync_sql_bind_uint(stmt, 1, syncid);
+      psync_sql_bind_uint(stmt, 2, folderid);
+      psync_sql_run(stmt);
+      assert(psync_sql_affected_rows()==1);
+      psync_sql_free_result(stmt);
+      localname=psync_local_path_for_remote_folder(folderid, syncid, NULL);
+      assert(localname!=NULL);
+      psync_task_delete_local_folder(localname, folderid, syncid);
+      psync_free(localname);
+    }
+    psync_sql_free_result(res);
+  }
   psync_sql_bind_uint(st, 1, folderid);
   psync_sql_run(st);
 }

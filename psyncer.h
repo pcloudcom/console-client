@@ -33,4 +33,8 @@
 void psync_syncer_init();
 void psync_syncer_new(psync_syncid_t syncid);
 
+void psync_add_folder_to_downloadlist(psync_folderid_t folderid);
+void psync_del_folder_from_downloadlist(psync_folderid_t folderid);
+int psync_is_folder_in_downloadlist(psync_folderid_t folderid);
+
 #endif

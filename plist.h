@@ -61,11 +61,13 @@ typedef struct _psync_list {
     (a)->prev->next=(a)->next;\
   } while (0)
   
-#define psync_list_element(a, t, n) ((t *)(char *)(a)-offsetof(t, n))
+#define psync_list_element(a, t, n) ((t *)((char *)(a)-offsetof(t, n)))
 
-#define psync_list_for_each(a, l) for (a=(l)->next; a!=(l); a=a->next)
-#define psync_list_for_each_safe(a, b, l) for (a=(l)->next, b=a->next; a!=(l); a=b, b=b->next)
-#define psync_list_for_each_element(a, l, t, n) for (a=psync_list_element((l)->next, t, n); &a->n!=(l); a=psync_list_element(a->n.next, t, n))
+#define psync_list_for_each(a, l) for (a=(l)->next; psync_prefetch(a->next), a!=(l); a=a->next)
+#define psync_list_for_each_safe(a, b, l) for (a=(l)->next, b=a->next; psync_prefetch(b), a!=(l); a=b, b=b->next)
+#define psync_list_for_each_element(a, l, t, n) for (a=psync_list_element((l)->next, t, n);\
+                                                     psync_prefetch(a->n.next), &a->n!=(l);\
+                                                     a=psync_list_element(a->n.next, t, n))
 
 #define psync_list_for_each_element_call(l, t, n, c)\
   do {\

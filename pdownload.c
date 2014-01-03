@@ -81,12 +81,14 @@ static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, 
     res=task_mkdir(localpath);
     if (!res)
       psync_send_event_by_id(PEVENT_LOCAL_FOLDER_CREATED, syncid, localpath, itemid);
-    return res;
   }
   else{
     debug(D_BUG, "invalid task type %u", (unsigned)type);
-    return 0;
+    res=0;
   }
+  if (res)
+    debug(D_WARNING, "task of type %u, syncid %u, id %lu failed for path %s", (unsigned)type, (unsigned)syncid, (unsigned long)itemid, localpath);
+  return res;
 }
 
 static void download_thread(){

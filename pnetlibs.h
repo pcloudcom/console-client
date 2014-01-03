@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@ typedef struct {
   uint32_t readbuffoff;
   uint32_t readbuffsize;
 } psync_http_socket;
+
+int psync_rmdir_with_trashes(const char *path);
 
 void psync_set_local_full(int over);
 int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint64_t *fsize);

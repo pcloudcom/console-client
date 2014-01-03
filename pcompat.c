@@ -758,7 +758,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   while (!readdir_r(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
       strcpy(cpath+pl, de->d_name);
-      if (!stat(cpath, &st)){
+      if (!lstat(cpath, &st)){
         pst.name=de->d_name;
         pst.size=st.st_size;
         pst.lastmod=st.st_mtime;

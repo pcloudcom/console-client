@@ -50,8 +50,9 @@ CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER 
 localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderid ON syncfolder(folderid);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);\
-CREATE TABLE IF NOT EXISTS syncfolderdown (syncid INTEGER, folderid INTEGER, localpath VARCHAR(4096));\
+CREATE TABLE IF NOT EXISTS syncfolderdown (syncid INTEGER, folderid INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncfolderdown(syncid, folderid);\
+CREATE INDEX IF NOT EXISTS ksyncfolderdownfolderid ON syncfolderdown(folderid);\
 CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localpath VARCHAR(4096));\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
 COMMIT;\
@@ -63,6 +64,7 @@ DROP INDEX kfilefolderid;\
 DROP INDEX ksyncfolderfolderid;\
 DROP INDEX ksyncfolderlocalpath;\
 DROP INDEX ksyncfolderdownsyncidfolderid;\
+DROP INDEX ksyncfolderdownfolderid;\
 DROP TABLE setting;\
 DROP TABLE folder;\
 DROP TABLE file;\

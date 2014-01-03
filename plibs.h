@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -56,8 +56,11 @@
 
 #define DEBUG_FILE "/tmp/psync_err.log"
 
+#define NTO_STR(s) TO_STR(s)
+#define TO_STR(s) #s
+
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
-#define assert(cond, ...) do {if (!(cond)) debug(D_ERROR, __VA_ARGS__);} while (0)
+#define assert(cond) do {if (D_ERROR<=DEBUG_LEVEL && unlikely(!(cond))) debug(D_ERROR, "assertion %s failed", TO_STR(cond));} while (0)
 
 #define PSYNC_TNUMBER 1
 #define PSYNC_TSTRING 2
@@ -73,7 +76,7 @@
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0]))
 
 #define psync_new(type) (type *)psync_malloc(sizeof(type)) 
-#define psync_new_cnt(type, cnt) (type *)psync_malloc(sizeof(type)*cnt) 
+#define psync_new_cnt(type, cnt) (type *)psync_malloc(sizeof(type)*(cnt)) 
 
 #define psync_binhex(dst, src, cnt) \
   do {\
@@ -84,9 +87,6 @@
     for (it__=0; it__<cnt__; it__++)\
       dst__[it__]=__hex_lookup[src__[it__]];\
   } while (0)
-
-#define NTO_STR(s) TO_STR(s)
-#define TO_STR(s) #s
 
 typedef struct {
   uint32_t type;
@@ -143,8 +143,8 @@ void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_variant *psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
 char **psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
 uint64_t *psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);
-uint32_t psync_sql_affected_rows();
-uint64_t psync_sql_insertid();
+uint32_t psync_sql_affected_rows() PSYNC_PURE;
+uint64_t psync_sql_insertid() PSYNC_PURE;
 
 int psync_rename_conflicted_file(const char *path);
 

@@ -56,6 +56,8 @@
 
 #define PSYNC_SPEED_CALC_AVERAGE_SEC 10
 
+#define PSYNC_DIR_HASH_SIZE 1024
+
 #define PSYNC_DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
 #define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloudsync.db"
 
@@ -124,7 +126,7 @@ typedef int psync_settingid_t;
 
 void psync_settings_init();
 
-psync_settingid_t psync_setting_getid(const char *name) PSYNC_PURE PSYNC_NONNULL(1);
+psync_settingid_t psync_setting_getid(const char *name) PSYNC_CONST PSYNC_NONNULL(1);
 
 int psync_setting_get_bool(psync_settingid_t settingid);
 int psync_setting_set_bool(psync_settingid_t settingid, int value);
