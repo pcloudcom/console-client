@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,11 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string.h>
 #include "psyncer.h"
 #include "plibs.h"
 #include "psettings.h"
 #include "ptasks.h"
+#include <string.h>
 
 static psync_folderid_t *synced_down_folders[PSYNC_DIR_HASH_SIZE];
 static uint32_t synced_down_folders_cnt[PSYNC_DIR_HASH_SIZE];
@@ -101,7 +101,7 @@ int psync_is_folder_in_downloadlist(psync_folderid_t folderid){
   return 0;
 }
 
-static void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t folderid, const char *localpath){
+void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t folderid, const char *localpath){
   psync_sql_res *res;
   psync_variant *row;
   const char *name;

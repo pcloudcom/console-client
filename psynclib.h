@@ -97,14 +97,20 @@ typedef struct {
   uint8_t localisfull; /* (some) local hard drive is full and no files will be synced from the cloud */
 } pstatus_t;
 
+/* PEVENT_LOCAL_FOLDER_CREATED means that a folder was created in remotely and this action was replicated
+ * locally, not the other way around. Accordingly PEVENT_REMOTE_FOLDER_CREATED is fired when locally created
+ * folder is replicated to the server.
+ */
+
 #define PEVENT_TYPE_LOCAL            (0<<0)
 #define PEVENT_TYPE_REMOTE           (1<<0)
 #define PEVENT_TYPE_FILE             (0<<1)
 #define PEVENT_TYPE_FOLDER           (1<<1)
 #define PEVENT_TYPE_CREATE           (0<<2)
 #define PEVENT_TYPE_DELETE           (1<<2)
-#define PEVENT_TYPE_START            (0<<3)
-#define PEVENT_TYPE_FINISH           (1<<3)
+#define PEVENT_TYPE_RENAME           (2<<2)
+#define PEVENT_TYPE_START            (0<<5)
+#define PEVENT_TYPE_FINISH           (1<<5)
 
 #define PEVENT_LOCAL_FOLDER_CREATED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
 #define PEVENT_REMOTE_FOLDER_CREATED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
@@ -116,6 +122,7 @@ typedef struct {
 #define PEVENT_REMOTE_FOLDER_DELETED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_DELETE)
 #define PEVENT_LOCAL_FILE_DELETED     (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_DELETE)
 #define PEVENT_REMOTE_FILE_DELETED    (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_DELETE)
+#define PEVENT_LOCAL_FOLDER_RENAMED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_RENAME)
 
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2

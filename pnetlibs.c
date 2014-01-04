@@ -83,6 +83,12 @@ int psync_rmdir_with_trashes(const char *path){
   return psync_rmdir(path);
 }
 
+int psync_rmdir_recursive(const char *path){
+  if (!psync_list_dir(path, rm_all, (void *)path))
+    return -1;
+  return psync_rmdir(path);
+}
+
 void psync_set_local_full(int over){
   static int isover=0;
   if (over!=isover){

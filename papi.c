@@ -25,12 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string.h>
-#include <stddef.h>
+#include "papi.h"
 #include "psynclib.h"
 #include "plibs.h"
-#include "papi.h"
 #include "psettings.h"
+#include <string.h>
+#include <stddef.h>
 
 #define RPARAM_STR1  0
 #define RPARAM_STR2  1

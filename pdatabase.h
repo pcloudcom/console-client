@@ -40,7 +40,7 @@
 "BEGIN;\
 PRAGMA page_size=4096;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
-CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissons INTEGER, \
+CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
 name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
 CREATE INDEX IF NOT EXISTS kfolderfolderid ON folder(parentfolderid);\
 CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, size INTEGER, hash INTEGER,\
@@ -53,7 +53,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);
 CREATE TABLE IF NOT EXISTS syncfolderdown (syncid INTEGER, folderid INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncfolderdown(syncid, folderid);\
 CREATE INDEX IF NOT EXISTS ksyncfolderdownfolderid ON syncfolderdown(folderid);\
-CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localpath VARCHAR(4096));\
+CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localpath VARCHAR(4096), newlocalpath VARCHAR(4096));\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
 COMMIT;\
 "

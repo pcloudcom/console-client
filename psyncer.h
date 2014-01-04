@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,8 @@
 
 void psync_syncer_init();
 void psync_syncer_new(psync_syncid_t syncid);
+
+void psync_add_folder_for_downloadsync(psync_syncid_t syncid, uint64_t folderid, const char *localpath);
 
 void psync_add_folder_to_downloadlist(psync_folderid_t folderid);
 void psync_del_folder_from_downloadlist(psync_folderid_t folderid);

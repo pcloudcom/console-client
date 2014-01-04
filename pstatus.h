@@ -28,6 +28,7 @@
 #ifndef _PSYNC_STATUS_H
 #define _PSYNC_STATUS_H
 
+#include "pcompiler.h"
 #include <stdint.h>
 
 #define PSTATUS_NUM_STATUSES 5
@@ -63,7 +64,7 @@
 #define PSTATUS_COMBINE(type, statuses) (((type)<<24)+(statuses))
 
 void psync_status_init();
-uint32_t psync_status_get(uint32_t statusid);
+uint32_t psync_status_get(uint32_t statusid) PSYNC_PURE;
 void psync_set_status(uint32_t statusid, uint32_t status);
 void psync_wait_status(uint32_t statusid, uint32_t status);
 void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt);

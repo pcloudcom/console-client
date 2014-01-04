@@ -42,14 +42,23 @@
 
 #define PSYNC_TASK_TYPE_CREATE 0
 #define PSYNC_TASK_TYPE_DELETE 1
+#define PSYNC_TASK_TYPE_DELREC 2
+#define PSYNC_TASK_TYPE_RENAME 3
+#define PSYNC_TASK_TYPE_COPY   4
 
 #define PSYNC_CREATE_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
 #define PSYNC_DELETE_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_DELETE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
+#define PSYNC_DELREC_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_DELREC<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
+#define PSYNC_RENAME_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_RENAME<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
+#define PSYNC_COPY_LOCAL_FOLDER    ((PSYNC_TASK_TYPE_COPY  <<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
 #define PSYNC_DOWNLOAD_FILE        ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
 
 
 void psync_task_create_local_folder(const char *path, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
 void psync_task_delete_local_folder(const char *path, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
+void psync_task_delete_local_folder_recursive(const char *path, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1);
+void psync_task_rename_local_folder(const char *path, const char *newpath, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1, 2);
+void psync_task_copy_local_folder(const char *path, const char *newpath, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1, 2);
 void psync_task_download_file(const char *path, psync_fileid_t fileid, psync_syncid_t syncid) PSYNC_NONNULL(1);
 
 #endif

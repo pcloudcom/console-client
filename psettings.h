@@ -128,13 +128,13 @@ void psync_settings_init();
 
 psync_settingid_t psync_setting_getid(const char *name) PSYNC_CONST PSYNC_NONNULL(1);
 
-int psync_setting_get_bool(psync_settingid_t settingid);
+int psync_setting_get_bool(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_bool(psync_settingid_t settingid, int value);
-int64_t psync_setting_get_int(psync_settingid_t settingid);
+int64_t psync_setting_get_int(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_int(psync_settingid_t settingid, int64_t value);
-uint64_t psync_setting_get_uint(psync_settingid_t settingid);
+uint64_t psync_setting_get_uint(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_uint(psync_settingid_t settingid, uint64_t value);
-const char *psync_setting_get_string(psync_settingid_t settingid);
+const char *psync_setting_get_string(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_string(psync_settingid_t settingid, const char *value);
 
 #endif

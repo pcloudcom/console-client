@@ -25,12 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string.h>
-#include <pthread.h>
-#include <stdarg.h>
 #include "pstatus.h"
 #include "pcallbacks.h"
 #include "plibs.h"
+#include <string.h>
+#include <stdarg.h>
 
 static uint32_t statuses[PSTATUS_NUM_STATUSES]={
   PSTATUS_INVALID, 
@@ -97,7 +96,7 @@ static uint32_t psync_calc_status(){
   }
   
   /* This will work quite as well probably:
-   * return !!psync_status.filesdownloading+(!!psync_status.filesuploading)<<1;
+   * return (!!psync_status.filesdownloading)+(!!psync_status.filesuploading)<<1;
    */
   if (psync_status.filesdownloading && psync_status.filesuploading)
     return PSTATUS_DOWNLOADINGANDUPLOADING;

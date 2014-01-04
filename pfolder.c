@@ -327,6 +327,30 @@ char *psync_local_path_for_remote_file(psync_fileid_t fileid, psync_syncid_t syn
   return ret;
 }
 
+char *psync_local_path_for_remote_file_or_folder_by_name(psync_folderid_t parentfolderid, const char *filename, psync_syncid_t syncid, size_t *retlen){
+  psync_list folderlist;
+  char *ret;
+  string_list *e;
+  size_t len;
+  psync_list_init(&folderlist);
+  len=strlen(filename);
+  e=(string_list *)psync_malloc(sizeof(string_list)+len+1);
+  e->str=(char *)(e+1);
+  e->len=len;
+  memcpy(e->str, filename, len+1);
+  psync_list_add_head(&folderlist, &e->list);
+  psync_sql_lock();
+  if (unlikely(psync_add_local_path_to_list(&folderlist, parentfolderid, syncid))){
+    psync_sql_unlock();
+    psync_free_string_list(&folderlist);
+    return PSYNC_INVALID_PATH;
+  }
+  psync_sql_unlock();
+  ret=psync_join_string_list(PSYNC_DIRECTORY_SEPARATOR, &folderlist, retlen);
+  psync_free_string_list(&folderlist);
+  return ret;
+}
+
 static folder_list *folder_list_init(){
   folder_list *list;
   list=(folder_list *)psync_malloc(sizeof(folder_list));
@@ -388,7 +412,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
   uint64_t perms;
   list=folder_list_init();
   if (listtype&PLIST_FOLDERS){
-    res=psync_sql_query("SELECT id, permissons, name FROM folder WHERE parentfolderid=?");
+    res=psync_sql_query("SELECT id, permissions, name FROM folder WHERE parentfolderid=?");
     if (res){
       psync_sql_bind_uint(res, 1, folderid);
       while ((row=psync_sql_fetch_row(res))){

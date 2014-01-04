@@ -70,6 +70,8 @@
 
 #define psync_get_number(v) (likely((v).type==PSYNC_TNUMBER)?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_string(v) (likely((v).type==PSYNC_TSTRING)?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_string_or_null(v) (((v).type==PSYNC_TSTRING)?(v).str:(likely((v).type==PSYNC_TNULL)?NULL:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
+#define psync_dup_string(v) (likely((v).type==PSYNC_TSTRING)?psync_strndup((v).str, (v).length):psync_strdup(psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_get_lstring(v, l) psync_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l)
 #define psync_get_real(v) (likely((v).type==PSYNC_TREAL)?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 
@@ -87,6 +89,8 @@
     for (it__=0; it__<cnt__; it__++)\
       dst__[it__]=__hex_lookup[src__[it__]];\
   } while (0)
+  
+#define psync_get_result_cell(res, row, col) (res)->data[(row)*(res)->cols+(col)]
 
 typedef struct {
   uint32_t type;
@@ -105,6 +109,12 @@ typedef struct {
   psync_variant row[];
 } psync_sql_res;
 
+typedef struct {
+  uint32_t rows;
+  uint32_t cols;
+  uint64_t data[];
+} psync_full_result_int;
+
 typedef void (*psync_run_after_t)(void *);
 
 extern int psync_do_run;
@@ -116,6 +126,7 @@ extern PSYNC_THREAD uint32_t psync_error;
 extern uint16_t const *__hex_lookup;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
+char *psync_strndup(const char *str, size_t len) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
 
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
@@ -143,6 +154,7 @@ void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_variant *psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
 char **psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
 uint64_t *psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);
+psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res) PSYNC_NONNULL(1);;
 uint32_t psync_sql_affected_rows() PSYNC_PURE;
 uint64_t psync_sql_insertid() PSYNC_PURE;
 

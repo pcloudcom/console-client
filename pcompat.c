@@ -44,6 +44,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <pwd.h>
 
 #define psync_close_socket close
@@ -75,6 +76,7 @@ static int psync_gids_cnt;
 
 void psync_compat_init(){
 #if defined(P_OS_POSIX)
+  signal(SIGPIPE, SIG_IGN);
   psync_uid=getuid();
   psync_gid=getgid();
   psync_gids_cnt=getgroups(0, NULL);
@@ -359,7 +361,7 @@ static int wait_sock_ready_for_ssl(psync_socket_t sock){
     wfds=NULL;
     tv.tv_sec=PSYNC_SOCK_READ_TIMEOUT;
   }
-  else if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ){
+  else if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
     rfds=NULL;
     wfds=&fds;
     tv.tv_sec=PSYNC_SOCK_WRITE_TIMEOUT;
@@ -728,6 +730,15 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result){
 static time_t filetime_to_timet(const FILETIME *ft){
   return (ft->dwHighDateTime*(MAXDWORD+1ULL)+ft->dwLowDateTime)/10000000ULL-11644473600ULL;
 }
+
+static wchar_t *utf8_to_wchar(const char *str){
+  int len;
+  wchar_t *ret;
+  len=MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+  ret=psync_new_cnt(wchar_t, len);
+  MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+  return ret;
+}
 #endif
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
@@ -778,11 +789,14 @@ err1:
 #elif defined(P_OS_WINDOWS)
   psync_pstat pst;
   char *spath;
+  wchar_t *wpath;
   WIN32_FIND_DATA st;
   HANDLE dh;
   spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
-  dh=FindFirstFile(spath, &st);
+  wpath=utf8_to_wchar(spath);
   psync_free(spath);
+  dh=FindFirstFileW(wpath, &st);
+  psync_free(wpath);
   if (dh==INVALID_HANDLE_VALUE){
     if (GetLastError()==ERROR_FILE_NOT_FOUND)
       return 0;
@@ -800,7 +814,7 @@ err1:
     pst.lastmod=filetime_to_timet(&st.ftLastWriteTime);
     pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY;
     callback(ptr, &pst);
-  } while (FindNextFile(dh, &st));
+  } while (FindNextFileW(dh, &st));
   FindClose(dh);
   return 0;
 #else
@@ -812,10 +826,12 @@ int psync_mkdir(const char *path){
 #if defined(P_OS_POSIX)
   return mkdir(path, PSYNC_DEFAULT_POSIX_FOLDER_MODE);
 #elif defined(P_OS_WINDOWS)
-  if (CreateDirectory(path, NULL))
-    return 0;
-  else
-    return -1;
+  wchar_t *wpath;
+  int ret;
+  wpath=utf8_to_wchar(path);
+  ret=CreateDirectoryW(wpath, NULL)?0:-1;
+  psync_free(wpath);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -825,10 +841,12 @@ int psync_rmdir(const char *path){
 #if defined(P_OS_POSIX)
   return rmdir(path);
 #elif defined(P_OS_WINDOWS)
-  if (RemoveDirectory(path))
-    return 0;
-  else
-    return -1;
+  wchar_t *wpath;
+  int ret;
+  wpath=utf8_to_wchar(path);
+  ret=RemoveDirectoryW(wpath)?0:-1;
+  psync_free(wpath);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -838,10 +856,14 @@ int psync_file_rename(const char *oldpath, const char *newpath){
 #if defined(P_OS_POSIX)
   return rename(oldpath, newpath);
 #elif defined(P_OS_WINDOWS) // should we just use rename() here?
-  if (MoveFile(oldpath, newpath))
-    return 0;
-  else
-    return -1;
+  wchar_t *oldwpath, *newwpath;
+  int ret;
+  oldwpath=utf8_to_wchar(oldpath);
+  newwpath=utf8_to_wchar(newpath);
+  ret=MoveFileW(oldwpath, newwpath)?0:-1;
+  psync_free(oldwpath);
+  psync_free(newwpath);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -851,10 +873,12 @@ int psync_file_delete(const char *path){
 #if defined(P_OS_POSIX)
   return unlink(path);
 #elif defined(P_OS_WINDOWS)
-  if (DeleteFile(path))
-    return 0;
-  else
-    return -1;
+  wchar_t *wpath;
+  int ret;
+  wpath=utf8_to_wchar(path);
+  ret=DeleteFileW(wpath)?0:-1;
+  psync_free(wpath);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -868,6 +892,8 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
   return open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
 #elif defined(P_OS_WINDOWS)
   DWORD cdis;
+  wchar_t *wpath;
+  HANDLE ret;
   if (flags&P_O_EXCL)
     cdis=CREATE_NEW;
   else if (flags&(P_O_CREAT|P_O_TRUNC))
@@ -878,7 +904,10 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
     cdis=TRUNCATE_EXISTING;
   else
     cdis=OPEN_EXISTING;
-  return CreateFile(path, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_ATTRIBUTE_NORMAL, NULL);
+  wpath=utf8_to_wchar(path);
+  ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_ATTRIBUTE_NORMAL, NULL);
+  psync_free(wpath);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -929,7 +958,7 @@ ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count){
   return write(fd, buf, count);
 #elif defined(P_OS_WINDOWS)
   DWORD ret;
-  if (ReadFile(fd, buf, count, &ret, NULL))
+  if (WriteFile(fd, buf, count, &ret, NULL))
     return ret;
   else
     return -1;

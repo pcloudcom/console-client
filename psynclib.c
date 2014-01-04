@@ -25,10 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string.h>
-#include <ctype.h>
-#include "psynclib.h"
 #include "pcompat.h"
+#include "psynclib.h"
 #include "plibs.h"
 #include "pcallbacks.h"
 #include "pdatabase.h"
@@ -41,6 +39,8 @@
 #include "pfolder.h"
 #include "psettings.h"
 #include "psyncer.h"
+#include <string.h>
+#include <ctype.h>
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
@@ -207,7 +207,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (!psync_stat_mode_ok(&st, md))
     return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
   if (folderid){
-    res=psync_sql_query("SELECT permissons FROM folder WHERE id=?");
+    res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
     if (!res)
       return_isyncid(PERROR_DATABASE_ERROR);
     psync_sql_bind_uint(res, 1, folderid);
@@ -224,7 +224,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if ((synctype&PSYNC_DOWNLOAD_ONLY && (perms&PSYNC_PERM_READ)!=PSYNC_PERM_READ) ||
       (synctype&PSYNC_UPLOAD_ONLY && (perms&PSYNC_PERM_WRITE)!=PSYNC_PERM_WRITE))
     return_isyncid(PERROR_REMOTE_FOLDER_ACC_DENIED);
-  res=psync_sql_prep_statement("INSERT IGNORE INTO syncfolder (folderid, localpath, synctype, flags) VALUES (?, ?, ?, 0)");
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags) VALUES (?, ?, ?, 0)");
   if (!res)
     return_isyncid(PERROR_DATABASE_ERROR);
   psync_sql_bind_uint(res, 1, folderid);

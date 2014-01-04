@@ -29,8 +29,6 @@
 #define _PSYNC_COMPAT_H
 
 #include "pcompiler.h"
-#include <stdint.h>
-#include <stdlib.h>
 
 #if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_POSIX)
 #if defined(__ANDROID__)
@@ -70,8 +68,16 @@
 #define P_OS_POSIX
 #endif
 
+#if defined(P_OS_MACOSX)
+#define _DARWIN_USE_64_BIT_INODE
+#endif
+
+#define _FILE_OFFSET_BITS 64
+
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #if defined(P_OS_POSIX)
@@ -107,6 +113,9 @@ typedef struct stat psync_stat_t;
 #define P_NOSPC      ENOSPC
 #define P_DQUOT      EDQUOT
 #define P_NOTEMPTY   ENOTEMPTY
+#define P_NOTDIR     ENOTDIR
+#define P_BUSY       EBUSY
+#define P_ROFS       EROFS
 
 #define P_O_RDONLY O_RDONLY
 #define P_O_WRONLY O_WRONLY
@@ -155,6 +164,9 @@ typedef struct __stat64 psync_stat_t;
 #define P_NOSPC      ERROR_HANDLE_DISK_FULL
 #define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
 #define P_NOTEMPTY   ERROR_DIR_NOT_EMPTY
+#define P_BUSY       ERROR_PATH_BUSY
+#define P_ROFS       -1
+
 
 #define P_O_RDONLY GENERIC_READ
 #define P_O_WRONLY GENERIC_WRITE
@@ -237,6 +249,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
 
 int psync_mkdir(const char *path);
 int psync_rmdir(const char *path);
+#define psync_rendir psync_file_rename
 int psync_file_rename(const char *oldpath, const char *newpath);
 int psync_file_delete(const char *path);
 

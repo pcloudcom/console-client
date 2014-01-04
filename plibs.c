@@ -25,11 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "plibs.h"
+#include "ptimer.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include "plibs.h"
-#include "ptimer.h"
+#include <stddef.h>
 
 struct run_after_ptr {
   struct run_after_ptr *next;
@@ -79,7 +80,15 @@ char *psync_strdup(const char *str){
   size_t len;
   char *ptr;
   len=strlen(str)+1;
-  ptr=(char *)psync_malloc(len);
+  ptr=psync_new_cnt(char, len);
+  memcpy(ptr, str, len);
+  return ptr;
+}
+
+char *psync_strndup(const char *str, size_t len){
+  char *ptr;
+  len++;
+  ptr=psync_new_cnt(char, len);
   memcpy(ptr, str, len);
   return ptr;
 }
@@ -214,17 +223,14 @@ int64_t psync_sql_cellint(const char *sql, int64_t dflt){
   int code;
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (code!=SQLITE_OK){
+  if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
-  }
   else{
     code=sqlite3_step(stmt);
     if (code==SQLITE_ROW)
       dflt=sqlite3_column_int64(stmt, 0);
-    else {
-      if (code!=SQLITE_DONE)
-        debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
-    }
+    else if (unlikely(code!=SQLITE_DONE))
+      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
     sqlite3_finalize(stmt);
   }
   psync_sql_unlock();
@@ -489,6 +495,37 @@ uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
   }
 }
 
+psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res){
+  uint64_t *data;
+  psync_full_result_int *ret;
+  uint32_t rows, cols, off, i, all;
+  int code;
+  cols=res->column_count;
+  rows=0;
+  off=0;
+  all=0;
+  data=NULL;
+  while ((code=sqlite3_step(res->stmt))==SQLITE_ROW){
+    if (rows>=all){
+      all=10+all*2;
+      data=(uint64_t *)psync_realloc(data, sizeof(uint64_t)*cols*all);
+    }
+    for (i=0; i<cols; i++)
+      data[off+i]=sqlite3_column_int64(res->stmt, i);
+    off+=cols;
+    rows++;
+  }
+  if (unlikely(code!=SQLITE_DONE))
+    debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+  psync_sql_free_result(res);
+  ret=(psync_full_result_int *)psync_malloc(offsetof(psync_full_result_int, data)+sizeof(uint64_t)*off);
+  ret->rows=rows;
+  ret->cols=cols;
+  memcpy(ret->data, data, sizeof(uint64_t)*off);
+  psync_free(data);
+  return ret;
+}
+
 uint32_t psync_sql_affected_rows(){
   return sqlite3_changes(psync_db);
 }
@@ -666,7 +703,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
   fflush(log);
 }
 
-static const char *get_type_name(uint32_t t){
+static const char * PSYNC_CONST get_type_name(uint32_t t){
   if (t>=ARRAY_SIZE(psync_typenames))
     t=0;
   return psync_typenames[t];
@@ -685,7 +722,7 @@ const char *psync_err_string_expected(const char *file, const char *function, in
 }
 
 const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len){
-  if (v->type==PSYNC_TSTRING){
+  if (likely(v->type==PSYNC_TSTRING)){
     *len=v->length;
     return v->str;
   }

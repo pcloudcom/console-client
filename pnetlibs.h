@@ -42,6 +42,7 @@ typedef struct {
 } psync_http_socket;
 
 int psync_rmdir_with_trashes(const char *path);
+int psync_rmdir_recursive(const char *path);
 
 void psync_set_local_full(int over);
 int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint64_t *fsize);
