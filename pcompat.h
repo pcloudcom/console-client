@@ -88,15 +88,18 @@
 #include <fcntl.h>
 
 #define psync_stat stat
-#define psync_stat_isfolder(s) (((s)->st_mode&S_IFDIR)==S_IFDIR)
+#define psync_stat_isfolder(s) S_ISDIR((s)->st_mode)
 #define psync_stat_size(s) ((s)->st_size)
 #define psync_stat_mtime(s) ((s)->st_mtime)
+#define psync_stat_inode(s) ((s)->st_ino)
 typedef struct stat psync_stat_t;
 
 #define psync_sock_err() errno
 #define psync_sock_set_err(e) errno=(e)
 
 #define psync_fs_err() errno
+
+#define psync_inode_supported(path) 1
 
 #define PSYNC_DIRECTORY_SEPARATOR "/"
 #define PSYNC_DIRECTORY_SEPARATORC '/'
@@ -131,6 +134,8 @@ typedef struct stat psync_stat_t;
 typedef int psync_socket_t;
 typedef int psync_file_t;
 
+#define PSYNC_FILENAMES_CASESENSITIVE 1
+
 #elif defined(P_OS_WINDOWS)
 
 #define _WIN32_WINNT 0x0400
@@ -142,12 +147,15 @@ typedef int psync_file_t;
 #define psync_stat_isfolder(s) (((s)->st_mode&_S_IFDIR)==_S_IFDIR)
 #define psync_stat_size(s) ((s)->st_size)
 #define psync_stat_mtime(s) ((s)->st_mtime)
+#define psync_stat_inode(s) 0
 typedef struct __stat64 psync_stat_t;
 
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
 
 #define psync_fs_err() GetLastError()
+
+#define psync_inode_supported(path) 0
 
 #define PSYNC_DIRECTORY_SEPARATOR "\\"
 #define PSYNC_DIRECTORY_SEPARATORC '\\'
@@ -182,6 +190,8 @@ typedef struct __stat64 psync_stat_t;
 typedef SOCKET psync_socket_t;
 typedef HANDLE psync_file_t;
 
+#define PSYNC_FILENAMES_CASESENSITIVE 0
+
 #else
 #error "Need to define types for your operating system"
 #endif
@@ -192,9 +202,14 @@ typedef struct {
   int pending;
 } psync_socket;
 
+typedef uint64_t psync_inode_t;
+
 typedef struct {
   const char *name;
   uint64_t size;
+#if defined(P_OS_POSIX)
+  psync_inode_t inode;
+#endif
   time_t lastmod;
   uint8_t isfolder;
   uint8_t canread;
@@ -251,6 +266,7 @@ int psync_mkdir(const char *path);
 int psync_rmdir(const char *path);
 #define psync_rendir psync_file_rename
 int psync_file_rename(const char *oldpath, const char *newpath);
+int psync_file_rename_overwrite(const char *oldpath, const char *newpath);
 int psync_file_delete(const char *path);
 
 psync_file_t psync_file_open(const char *path, int access, int flags);

@@ -366,6 +366,9 @@ psync_sql_res *psync_sql_query(const char *sql){
   cnt=sqlite3_column_count(stmt);
   res=(psync_sql_res *)psync_malloc(sizeof(psync_sql_res)+cnt*sizeof(psync_variant));
   res->stmt=stmt;
+#if D_ERROR<=DEBUG_LEVEL
+  res->sql=sql;
+#endif
   res->column_count=cnt;
   return res;
 }
@@ -383,6 +386,9 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
   }
   res=(psync_sql_res *)psync_malloc(sizeof(psync_sql_res));
   res->stmt=stmt;
+#if D_ERROR<=DEBUG_LEVEL
+  res->sql=sql;
+#endif
   return res;
 }
 
@@ -395,7 +401,7 @@ void psync_sql_reset(psync_sql_res *res){
 void psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE))
-    debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errstr(code), res->sql);
   code=sqlite3_reset(res->stmt);
   if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
@@ -556,7 +562,7 @@ int psync_rename_conflicted_file(const char *path){
       memcpy(npath+dotidx, "(conflicted)", l);
     }
     memcpy(npath+dotidx+l, path+dotidx, plen-dotidx+1);
-    if (!psync_stat(npath, &st)){
+    if (psync_stat(npath, &st)){
       l=psync_file_rename(path, npath);
       psync_free(npath);
       return l;

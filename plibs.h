@@ -60,7 +60,7 @@
 #define TO_STR(s) #s
 
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
-#define assert(cond) do {if (D_ERROR<=DEBUG_LEVEL && unlikely(!(cond))) debug(D_ERROR, "assertion %s failed", TO_STR(cond));} while (0)
+#define assert(cond) do {if (D_ERROR<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion "TO_STR(cond)" failed"); abort();}} while (0)
 
 #define PSYNC_TNUMBER 1
 #define PSYNC_TSTRING 2
@@ -69,6 +69,7 @@
 #define PSYNC_TBOOL   5
 
 #define psync_get_number(v) (likely((v).type==PSYNC_TNUMBER)?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_number_or_null(v) (((v).type==PSYNC_TNUMBER)?(v).num:(likely((v).type==PSYNC_TNULL)?0:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_get_string(v) (likely((v).type==PSYNC_TSTRING)?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_string_or_null(v) (((v).type==PSYNC_TSTRING)?(v).str:(likely((v).type==PSYNC_TNULL)?NULL:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_dup_string(v) (likely((v).type==PSYNC_TSTRING)?psync_strndup((v).str, (v).length):psync_strdup(psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
@@ -105,6 +106,11 @@ typedef struct {
 
 typedef struct {
   sqlite3_stmt *stmt;
+#if D_ERROR<=DEBUG_LEVEL
+  const char *sql;
+#else
+  char sql[0];
+#endif
   int column_count;
   psync_variant row[];
 } psync_sql_res;

@@ -133,7 +133,7 @@ void psync_timer_exception_handler(psync_timer_callback func){
   pthread_mutex_unlock(&timer_mutex);
 }
 
-void psync_timer_notify_exception(){
+void psync_timer_do_notify_exception(){
   struct exception_list *e;
   pthread_t threadid;
   e=excepions;

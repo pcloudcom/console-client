@@ -772,6 +772,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
       if (!lstat(cpath, &st)){
         pst.name=de->d_name;
         pst.size=st.st_size;
+        pst.inode=st.st_ino;
         pst.lastmod=st.st_mtime;
         pst.isfolder=S_ISDIR(st.st_mode);
         pst.canread=psync_stat_mode_ok(&st, 4);
@@ -869,6 +870,24 @@ int psync_file_rename(const char *oldpath, const char *newpath){
 #endif
 }
 
+int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
+#if defined(P_OS_POSIX)
+  return rename(oldpath, newpath);
+#elif defined(P_OS_WINDOWS) // should we just use rename() here?
+  wchar_t *oldwpath, *newwpath;
+  int ret;
+  oldwpath=utf8_to_wchar(oldpath);
+  newwpath=utf8_to_wchar(newpath);
+  DeleteFileW(newwpath);
+  ret=MoveFileW(oldwpath, newwpath)?0:-1;
+  psync_free(oldwpath);
+  psync_free(newwpath);
+  return ret;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
 int psync_file_delete(const char *path){
 #if defined(P_OS_POSIX)
   return unlink(path);
@@ -888,6 +907,9 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
 #if defined(P_OS_POSIX)
 #if defined(O_CLOEXEC)
   flags|=O_CLOEXEC;
+#endif
+#if defined(O_NOATIME)
+  flags|=O_NOATIME;
 #endif
   return open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
 #elif defined(P_OS_WINDOWS)

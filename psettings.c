@@ -50,7 +50,7 @@ typedef struct {
 static void lower_patterns(void *ptr);
 
 static psync_setting_t settings[]={
-  {"usessl", psync_timer_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
+  {"usessl", psync_timer_do_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
   {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
   {"maxdownloadspeed", NULL, NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},

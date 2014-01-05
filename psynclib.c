@@ -177,7 +177,10 @@ void psync_unlink(){
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_timer_notify_exception();
   psync_milisleep(20);
+  psync_sql_lock();
   psync_sql_statement(PSYNC_DATABASE_DELETE);
+  psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
+  psync_sql_unlock();
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, runstatus);
 }

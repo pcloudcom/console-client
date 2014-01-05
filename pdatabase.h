@@ -28,6 +28,7 @@
 #ifndef _PSYNC_DATABASE_H
 #define _PSYNC_DATABASE_H
 
+#include "pcompat.h"
 #include <sqlite3.h>
 
 #if defined(SQLITE_VERSION_NUMBER) && SQLITE_VERSION_NUMBER>=3008002
@@ -36,25 +37,41 @@
 #define P_SQL_WOWROWID
 #endif
 
+#if PSYNC_FILENAMES_CASESENSITIVE
+#define PSYNC_TEXT_COL "COLLATE BINARY"
+#else
+#define PSYNC_TEXT_COL "COLLATE NOCASE"
+#endif
+
 #define PSYNC_DATABASE_STRUCTURE \
 "BEGIN;\
 PRAGMA page_size=4096;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
-name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
+  name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
 CREATE INDEX IF NOT EXISTS kfolderfolderid ON folder(parentfolderid);\
 CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, size INTEGER, hash INTEGER,\
-name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
+  name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
 CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
+CREATE TABLE IF NOT EXISTS localfolder (id INTEGER PRIMARY KEY, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, folderid INTEGER, \
+  syncid INTEGER, inode INTEGER, mtime INTEGER, flags INTEGER, taskcnt INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL");\
+CREATE INDEX IF NOT EXISTS klocalfolderlpfid ON localfolder(localparentfolderid);\
+CREATE UNIQUE INDEX IF NOT EXISTS klocalfolderpsn ON localfolder(syncid, localparentfolderid, name);\
+CREATE INDEX IF NOT EXISTS klocalfolderfolderid ON localfolder(folderid);\
+CREATE INDEX IF NOT EXISTS klocalfoldersyncid ON localfolder(syncid);\
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE CASCADE,\
-localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
+  localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderid ON syncfolder(folderid);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);\
-CREATE TABLE IF NOT EXISTS syncfolderdown (syncid INTEGER, folderid INTEGER);\
-CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncfolderdown(syncid, folderid);\
-CREATE INDEX IF NOT EXISTS ksyncfolderdownfolderid ON syncfolderdown(folderid);\
-CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localpath VARCHAR(4096), newlocalpath VARCHAR(4096));\
+CREATE TABLE IF NOT EXISTS syncedfolder (syncid INTEGER, folderid INTEGER, localfolderid INTEGER, synctype INTEGER);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncedfolder(folderid, syncid);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidlocalfolderid ON syncedfolder(localfolderid, syncid);\
+CREATE INDEX IF NOT EXISTS ksyncedfoldersyncid ON syncedfolder(syncid);\
+CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER, itemid INTEGER, localitemid INTEGER,\
+  newitemid INTEGER, name VARCHAR(4096));\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
+INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
+INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\
 COMMIT;\
 "
 
@@ -73,7 +90,7 @@ DROP TABLE syncfolderdown;\
 DROP TABLE task;\
 DROP TABLE hashchecksum;\
 VACUUM;\
-" PSYNC_DATABASE_STRUCTURE
+"
 
 
 #endif

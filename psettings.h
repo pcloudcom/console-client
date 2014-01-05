@@ -58,11 +58,13 @@
 
 #define PSYNC_DIR_HASH_SIZE 1024
 
-#define PSYNC_DEFAULT_POSIX_DBNAME ".pcloudsyncdb"
-#define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloudsync.db"
+#define PSYNC_DEFAULT_POSIX_DBNAME ".pclouddb"
+#define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloud.db"
 
 #define PSYNC_DEFAULT_POSIX_FOLDER_MODE 0755
 #define PSYNC_DEFAULT_POSIX_FILE_MODE 0644
+
+#define PSYNC_APPEND_PARTIAL_FILES ".part"
 
 #define PSYNC_DIFF_FILTER_META "parentfolderid,ismine,userid,name,fileid,folderid,deletedfileid,created,modified,size,hash,canread,canmodify,candelete,cancreate"
 

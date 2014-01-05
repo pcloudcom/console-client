@@ -226,7 +226,68 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen){
   return ret;
 }
 
-static int psync_add_local_path_to_list(psync_list *lst, psync_folderid_t folderid, psync_syncid_t syncid){
+static int psync_add_local_path_to_list_by_localfolderid(psync_list *lst, psync_folderid_t localfolderid, psync_syncid_t syncid){
+  string_list *e, *le;
+  psync_sql_res *res;
+  psync_variant *row;
+  const char *str;
+  size_t len;
+  res=psync_sql_query("SELECT localpath FROM syncfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  row=psync_sql_fetch_row(res);
+  if (unlikely(!row)){
+    debug(D_ERROR, "could not find sync id %lu", (long unsigned)syncid);
+    return -1;
+  }
+  str=psync_get_lstring(row[0], &len);
+  le=(string_list *)psync_malloc(sizeof(string_list)+len+1);
+  le->str=(char *)(le+1);
+  le->len=len;
+  memcpy(le->str, str, len+1);
+  psync_sql_free_result(res);
+  while (1){
+    if (localfolderid==0){
+      psync_list_add_head(lst, &le->list);
+      return 0;
+    }
+    res=psync_sql_query("SELECT localparentfolderid, name FROM localfolder WHERE id=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    row=psync_sql_fetch_row(res);
+    if (unlikely(!row))
+      break;
+    localfolderid=psync_get_number(row[0]);
+    str=psync_get_lstring(row[1], &len);
+    e=(string_list *)psync_malloc(sizeof(string_list)+len+1);
+    e->str=(char *)(e+1);
+    e->len=len;
+    memcpy(e->str, str, len+1);
+    psync_list_add_head(lst, &e->list);
+    psync_sql_free_result(res);
+  }
+  psync_sql_free_result(res);
+  psync_list_add_head(lst, &le->list);
+  debug(D_ERROR, "local folder %lu not found in database", (unsigned long)localfolderid);
+  return -1;
+}
+
+char *psync_local_path_for_local_folder(psync_folderid_t localfolderid, psync_syncid_t syncid, size_t *retlen){
+  psync_list folderlist;
+  char *ret;
+  int res;
+  psync_list_init(&folderlist);
+  psync_sql_lock();
+  res=psync_add_local_path_to_list_by_localfolderid(&folderlist, localfolderid, syncid);
+  psync_sql_unlock();
+  if (unlikely(res)){
+    psync_free_string_list(&folderlist);
+    return PSYNC_INVALID_PATH;
+  }
+  ret=psync_join_string_list(PSYNC_DIRECTORY_SEPARATOR, &folderlist, retlen);
+  psync_free_string_list(&folderlist);
+  return ret;
+}
+
+/*static int psync_add_local_path_to_list(psync_list *lst, psync_folderid_t folderid, psync_syncid_t syncid){
   string_list *e, *le;
   psync_sql_res *res;
   psync_variant *row;
@@ -349,7 +410,7 @@ char *psync_local_path_for_remote_file_or_folder_by_name(psync_folderid_t parent
   ret=psync_join_string_list(PSYNC_DIRECTORY_SEPARATOR, &folderlist, retlen);
   psync_free_string_list(&folderlist);
   return ret;
-}
+}*/
 
 static folder_list *folder_list_init(){
   folder_list *list;

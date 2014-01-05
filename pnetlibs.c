@@ -78,13 +78,13 @@ int psync_rmdir_with_trashes(const char *path){
     return 0;
   if (psync_fs_err()!=P_NOTEMPTY && psync_fs_err()!=P_EXIST)
     return -1;
-  if (!psync_list_dir(path, rm_ign, (void *)path))
+  if (psync_list_dir(path, rm_ign, (void *)path))
     return -1;
   return psync_rmdir(path);
 }
 
 int psync_rmdir_recursive(const char *path){
-  if (!psync_list_dir(path, rm_all, (void *)path))
+  if (psync_list_dir(path, rm_all, (void *)path))
     return -1;
   return psync_rmdir(path);
 }
@@ -186,17 +186,19 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
   psync_file_t sfd, dfd;
   psync_hash_ctx hctx;
   void *buff;
+  char *tmpdest;
   size_t rrd;
   ssize_t rd;
   unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
   char hashhex[PSYNC_HASH_DIGEST_HEXLEN];
   sfd=psync_file_open(source, P_O_RDONLY, 0);
-  if (sfd==INVALID_HANDLE_VALUE)
+  if (unlikely(sfd==INVALID_HANDLE_VALUE))
     goto err0;
+  tmpdest=psync_strcat(destination, PSYNC_APPEND_PARTIAL_FILES, NULL);
   if (psync_file_size(sfd)!=fsize)
     goto err1;
-  dfd=psync_file_open(destination, P_O_WRONLY, P_O_CREAT|P_O_TRUNC);
-  if (dfd==INVALID_HANDLE_VALUE)
+  dfd=psync_file_open(tmpdest, P_O_WRONLY, P_O_CREAT|P_O_TRUNC);
+  if (unlikely(dfd==INVALID_HANDLE_VALUE))
     goto err1;
   psync_hash_init(&hctx);
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
@@ -206,9 +208,9 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
     else
       rrd=fsize;
     rd=psync_file_read(sfd, buff, rrd);
-    if (rd<=0)
+    if (unlikely(rd<=0))
       goto err2;
-    if (psync_file_writeall_checkoverquota(dfd, buff, rd))
+    if (unlikely(psync_file_writeall_checkoverquota(dfd, buff, rd)))
       goto err2;
     psync_hash_update(&hctx, buff, rd);
     psync_yield_cpu();
@@ -219,13 +221,17 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
     goto err2;
   psync_free(buff);
   psync_file_close(dfd);
+  if (unlikely(psync_file_rename_overwrite(tmpdest, destination)))
+    goto err1;
+  psync_free(tmpdest);
   psync_file_close(sfd);
   return PSYNC_NET_OK;
 err2:
   psync_free(buff);
   psync_file_close(dfd);
-  psync_file_delete(destination);
+  psync_file_delete(tmpdest);
 err1:
+  psync_free(tmpdest);
   psync_file_close(sfd);
 err0:
   return PSYNC_NET_PERMFAIL;
