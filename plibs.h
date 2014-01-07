@@ -60,7 +60,8 @@
 #define TO_STR(s) #s
 
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
-#define assert(cond) do {if (D_ERROR<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion "TO_STR(cond)" failed"); abort();}} while (0)
+#define assert(cond) do {if (D_CRITICAL<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion "TO_STR(cond)" failed, aborting"); abort();}} while (0)
+#define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion "TO_STR(cond)" failed, aborting");}} while (0)
 
 #define PSYNC_TNUMBER 1
 #define PSYNC_TSTRING 2
@@ -75,6 +76,14 @@
 #define psync_dup_string(v) (likely((v).type==PSYNC_TSTRING)?psync_strndup((v).str, (v).length):psync_strdup(psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_get_lstring(v, l) psync_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l)
 #define psync_get_real(v) (likely((v).type==PSYNC_TREAL)?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+
+#if D_WARNING<=DEBUG_LEVEL
+#define likely_log(x) (likely(x)?1:psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion likely_log("TO_STR(x)") failed")*0)
+#define unlikely_log(x) (unlikely(x)?psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion unlikely_log("TO_STR(x)") failed"):0)
+#else
+#define likely_log likely
+#define unlikely_log unlikely
+#endif
 
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0]))
 
@@ -152,6 +161,7 @@ psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
 void psync_sql_reset(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run(psync_sql_res *res) PSYNC_NONNULL(1);
+void psync_sql_run_free(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val) PSYNC_NONNULL(1);
 void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val) PSYNC_NONNULL(1);
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str) PSYNC_NONNULL(1);
@@ -170,7 +180,7 @@ void psync_libs_init();
 void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds);
 void psync_free_after_sec(void *ptr, uint32_t seconds);
 
-void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
+int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
 uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
 const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;

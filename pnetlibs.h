@@ -45,7 +45,10 @@ int psync_rmdir_with_trashes(const char *path);
 int psync_rmdir_recursive(const char *path);
 
 void psync_set_local_full(int over);
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint64_t *fsize);
+int psync_handle_api_result(uint64_t result);
+int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize, psync_socket *restrict useapi);
+int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize);
+int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
 
 psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);

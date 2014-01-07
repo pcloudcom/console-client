@@ -55,6 +55,19 @@ static void create_task2(uint32_t type, psync_syncid_t syncid, uint64_t entryid,
   psync_wake_download();
 }
 
+static void create_task3(uint32_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid, const char *name){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid, name) VALUES (?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(res, 1, type);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_bind_uint(res, 3, entryid);
+  psync_sql_bind_uint(res, 4, localentryid);
+  psync_sql_bind_string(res, 5, name);
+  psync_sql_run(res);
+  psync_sql_free_result(res);
+  psync_wake_download();
+}
+
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid){
   create_task1(PSYNC_CREATE_LOCAL_FOLDER, syncid, folderid, localfolderid);
 }
@@ -71,15 +84,7 @@ void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t fold
                                     psync_folderid_t newlocalparentfolderid, const char *newname){
   create_task2(PSYNC_RENAME_LOCAL_FOLDER, syncid, folderid, localfolderid, newlocalparentfolderid, newname);
 }
-/*
-void psync_task_rename_local_folder(const char *path, const char *newpath, psync_folderid_t folderid, psync_syncid_t syncid){
-  create_task2(path, newpath, folderid, syncid, PSYNC_RENAME_LOCAL_FOLDER);
-}
 
-void psync_task_copy_local_folder(const char *path, const char *newpath, psync_folderid_t folderid, psync_syncid_t syncid){
-  create_task2(path, newpath, folderid, syncid, PSYNC_COPY_LOCAL_FOLDER);
+void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
+  create_task3(PSYNC_DOWNLOAD_FILE, syncid, fileid, localfolderid, name);
 }
-
-void psync_task_download_file(const char *path, psync_fileid_t fileid, psync_syncid_t syncid){
-  create_task(path, fileid, syncid, PSYNC_DOWNLOAD_FILE);
-}*/

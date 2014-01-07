@@ -190,13 +190,19 @@ void psync_status_set_download_speed(uint32_t speed){
   }
 }
 
+/* there is just one thread downloading, therefore no locking */
+
 void psync_status_inc_downloads_count(){
   psync_status.filesdownloading++;
+  psync_status.status=psync_calc_status();
   psync_send_status_update();
 }
 
 void psync_status_dec_downloads_count(){
-  psync_status.filesdownloading++;
+  psync_status.filesdownloading--;
+  if (!psync_status.filesdownloading)
+    psync_status.downloadspeed=0;
+  psync_status.status=psync_calc_status();
   psync_send_status_update();
 }
 

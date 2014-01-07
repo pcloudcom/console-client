@@ -57,13 +57,8 @@
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
 void psync_task_delete_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
 void psync_task_delete_local_folder_recursive(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
-
 void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, 
                                     psync_folderid_t newlocalparentfolderid, const char *newname);
-/*
-void psync_task_rename_local_folder(const char *path, const char *newpath, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1, 2);
-void psync_task_copy_local_folder(const char *path, const char *newpath, psync_folderid_t folderid, psync_syncid_t syncid) PSYNC_NONNULL(1, 2);
-void psync_task_download_file(const char *path, psync_fileid_t fileid, psync_syncid_t syncid) PSYNC_NONNULL(1);
-*/
+void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name);
 
 #endif

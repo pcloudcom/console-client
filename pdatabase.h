@@ -59,6 +59,10 @@ CREATE INDEX IF NOT EXISTS klocalfolderlpfid ON localfolder(localparentfolderid)
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfolderpsn ON localfolder(syncid, localparentfolderid, name);\
 CREATE INDEX IF NOT EXISTS klocalfolderfolderid ON localfolder(folderid);\
 CREATE INDEX IF NOT EXISTS klocalfoldersyncid ON localfolder(syncid);\
+CREATE TABLE IF NOT EXISTS localfile (id INTEGER PRIMARY KEY, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, fileid INTEGER, \
+  syncid INTEGER, size INTEGER, inode INTEGER, mtime INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL", checksum TEXT);\
+CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
+CREATE UNIQUE INDEX IF NOT EXISTS klocalfilerpsn ON localfile(syncid, localparentfolderid, name);\
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE CASCADE,\
   localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderid ON syncfolder(folderid);\

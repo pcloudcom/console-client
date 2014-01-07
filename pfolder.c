@@ -106,6 +106,15 @@ static void psync_free_string_list(psync_list *lst){
   psync_list_for_each_element_call(lst, string_list, list, psync_free);
 }
 
+static string_list *str_to_list_element(const char *str, size_t len){
+  string_list *le;
+  le=(string_list *)psync_malloc(sizeof(string_list)+len+1);
+  le->str=(char *)(le+1);
+  le->len=len;
+  memcpy(le->str, str, len+1);
+  return le;
+}
+
 static int psync_add_path_to_list(psync_list *lst, psync_folderid_t folderid){
   string_list *e;
   psync_sql_res *res;
@@ -127,10 +136,7 @@ static int psync_add_path_to_list(psync_list *lst, psync_folderid_t folderid){
       break;
     folderid=psync_get_number(row[0]);
     str=psync_get_lstring(row[1], &len);
-    e=(string_list *)psync_malloc(sizeof(string_list)+len+1);
-    e->str=(char *)(e+1);
-    e->len=len;
-    memcpy(e->str, str, len+1);
+    e=str_to_list_element(str, len);
     psync_list_add_head(lst, &e->list);
     psync_sql_free_result(res);
   }
@@ -209,10 +215,7 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen){
   }
   folderid=psync_get_number(row[0]);
   str=psync_get_lstring(row[1], &len);
-  e=(string_list *)psync_malloc(sizeof(string_list)+len+1);
-  e->str=(char *)(e+1);
-  e->len=len;
-  memcpy(e->str, str, len+1);
+  e=str_to_list_element(str, len);
   psync_list_add_head(&folderlist, &e->list);
   psync_sql_free_result(res);
   if (unlikely(psync_add_path_to_list(&folderlist, folderid))){
@@ -240,10 +243,7 @@ static int psync_add_local_path_to_list_by_localfolderid(psync_list *lst, psync_
     return -1;
   }
   str=psync_get_lstring(row[0], &len);
-  le=(string_list *)psync_malloc(sizeof(string_list)+len+1);
-  le->str=(char *)(le+1);
-  le->len=len;
-  memcpy(le->str, str, len+1);
+  le=str_to_list_element(str, len);
   psync_sql_free_result(res);
   while (1){
     if (localfolderid==0){
@@ -257,10 +257,7 @@ static int psync_add_local_path_to_list_by_localfolderid(psync_list *lst, psync_
       break;
     localfolderid=psync_get_number(row[0]);
     str=psync_get_lstring(row[1], &len);
-    e=(string_list *)psync_malloc(sizeof(string_list)+len+1);
-    e->str=(char *)(e+1);
-    e->len=len;
-    memcpy(e->str, str, len+1);
+    e=str_to_list_element(str, len);
     psync_list_add_head(lst, &e->list);
     psync_sql_free_result(res);
   }
@@ -279,6 +276,44 @@ char *psync_local_path_for_local_folder(psync_folderid_t localfolderid, psync_sy
   res=psync_add_local_path_to_list_by_localfolderid(&folderlist, localfolderid, syncid);
   psync_sql_unlock();
   if (unlikely(res)){
+    psync_free_string_list(&folderlist);
+    return PSYNC_INVALID_PATH;
+  }
+  ret=psync_join_string_list(PSYNC_DIRECTORY_SEPARATOR, &folderlist, retlen);
+  psync_free_string_list(&folderlist);
+  return ret;
+}
+
+char *psync_local_path_for_local_file(psync_fileid_t localfileid, size_t *retlen){
+  psync_list folderlist;
+  char *ret;
+  const char *str;
+  psync_sql_res *res;
+  psync_variant *row;
+  string_list *e;
+  psync_folderid_t localfolderid;
+  size_t len;
+  psync_syncid_t syncid;
+  int rs;
+  psync_list_init(&folderlist);
+  psync_sql_lock();
+  res=psync_sql_query("SELECT localparentfolderid, syncid, name FROM localfile WHERE id=?");
+  psync_sql_bind_uint(res, 1, localfileid);
+  if (unlikely(!(row=psync_sql_fetch_row(res)))){
+    psync_sql_free_result(res);
+    psync_sql_unlock();
+    psync_free_string_list(&folderlist);
+    return PSYNC_INVALID_PATH;
+  }
+  localfolderid=psync_get_number(row[0]);
+  syncid=psync_get_number(row[1]);
+  str=psync_get_lstring(row[2], &len);
+  e=str_to_list_element(str, len);
+  psync_sql_free_result(res);
+  psync_list_add_head(&folderlist, &e->list);
+  rs=psync_add_local_path_to_list_by_localfolderid(&folderlist, localfolderid, syncid);
+  psync_sql_unlock();
+  if (unlikely(rs)){
     psync_free_string_list(&folderlist);
     return PSYNC_INVALID_PATH;
   }

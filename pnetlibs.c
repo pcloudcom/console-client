@@ -28,12 +28,12 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "pnetlibs.h"
+#include "pssl.h"
 #include "psettings.h"
 #include "plibs.h"
 #include "ptimer.h"
 #include "pstatus.h"
 #include "papi.h"
-#include "pssl.h"
 
 static time_t current_download_sec=0;
 static uint32_t download_bytes_this_sec=0;
@@ -100,7 +100,7 @@ void psync_set_local_full(int over){
   }
 }
 
-static int handle_result(uint64_t result){
+int psync_handle_api_result(uint64_t result){
   if (result==2000){
     psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
     psync_timer_notify_exception();
@@ -112,7 +112,7 @@ static int handle_result(uint64_t result){
     return PSYNC_NET_TEMPFAIL;
 }
 
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint64_t *fsize){
+int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize, psync_socket *restrict useapi){
   psync_socket *api;
   binresult *res;
   const binresult *meta, *checksum;
@@ -129,21 +129,27 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint6
     return PSYNC_NET_OK;
   }
   psync_sql_free_result(sres);
-  api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
-  if (!api){
-    psync_timer_notify_exception();
-    return PSYNC_NET_TEMPFAIL;
+  if (useapi)
+    api=useapi;
+  else{
+    api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+    if (!api){
+      psync_timer_notify_exception();
+      return PSYNC_NET_TEMPFAIL;
+    }
   }
   res=send_command(api, "checksumfile", params);
-  psync_socket_close(api);
-  if (!res){
+  if (!useapi)
+    psync_socket_close(api);
+  if (unlikely_log(!res)){
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
   }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
+    debug(D_ERROR, "checksumfile returned error %lu", (unsigned long)result);
     psync_free(res);
-    handle_result(result);
+    return psync_handle_api_result(result);
   }
   meta=psync_find_result(res, "metadata", PARAM_HASH);
   checksum=psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR);
@@ -161,7 +167,7 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *hexsum, uint6
   return PSYNC_NET_OK;
 }
 
-static int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count){
+int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count){
   ssize_t wr;
   while (count){
     wr=psync_file_write(fd, buf, count);
@@ -182,7 +188,7 @@ static int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, 
   return 0;
 }
 
-int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const char *hexsum, uint64_t fsize){
+int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize){
   psync_file_t sfd, dfd;
   psync_hash_ctx hctx;
   void *buff;
@@ -192,13 +198,13 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
   unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
   char hashhex[PSYNC_HASH_DIGEST_HEXLEN];
   sfd=psync_file_open(source, P_O_RDONLY, 0);
-  if (unlikely(sfd==INVALID_HANDLE_VALUE))
+  if (unlikely_log(sfd==INVALID_HANDLE_VALUE))
     goto err0;
   tmpdest=psync_strcat(destination, PSYNC_APPEND_PARTIAL_FILES, NULL);
-  if (psync_file_size(sfd)!=fsize)
+  if (unlikely_log(psync_file_size(sfd)!=fsize))
     goto err1;
   dfd=psync_file_open(tmpdest, P_O_WRONLY, P_O_CREAT|P_O_TRUNC);
-  if (unlikely(dfd==INVALID_HANDLE_VALUE))
+  if (unlikely_log(dfd==INVALID_HANDLE_VALUE))
     goto err1;
   psync_hash_init(&hctx);
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
@@ -208,20 +214,20 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
     else
       rrd=fsize;
     rd=psync_file_read(sfd, buff, rrd);
-    if (unlikely(rd<=0))
+    if (unlikely_log(rd<=0))
       goto err2;
-    if (unlikely(psync_file_writeall_checkoverquota(dfd, buff, rd)))
+    if (unlikely_log(psync_file_writeall_checkoverquota(dfd, buff, rd)))
       goto err2;
     psync_hash_update(&hctx, buff, rd);
     psync_yield_cpu();
   }
   psync_hash_final(hashbin, &hctx);
   psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
-  if (memcmp(hexsum, hashhex, PSYNC_HASH_DIGEST_HEXLEN))
+  if (unlikely_log(memcmp(hexsum, hashhex, PSYNC_HASH_DIGEST_HEXLEN)))
     goto err2;
   psync_free(buff);
   psync_file_close(dfd);
-  if (unlikely(psync_file_rename_overwrite(tmpdest, destination)))
+  if (unlikely_log(psync_file_rename_overwrite(tmpdest, destination)))
     goto err1;
   psync_free(tmpdest);
   psync_file_close(sfd);

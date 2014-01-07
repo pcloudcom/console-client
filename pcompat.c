@@ -62,6 +62,8 @@
 
 #endif
 
+#define psync_bool_to_zero(x) ((!!(x))-1)
+
 typedef struct {
  psync_thread_start1 run;
   void *ptr;
@@ -830,7 +832,7 @@ int psync_mkdir(const char *path){
   wchar_t *wpath;
   int ret;
   wpath=utf8_to_wchar(path);
-  ret=CreateDirectoryW(wpath, NULL)?0:-1;
+  ret=psync_bool_to_zero(CreateDirectoryW(wpath, NULL));
   psync_free(wpath);
   return ret;
 #else
@@ -845,7 +847,7 @@ int psync_rmdir(const char *path){
   wchar_t *wpath;
   int ret;
   wpath=utf8_to_wchar(path);
-  ret=RemoveDirectoryW(wpath)?0:-1;
+  ret=psync_bool_to_zero(RemoveDirectoryW(wpath));
   psync_free(wpath);
   return ret;
 #else
@@ -861,7 +863,7 @@ int psync_file_rename(const char *oldpath, const char *newpath){
   int ret;
   oldwpath=utf8_to_wchar(oldpath);
   newwpath=utf8_to_wchar(newpath);
-  ret=MoveFileW(oldwpath, newwpath)?0:-1;
+  ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
   psync_free(oldwpath);
   psync_free(newwpath);
   return ret;
@@ -879,7 +881,7 @@ int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
   oldwpath=utf8_to_wchar(oldpath);
   newwpath=utf8_to_wchar(newpath);
   DeleteFileW(newwpath);
-  ret=MoveFileW(oldwpath, newwpath)?0:-1;
+  ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
   psync_free(oldwpath);
   psync_free(newwpath);
   return ret;
@@ -895,7 +897,7 @@ int psync_file_delete(const char *path){
   wchar_t *wpath;
   int ret;
   wpath=utf8_to_wchar(path);
-  ret=DeleteFileW(wpath)?0:-1;
+  ret=psync_bool_to_zero(DeleteFileW(wpath));
   psync_free(wpath);
   return ret;
 #else
@@ -939,10 +941,7 @@ int psync_file_close(psync_file_t fd){
 #if defined(P_OS_POSIX)
   return close(fd);
 #elif defined(P_OS_WINDOWS)
-  if (CloseHandle(fd))
-    return 0;
-  else
-    return -1;
+  return psync_bool_to_zero(CloseHandle(fd));
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -952,10 +951,7 @@ int psync_file_sync(psync_file_t fd){
 #if defined(P_OS_POSIX)
   return fsync(fd);
 #elif defined(P_OS_WINDOWS) 
-  if (FlushFileBuffers(fd))
-    return 0;
-  else
-    return -1;
+  return psync_bool_to_zero(FlushFileBuffers(fd));
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -1000,6 +996,21 @@ int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence){
      return -1;
    else
      return li.QuadPart;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_file_truncate(psync_file_t fd){
+#if defined(P_OS_POSIX)
+  off_t off;
+  off=lseek(fd, 0, SEEK_CUR);
+  if (likely(off!=(off_t)-1))
+    return ftruncate(fd, off);
+  else
+    return -1;
+#elif defined(P_OS_WINDOWS)
+   return psync_bool_to_zero(SetEndOfFile(fd));
 #else
 #error "Function not implemented for your operating system"
 #endif

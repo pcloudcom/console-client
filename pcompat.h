@@ -275,6 +275,7 @@ int psync_file_sync(psync_file_t fd);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
 ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count);
 int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence);
+int psync_file_truncate(psync_file_t fd);
 int64_t psync_file_size(psync_file_t fd) PSYNC_PURE;
 
 #if defined(P_OS_WINDOWS)

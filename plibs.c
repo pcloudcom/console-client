@@ -407,6 +407,15 @@ void psync_sql_run(psync_sql_res *res){
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
 }
 
+void psync_sql_run_free(psync_sql_res *res){
+  int code=sqlite3_step(res->stmt);
+  if (unlikely(code!=SQLITE_DONE))
+    debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errstr(code), res->sql);
+  sqlite3_finalize(res->stmt);
+  psync_sql_unlock();
+  psync_free(res);
+}
+
 void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val){
   int code=sqlite3_bind_int64(res->stmt, n, val);
   if (unlikely(code!=SQLITE_OK))
@@ -677,7 +686,7 @@ static void time_format(time_t tm, char *result){
   memcpy(result, " +0000", 7); // copies the null byte
 }
 
-void psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...){
+int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...){
   static const struct {
     int unsigned level;
     const char *name;
@@ -697,7 +706,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
   if (unlikely(!log)){
     log=fopen(DEBUG_FILE, "a+");
     if (!log)
-      return;
+      return 1;
   }
   currenttime=psync_timer_time();
   time_format(currenttime, dttime);
@@ -707,6 +716,7 @@ void psync_debug(const char *file, const char *function, int unsigned line, int 
   vfprintf(log, format, ap);
   va_end(ap);
   fflush(log);
+  return 1;
 }
 
 static const char * PSYNC_CONST get_type_name(uint32_t t){
