@@ -62,6 +62,7 @@ CREATE INDEX IF NOT EXISTS klocalfoldersyncid ON localfolder(syncid);\
 CREATE TABLE IF NOT EXISTS localfile (id INTEGER PRIMARY KEY, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, fileid INTEGER, \
   syncid INTEGER, size INTEGER, inode INTEGER, mtime INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL", checksum TEXT);\
 CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
+CREATE INDEX IF NOT EXISTS klocalfilefileid ON localfile(fileid);\
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfilerpsn ON localfile(syncid, localparentfolderid, name);\
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE CASCADE,\
   localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
@@ -78,23 +79,5 @@ INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\
 COMMIT;\
 "
-
-#define PSYNC_DATABASE_DELETE \
-"DROP INDEX kfolderfolderid;\
-DROP INDEX kfilefolderid;\
-DROP INDEX ksyncfolderfolderid;\
-DROP INDEX ksyncfolderlocalpath;\
-DROP INDEX ksyncfolderdownsyncidfolderid;\
-DROP INDEX ksyncfolderdownfolderid;\
-DROP TABLE setting;\
-DROP TABLE folder;\
-DROP TABLE file;\
-DROP TABLE syncfolder;\
-DROP TABLE syncfolderdown;\
-DROP TABLE task;\
-DROP TABLE hashchecksum;\
-VACUUM;\
-"
-
 
 #endif

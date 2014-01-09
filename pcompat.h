@@ -80,6 +80,12 @@
 #include <stdlib.h>
 #include <errno.h>
 
+typedef long psync_int_t;
+typedef unsigned long psync_uint_t;
+
+#define P_PRI_I "ld"
+#define P_PRI_U "lu"
+
 #if defined(P_OS_POSIX)
 
 #include <sys/socket.h>

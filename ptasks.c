@@ -29,7 +29,7 @@
 #include "plibs.h"
 #include "pdownload.h"
 
-static void create_task1(uint32_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid){
+static void create_task1(psync_uint_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid){
   psync_sql_res *res;
   res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid) VALUES (?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, type);
@@ -41,7 +41,7 @@ static void create_task1(uint32_t type, psync_syncid_t syncid, uint64_t entryid,
   psync_wake_download();
 }
 
-static void create_task2(uint32_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid, uint64_t newitemid, const char *name){
+static void create_task2(psync_uint_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid, uint64_t newitemid, const char *name){
   psync_sql_res *res;
   res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid, newitemid, name) VALUES (?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, type);
@@ -55,7 +55,7 @@ static void create_task2(uint32_t type, psync_syncid_t syncid, uint64_t entryid,
   psync_wake_download();
 }
 
-static void create_task3(uint32_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid, const char *name){
+static void create_task3(psync_uint_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid, const char *name){
   psync_sql_res *res;
   res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid, name) VALUES (?, ?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, type);
@@ -63,6 +63,16 @@ static void create_task3(uint32_t type, psync_syncid_t syncid, uint64_t entryid,
   psync_sql_bind_uint(res, 3, entryid);
   psync_sql_bind_uint(res, 4, localentryid);
   psync_sql_bind_string(res, 5, name);
+  psync_sql_run(res);
+  psync_sql_free_result(res);
+  psync_wake_download();
+}
+
+static void create_task4(psync_uint_t type, uint64_t entryid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid) VALUES (?, 0, ?, 0)");
+  psync_sql_bind_uint(res, 1, type);
+  psync_sql_bind_uint(res, 2, entryid);
   psync_sql_run(res);
   psync_sql_free_result(res);
   psync_wake_download();
@@ -87,4 +97,8 @@ void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t fold
 
 void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
   create_task3(PSYNC_DOWNLOAD_FILE, syncid, fileid, localfolderid, name);
+}
+
+void psync_task_delete_local_file(psync_fileid_t fileid){
+  create_task4(PSYNC_DELETE_LOCAL_FILE, fileid);
 }

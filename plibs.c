@@ -212,7 +212,7 @@ char *psync_sql_cellstr(const char *sql){
   else {
     sqlite3_finalize(stmt);
     psync_sql_unlock();
-    if (code!=SQLITE_DONE)
+    if (unlikely(code!=SQLITE_DONE))
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
   }
@@ -281,7 +281,7 @@ char **psync_sql_rowstr(const char *sql){
   else {
     sqlite3_finalize(stmt);
     psync_sql_unlock();
-    if (code!=SQLITE_DONE)
+    if (unlikely(code!=SQLITE_DONE))
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
   }
@@ -346,7 +346,7 @@ psync_variant *psync_sql_row(const char *sql){
   else {
     sqlite3_finalize(stmt);
     psync_sql_unlock();
-    if (code!=SQLITE_DONE)
+    if (unlikely(code!=SQLITE_DONE))
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
   }
@@ -384,7 +384,7 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
     return NULL;
   }
-  res=(psync_sql_res *)psync_malloc(sizeof(psync_sql_res));
+  res=psync_new(psync_sql_res);
   res->stmt=stmt;
 #if D_ERROR<=DEBUG_LEVEL
   res->sql=sql;
@@ -445,7 +445,7 @@ void psync_sql_free_result(psync_sql_res *res){
   psync_free(res);
 }
 
-psync_variant *psync_sql_fetch_row(psync_sql_res *res){
+psync_variant_row psync_sql_fetch_row(psync_sql_res *res){
   int code, i;
   code=sqlite3_step(res->stmt);
   if (code==SQLITE_ROW){
@@ -476,14 +476,14 @@ psync_variant *psync_sql_fetch_row(psync_sql_res *res){
   }
 }
 
-char **psync_sql_fetch_rowstr(psync_sql_res *res){
+psync_str_row psync_sql_fetch_rowstr(psync_sql_res *res){
   int code, i;
-  char **strs;
+  const char **strs;
   code=sqlite3_step(res->stmt);
   if (code==SQLITE_ROW){
-    strs=(char **)res->row;
+    strs=(const char **)res->row;
     for (i=0; i<res->column_count; i++)
-      strs[i]=(char *)sqlite3_column_text(res->stmt, i);
+      strs[i]=(const char *)sqlite3_column_text(res->stmt, i);
     return strs;
   }
   else {
@@ -493,7 +493,7 @@ char **psync_sql_fetch_rowstr(psync_sql_res *res){
   }
 }
 
-uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
+const uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
   int code, i;
   uint64_t *ret;
   code=sqlite3_step(res->stmt);
@@ -513,7 +513,7 @@ uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
 psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res){
   uint64_t *data;
   psync_full_result_int *ret;
-  uint32_t rows, cols, off, i, all;
+  psync_uint_t rows, cols, off, i, all;
   int code;
   cols=res->column_count;
   rows=0;
@@ -553,7 +553,7 @@ int psync_rename_conflicted_file(const char *path){
   char *npath;
   size_t plen, dotidx;
   psync_stat_t st;
-  int num, l;
+  psync_int_t num, l;
   plen=strlen(path);
   dotidx=plen;
   while (dotidx && path[dotidx]!='.')
@@ -565,7 +565,7 @@ int psync_rename_conflicted_file(const char *path){
   num=0;
   while (1){
     if (num)
-      l=sprintf(npath+dotidx, "(conflicted %d)", num);
+      l=sprintf(npath+dotidx, "(conflicted %"P_PRI_I")", num);
     else{
       l=12;
       memcpy(npath+dotidx, "(conflicted)", l);
@@ -654,7 +654,7 @@ static void time_format(time_t tm, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   struct tm dt;
-  int unsigned y;
+  psync_uint_t y;
   gmtime_r(&tm, &dt);
   memcpy(result, day_names[dt.tm_wday], 3);
   result+=3;
@@ -688,14 +688,14 @@ static void time_format(time_t tm, char *result){
 
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...){
   static const struct {
-    int unsigned level;
+    psync_uint_t level;
     const char *name;
   } debug_levels[]=DEBUG_LEVELS;
   static FILE *log=NULL;
   char dttime[32], format[512];
   va_list ap;
   const char *errname;
-  int unsigned i;
+  psync_uint_t i;
   time_t currenttime;
   errname="BAD_ERROR_CODE";
   for (i=0; i<ARRAY_SIZE(debug_levels); i++)
@@ -725,19 +725,19 @@ static const char * PSYNC_CONST get_type_name(uint32_t t){
   return psync_typenames[t];
 }
 
-uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v){
+uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, const psync_variant *v){
   if (D_CRITICAL<=DEBUG_LEVEL)
     psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TNUMBER), get_type_name(v->type));
   return 0;
 }
 
-const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v){
+const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, const psync_variant *v){
   if (D_CRITICAL<=DEBUG_LEVEL)
     psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TSTRING), get_type_name(v->type));
   return "";
 }
 
-const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len){
+const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, const psync_variant *v, size_t *len){
   if (likely(v->type==PSYNC_TSTRING)){
     *len=v->length;
     return v->str;
@@ -750,7 +750,7 @@ const char *psync_lstring_expected(const char *file, const char *function, int u
   }
 }
 
-double psync_err_real_expected(const char *file, const char *function, int unsigned line, psync_variant *v){
+double psync_err_real_expected(const char *file, const char *function, int unsigned line, const psync_variant *v){
   if (D_CRITICAL<=DEBUG_LEVEL)
     psync_debug(file, function, line, D_CRITICAL, "type error, wanted %s got %s", get_type_name(PSYNC_TREAL), get_type_name(v->type));
   return 0.0;

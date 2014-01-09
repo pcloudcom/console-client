@@ -71,7 +71,7 @@ static psync_socket *get_connected_socket(){
     }
     saveauth=psync_setting_get_bool(_PS(saveauth));
     sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
-    if (!sock){
+    if (unlikely_log(!sock)){
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
@@ -91,7 +91,7 @@ static psync_socket *get_connected_socket(){
                          P_BOOL("getauth", 1)};
       res=send_command(sock, "userinfo", params);
     }
-    if (unlikely(!res)){
+    if (unlikely_log(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
@@ -100,7 +100,7 @@ static psync_socket *get_connected_socket(){
     }
     psync_api_conn_fail_reset();
     result=psync_find_result(res, "result", PARAM_NUM)->num;
-    if (unlikely(result)){
+    if (unlikely_log(result)){
       psync_socket_close(sock);
       psync_free(res);
       if (result==2000){
@@ -117,7 +117,7 @@ static psync_socket *get_connected_socket(){
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     if (luserid){
-      if (unlikely(luserid!=userid)){
+      if (unlikely_log(luserid!=userid)){
         psync_socket_close(sock);
         psync_free(res);
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_MISMATCH);
@@ -196,7 +196,8 @@ static void process_createfolder(const binresult *entry){
   static psync_sql_res *st=NULL;
   psync_sql_res *res, *stmt;
   const binresult *meta, *name;
-  uint64_t userid, perms, *row;
+  uint64_t userid, perms;
+  psync_uint_row row;
   psync_folderid_t parentfolderid, folderid, localfolderid;
 //  char *localname;
   psync_syncid_t syncid;
@@ -283,7 +284,7 @@ static void group_results_by_col(psync_full_result_int *restrict r1, psync_full_
 
 static void del_synced_folder_rec(psync_folderid_t folderid, psync_syncid_t syncid){
   psync_sql_res *res;
-  uint64_t *row;
+  psync_uint_row row;
   res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE folderid=? AND syncid=?");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_uint(res, 2, syncid);
@@ -302,8 +303,8 @@ static void process_modifyfolder(const binresult *entry){
   psync_full_result_int *fres1, *fres2;
   const binresult *meta, *name;
   uint64_t userid, perms;
-  psync_variant *vrow;
-  uint64_t *row;
+  psync_variant_row vrow;
+  psync_uint_row row;
   psync_folderid_t parentfolderid, folderid, oldparentfolderid, localfolderid;
   char *oldname;
   psync_syncid_t syncid;
@@ -336,7 +337,7 @@ static void process_modifyfolder(const binresult *entry){
   res=psync_sql_query("SELECT parentfolderid, name FROM folder WHERE id=?");
   psync_sql_bind_uint(res, 1, folderid);
   vrow=psync_sql_fetch_row(res);
-  if (vrow){
+  if (likely(vrow)){
     oldparentfolderid=psync_get_number(vrow[0]);
     oldname=psync_dup_string(vrow[1]);
   }
@@ -454,9 +455,7 @@ static void process_deletefolder(const binresult *entry){
   static psync_sql_res *st=NULL;
   psync_sql_res *res, *stmt;
   psync_folderid_t folderid;
-  uint64_t *row;
-//  char *localname;
-//  psync_syncid_t syncid;
+  psync_uint_row row;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -496,7 +495,8 @@ static void process_createfile(const binresult *entry){
   psync_sql_res *res;
   psync_folderid_t parentfolderid;
   psync_fileid_t fileid;
-  uint64_t size, userid, *row;
+  uint64_t size, userid;
+  psync_uint_row row;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -540,7 +540,7 @@ static void process_createfile(const binresult *entry){
 
 static void process_modifyfile(const binresult *entry){
   static psync_sql_res *st=NULL;
-  uint64_t *arr;
+  psync_uint_row row;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -554,9 +554,9 @@ static void process_modifyfile(const binresult *entry){
       st=psync_sql_query("SELECT userid, size FROM file WHERE id=?");
     if (st){
       psync_sql_bind_uint(st, 1, psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "fileid", PARAM_NUM)->num);
-      arr=psync_sql_fetch_rowint(st);
-      if (arr && arr[0]==psync_my_userid)
-        used_quota-=arr[1];
+      row=psync_sql_fetch_rowint(st);
+      if (row && row[0]==psync_my_userid)
+        used_quota-=row[1];
     }
   }
   process_createfile(entry);
@@ -565,6 +565,7 @@ static void process_modifyfile(const binresult *entry){
 static void process_deletefile(const binresult *entry){
   static psync_sql_res *st=NULL;
   const binresult *meta;
+  psync_fileid_t fileid;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -578,10 +579,13 @@ static void process_deletefile(const binresult *entry){
       return;
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
-  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, fileid);
   psync_sql_run(st);
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num)
     used_quota-=psync_find_result(meta, "size", PARAM_NUM)->num;
+  if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num))
+    psync_task_delete_local_file(fileid);
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
@@ -712,7 +716,7 @@ restart:
       goto restart;
     }
     result=psync_find_result(res, "result", PARAM_NUM)->num;
-    if (result){
+    if (unlikely(result)){
       debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
       psync_free(res);
       psync_socket_close(sock);
@@ -730,7 +734,7 @@ restart:
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   exceptionsock=setup_exeptions();
-  if (exceptionsock==INVALID_SOCKET){
+  if (unlikely(exceptionsock==INVALID_SOCKET)){
     debug(D_ERROR, "could not create pipe");
     psync_socket_close(sock);
     return;
@@ -754,14 +758,14 @@ restart:
     else if (sel==1){
       sock->pending=1;
       res=get_result(sock);
-      if (!res){
+      if (unlikely_log(!res)){
         psync_timer_notify_exception();
         handle_exception(&sock, 'r');
         socks[1]=sock->sock;
         continue;
       }
       result=psync_find_result(res, "result", PARAM_NUM)->num;
-      if (result){
+      if (unlikely(result)){
         debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
         psync_free(res);
         handle_exception(&sock, 'r');

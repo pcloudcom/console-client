@@ -169,13 +169,30 @@ void psync_set_auth(const char *auth, int save){
 }
 
 void psync_unlink(){
+  psync_sql_res *res;
+  psync_str_row row;
+  char *sql;
   uint32_t runstatus;
   runstatus=psync_status_get(PSTATUS_TYPE_RUN);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_timer_notify_exception();
   psync_milisleep(20);
   psync_sql_lock();
-  psync_sql_statement(PSYNC_DATABASE_DELETE);
+  res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='index'");
+  while ((row=psync_sql_fetch_rowstr(res))){
+    sql=psync_strcat("DROP INDEX ", row[0], NULL);
+    psync_sql_statement(sql);
+    psync_free(sql);
+  }
+  psync_sql_free_result(res);
+  res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='table'");
+  while ((row=psync_sql_fetch_rowstr(res))){
+    sql=psync_strcat("DROP TABLE ", row[0], NULL);
+    psync_sql_statement(sql);
+    psync_free(sql);
+  }
+  psync_sql_free_result(res);
+  psync_sql_statement("VACUUM");
   psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
   psync_sql_unlock();
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
@@ -192,7 +209,8 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
 
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
   psync_sql_res *res;
-  uint64_t *row, perms;
+  psync_uint_row row;
+  uint64_t perms;
   psync_stat_t st;
   psync_syncid_t ret;
   int unsigned md;

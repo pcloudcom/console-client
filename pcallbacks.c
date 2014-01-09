@@ -112,7 +112,7 @@ void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, co
       remotepath=psync_get_path_by_folderid(remoteid, NULL);
     else
       remotepath=psync_get_path_by_fileid(remoteid, NULL);
-    if (unlikely(!remotepath))
+    if (unlikely_log(!remotepath))
       return;
     event=psync_new(event_list_t);
     event->localpath=psync_strdup(localpath);

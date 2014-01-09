@@ -36,13 +36,13 @@
 #include "papi.h"
 
 static time_t current_download_sec=0;
-static uint32_t download_bytes_this_sec=0;
-static uint32_t download_bytes_off=0;
-static uint32_t download_speed=0;
+static psync_uint_t download_bytes_this_sec=0;
+static psync_uint_t download_bytes_off=0;
+static psync_uint_t download_speed=0;
 
 struct time_bytes {
   time_t tm;
-  uint32_t bytes;
+  psync_uint_t bytes;
 };
 
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
@@ -117,14 +117,16 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
   binresult *res;
   const binresult *meta, *checksum;
   psync_sql_res *sres;
-  char **row;
+  psync_variant_row row;
   uint64_t result;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
-  sres=psync_sql_query("SELECT h.checksum FROM hashchecksum h, file f WHERE f.id=? AND f.hash=h.hash AND f.size=h.size");
+  sres=psync_sql_query("SELECT h.checksum, f.size FROM hashchecksum h, file f WHERE f.id=? AND f.hash=h.hash AND f.size=h.size");
   psync_sql_bind_uint(sres, 1, fileid);
-  row=psync_sql_fetch_rowstr(sres);
+  row=psync_sql_fetch_row(sres);
   if (row){
-    strcpy((char *)hexsum, row[0]);
+    strcpy((char *)hexsum, psync_get_string(row[0]));
+    if (fsize)
+      *fsize=psync_get_number(row[1]);
     psync_sql_free_result(sres);
     return PSYNC_NET_OK;
   }
@@ -219,6 +221,7 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
     if (unlikely_log(psync_file_writeall_checkoverquota(dfd, buff, rd)))
       goto err2;
     psync_hash_update(&hctx, buff, rd);
+    fsize-=rd;
     psync_yield_cpu();
   }
   psync_hash_final(hashbin, &hctx);
@@ -285,7 +288,7 @@ static void account_downloaded_bytes(int unsigned bytes){
     download_bytes_this_sec+=bytes;
   else{
     uint64_t sum;
-    uint32_t i;
+    psync_uint_t i;
     download_bytes_sec[download_bytes_off].tm=current_download_sec;
     download_bytes_sec[download_bytes_off].bytes=download_bytes_this_sec;
     download_bytes_off=(download_bytes_off+1)%PSYNC_SPEED_CALC_AVERAGE_SEC;
@@ -300,7 +303,7 @@ static void account_downloaded_bytes(int unsigned bytes){
   }
 }
 
-static int unsigned get_download_bytes_this_sec(){
+static psync_uint_t get_download_bytes_this_sec(){
   if (current_download_sec==psync_current_time)
     return download_bytes_this_sec;
   else
@@ -308,8 +311,8 @@ static int unsigned get_download_bytes_this_sec(){
 }
 
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
-  int dwlspeed, readbytes, pending, lpending, rd, rrd;
-  int unsigned thissec, ds;
+  psync_int_t dwlspeed, readbytes, pending, lpending, rd, rrd;
+  psync_uint_t thissec, ds;
   dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
   if (dwlspeed==0){
     lpending=psync_socket_pendingdata_buf(sock);

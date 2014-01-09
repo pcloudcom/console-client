@@ -114,4 +114,12 @@
 #define restrict
 #endif
 
+#if defined(__clang__) || defined(_MSC_VER)
+#define psync_alignof __alignof
+#elif defined(__GNUC__)
+#define psync_alignof __alignof__
+#else
+#define psync_alignof(t) offsetof(struct {char a; t b;}, b)
+#endif
+
 #endif

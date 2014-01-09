@@ -83,7 +83,7 @@ void psync_compat_init(){
   psync_gid=getgid();
   psync_gids_cnt=getgroups(0, NULL);
   psync_gids=psync_new_cnt(gid_t, psync_gids_cnt);
-  if (getgroups(psync_gids_cnt, psync_gids)!=psync_gids_cnt)
+  if (unlikely_log(getgroups(psync_gids_cnt, psync_gids)!=psync_gids_cnt))
     psync_gids_cnt=0;
 #endif
 }
@@ -117,11 +117,12 @@ char *psync_get_default_database_path(){
   struct stat st;
   const char *dir;
   dir=getenv("HOME");
-  if (!dir || stat(dir, &st) || !psync_stat_mode_ok(&st, 7)){
+  if (unlikely_log(!dir) || unlikely_log(stat(dir, &st)) || unlikely_log(!psync_stat_mode_ok(&st, 7))){
     struct passwd pwd;
     struct passwd *result;
     char buff[4096];
-    if (getpwuid_r(getuid(), &pwd, buff, sizeof(buff), &result) || stat(result->pw_dir, &st) || !psync_stat_mode_ok(&st, 7))
+    if (unlikely_log(getpwuid_r(getuid(), &pwd, buff, sizeof(buff), &result)) || unlikely_log(stat(result->pw_dir, &st)) ||
+        unlikely_log(!psync_stat_mode_ok(&st, 7)))
       return NULL;
     dir=result->pw_dir;
   }
@@ -130,7 +131,7 @@ char *psync_get_default_database_path(){
 #warning "should we create pCloud directory in user's home directory and put the file there on Windows?"
   const char *dir;
   dir=getenv("UserProfile");
-  if (!dir)
+  if (unlikely_log(!dir))
     return NULL;
   return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_WINDOWS_DBNAME, NULL);
 #else
@@ -214,7 +215,7 @@ void psync_milisleep(uint64_t milisec){
 time_t psync_time(){
 #if defined(_POSIX_TIMERS) && _POSIX_TIMERS>0
   struct timespec ts;
-  if (likely(clock_gettime(CLOCK_REALTIME, &ts)==0))
+  if (likely_log(clock_gettime(CLOCK_REALTIME, &ts)==0))
     return ts.tv_sec;
   else
     return time(NULL);
@@ -278,7 +279,7 @@ static psync_socket_t connect_res(struct addrinfo *res){
 #endif
   while (res){
     sock=socket(res->ai_family, res->ai_socktype|PSOCK_TYPE_OR, res->ai_protocol);
-    if (likely(sock!=INVALID_SOCKET)){
+    if (likely_log(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
       ioctlsocket(sock, FIONBIO, &non_blocking_mode);
@@ -389,7 +390,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
   char sport[24];
   sprintf(sport, "%d", port);
   sock=connect_socket(host, sport);
-  if (unlikely(sock==INVALID_SOCKET))
+  if (unlikely_log(sock==INVALID_SOCKET))
     return NULL;
   if (ssl){
     ssl=psync_ssl_connect(sock, &sslc);
@@ -400,7 +401,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
       }
       ssl=psync_ssl_connect_finish(sslc);
     }
-    if (ssl!=PSYNC_SSL_SUCCESS){
+    if (unlikely_log(ssl!=PSYNC_SSL_SUCCESS)){
       psync_close_socket(sock);
       return NULL;
     }
@@ -476,7 +477,7 @@ static int psync_socket_read_ssl(psync_socket *sock, void *buff, int num){
   while (1){
     r=psync_ssl_read(sock->ssl, (char *)buff, num);
     if (r==PSYNC_SSL_FAIL){
-      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
         if (wait_sock_ready_for_ssl(sock->sock))
           return -1;
         else
@@ -501,7 +502,7 @@ static int psync_socket_read_plain(psync_socket *sock, void *buff, int num){
       return -1;
     r=psync_read_socket(sock->sock, (char *)buff, num);
     if (r==SOCKET_ERROR){
-      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN)
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
         continue;
       else
         return -1;
@@ -527,7 +528,7 @@ static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
   while (br<num){
     r=psync_ssl_read(sock->ssl, (char *)buff+br, num-br);
     if (r==PSYNC_SSL_FAIL){
-      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
         if (wait_sock_ready_for_ssl(sock->sock))
           return -1;
         else
@@ -555,7 +556,7 @@ static int psync_socket_readall_plain(psync_socket *sock, void *buff, int num){
       return -1;
     r=psync_read_socket(sock->sock, (char *)buff+br, num-br);
     if (r==SOCKET_ERROR){
-      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN)
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
         continue;
       else
         return -1;
@@ -741,6 +742,15 @@ static wchar_t *utf8_to_wchar(const char *str){
   MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
   return ret;
 }
+
+static wchar_t *wchar_to_utf8(const wchar_t *str){
+  int len;
+  char *ret;
+  len=WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
+  ret=psync_new_cnt(wchar_t, len);
+  WideCharToMultiByte(CP_UTF8, 0, str, -1, ret, len, NULL, NULL);
+  return ret;
+}
 #endif
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
@@ -756,7 +766,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
     goto err1;
   pst.canmodifyparent=psync_stat_mode_ok(&st, 2);
   dh=opendir(path);
-  if (unlikely(!dh))
+  if (unlikely_log(!dh))
     goto err1;
   pl=strlen(path);
   namelen=pathconf(path, _PC_NAME_MAX);
@@ -808,7 +818,6 @@ err1:
       return -1;
     }
   }
-  pst.name=st.cFileName;
   pst.canread=1;
   pst.canwrite=1;
   pst.canmodifyparent=1;
@@ -816,7 +825,9 @@ err1:
     pst.size=st.nFileSizeHigh*(MAXDWORD+1ULL)+st.nFileSizeLow;
     pst.lastmod=filetime_to_timet(&st.ftLastWriteTime);
     pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY;
+    pst.name=wchar_to_utf8(st.cFileName);
     callback(ptr, &pst);
+    psync_free(pst.name);
   } while (FindNextFileW(dh, &st));
   FindClose(dh);
   return 0;
@@ -1005,7 +1016,7 @@ int psync_file_truncate(psync_file_t fd){
 #if defined(P_OS_POSIX)
   off_t off;
   off=lseek(fd, 0, SEEK_CUR);
-  if (likely(off!=(off_t)-1))
+  if (likely_log(off!=(off_t)-1))
     return ftruncate(fd, off);
   else
     return -1;
@@ -1019,14 +1030,14 @@ int psync_file_truncate(psync_file_t fd){
 int64_t psync_file_size(psync_file_t fd){
 #if defined(P_OS_POSIX)
   struct stat st;
-  if (fstat(fd, &st))
+  if (unlikely_log(fstat(fd, &st)))
     return -1;
   else
     return st.st_size;
 #elif defined(P_OS_WINDOWS)
    LARGE_INTEGER li;
    li.LowPart=GetFileSize(fd, &li.HighPart);
-   if (li.LowPart==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR)
+   if (unlikely_log(li.LowPart==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR))
      return -1;
    else
      return li.QuadPart;

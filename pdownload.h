@@ -28,7 +28,10 @@
 #ifndef _PSYNC_DOWNLOAD_H
 #define _PSYNC_DOWNLOAD_H
 
+#include "psynclib.h"
+
 void psync_download_init();
 void psync_wake_download();
+void psync_delete_download_tasks_for_file(psync_fileid_t fileid);
 
 #endif

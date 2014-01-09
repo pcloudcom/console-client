@@ -41,7 +41,7 @@ static uint32_t statuses[PSTATUS_NUM_STATUSES]={
 
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
-static uint32_t status_waiters=0;
+static psync_uint_t status_waiters=0;
 
 static uint32_t psync_calc_status(){
   if (statuses[PSTATUS_TYPE_RUN]!=PSTATUS_RUN_RUN){

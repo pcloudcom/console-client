@@ -44,7 +44,7 @@ typedef struct {
     char *str;
     int boolean;
   };
-  uint32_t type;
+  psync_uint_t type;
 } psync_setting_t;
 
 static void lower_patterns(void *ptr);
@@ -59,7 +59,7 @@ static psync_setting_t settings[]={
 
 void psync_settings_init(){
   psync_sql_res *res;
-  char **row;
+  psync_str_row row;
   const char *name;
   psync_settingid_t i;
   for (i=0; i<ARRAY_SIZE(settings); i++){
@@ -97,7 +97,7 @@ void psync_settings_init(){
             settings[i].fix_callback(&settings[i].boolean);
         }
         else
-          debug(D_BUG, "bad setting type for settingid %d (%s) expected %u", i, name, settings[i].type);
+          debug(D_BUG, "bad setting type for settingid %d (%s) expected %"P_PRI_U, i, name, settings[i].type);
       }
   }
   psync_sql_free_result(res);

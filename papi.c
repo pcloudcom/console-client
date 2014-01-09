@@ -96,8 +96,8 @@ void psync_api_conn_fail_reset(){
     connfailures=0;
 }
 
-#define _NEED_DATA(cnt) if (unlikely(*datalen<(cnt))) return -1
-#define ALIGN_BYTES sizeof(uint64_t)
+#define _NEED_DATA(cnt) if (unlikely_log(*datalen<(cnt))) return -1
+#define ALIGN_BYTES psync_alignof(uint64_t)
 
 static ssize_t calc_ret_len(unsigned char **restrict data, size_t *restrict datalen, size_t *restrict strcnt){
   size_t type, len;
@@ -204,7 +204,7 @@ static ssize_t calc_ret_len(unsigned char **restrict data, size_t *restrict data
 static binresult *do_parse_result(unsigned char **restrict indata, unsigned char **restrict odata, binresult **restrict strings, size_t *restrict nextstrid){
   binresult *ret;
   long cond;
-  uint32_t type, len;
+  psync_uint_t type, len;
   type=**indata;
   (*indata)++;
   if ((cond=(type>=RPARAM_SHORT_STR_BASE && type<RPARAM_SHORT_STR_BASE+VSHORT_STR_LEN)) || (type>=RPARAM_STR1 && type<=RPARAM_STR4)){
@@ -261,7 +261,7 @@ static binresult *do_parse_result(unsigned char **restrict indata, unsigned char
     return (binresult *)&BOOL_FALSE;
   else if (type==RPARAM_ARRAY){
     binresult **arr;
-    int unsigned cnt, alloc;
+    psync_uint_t cnt, alloc;
     ret=(binresult *)(*odata);
     *odata+=sizeof(binresult);
     ret->type=PARAM_ARRAY;
@@ -286,7 +286,7 @@ static binresult *do_parse_result(unsigned char **restrict indata, unsigned char
   }
   else if (type==RPARAM_HASH){
     struct _hashpair *arr;
-    int unsigned cnt, alloc;
+    psync_uint_t cnt, alloc;
     binresult *key;
     ret=(binresult *)(*odata);
     *odata+=sizeof(binresult);
@@ -338,8 +338,8 @@ static binresult *parse_result(unsigned char *data, size_t datalen){
   retlen=calc_ret_len(&datac, &datalenc, &strcnt);
   if (retlen==-1)
     return NULL;
-  datac=(unsigned char *)psync_malloc(retlen);
-  strings=(binresult **)psync_malloc(strcnt*sizeof(binresult *));
+  datac=psync_new_cnt(unsigned char, retlen);
+  strings=psync_new_cnt(binresult *, strcnt);
   strcnt=0;
   res=do_parse_result(&data, &datac, strings, &strcnt);
   psync_free(strings);
@@ -350,10 +350,10 @@ binresult *get_result(psync_socket *sock){
   unsigned char *data;
   binresult *res;
   uint32_t ressize;
-  if (psync_socket_readall(sock, &ressize, sizeof(uint32_t))!=sizeof(uint32_t))
+  if (unlikely_log(psync_socket_readall(sock, &ressize, sizeof(uint32_t))!=sizeof(uint32_t)))
     return NULL;
   data=(unsigned char *)psync_malloc(ressize);
-  if (psync_socket_readall(sock, data, ressize)!=ressize){
+  if (unlikely_log(psync_socket_readall(sock, data, ressize)!=ressize)){
     psync_free(data);
     return NULL;
   }
@@ -377,7 +377,7 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
       plen+=params[i].paramnamelen+1+sizeof(uint64_t);
     else if (params[i].paramtype==PARAM_BOOL)
       plen+=params[i].paramnamelen+2;
-  if (plen>0xffff)
+  if (unlikely_log(plen>0xffff))
     return NULL;
   sdata=data=(unsigned char *)psync_malloc(plen+2);
   memcpy(data, &plen, 2);
@@ -410,7 +410,7 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
       *data++=params[i].num&1;
   }
   plen+=2;
-  if (psync_socket_writeall(sock, sdata, plen)!=plen){
+  if (unlikely_log(psync_socket_writeall(sock, sdata, plen)!=plen)){
     psync_free(sdata);
     return NULL;
   }
@@ -424,11 +424,12 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
 const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
   uint32_t i;
   if (unlikely(!res || res->type!=PARAM_HASH)){
-    const char *nm="NULL";
-    if (res)
-      nm=type_names[res->type];
-    if (D_CRITICAL<=DEBUG_LEVEL)
+    if (D_CRITICAL<=DEBUG_LEVEL){
+      const char *nm="NULL";
+      if (res)
+        nm=type_names[res->type];    
       psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
+    }
     return empty_types[type];
   }
   for (i=0; i<res->length; i++)
@@ -449,11 +450,12 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
 const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
   uint32_t i;
   if (unlikely(!res || res->type!=PARAM_HASH)){
-    const char *nm="NULL";
-    if (res)
-      nm=type_names[res->type];
-    if (D_CRITICAL<=DEBUG_LEVEL)
+    if (D_CRITICAL<=DEBUG_LEVEL){
+      const char *nm="NULL";
+      if (res)
+        nm=type_names[res->type]; 
       psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
+    }
     return NULL;
   }
   for (i=0; i<res->length; i++)

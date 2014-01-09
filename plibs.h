@@ -61,7 +61,7 @@
 
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
 #define assert(cond) do {if (D_CRITICAL<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion "TO_STR(cond)" failed, aborting"); abort();}} while (0)
-#define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion "TO_STR(cond)" failed, aborting");}} while (0)
+#define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion "TO_STR(cond)" failed");}} while (0)
 
 #define PSYNC_TNUMBER 1
 #define PSYNC_TSTRING 2
@@ -78,8 +78,8 @@
 #define psync_get_real(v) (likely((v).type==PSYNC_TREAL)?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 
 #if D_WARNING<=DEBUG_LEVEL
-#define likely_log(x) (likely(x)?1:psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion likely_log("TO_STR(x)") failed")*0)
-#define unlikely_log(x) (unlikely(x)?psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion unlikely_log("TO_STR(x)") failed"):0)
+#define likely_log(x) (likely(x)?1:psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion likely_log(%s) failed", TO_STR(x))*0)
+#define unlikely_log(x) (unlikely(x)?psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion unlikely_log(%s) failed", TO_STR(x)):0)
 #else
 #define likely_log likely
 #define unlikely_log unlikely
@@ -132,6 +132,10 @@ typedef struct {
 
 typedef void (*psync_run_after_t)(void *);
 
+typedef const uint64_t* psync_uint_row;
+typedef const char* const* psync_str_row;
+typedef const psync_variant* psync_variant_row;
+
 extern int psync_do_run;
 extern pstatus_t psync_status;
 extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
@@ -167,9 +171,9 @@ void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val) PSYNC_NONNULL(1)
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str) PSYNC_NONNULL(1);
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len) PSYNC_NONNULL(1);
 void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
-psync_variant *psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
-char **psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
-uint64_t *psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);
+psync_variant_row psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
+psync_str_row psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
+psync_uint_row psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res) PSYNC_NONNULL(1);;
 uint32_t psync_sql_affected_rows() PSYNC_PURE;
 uint64_t psync_sql_insertid() PSYNC_PURE;
@@ -182,9 +186,9 @@ void psync_free_after_sec(void *ptr, uint32_t seconds);
 
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
-uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
-const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
-const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, psync_variant *v, size_t *len) PSYNC_NONNULL(4, 5);
-double psync_err_real_expected(const char *file, const char *function, int unsigned line, psync_variant *v) PSYNC_COLD;
+uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, const psync_variant *v) PSYNC_COLD;
+const char *psync_err_string_expected(const char *file, const char *function, int unsigned line, const psync_variant *v) PSYNC_COLD;
+const char *psync_lstring_expected(const char *file, const char *function, int unsigned line, const psync_variant *v, size_t *len) PSYNC_NONNULL(4, 5);
+double psync_err_real_expected(const char *file, const char *function, int unsigned line, const psync_variant *v) PSYNC_COLD;
 
 #endif

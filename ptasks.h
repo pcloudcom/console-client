@@ -52,6 +52,7 @@
 #define PSYNC_RENAME_LOCAL_FOLDER  ((PSYNC_TASK_TYPE_RENAME<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
 #define PSYNC_COPY_LOCAL_FOLDER    ((PSYNC_TASK_TYPE_COPY  <<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_DOWNLOAD)
 #define PSYNC_DOWNLOAD_FILE        ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
+#define PSYNC_DELETE_LOCAL_FILE    ((PSYNC_TASK_TYPE_DELETE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
 
 
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
@@ -60,5 +61,7 @@ void psync_task_delete_local_folder_recursive(psync_syncid_t syncid, psync_folde
 void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, 
                                     psync_folderid_t newlocalparentfolderid, const char *newname);
 void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name);
+
+void psync_task_delete_local_file(psync_fileid_t fileid);
 
 #endif
