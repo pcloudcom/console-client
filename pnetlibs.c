@@ -50,7 +50,7 @@ static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
 static void rm_all(void *vpath, psync_pstat *st){
   char *path;
   path=psync_strcat((char *)vpath, PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
-  if (st->isfolder){
+  if (psync_stat_isfolder(&st->stat)){
     psync_list_dir(path, rm_all, path);
     psync_rmdir(path);
   }
@@ -64,7 +64,7 @@ static void rm_ign(void *vpath, psync_pstat *st){
   if (!psync_is_name_to_ignore(st->name))
     return;
   path=psync_strcat((char *)vpath, PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
-  if (st->isfolder){
+  if (psync_stat_isfolder(&st->stat)){
     psync_list_dir(path, rm_all, path);
     psync_rmdir(path);
   }

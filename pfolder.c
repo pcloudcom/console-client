@@ -545,17 +545,18 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
 static void add_to_folderlist(void *ptr, psync_pstat *stat){
   flist_ltype *ft=(flist_ltype *)ptr;
   pentry_t entry;
-  if (((ft->listtype&PLIST_FOLDERS) && stat->isfolder) || ((ft->listtype&PLIST_FILES) && !stat->isfolder)){
+  int isfolder=psync_stat_isfolder(&stat->stat);
+  if (((ft->listtype&PLIST_FOLDERS) && isfolder) || ((ft->listtype&PLIST_FILES) && !isfolder)){
     entry.name=stat->name;
     entry.namelen=strlen(stat->name);
-    if (stat->isfolder){
+    if (isfolder){
       entry.isfolder=1;
-      entry.folder.cansyncup=stat->canread;
-      entry.folder.cansyncdown=stat->canwrite;
+      entry.folder.cansyncup=psync_stat_mode_ok(&stat->stat, 5);
+      entry.folder.cansyncdown=psync_stat_mode_ok(&stat->stat, 7);
     }
     else{
       entry.isfolder=0;
-      entry.file.size=stat->size;
+      entry.file.size=psync_stat_size(&stat->stat);
     }
     folder_list_add(ft->folderlist, &entry);
   }

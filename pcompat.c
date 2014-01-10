@@ -764,16 +764,12 @@ int psync_stat(const char *path, psync_stat_t *st){
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
 #if defined(P_OS_POSIX)
-  struct stat st;
   psync_pstat pst;
   DIR *dh;
   char *cpath;
   size_t pl, entrylen;
   long namelen;
   struct dirent *entry, *de;
-  if (stat(path, &st))
-    goto err1;
-  pst.canmodifyparent=psync_stat_mode_ok(&st, 2);
   dh=opendir(path);
   if (unlikely_log(!dh))
     goto err1;
@@ -787,18 +783,12 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   memcpy(cpath, path, pl);
   if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
     cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
+  pst.path=cpath;
   while (!readdir_r(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
       strcpy(cpath+pl, de->d_name);
-      if (!lstat(cpath, &st)){
+      if (likely_log(!lstat(cpath, &pst.stat))){
         pst.name=de->d_name;
-        pst.size=st.st_size;
-        pst.inode=st.st_ino;
-        pst.lastmodnative=psync_stat_mtime_native(&st);
-        pst.lastmod=st.st_mtime;
-        pst.isfolder=S_ISDIR(st.st_mode);
-        pst.canread=psync_stat_mode_ok(&st, 4);
-        pst.canwrite=psync_stat_mode_ok(&st, 2);
         callback(ptr, &pst);
       }
     }
@@ -811,7 +801,7 @@ err1:
   return -1;
 #elif defined(P_OS_WINDOWS)
   psync_pstat pst;
-  char *spath;
+  char *spath, *name;
   wchar_t *wpath;
   WIN32_FIND_DATAW st;
   HANDLE dh;
@@ -828,16 +818,15 @@ err1:
       return -1;
     }
   }
-  pst.canread=1;
-  pst.canwrite=1;
-  pst.canmodifyparent=1;
   do {
-    pst.size=psync_32to64(st.nFileSizeHigh, st.nFileSizeLow);
-    pst.lastmod=psync_filetime_to_timet(&st.ftLastWriteTime);
-    pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY;
-    pst.name=wchar_to_utf8(st.cFileName);
-    callback(ptr, &pst);
-    psync_free(pst.name);
+    name=wchar_to_utf8(st.cFileName);
+    spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
+    pst.name=name;
+    pst.path=spath;
+    if (likely_log(!psync_stat(spath, &pst.stat)))
+      callback(ptr, &pst);
+    psync_free(name);
+    psync_free(spath);
   } while (FindNextFileW(dh, &st));
   FindClose(dh);
   return 0;

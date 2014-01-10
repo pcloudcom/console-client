@@ -106,9 +106,13 @@ typedef unsigned long psync_uint_t;
 #define psync_stat_mtime(s) ((s)->st_mtime)
 
 #if defined(st_mtime)
+#if defined(st_mtimensec)
+#define psync_stat_mtime_native(s) ((s)->st_mtime*1000000ULL+(s)->st_mtimensec/1000)
+#else
 #define psync_stat_mtime_native(s) \
   ((s)->st_mtime*1000000ULL+\
   ((struct timespec *)(&(s)->st_mtime))->tv_nsec/1000)
+#endif
 #else
 #define psync_stat_mtime_native(s) ((s)->st_mtime)
 #endif
@@ -233,14 +237,8 @@ typedef uint64_t psync_inode_t;
 
 typedef struct {
   const char *name;
-  uint64_t size;
-  psync_inode_t inode;
-  uint64_t lastmodnative;
-  time_t lastmod;
-  uint8_t isfolder;
-  uint8_t canread;
-  uint8_t canwrite;
-  uint8_t canmodifyparent;
+  const char *path;
+  psync_stat_t stat;;
 } psync_pstat;
 
 #ifndef INVALID_SOCKET

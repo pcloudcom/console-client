@@ -106,7 +106,7 @@ static void do_move(void *ptr, psync_pstat *st){
   arr=(const char **)ptr;
   oldpath=psync_strcat(arr[0], st->name, NULL);
   newpath=psync_strcat(arr[1], st->name, NULL);
-  if (st->isfolder)
+  if (psync_stat_isfolder(&st->stat))
     psync_rendir(oldpath, newpath);
   else
     psync_file_rename(oldpath, newpath);
@@ -163,10 +163,11 @@ static void update_local_folder_mtime(const char *localpath, psync_folderid_t lo
     debug(D_ERROR, "stat failed for %s", localpath);
     return;
   }
-  res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, mtime=? WHERE id=?");
+  res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, mtime=?, mtimenative=? WHERE id=?");
   psync_sql_bind_uint(res, 1, psync_stat_inode(&st));
   psync_sql_bind_uint(res, 2, psync_stat_mtime(&st));
-  psync_sql_bind_uint(res, 3, localfolderid);
+  psync_sql_bind_uint(res, 3, psync_stat_mtime_native(&st));
+  psync_sql_bind_uint(res, 4, localfolderid);
   psync_sql_run_free(res);
 }
 
@@ -393,15 +394,17 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     psync_free(name);
     goto err0;
   }
-  sql=psync_sql_prep_statement("REPLACE INTO localfile (localparentfolderid, fileid, syncid, size, inode, mtime, name, checksum) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  sql=psync_sql_prep_statement("REPLACE INTO localfile (localparentfolderid, fileid, syncid, size, inode, mtime, mtimenative, name, checksum)"
+                                              " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(sql, 1, localfolderid);
   psync_sql_bind_uint(sql, 2, fileid);
   psync_sql_bind_uint(sql, 3, syncid);
   psync_sql_bind_uint(sql, 4, psync_stat_size(&st));
   psync_sql_bind_uint(sql, 5, psync_stat_inode(&st));
   psync_sql_bind_uint(sql, 6, psync_stat_mtime(&st));
-  psync_sql_bind_string(sql, 7, filename);
-  psync_sql_bind_lstring(sql, 8, (char *)localhashhex, PSYNC_HASH_DIGEST_HEXLEN);
+  psync_sql_bind_uint(sql, 7, psync_stat_mtime_native(&st));
+  psync_sql_bind_string(sql, 8, filename);
+  psync_sql_bind_lstring(sql, 9, (char *)localhashhex, PSYNC_HASH_DIGEST_HEXLEN);
   psync_sql_run_free(sql);
   debug(D_NOTICE, "file downloaded %s", name);
   psync_free(name);
