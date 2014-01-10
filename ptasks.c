@@ -36,8 +36,7 @@ static void create_task1(psync_uint_t type, psync_syncid_t syncid, uint64_t entr
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_bind_uint(res, 3, entryid);
   psync_sql_bind_uint(res, 4, localentryid);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   psync_wake_download();
 }
 
@@ -50,8 +49,7 @@ static void create_task2(psync_uint_t type, psync_syncid_t syncid, uint64_t entr
   psync_sql_bind_uint(res, 4, localentryid);
   psync_sql_bind_uint(res, 5, newitemid);
   psync_sql_bind_string(res, 6, name);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   psync_wake_download();
 }
 
@@ -63,8 +61,7 @@ static void create_task3(psync_uint_t type, psync_syncid_t syncid, uint64_t entr
   psync_sql_bind_uint(res, 3, entryid);
   psync_sql_bind_uint(res, 4, localentryid);
   psync_sql_bind_string(res, 5, name);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   psync_wake_download();
 }
 
@@ -73,8 +70,7 @@ static void create_task4(psync_uint_t type, uint64_t entryid){
   res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid) VALUES (?, 0, ?, 0)");
   psync_sql_bind_uint(res, 1, type);
   psync_sql_bind_uint(res, 2, entryid);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   psync_wake_download();
 }
 

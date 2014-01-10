@@ -258,6 +258,27 @@ static int rename_if_notex(const char *oldname, const char *newname){
   return psync_file_rename_overwrite(oldname, newname);
 }
 
+static int stat_and_create_local(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *filename,
+                                 const char *name, unsigned char *hash, uint64_t serversize){
+  psync_sql_res *sql;
+  psync_stat_t st;
+  if (unlikely_log(psync_stat(name, &st)) || unlikely_log(psync_stat_size(&st)!=serversize))
+    return -1;
+  sql=psync_sql_prep_statement("REPLACE INTO localfile (localparentfolderid, fileid, syncid, size, inode, mtime, mtimenative, name, checksum)"
+                                              " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(sql, 1, localfolderid);
+  psync_sql_bind_uint(sql, 2, fileid);
+  psync_sql_bind_uint(sql, 3, syncid);
+  psync_sql_bind_uint(sql, 4, psync_stat_size(&st));
+  psync_sql_bind_uint(sql, 5, psync_stat_inode(&st));
+  psync_sql_bind_uint(sql, 6, psync_stat_mtime(&st));
+  psync_sql_bind_uint(sql, 7, psync_stat_mtime_native(&st));
+  psync_sql_bind_string(sql, 8, filename);
+  psync_sql_bind_lstring(sql, 9, (char *)hash, PSYNC_HASH_DIGEST_HEXLEN);
+  psync_sql_run_free(sql);
+  return 0;
+}
+
 static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *filename){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
   psync_socket *api;
@@ -271,7 +292,6 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   uint64_t result, serversize;
   psync_uint_row row;
   psync_hash_ctx hashctx;
-  psync_stat_t st;
   unsigned char serverhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
                 localhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
                 localhashbin[PSYNC_HASH_DIGEST_LEN];
@@ -317,8 +337,12 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
     tmpname=psync_local_path_for_local_file(row[0], NULL);
     rt=psync_copy_local_file_if_checksum_matches(tmpname, name, serverhashhex, serversize);
-    if (likely(rt==PSYNC_NET_OK))
-      debug(D_NOTICE, "file %s copied from %s", tmpname, name);
+    if (likely(rt==PSYNC_NET_OK)){
+      if (unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize)))
+        rt=PSYNC_NET_TEMPFAIL;
+      else
+        debug(D_NOTICE, "file %s copied from %s", tmpname, name);
+    }
     else
       debug(D_WARNING, "failed to copy %s from %s", tmpname, name);
     psync_free(tmpname);
@@ -390,22 +414,10 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     goto err0;
   }
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
-  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(psync_stat(name, &st)) || unlikely_log(psync_stat_size(&st)!=serversize)){
+  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize))){
     psync_free(name);
     goto err0;
   }
-  sql=psync_sql_prep_statement("REPLACE INTO localfile (localparentfolderid, fileid, syncid, size, inode, mtime, mtimenative, name, checksum)"
-                                              " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-  psync_sql_bind_uint(sql, 1, localfolderid);
-  psync_sql_bind_uint(sql, 2, fileid);
-  psync_sql_bind_uint(sql, 3, syncid);
-  psync_sql_bind_uint(sql, 4, psync_stat_size(&st));
-  psync_sql_bind_uint(sql, 5, psync_stat_inode(&st));
-  psync_sql_bind_uint(sql, 6, psync_stat_mtime(&st));
-  psync_sql_bind_uint(sql, 7, psync_stat_mtime_native(&st));
-  psync_sql_bind_string(sql, 8, filename);
-  psync_sql_bind_lstring(sql, 9, (char *)localhashhex, PSYNC_HASH_DIGEST_HEXLEN);
-  psync_sql_run_free(sql);
   debug(D_NOTICE, "file downloaded %s", name);
   psync_free(name);
   psync_free(tmpname);
@@ -438,6 +450,7 @@ static int task_delete_file(psync_fileid_t fileid){
   int ret;
   ret=0;
   res=psync_sql_query("SELECT id FROM localfile WHERE fileid=?");
+  psync_sql_bind_uint(res, 1, fileid);
   while ((row=psync_sql_fetch_rowint(res))){
     name=psync_local_path_for_local_file(row[0], NULL);
     if (likely_log(name)){

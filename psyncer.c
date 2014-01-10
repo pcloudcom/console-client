@@ -36,8 +36,6 @@ static uint32_t synced_down_folders_cnt[PSYNC_DIR_HASH_SIZE];
 
 static pthread_mutex_t sync_down_mutex=PTHREAD_MUTEX_INITIALIZER;
 
-static int running=0;
-
 void psync_add_folder_to_downloadlist(psync_folderid_t folderid){
   psync_folderid_t *a;
   size_t h;
@@ -157,8 +155,7 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
   psync_sql_bind_uint(res, 2, folderid);
   psync_sql_bind_uint(res, 3, lfoiderid);
   psync_sql_bind_uint(res, 4, synctype);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   psync_add_folder_to_downloadlist(folderid);
   res=psync_sql_query("SELECT id, permissions, name FROM folder WHERE parentfolderid=?");
   psync_sql_bind_uint(res, 1, folderid);
@@ -187,26 +184,26 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
 
 static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_variant_row row;
+  psync_uint_row row;
   uint64_t folderid;
   psync_synctype_t synctype;
   psync_sql_start_transaction();
-  res=psync_sql_query("SELECT folderid, localpath, synctype FROM syncfolder WHERE id=? AND flags=0");
+  res=psync_sql_query("SELECT folderid, synctype FROM syncfolder WHERE id=? AND flags=0");
   psync_sql_bind_uint(res, 1, syncid);
-  row=psync_sql_fetch_row(res);
+  row=psync_sql_fetch_rowint(res);
   if (unlikely_log(!row)){
+    psync_sql_free_result(res);
     psync_sql_rollback_transaction();
     return;
   }
-  folderid=psync_get_number(row[0]);
-  synctype=psync_get_number(row[2]);
+  folderid=row[0];
+  synctype=row[1];
   psync_sql_free_result(res);
   if (synctype&PSYNC_DOWNLOAD_ONLY)
-    psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0/*, localpath*/);
+    psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0);
   res=psync_sql_prep_statement("UPDATE syncfolder SET flags=1 WHERE flags=0 AND id=?");
   psync_sql_bind_uint(res, 1, syncid);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   if (likely_log(psync_sql_affected_rows()))
     psync_sql_commit_transaction();
   else
@@ -219,18 +216,15 @@ static void psync_do_sync_thread(void *ptr){
 }
 
 void psync_syncer_new(psync_syncid_t syncid){
-  if (running){
-    psync_syncid_t *psid;
-    psid=(psync_syncid_t *)psync_malloc(sizeof(psync_syncid_t));
-    *psid=syncid;
-    psync_run_thread1(psync_do_sync_thread, psid);
-  }
+  psync_syncid_t *psid;
+  psid=psync_new(psync_syncid_t);
+  *psid=syncid;
+  psync_run_thread1(psync_do_sync_thread, psid);
 }
 
 static void psync_syncer_thread(){
   int64_t syncid;
   psync_sql_lock();
-  running=1;
   while ((syncid=psync_sql_cellint("SELECT id FROM syncfolder WHERE flags=0", -1))!=-1)
     psync_sync_newsyncedfolder(syncid);
   psync_sql_unlock();

@@ -219,9 +219,9 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (unlikely_log(psync_stat(localpath, &st)) || unlikely_log(!psync_stat_isfolder(&st)))
     return_isyncid(PERROR_LOCAL_FOLDER_NOT_FOUND);
   if (synctype&PSYNC_DOWNLOAD_ONLY)
-    md=6;
+    md=7;
   else
-    md=4;
+    md=5;
   if (unlikely_log(!psync_stat_mode_ok(&st, md)))
     return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
   if (folderid){

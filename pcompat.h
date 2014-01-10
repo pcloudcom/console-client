@@ -118,6 +118,8 @@ typedef unsigned long psync_uint_t;
 #endif
 
 #define psync_stat_inode(s) ((s)->st_ino)
+#define psync_stat_device(s) ((s)->st_dev)
+
 typedef struct stat psync_stat_t;
 
 #define psync_sock_err() errno
@@ -180,6 +182,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
 #define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
 #define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)
+#define psync_stat_device(s) ((s)->dwVolumeSerialNumber)
 
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
