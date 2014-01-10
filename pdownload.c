@@ -446,6 +446,8 @@ static int task_delete_file(psync_fileid_t fileid){
           continue;
         }
       }
+      else
+        debug(D_NOTICE, "local file %s deleted", name);
       psync_free(name);
     }
     stmt=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");

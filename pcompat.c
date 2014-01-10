@@ -62,8 +62,6 @@
 
 #endif
 
-#define psync_bool_to_zero(x) ((!!(x))-1)
-
 typedef struct {
  psync_thread_start1 run;
   void *ptr;
@@ -730,10 +728,6 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result){
   return result;
 }
 
-static time_t filetime_to_timet(const FILETIME *ft){
-  return (ft->dwHighDateTime*(MAXDWORD+1ULL)+ft->dwLowDateTime)/10000000ULL-11644473600ULL;
-}
-
 static wchar_t *utf8_to_wchar(const char *str){
   int len;
   wchar_t *ret;
@@ -751,6 +745,21 @@ static wchar_t *wchar_to_utf8(const wchar_t *str){
   WideCharToMultiByte(CP_UTF8, 0, str, -1, ret, len, NULL, NULL);
   return ret;
 }
+
+int psync_stat(const char *path, psync_stat_t *st){
+  wchar_t *wpath;
+  HANDLE fd;
+  BOOL ret;
+  wpath=utf8_to_wchar(path);
+  fd=CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  psync_free(wpath);
+  if (unlikely_log(fd==INVALID_HANDLE_VALUE))
+    return -1;
+  ret=GetFileInformationByHandle(fd, st);
+  CloseHandle(fd);
+  return psync_bool_to_zero(ret);
+}
+
 #endif
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
@@ -785,6 +794,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
         pst.name=de->d_name;
         pst.size=st.st_size;
         pst.inode=st.st_ino;
+        pst.lastmodnative=psync_stat_mtime_native(&st);
         pst.lastmod=st.st_mtime;
         pst.isfolder=S_ISDIR(st.st_mode);
         pst.canread=psync_stat_mode_ok(&st, 4);
@@ -803,7 +813,7 @@ err1:
   psync_pstat pst;
   char *spath;
   wchar_t *wpath;
-  WIN32_FIND_DATA st;
+  WIN32_FIND_DATAW st;
   HANDLE dh;
   spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
   wpath=utf8_to_wchar(spath);
@@ -822,8 +832,8 @@ err1:
   pst.canwrite=1;
   pst.canmodifyparent=1;
   do {
-    pst.size=st.nFileSizeHigh*(MAXDWORD+1ULL)+st.nFileSizeLow;
-    pst.lastmod=filetime_to_timet(&st.ftLastWriteTime);
+    pst.size=psync_32to64(st.nFileSizeHigh, st.nFileSizeLow);
+    pst.lastmod=psync_filetime_to_timet(&st.ftLastWriteTime);
     pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY;
     pst.name=wchar_to_utf8(st.cFileName);
     callback(ptr, &pst);

@@ -56,9 +56,6 @@
 
 #define DEBUG_FILE "/tmp/psync_err.log"
 
-#define NTO_STR(s) TO_STR(s)
-#define TO_STR(s) #s
-
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
 #define assert(cond) do {if (D_CRITICAL<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion "TO_STR(cond)" failed, aborting"); abort();}} while (0)
 #define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion "TO_STR(cond)" failed");}} while (0)

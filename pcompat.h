@@ -86,6 +86,12 @@ typedef unsigned long psync_uint_t;
 #define P_PRI_I "ld"
 #define P_PRI_U "lu"
 
+#define psync_32to64(hi, lo) (((uint64_t)(hi))<<32+(lo))
+#define psync_bool_to_zero(x) ((!!(x))-1)
+
+#define NTO_STR(s) TO_STR(s)
+#define TO_STR(s) #s
+
 #if defined(P_OS_POSIX)
 
 #include <sys/socket.h>
@@ -94,9 +100,19 @@ typedef unsigned long psync_uint_t;
 #include <fcntl.h>
 
 #define psync_stat stat
+#define psync_fstat fstat
 #define psync_stat_isfolder(s) S_ISDIR((s)->st_mode)
 #define psync_stat_size(s) ((s)->st_size)
 #define psync_stat_mtime(s) ((s)->st_mtime)
+
+#if defined(st_mtime)
+#define psync_stat_mtime_native(s) \
+  ((s)->st_mtime*1000000ULL+\
+  ((struct timespec *)(&(s)->st_mtime))->tv_nsec/1000)
+#else
+#define psync_stat_mtime_native(s) ((s)->st_mtime)
+#endif
+
 #define psync_stat_inode(s) ((s)->st_ino)
 typedef struct stat psync_stat_t;
 
@@ -149,19 +165,24 @@ typedef int psync_file_t;
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-#define psync_stat _stat64
-#define psync_stat_isfolder(s) (((s)->st_mode&_S_IFDIR)==_S_IFDIR)
-#define psync_stat_size(s) ((s)->st_size)
-#define psync_stat_mtime(s) ((s)->st_mtime)
-#define psync_stat_inode(s) 0
-typedef struct __stat64 psync_stat_t;
+#define psync_filetime_to_timet(ft) ((time_t)(psync_32to64((ft)->dwHighDateTime, (ft)->dwLowDateTime)/10000000ULL-11644473600ULL))
+
+typedef BY_HANDLE_FILE_INFORMATION psync_stat_t;
+
+int psync_stat(const char *path, psync_stat_t *st);
+#define psync_fstat(fd, st) psync_bool_to_zero(GetFileInformationByHandle(fd, st))
+#define psync_stat_isfolder(s) (((s)->dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY)
+#define psync_stat_size(s) psync_32to64((s)->nFileSizeHigh, (s)->nFileSizeLow)
+#define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
+#define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
+#define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)
 
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
 
 #define psync_fs_err() GetLastError()
 
-#define psync_inode_supported(path) 0
+#define psync_inode_supported(path) 1
 
 #define PSYNC_DIRECTORY_SEPARATOR "\\"
 #define PSYNC_DIRECTORY_SEPARATORC '\\'
@@ -213,9 +234,8 @@ typedef uint64_t psync_inode_t;
 typedef struct {
   const char *name;
   uint64_t size;
-#if defined(P_OS_POSIX)
   psync_inode_t inode;
-#endif
+  uint64_t lastmodnative;
   time_t lastmod;
   uint8_t isfolder;
   uint8_t canread;
