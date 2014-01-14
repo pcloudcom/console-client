@@ -56,10 +56,14 @@
 #if defined(__GNUC__) || __has_builtin(__builtin_prefetch)
 #define psync_prefetch(expr) __builtin_prefetch(expr)
 #else
-#define psync_prefetch(expr)
+#define psync_prefetch(expr) (void)0
 #endif
 
+#if defined(__GNUC__)
 #define PSYNC_THREAD __thread
+#else
+#define PSYNC_THREAD __declspec( thread )
+#endif
 
 #if __has_attribute(malloc)
 #define PSYNC_MALLOC __attribute__((malloc))
@@ -103,7 +107,7 @@
 #define PSYNC_NONNULL(...)
 #endif
 
-#if _MSC_VER >= 1500
+#if _MSC_VER >= 1500 && _MSC_VER < 1700
 #define inline __inline
 #define restrict __restrict
 #elif __GNUC__ >= 3

@@ -127,7 +127,7 @@ char *psync_get_default_database_path(){
   }
   return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_POSIX_DBNAME, NULL);
 #elif defined(P_OS_WINDOWS)
-#warning "should we create pCloud directory in user's home directory and put the file there on Windows?"
+#pragma message ("should we create pCloud directory in user's home directory and put the file there on Windows?")
   const char *dir;
   dir=getenv("UserProfile");
   if (unlikely_log(!dir))
