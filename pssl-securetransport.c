@@ -45,7 +45,10 @@ static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
   debug(D_NOTICE, "read(%u)=%d", (unsigned)llen, (int)rd);
   if (likely(rd>0)){
     *len=rd;
-    return rd==llen?noErr:errSSLWouldBlock;
+    if (rd==llen)
+      return noErr;
+    psync_ssl_errno=PSYNC_SSL_ERR_WANT_READ;
+    return errSSLWouldBlock;
   }
   else if (rd==0){
     *len=0;
@@ -69,7 +72,10 @@ static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *l
   debug(D_NOTICE, "write(%u)=%d", (unsigned)llen, (int)rd);
   if (likely(rd>=0)){
     *len=rd;
-    return rd==llen?noErr:errSSLWouldBlock;
+    if (rd==llen)
+      return noErr;
+    psync_ssl_errno=PSYNC_SSL_ERR_WANT_WRITE;
+    return errSSLWouldBlock;
   }
   else {
     *len=0;
