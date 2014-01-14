@@ -32,6 +32,8 @@
 #include <unistd.h>
 #include <Security/SecureTransport.h>
 
+PSYNC_THREAD int psync_ssl_errno;
+
 int psync_ssl_init(){
   return 0;
 }
