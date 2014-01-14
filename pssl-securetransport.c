@@ -82,7 +82,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn){
   SSLContextRef ref;
   OSStatus st;
   debug(D_NOTICE, "called");
-  ref=SSLCreateContext(NULL, kSSLClientSide, kSSLStreamType);
+  ref=SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
   if (unlikely_log(!ref))
     goto err1;
   if (unlikely_log(SSLSetIOFuncs(ref, psync_myread, psync_mywrite)!=noErr))
