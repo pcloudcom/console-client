@@ -42,7 +42,6 @@ static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
   psync_socket_t sock=(psync_socket_t)conn;
   size_t llen=*len;
   ssize_t rd=read(sock, data, llen);
-  debug(D_NOTICE, "read(%u)=%d", (unsigned)llen, (int)rd);
   if (likely(rd>0)){
     *len=rd;
     if (rd==llen)
@@ -69,7 +68,6 @@ static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *l
   psync_socket_t sock=(psync_socket_t)conn;
   size_t llen=*len;
   ssize_t rd=write(sock, data, llen);
-  debug(D_NOTICE, "write(%u)=%d", (unsigned)llen, (int)rd);
   if (likely(rd>=0)){
     *len=rd;
     if (rd==llen)
@@ -91,7 +89,6 @@ static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *l
 int psync_ssl_connect(psync_socket_t sock, void **sslconn){
   SSLContextRef ref;
   OSStatus st;
-  debug(D_NOTICE, "called");
   ref=SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
   if (unlikely_log(!ref))
     goto err1;
@@ -119,7 +116,6 @@ err1:
 int psync_ssl_connect_finish(void *sslconn){
   SSLContextRef ref;
   OSStatus st;
-  debug(D_NOTICE, "called");
   ref=(SSLContextRef)sslconn;
   st=SSLHandshake(ref);
   if (st==noErr)
