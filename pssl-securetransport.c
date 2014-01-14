@@ -95,6 +95,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn){
     *sslconn=ref;
     return PSYNC_SSL_NEED_FINISH;    
   }
+  debug(D_WARNING, "connection failed with status %d", (int)st);
 err2:
   CFRelease(ref);
 err1:
