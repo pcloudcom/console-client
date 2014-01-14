@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <time.h>
 #include "pcompat.h"
 #include "psynclib.h"
