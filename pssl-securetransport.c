@@ -60,12 +60,10 @@ static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
 static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *len){
   psync_socket_t sock=(psync_socket_t)conn;
   ssize_t rd=write(sock, data, *len);
-  if (likely(rd>0)){
+  if (likely(rd>=0)){
     *len=rd;
     return noErr;
   }
-  else if (rd==0)
-    return errSSLClosedNoNotify;
   else {
     if (errno==EAGAIN || errno==EINTR){
       psync_ssl_errno=PSYNC_SSL_ERR_WANT_WRITE;
@@ -79,6 +77,7 @@ static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *l
 int psync_ssl_connect(psync_socket_t sock, void **sslconn){
   SSLContextRef ref;
   OSStatus st;
+  debug(D_NOTICE, "called");
   ref=SSLCreateContext(NULL, kSSLClientSide, kSSLStreamType);
   if (unlikely_log(!ref))
     goto err1;
@@ -106,6 +105,7 @@ err1:
 int psync_ssl_connect_finish(void *sslconn){
   SSLContextRef ref;
   OSStatus st;
+  debug(D_NOTICE, "called");
   ref=(SSLContextRef)sslconn;
   st=SSLHandshake(ref);
   if (st==noErr)
