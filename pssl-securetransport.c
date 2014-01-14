@@ -162,8 +162,10 @@ int psync_ssl_read(void *sslconn, void *buf, int num){
   if (st!=noErr){
     if (st==errSSLWouldBlock && ret)
       return ret;
-    else
+    else{
+      debug(D_WARNING, "read failed with error %d", (int)st);
       return PSYNC_SSL_FAIL;
+    }
   }
   else
     return ret;  
@@ -177,8 +179,10 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
   if (st!=noErr){
     if (st==errSSLWouldBlock && ret)
       return ret;
-    else
+    else{
+      debug(D_WARNING, "write failed with error %d", (int)st);
       return PSYNC_SSL_FAIL;
+    }
   }
   else
     return ret;
