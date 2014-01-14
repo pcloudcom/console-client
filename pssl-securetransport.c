@@ -113,6 +113,7 @@ int psync_ssl_connect_finish(void *sslconn){
   else if (st==errSSLWouldBlock)
     return PSYNC_SSL_NEED_FINISH;
   CFRelease(ref);
+  debug(D_WARNING, "connection failed with status %d", (int)st);
   psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
   return PSYNC_SSL_FAIL;
 }
