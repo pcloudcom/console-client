@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -68,6 +68,14 @@
 #define P_OS_POSIX
 #endif
 
+#ifdef P_OS_WINDOWS
+
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0501
+#endif
+
+#endif
+
 #if defined(P_OS_MACOSX)
 #define _DARWIN_USE_64_BIT_INODE
 #endif
@@ -86,7 +94,7 @@ typedef unsigned long psync_uint_t;
 #define P_PRI_I "ld"
 #define P_PRI_U "lu"
 
-#define psync_32to64(hi, lo) (((uint64_t)(hi))<<32+(lo))
+#define psync_32to64(hi, lo) ((((uint64_t)(hi))<<32)+(lo))
 #define psync_bool_to_zero(x) ((!!(x))-1)
 
 #define NTO_STR(s) TO_STR(s)
@@ -150,7 +158,7 @@ typedef struct stat psync_stat_t;
 
 #define P_O_RDONLY O_RDONLY
 #define P_O_WRONLY O_WRONLY
-#define P_O_RDWR   O_RDWR 
+#define P_O_RDWR   O_RDWR
 #define P_O_CREAT  O_CREAT
 #define P_O_TRUNC  O_TRUNC
 #define P_O_EXCL   O_EXCL
@@ -166,10 +174,8 @@ typedef int psync_file_t;
 
 #elif defined(P_OS_WINDOWS)
 
-#define _WIN32_WINNT 0x0400
-
 #include <winsock2.h>
-#include <ws2tcpip.h>
+#include <unistd.h>
 
 #define psync_filetime_to_timet(ft) ((time_t)(psync_32to64((ft)->dwHighDateTime, (ft)->dwLowDateTime)/10000000ULL-11644473600ULL))
 
@@ -206,6 +212,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define P_NOSPC      ERROR_HANDLE_DISK_FULL
 #define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
 #define P_NOTEMPTY   ERROR_DIR_NOT_EMPTY
+#define P_NOTDIR     ERROR_FILE_INVALID
 #define P_BUSY       ERROR_PATH_BUSY
 #define P_ROFS       -1
 

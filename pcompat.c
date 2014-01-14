@@ -1,7 +1,7 @@
 /* Copyright (c) 2013 Anton Titov.
  * Copyright (c) 2013 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -55,6 +55,7 @@
 
 #include <process.h>
 #include <windows.h>
+#include <ws2tcpip.h>
 
 #define psync_close_socket closesocket
 #define psync_read_socket(s, b, c) recv(s, b, c, 0)
@@ -280,8 +281,9 @@ static psync_socket_t connect_res(struct addrinfo *res){
     if (likely_log(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
-      ioctlsocket(sock, FIONBIO, &non_blocking_mode);
-#elif defined(P_OS_POSIX) 
+      unsigned long mode = non_blocking_mode;
+      ioctlsocket(sock, FIONBIO, &mode);
+#elif defined(P_OS_POSIX)
       fcntl(sock, F_SETFD, FD_CLOEXEC);
       fcntl(sock, F_SETFL, fcntl(sock, F_GETFL)|O_NONBLOCK);
 #else
@@ -291,7 +293,7 @@ static psync_socket_t connect_res(struct addrinfo *res){
       if ((connect(sock, res->ai_addr, res->ai_addrlen)!=SOCKET_ERROR) ||
           (psync_sock_err()==P_INPROGRESS && !psync_wait_socket_writable(sock, PSYNC_SOCK_CONNECT_TIMEOUT)))
         return sock;
-      close(sock);
+      psync_close_socket(sock);
     }
     res=res->ai_next;
   }
@@ -312,7 +314,7 @@ static psync_socket_t connect_socket(const char *host, const char *port){
 #if defined(P_OS_WINDOWS)
   if (unlikely(rc==WSANOTINITIALISED)){
     WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData)) 
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData))
       return INVALID_SOCKET;
     rc=getaddrinfo(host, port, &hints, &res);
   }
@@ -426,7 +428,7 @@ void psync_socket_close(psync_socket *sock){
 
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
 #if defined(SO_RCVBUF) && defined(SOL_SOCKET)
-  return setsockopt(sock->sock, SOL_SOCKET, SO_RCVBUF, &bufsize, sizeof(bufsize));
+  return setsockopt(sock->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&bufsize, sizeof(bufsize));
 #else
   return -1;
 #endif
@@ -464,7 +466,7 @@ int psync_socket_pendingdata_buf(psync_socket *sock){
 #endif
   if (sock->ssl)
     ret+=psync_ssl_pendingdata(sock->ssl);
-  return ret;  
+  return ret;
 }
 
 static int psync_socket_read_ssl(psync_socket *sock, void *buff, int num){
@@ -489,7 +491,7 @@ static int psync_socket_read_ssl(psync_socket *sock, void *buff, int num){
     else
       return r;
   }
-} 
+}
 
 static int psync_socket_read_plain(psync_socket *sock, void *buff, int num){
   int r;
@@ -637,7 +639,7 @@ int psync_pipe(psync_socket_t pipefd[2]){
 #if defined(P_OS_WINDOWS)
     if (psync_sock_err()==WSANOTINITIALISED){
       WSADATA wsaData;
-      if (WSAStartup(MAKEWORD(2, 2), &wsaData) || (sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET) 
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData) || (sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET)
         goto err0;
     }
     else
@@ -648,7 +650,7 @@ int psync_pipe(psync_socket_t pipefd[2]){
   addr.sin_family=AF_INET;
   addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
   addrlen=sizeof(addr);
-  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr))==SOCKET_ERROR || 
+  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr))==SOCKET_ERROR ||
       listen(sock, 1)==SOCKET_ERROR ||
       getsockname(sock, (struct sockaddr *)&addr, &addrlen)==SOCKET_ERROR ||
       (pipefd[0]=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET)
@@ -737,11 +739,11 @@ static wchar_t *utf8_to_wchar(const char *str){
   return ret;
 }
 
-static wchar_t *wchar_to_utf8(const wchar_t *str){
+static char *wchar_to_utf8(const wchar_t *str){
   int len;
   char *ret;
   len=WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
-  ret=psync_new_cnt(wchar_t, len);
+  ret=psync_new_cnt(char, len);
   WideCharToMultiByte(CP_UTF8, 0, str, -1, ret, len, NULL, NULL);
   return ret;
 }
@@ -960,7 +962,7 @@ int psync_file_close(psync_file_t fd){
 int psync_file_sync(psync_file_t fd){
 #if defined(P_OS_POSIX)
   return fsync(fd);
-#elif defined(P_OS_WINDOWS) 
+#elif defined(P_OS_WINDOWS)
   return psync_bool_to_zero(FlushFileBuffers(fd));
 #else
 #error "Function not implemented for your operating system"
@@ -1034,7 +1036,7 @@ int64_t psync_file_size(psync_file_t fd){
   else
     return st.st_size;
 #elif defined(P_OS_WINDOWS)
-   LARGE_INTEGER li;
+   ULARGE_INTEGER li;
    li.LowPart=GetFileSize(fd, &li.HighPart);
    if (unlikely_log(li.LowPart==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR))
      return -1;
