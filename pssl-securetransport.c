@@ -30,9 +30,10 @@
 #include "plibs.h"
 #include "pcompat.h"
 #include <unistd.h>
-#include <SecureTransport.h>
+#include <Security/SecureTransport.h>
 
 int psync_ssl_init(){
+  return 0;
 }
 
 static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
@@ -81,7 +82,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn){
     goto err1;
   if (unlikely_log(SSLSetIOFuncs(ref, psync_myread, psync_mywrite)!=noErr))
     goto err2;
-  if (unlikely_log(SSLSetConnection(ref, (SSLConnectionRef)sock)!=noErr))
+  if (unlikely_log(SSLSetConnection(ref, (SSLConnectionRef)(uintptr_t)sock)!=noErr))
     goto err2;
   st=SSLHandshake(ref);
   if (st==noErr){
