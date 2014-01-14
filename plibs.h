@@ -171,7 +171,7 @@ void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_variant_row psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_str_row psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_uint_row psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);
-psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res) PSYNC_NONNULL(1);;
+psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res) PSYNC_NONNULL(1);
 uint32_t psync_sql_affected_rows() PSYNC_PURE;
 uint64_t psync_sql_insertid() PSYNC_PURE;
 

@@ -25,7 +25,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #define __STDC_FORMAT_MACROS
-#include <inttypes.h>
 #include <stdio.h>
 #include <ctype.h>
 #include "pnetlibs.h"
@@ -185,7 +184,7 @@ int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t 
       }
       return -1;
     }
-    buf+=wr;
+    buf = (unsigned char*)buf+wr;
     count-=wr;
   }
   return 0;
@@ -345,7 +344,7 @@ int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
       if (rd<=0)
         return readbytes?readbytes:rd;
       num-=rd;
-      buff+=rd;
+      buff = (unsigned char*)buff+rd;
       readbytes+=rd;
       account_downloaded_bytes(rd);
     }
@@ -369,10 +368,10 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);
   if (from || to){
     if (to)
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"PRIu64"-%"PRIu64"\015\012Connection: close\015\012\015\012",
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64"\015\012Connection: close\015\012\015\012",
                   path, host, from, to);
     else
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"PRIu64"-\015\012Connection: close\015\012\015\012",
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-\015\012Connection: close\015\012\015\012",
                   path, host, from);
   }
   else
@@ -425,7 +424,7 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
       cp=num;
     else
       cp=http->readbuffsize-http->readbuffoff;
-    memcpy(buff, http->readbuff+http->readbuffoff, cp);
+    memcpy(buff, (unsigned char*)http->readbuff+http->readbuffoff, cp);
     http->readbuffoff+=cp;
     if (http->readbuffoff>=http->readbuffsize){
       psync_free(http->readbuff);
@@ -433,7 +432,7 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
     }
     if (cp==num)
       return cp;
-    num=psync_socket_readall_download(http->sock, buff+cp, num-cp);
+    num=psync_socket_readall_download(http->sock, (unsigned char*)buff+cp, num-cp);
     if (num<=0)
       return cp;
     else

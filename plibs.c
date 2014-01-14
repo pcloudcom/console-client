@@ -251,7 +251,8 @@ char **psync_sql_rowstr(const char *sql){
   code=sqlite3_step(stmt);
   if (code==SQLITE_ROW){
     char **arr, *nstr, *str;
-    size_t l, ln, lens[cnt];
+    size_t l, ln;
+    psync_def_var_arr(lens, size_t, cnt);
     int i;
     ln=0;
     for (i=0; i<cnt; i++){
@@ -302,8 +303,10 @@ psync_variant *psync_sql_row(const char *sql){
   if (code==SQLITE_ROW){
     psync_variant *arr;
     char *nstr, *str;
-    size_t l, ln, lens[cnt];
-    int i, t, types[cnt];
+    size_t l, ln;
+    psync_def_var_arr(lens, size_t, cnt);
+    int i, t;
+    psync_def_var_arr(types, int, cnt);
     ln=sizeof(psync_variant)*cnt;
     for (i=0; i<cnt; i++){
       t=sqlite3_column_type(stmt, i);

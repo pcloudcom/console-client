@@ -102,6 +102,8 @@ typedef unsigned long psync_uint_t;
 
 #if defined(P_OS_POSIX)
 
+#define P_PRI_U64 "llu"
+
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netdb.h>
@@ -172,10 +174,27 @@ typedef int psync_file_t;
 
 #define PSYNC_FILENAMES_CASESENSITIVE 1
 
+#define psync_def_var_arr(name, type, size) type name[size]
+
 #elif defined(P_OS_WINDOWS)
 
 #include <winsock2.h>
-#include <unistd.h>
+#include <BaseTsd.h>
+#if defined(__GNUC__)
+#define psync_def_var_arr(name, type, size) type name[size]
+#define P_PRI_U64 "I64u"
+#else
+#include <malloc.h>
+#define psync_def_var_arr(name, type, size) type* name = (type*)alloca(sizeof(type)*size)
+#define P_PRI_U64 "llu"
+
+#define atoll _atoi64
+#define snprintf _snprintf
+#endif
+
+#if !defined(_SSIZE_T_)
+typedef SSIZE_T ssize_t;
+#endif
 
 #define psync_filetime_to_timet(ft) ((time_t)(psync_32to64((ft)->dwHighDateTime, (ft)->dwLowDateTime)/10000000ULL-11644473600ULL))
 
@@ -248,7 +267,7 @@ typedef uint64_t psync_inode_t;
 typedef struct {
   const char *name;
   const char *path;
-  psync_stat_t stat;;
+  psync_stat_t stat;
 } psync_pstat;
 
 #ifndef INVALID_SOCKET

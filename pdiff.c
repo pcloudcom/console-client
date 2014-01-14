@@ -259,7 +259,7 @@ static void process_createfolder(const binresult *entry){
 }
 
 static void group_results_by_col(psync_full_result_int *restrict r1, psync_full_result_int *restrict r2, uint32_t col){
-  uint64_t buff[r1->cols];
+  psync_def_var_arr(buff, uint64_t, r1->cols);
   size_t rowsize;
   uint32_t i, j, l;
   l=0;
