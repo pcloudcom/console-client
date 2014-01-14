@@ -45,9 +45,12 @@ static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
     *len=rd;
     return noErr;
   }
-  else if (rd==0)
+  else if (rd==0){
+    *len=0;
     return errSSLClosedNoNotify;
+  }
   else {
+    *len=0;
     if (errno==EAGAIN || errno==EINTR){
       psync_ssl_errno=PSYNC_SSL_ERR_WANT_READ;
       return errSSLWouldBlock;
@@ -65,6 +68,7 @@ static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *l
     return noErr;
   }
   else {
+    *len=0;
     if (errno==EAGAIN || errno==EINTR){
       psync_ssl_errno=PSYNC_SSL_ERR_WANT_WRITE;
       return errSSLWouldBlock;
