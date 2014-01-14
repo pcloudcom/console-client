@@ -102,12 +102,13 @@ typedef unsigned long psync_uint_t;
 
 #if defined(P_OS_POSIX)
 
-#define P_PRI_U64 "llu"
-
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <inttypes.h>
+
+#define P_PRI_U64 PRIu64
 
 #define psync_stat stat
 #define psync_fstat fstat

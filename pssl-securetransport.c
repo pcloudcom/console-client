@@ -156,18 +156,30 @@ int psync_ssl_pendingdata(void *sslconn){
 
 int psync_ssl_read(void *sslconn, void *buf, int num){
   size_t ret;
+  OSStatus st;
   psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
-  if (SSLRead((SSLContextRef)sslconn, buf, num, &ret)!=noErr)
-    return PSYNC_SSL_FAIL;
+  st=SSLRead((SSLContextRef)sslconn, buf, num, &ret);
+  if (st!=noErr){
+    if (st==errSSLWouldBlock && ret)
+      return ret;
+    else
+      return PSYNC_SSL_FAIL;
+  }
   else
     return ret;  
 }
 
 int psync_ssl_write(void *sslconn, const void *buf, int num){
   size_t ret;
+  OSStatus st;
   psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
-  if (SSLWrite((SSLContextRef)sslconn, buf, num, &ret)!=noErr)
-    return PSYNC_SSL_FAIL;
+  st=SSLWrite((SSLContextRef)sslconn, buf, num, &ret);
+  if (st!=noErr){
+    if (st==errSSLWouldBlock && ret)
+      return ret;
+    else
+      return PSYNC_SSL_FAIL;
+  }
   else
     return ret;
 }
