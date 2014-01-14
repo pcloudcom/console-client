@@ -39,6 +39,7 @@
 #include "pfolder.h"
 #include "psettings.h"
 #include "psyncer.h"
+#include "ptasks.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -261,7 +262,22 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
 }
 
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
-int psync_delete_sync(psync_syncid_t syncid);
+
+int psync_delete_sync(psync_syncid_t syncid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_sql_start_transaction();
+  res=psync_sql_query("SELECT type, itemid FROM task WHERE syncid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    if (row[0]==PSYNC_DOWNLOAD_FILE)
+      psync_stop_file_download(row[1], syncid);
+  psync_sql_free_result(res);
+  res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_run_free(res);
+  return psync_sql_commit_transaction();
+}
 
 psync_folder_list_t *psync_get_sync_list(){
   return psync_list_get_list();

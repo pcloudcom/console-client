@@ -216,8 +216,7 @@ static void psync_do_sync_thread(void *ptr){
 }
 
 void psync_syncer_new(psync_syncid_t syncid){
-  psync_syncid_t *psid;
-  psid=psync_new(psync_syncid_t);
+  psync_syncid_t *psid=psync_new(psync_syncid_t);
   *psid=syncid;
   psync_run_thread1(psync_do_sync_thread, psid);
 }
@@ -225,6 +224,8 @@ void psync_syncer_new(psync_syncid_t syncid){
 static void psync_syncer_thread(){
   int64_t syncid;
   psync_sql_lock();
+  if (psync_sql_cellint("SELECT COUNT(*) FROM task", -1)==0)
+    psync_sql_statement("DELETE FROM syncfolder WHERE folderid IS NULL");
   while ((syncid=psync_sql_cellint("SELECT id FROM syncfolder WHERE flags=0", -1))!=-1)
     psync_sync_newsyncedfolder(syncid);
   psync_sql_unlock();
