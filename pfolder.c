@@ -597,7 +597,7 @@ psync_folder_list_t *psync_list_get_list(){
   folders=NULL;
   alloced=lastfolder=0;
   strlens=0;
-  res=psync_sql_query("SELECT id, folderid, localpath, synctype FROM syncfolder");
+  res=psync_sql_query("SELECT id, folderid, localpath, synctype FROM syncfolder WHERE folderid IS NOT NULL");
   while ((row=psync_sql_fetch_row(res))){
     if (alloced==lastfolder){
       alloced=(alloced+32)*2;

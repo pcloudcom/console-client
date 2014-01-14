@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,14 +25,17 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_DOWNLOAD_H
-#define _PSYNC_DOWNLOAD_H
+#ifndef _PSYNC_SECURETRANSPORT_H
+#define _PSYNC_SECURETRANSPORT_H
 
-#include "psynclib.h"
+#include <CommonCrypto/CommonDigest.h>
 
-void psync_download_init();
-void psync_wake_download();
-void psync_delete_download_tasks_for_file(psync_fileid_t fileid);
-void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid);
+#define PSYNC_SHA1_DIGEST_LEN 20
+#define PSYNC_SHA1_DIGEST_HEXLEN 40
+#define psync_sha1_ctx CC_SHA1_CTX
+#define psync_sha1(data, datalen, checksum) CC_SHA1(data, datalen, checksum)
+#define psync_sha1_init(pctx) CC_SHA1_Init(pctx)
+#define psync_sha1_update(pctx, data, datalen) CC_SHA1_Update(pctx, data, datalen)
+#define psync_sha1_final(checksum, pctx) CC_SHA1_Final(checksum, pctx)
 
 #endif

@@ -20,6 +20,7 @@ else
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX
+        USESSL=securetransport
     endif
 endif
 
@@ -28,6 +29,10 @@ OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o 
 ifeq ($(USESSL),openssl)
   OBJ += pssl-openssl.o
   CFLAGS += -DP_SSL_OPENSSL
+endif
+ifeq ($(USESSL),securetransport)
+  OBJ += pssl-securetransport.o
+  CFLAGS += -DP_SSL_SECURETRANSPORT
 endif
 
 all: $(LIB_A)

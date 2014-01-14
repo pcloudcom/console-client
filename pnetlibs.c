@@ -369,10 +369,10 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   if (from || to){
     if (to)
       rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64"\015\012Connection: close\015\012\015\012",
-                  path, host, (unsigned long long)from, (unsigned long long)to);
+                  path, host, from, to);
     else
       rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-\015\012Connection: close\015\012\015\012",
-                  path, host, (unsigned long long)from);
+                  path, host, from);
   }
   else
     rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Connection: close\015\012\015\012", path, host);

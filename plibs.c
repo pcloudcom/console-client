@@ -133,7 +133,7 @@ int psync_sql_connect(const char *db){
     return 0;
   }
   else{
-    debug(D_CRITICAL, "could not open sqlite dabase %s: %s", db, sqlite3_errstr(code));
+    debug(D_CRITICAL, "could not open sqlite dabase %s: %d", db, code);
     return -1;
   }
 }
@@ -141,7 +141,7 @@ int psync_sql_connect(const char *db){
 void psync_sql_close(){
   int code=sqlite3_close(psync_db);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_CRITICAL, "error when closing database: %s", sqlite3_errstr(code));
+    debug(D_CRITICAL, "error when closing database: %d", code);
 }
 
 void psync_sql_lock(){
@@ -196,7 +196,7 @@ char *psync_sql_cellstr(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
-    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   code=sqlite3_step(stmt);
@@ -213,7 +213,7 @@ char *psync_sql_cellstr(const char *sql){
     sqlite3_finalize(stmt);
     psync_sql_unlock();
     if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
 }
@@ -224,13 +224,13 @@ int64_t psync_sql_cellint(const char *sql, int64_t dflt){
   psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
   else{
     code=sqlite3_step(stmt);
     if (code==SQLITE_ROW)
       dflt=sqlite3_column_int64(stmt, 0);
     else if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
     sqlite3_finalize(stmt);
   }
   psync_sql_unlock();
@@ -244,7 +244,7 @@ char **psync_sql_rowstr(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
-    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -283,7 +283,7 @@ char **psync_sql_rowstr(const char *sql){
     sqlite3_finalize(stmt);
     psync_sql_unlock();
     if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
 }
@@ -295,7 +295,7 @@ psync_variant *psync_sql_row(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
-    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -350,7 +350,7 @@ psync_variant *psync_sql_row(const char *sql){
     sqlite3_finalize(stmt);
     psync_sql_unlock();
     if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
 }
@@ -363,7 +363,7 @@ psync_sql_res *psync_sql_query(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
-    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -384,7 +384,7 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
-    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errstr(code));
+    debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   res=psync_new(psync_sql_res);
@@ -398,22 +398,22 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
 void psync_sql_reset(psync_sql_res *res){
   int code=sqlite3_reset(res->stmt);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errmsg(psync_db));
 }
 
 void psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE))
-    debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errstr(code), res->sql);
+    debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
   code=sqlite3_reset(res->stmt);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errmsg(psync_db));
 }
 
 void psync_sql_run_free(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE))
-    debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errstr(code), res->sql);
+    debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
   sqlite3_finalize(res->stmt);
   psync_sql_unlock();
   psync_free(res);
@@ -422,24 +422,24 @@ void psync_sql_run_free(psync_sql_res *res){
 void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val){
   int code=sqlite3_bind_int64(res->stmt, n, val);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
 }
 
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val){
   int code=sqlite3_bind_int64(res->stmt, n, val);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
 }
 
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str){
   int code=sqlite3_bind_text(res->stmt, n, str, -1, SQLITE_STATIC);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));}
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));}
 
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len){
   int code=sqlite3_bind_blob(res->stmt, n, str, len, SQLITE_STATIC);
   if (unlikely(code!=SQLITE_OK))
-    debug(D_ERROR, "error binding value: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
 }
 
 void psync_sql_free_result(psync_sql_res *res){
@@ -474,7 +474,7 @@ psync_variant_row psync_sql_fetch_row(psync_sql_res *res){
   }
   else {
     if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errmsg(psync_db));
     return NULL;
   }
 }
@@ -491,7 +491,7 @@ psync_str_row psync_sql_fetch_rowstr(psync_sql_res *res){
   }
   else {
     if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errmsg(psync_db));
     return NULL;
   }
 }
@@ -508,7 +508,7 @@ const uint64_t *psync_sql_fetch_rowint(psync_sql_res *res){
   }
   else {
     if (unlikely(code!=SQLITE_DONE))
-      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+      debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errmsg(psync_db));
     return NULL;
   }
 }
@@ -534,7 +534,7 @@ psync_full_result_int *psync_sql_fetchall_int(psync_sql_res *res){
     rows++;
   }
   if (unlikely(code!=SQLITE_DONE))
-    debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errstr(code));
+    debug(D_ERROR, "sqlite3_step returned error: %s", sqlite3_errmsg(psync_db));
   psync_sql_free_result(res);
   ret=(psync_full_result_int *)psync_malloc(offsetof(psync_full_result_int, data)+sizeof(uint64_t)*off);
   ret->rows=rows;

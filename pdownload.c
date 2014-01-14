@@ -49,6 +49,7 @@ static const uint32_t requiredstatuses[]={
 };
 
 static volatile psync_fileid_t downloadingfile=0, stopfile=0;
+static volatile psync_syncid_t downloadingfilesyncid=0;
 
 static int task_mkdir(const char *path){
   while (1){
@@ -299,6 +300,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_file_t fd;
   int rd, rt;
   downloadingfile=fileid;
+  downloadingfilesyncid=syncid;
   api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
   if (unlikely_log(!api))
     goto err_sl_ex;
@@ -391,6 +393,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
   }
   downloadingfile=0;
+  downloadingfilesyncid=0;
   if (unlikely(stopfile)){
     if (stopfile==fileid){
       psync_free(buff);
@@ -435,9 +438,11 @@ err0:
   psync_free(localpath);
   psync_free(res);
   downloadingfile=0;
+  downloadingfilesyncid=0;
   return -1;
 err_sl_ex:
   downloadingfile=0;
+  downloadingfilesyncid=0;
   psync_timer_notify_exception();
   psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
   return -1;
@@ -554,5 +559,10 @@ void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
   psync_sql_bind_uint(res, 2, fileid);
   psync_sql_run_free(res);
   if (fileid==downloadingfile)
+    stopfile=fileid;
+}
+
+void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid){
+  if (fileid==downloadingfile && syncid==downloadingfilesyncid)
     stopfile=fileid;
 }
