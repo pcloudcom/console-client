@@ -40,11 +40,12 @@ int psync_ssl_init(){
 
 static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
   psync_socket_t sock=(psync_socket_t)conn;
-  ssize_t rd=read(sock, data, *len);
-  debug(D_NOTICE, "read(%u)=%d", (unsigned)(*len), (int)rd);
+  size_t llen=*len;
+  ssize_t rd=read(sock, data, llen);
+  debug(D_NOTICE, "read(%u)=%d", (unsigned)llen, (int)rd);
   if (likely(rd>0)){
     *len=rd;
-    return noErr;
+    return rd==llen?noErr:errSSLWouldBlock;
   }
   else if (rd==0){
     *len=0;
@@ -63,11 +64,12 @@ static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
 
 static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *len){
   psync_socket_t sock=(psync_socket_t)conn;
-  ssize_t rd=write(sock, data, *len);
-  debug(D_NOTICE, "write(%u)=%d", (unsigned)(*len), (int)rd);
+  size_t llen=*len;
+  ssize_t rd=write(sock, data, llen);
+  debug(D_NOTICE, "write(%u)=%d", (unsigned)llen, (int)rd);
   if (likely(rd>=0)){
     *len=rd;
-    return noErr;
+    return rd==llen?noErr:errSSLWouldBlock;
   }
   else {
     *len=0;
