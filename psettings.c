@@ -1,7 +1,7 @@
 /* Copyright (c) 2013 Anton Titov.
  * Copyright (c) 2013 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -39,9 +39,9 @@ typedef struct {
   setting_callback change_callback;
   filter_callback fix_callback;
   union {
+    char *str;
     uint64_t num;
     int64_t snum;
-    char *str;
     int boolean;
   };
   psync_uint_t type;
@@ -50,11 +50,11 @@ typedef struct {
 static void lower_patterns(void *ptr);
 
 static psync_setting_t settings[]={
-  {"usessl", psync_timer_do_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
-  {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
-  {"maxdownloadspeed", NULL, NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"ignorepatterns", NULL, lower_patterns, {(uintptr_t)PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
+  {"usessl", psync_timer_do_notify_exception, NULL, {(char*)PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
+  {"saveauth", NULL, NULL, {(char*)1}, PSYNC_TBOOL},
+  {"maxdownloadspeed", NULL, NULL, {(char*)PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"maxuploadspeed", NULL, NULL, {(char*)PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"ignorepatterns", NULL, lower_patterns, {PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
 };
 
 void psync_settings_init(){

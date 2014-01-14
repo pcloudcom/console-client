@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -24,7 +24,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include <stdio.h>
 #include <ctype.h>
 #include "pnetlibs.h"
@@ -368,10 +369,10 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);
   if (from || to){
     if (to)
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%llu-%llu\015\012Connection: close\015\012\015\012", 
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"PRIu64"-%"PRIu64"\015\012Connection: close\015\012\015\012",
                   path, host, (unsigned long long)from, (unsigned long long)to);
     else
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%llu-\015\012Connection: close\015\012\015\012", 
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"PRIu64"-\015\012Connection: close\015\012\015\012",
                   path, host, (unsigned long long)from);
   }
   else
