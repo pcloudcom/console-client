@@ -41,7 +41,7 @@
 
 static pthread_mutex_t download_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t download_cond=PTHREAD_COND_INITIALIZER;
-static uint32_t download_wakes=0;
+static psync_uint_t download_wakes=0;
 static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED),
   PSTATUS_COMBINE(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN),

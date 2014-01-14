@@ -59,10 +59,10 @@
 #define psync_prefetch(expr) (void)0
 #endif
 
-#if defined(__GNUC__)
-#define PSYNC_THREAD __thread
-#else
+#if defined(_MSC_VER)
 #define PSYNC_THREAD __declspec( thread )
+#else
+#define PSYNC_THREAD __thread
 #endif
 
 #if __has_attribute(malloc)
