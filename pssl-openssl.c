@@ -96,6 +96,28 @@ static void psync_set_ssl_error(int err){
     psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
 }
 
+static int psync_ssl_verify_cert(SSL *ssl, const char *hostname){
+  X509 *cert;
+  char buff[256];
+  if (unlikely_log(SSL_get_verify_result(ssl)!=X509_V_OK))
+    return -1;
+  if (hostname){
+    cert=SSL_get_peer_certificate(ssl);
+    if (unlikely_log(!cert))
+      return -1;
+    if (unlikely_log(X509_NAME_get_text_by_NID(X509_get_subject_name(cert), OBJ_txt2nid("commonName"), buff, sizeof(buff))==-1))
+      return -1;
+    debug(D_NOTICE, "got certificate with commonName: %s", buff);
+    if (psync_match_pattern(hostname, buff, strlen(buff)))
+      return 0;
+    else{
+      debug(D_WARNING, "hostname %s does not match certificate common name %s", hostname, buff);
+      return -1;
+    }
+  }
+  return 0;
+}
+
 int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname){
   SSL *ssl;
   int res, err;
@@ -105,7 +127,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
   SSL_set_fd(ssl, sock);
   res=SSL_connect(ssl);
   if (res==1){
-    if (unlikely_log(SSL_get_verify_result(ssl)!=X509_V_OK))
+    if (unlikely(psync_ssl_verify_cert(ssl, hostname)))
       goto fail;
     *sslconn=ssl;
     return PSYNC_SSL_SUCCESS;
@@ -121,13 +143,13 @@ fail:
   return PSYNC_SSL_FAIL;
 }
 
-int psync_ssl_connect_finish(void *sslconn){
+int psync_ssl_connect_finish(void *sslconn, const char *hostname){
   SSL *ssl;
   int res, err;
   ssl=(SSL *)sslconn;
   res=SSL_connect(ssl);
   if (res==1){
-    if (unlikely_log(SSL_get_verify_result(ssl)!=X509_V_OK))
+    if (unlikely(psync_ssl_verify_cert(ssl, hostname)))
       goto fail;
     return PSYNC_SSL_SUCCESS;
   }

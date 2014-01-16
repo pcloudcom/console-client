@@ -115,7 +115,7 @@ err1:
   return PSYNC_SSL_FAIL;
 }
 
-int psync_ssl_connect_finish(void *sslconn){
+int psync_ssl_connect_finish(void *sslconn, const char *hostname){
   SSLContextRef ref;
   OSStatus st;
   ref=(SSLContextRef)sslconn;

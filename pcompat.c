@@ -400,7 +400,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
         psync_ssl_free(sslc);
         break;
       }
-      ssl=psync_ssl_connect_finish(sslc);
+      ssl=psync_ssl_connect_finish(sslc, host);
     }
     if (unlikely_log(ssl!=PSYNC_SSL_SUCCESS)){
       psync_close_socket(sock);

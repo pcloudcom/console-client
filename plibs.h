@@ -181,6 +181,8 @@ void psync_libs_init();
 void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds);
 void psync_free_after_sec(void *ptr, uint32_t seconds);
 
+int psync_match_pattern(const char *name, const char *pattern, size_t plen);
+
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
 uint64_t psync_err_number_expected(const char *file, const char *function, int unsigned line, const psync_variant *v) PSYNC_COLD;

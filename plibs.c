@@ -653,6 +653,29 @@ void psync_free_after_sec(void *ptr, uint32_t seconds){
   psync_run_after_sec(psync_free, ptr, seconds);
 }
 
+int psync_match_pattern(const char *name, const char *pattern, size_t plen){
+  size_t i;
+  for (i=0; i<plen; i++){
+    if (pattern[i]=='?')
+      continue;
+    else if (pattern[i]=='*'){
+      i++;
+      plen-=i;
+      if (!plen)
+        return 1;
+      pattern+=i;
+      do {
+        if (psync_match_pattern(name, pattern, plen))
+          return 1;
+      } while (*name++);
+      return 0;
+    }
+    else if (pattern[i]!=name[i])
+      return 0;
+  }
+  return name[i]==0;
+}
+
 static void time_format(time_t tm, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};

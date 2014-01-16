@@ -299,29 +299,6 @@ pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, 
   return psync_list_remote_folder(folderid, listtype);
 }
 
-static int match_pattern(const char *name, const char *pattern, size_t plen){
-  size_t i;
-  for (i=0; i<plen; i++){
-    if (pattern[i]=='?')
-      continue;
-    else if (pattern[i]=='*'){
-      i++;
-      plen-=i;
-      if (!plen)
-        return 1;
-      pattern+=i;
-      do {
-        if (match_pattern(name, pattern, plen))
-          return 1;
-      } while (*name++);
-      return 0;
-    }
-    else if (pattern[i]!=name[i])
-      return 0;
-  }
-  return name[i]==0;
-}
-
 int psync_is_name_to_ignore(const char *name){
   const char *ign, *sc, *pt;
   char *namelower;
@@ -350,7 +327,7 @@ int psync_is_name_to_ignore(const char *name){
     }
     while (pl && isspace((unsigned char)pt[pl-1]))
       pl--;
-    if (match_pattern(namelower, pt, pl)){
+    if (psync_match_pattern(namelower, pt, pl)){
       psync_free(namelower);
       debug(D_NOTICE, "ignoring file/folder %s", name);
       return 1;
