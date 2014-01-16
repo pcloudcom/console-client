@@ -86,7 +86,7 @@ static OSStatus psync_mywrite(SSLConnectionRef conn, const void *data, size_t *l
   }
 }
 
-int psync_ssl_connect(psync_socket_t sock, void **sslconn){
+int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname){
   SSLContextRef ref;
   OSStatus st;
   ref=SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
@@ -95,6 +95,8 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn){
   if (unlikely_log(SSLSetIOFuncs(ref, psync_myread, psync_mywrite)!=noErr))
     goto err2;
   if (unlikely_log(SSLSetConnection(ref, (SSLConnectionRef)(uintptr_t)sock)!=noErr))
+    goto err2;
+  if (hostname && unlikely_log(SSLSetPeerDomainName(ref, hostname, strlen(hostname))!=noErr))
     goto err2;
   st=SSLHandshake(ref);
   if (st==noErr){

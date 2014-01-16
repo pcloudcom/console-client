@@ -81,7 +81,7 @@ static void psync_set_ssl_error(int err){
     psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
 }
 
-int psync_ssl_connect(psync_socket_t sock, void **sslconn){
+int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname){
   SSL *ssl;
   int res, err;
   ssl=SSL_new(globalctx);

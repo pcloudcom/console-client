@@ -50,7 +50,7 @@ extern PSYNC_THREAD int psync_ssl_errno;
 #define PSYNC_SSL_SUCCESS       0
 
 int psync_ssl_init();
-int psync_ssl_connect(psync_socket_t sock, void **sslconn);
+int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname);
 int psync_ssl_connect_finish(void *sslconn);
 void psync_ssl_free(void *sslconn);
 int psync_ssl_shutdown(void *sslconn);

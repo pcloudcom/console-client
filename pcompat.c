@@ -394,7 +394,7 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
   if (unlikely_log(sock==INVALID_SOCKET))
     return NULL;
   if (ssl){
-    ssl=psync_ssl_connect(sock, &sslc);
+    ssl=psync_ssl_connect(sock, &sslc, host);
     while (ssl==PSYNC_SSL_NEED_FINISH){
       if (wait_sock_ready_for_ssl(sock)){
         psync_ssl_free(sslc);
