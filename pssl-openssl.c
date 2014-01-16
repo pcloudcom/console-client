@@ -30,6 +30,7 @@
 #include "pssl.h"
 #include "psynclib.h"
 #include "plibs.h"
+#include "psslcerts.h"
 
 static SSL_CTX *globalctx=NULL;
 
@@ -60,14 +61,28 @@ static void openssl_thread_setup(){
 }
 
 int psync_ssl_init(){
+  BIO *bio;
+  X509 *cert;
+  psync_uint_t i;
   SSL_library_init();
   OpenSSL_add_all_algorithms();
   OpenSSL_add_all_ciphers();
   SSL_load_error_strings();
   openssl_thread_setup();
   globalctx=SSL_CTX_new(SSLv23_method());
-  if (globalctx)
+  if (globalctx){
+    for (i=0; i<ARRAY_SIZE(psync_ssl_trusted_certs); i++){
+      bio=BIO_new(BIO_s_mem());
+      BIO_puts(bio, psync_ssl_trusted_certs[i]);
+      cert=PEM_read_bio_X509(bio, NULL, NULL, NULL);
+      BIO_free(bio);
+      if (likely_log(cert!=NULL)){
+        X509_STORE_add_cert(SSL_CTX_get_cert_store(globalctx), cert);
+        X509_free(cert);
+      }
+    }
     return 0;
+  }
   else
     return -1;
 }
@@ -90,6 +105,8 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
   SSL_set_fd(ssl, sock);
   res=SSL_connect(ssl);
   if (res==1){
+    if (unlikely_log(SSL_get_verify_result(ssl)!=X509_V_OK))
+      goto fail;
     *sslconn=ssl;
     return PSYNC_SSL_SUCCESS;
   }
@@ -99,6 +116,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
     *sslconn=ssl;
     return PSYNC_SSL_NEED_FINISH;
   }
+fail:
   SSL_free(ssl);
   return PSYNC_SSL_FAIL;
 }
@@ -108,12 +126,16 @@ int psync_ssl_connect_finish(void *sslconn){
   int res, err;
   ssl=(SSL *)sslconn;
   res=SSL_connect(ssl);
-  if (res==1)
+  if (res==1){
+    if (unlikely_log(SSL_get_verify_result(ssl)!=X509_V_OK))
+      goto fail;
     return PSYNC_SSL_SUCCESS;
+  }
   err=SSL_get_error(ssl, res);
   psync_set_ssl_error(err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE))
     return PSYNC_SSL_NEED_FINISH;
+fail:
   SSL_free(ssl);
   return PSYNC_SSL_FAIL;
 }
