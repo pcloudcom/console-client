@@ -50,10 +50,10 @@ typedef struct {
 static void lower_patterns(void *ptr);
 
 static psync_setting_t settings[]={
-  {"usessl", psync_timer_do_notify_exception, NULL, {(char*)PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
-  {"saveauth", NULL, NULL, {(char*)1}, PSYNC_TBOOL},
-  {"maxdownloadspeed", NULL, NULL, {(char*)PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"maxuploadspeed", NULL, NULL, {(char*)PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"usessl", psync_timer_do_notify_exception, NULL, {(char *)PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
+  {"saveauth", NULL, NULL, {(char *)1}, PSYNC_TBOOL},
+  {"maxdownloadspeed", NULL, NULL, {(char *)PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"maxuploadspeed", NULL, NULL, {(char *)PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"ignorepatterns", NULL, lower_patterns, {PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
 };
 
@@ -142,8 +142,7 @@ int psync_setting_set_bool(psync_settingid_t settingid, int value){
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
   psync_sql_bind_uint(res, 2, value);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   if (settings[settingid].change_callback)
     settings[settingid].change_callback();
   return 0;
@@ -163,8 +162,7 @@ int psync_setting_set_uint(psync_settingid_t settingid, uint64_t value){
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
   psync_sql_bind_uint(res, 2, value);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   if (settings[settingid].change_callback)
     settings[settingid].change_callback();
   return 0;
@@ -184,8 +182,7 @@ int psync_setting_set_int(psync_settingid_t settingid, int64_t value){
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
   psync_sql_bind_int(res, 2, value);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   if (settings[settingid].change_callback)
     settings[settingid].change_callback();
   return 0;
@@ -208,8 +205,7 @@ int psync_setting_set_string(psync_settingid_t settingid, const char *value){
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_bind_string(res, 1, settings[settingid].name);
   psync_sql_bind_string(res, 2, value);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   if (settings[settingid].change_callback)
     settings[settingid].change_callback();
   psync_free_after_sec(oldval, 600);

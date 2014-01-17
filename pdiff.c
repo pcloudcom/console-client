@@ -288,8 +288,7 @@ static void del_synced_folder_rec(psync_folderid_t folderid, psync_syncid_t sync
   res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE folderid=? AND syncid=?");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_uint(res, 2, syncid);
-  psync_sql_run(res);
-  psync_sql_free_result(res);
+  psync_sql_run_free(res);
   res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=?");
   psync_sql_bind_uint(res, 1, folderid);
   while ((row=psync_sql_fetch_rowint(res)))
@@ -414,8 +413,7 @@ static void process_modifyfolder(const binresult *entry){
           psync_sql_bind_uint(res, 2, psync_get_result_cell(fres2, i, 2));
           psync_sql_bind_uint(res, 3, psync_get_result_cell(fres1, i, 0));
           psync_sql_bind_uint(res, 4, folderid);
-          psync_sql_run(res);
-          psync_sql_free_result(res);
+          psync_sql_run_free(res);
         }
       }
       if (fres2->rows<fres1->rows){
@@ -478,9 +476,8 @@ static void process_deletefolder(const binresult *entry){
       stmt=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE syncid=? AND folderid=?");
       psync_sql_bind_uint(stmt, 1, row[0]);
       psync_sql_bind_uint(stmt, 2, folderid);
-      psync_sql_run(stmt);
-      assert(psync_sql_affected_rows()==1);
-      psync_sql_free_result(stmt);
+      psync_sql_run_free(stmt);
+      assertw(psync_sql_affected_rows()==1);
       psync_task_delete_local_folder(row[0], folderid, row[1]);
       psync_increase_local_folder_taskcnt(row[1]);
     }
@@ -637,15 +634,6 @@ static struct {
 
 #define event_list_size ARRAY_SIZE(event_list)
 
-static void set_num_setting(const char *key, uint64_t val){
-  psync_sql_res *q;
-  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-  psync_sql_bind_string(q, 1, key);
-  psync_sql_bind_uint(q, 2, val);
-  psync_sql_run(q);
-  psync_sql_free_result(q);
-}
-
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
   uint32_t i, j;
@@ -662,8 +650,8 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   for (j=0; j<event_list_size; j++)
     if (event_list[j].used)
       event_list[j].process(NULL);
-  set_num_setting("diffid", newdiffid);
-  set_num_setting("usedquota", used_quota);
+  psync_set_uint_value("diffid", newdiffid);
+  psync_set_uint_value("usedquota", used_quota);
   psync_sql_commit_transaction();
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);

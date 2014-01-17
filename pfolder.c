@@ -551,11 +551,13 @@ static void add_to_folderlist(void *ptr, psync_pstat *stat){
     entry.namelen=strlen(stat->name);
     if (isfolder){
       entry.isfolder=1;
+      entry.folder.folderid=psync_stat_inode(&stat->stat);
       entry.folder.cansyncup=psync_stat_mode_ok(&stat->stat, 5);
       entry.folder.cansyncdown=psync_stat_mode_ok(&stat->stat, 7);
     }
     else{
       entry.isfolder=0;
+      entry.file.fileid=psync_stat_inode(&stat->stat);
       entry.file.size=psync_stat_size(&stat->stat);
     }
     folder_list_add(ft->folderlist, &entry);

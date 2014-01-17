@@ -283,7 +283,8 @@ int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();
 
 /* Use the following functions to list local or remote folders.
- * For local folders fileid and folderid will have undefined values.
+ * For local folders fileid and folderid will be set to a value that
+ * should in general uniquely identify the entry (e.g. inode number).
  * Remote paths use slashes (/) and start with one.
  * In case of success the returned folder list is to be freed with a
  * single call to free(). In case of error NULL is returned. Parameter
@@ -325,7 +326,7 @@ int psync_pause();
 int psync_stop();
 int psync_resume();
 
-/* Regsiters a new user account. email is user e-mail address which will also be
+/* Registers a new user account. email is user e-mail address which will also be
  * the username after successful registration. Password is user's chosen password
  * implementations are advised to have the user verify the password by typing it
  * twice. The termsaccepted field should only be set to true if the user actually
@@ -345,7 +346,6 @@ int psync_resume();
 int psync_register(const char *email, const char *password, int termsaccepted, char **err);
 
 /* 
- * 
  * List of settings: 
  * usessl (bool) - use SSL connections to remote servers 
  * maxdownloadspeed (int) - maximum download speed in bytes per second, 0 for auto-shaper, -1 for no limit
@@ -354,8 +354,66 @@ int psync_register(const char *email, const char *password, int termsaccepted, c
  *                          * - matches any number of characters (even zero)
  *                          ? - matches exactly one character
  * 
+ * The following functions operate on settings. The value of psync_get_string_setting does not have to be freed, however if you are
+ * going to store it rather than use it right away, you should strdup() it.
+ * 
+ * psync_set_*_setting functions return 0 on success and -1 on failure. Setting a setting may fail if you mismatch the type or give
+ * invalid setting name.
+ * 
+ * psync_get_string_setting returns empty string on failure (type mismatch or non-existing setting), all other psync_get_*_setting
+ * return zero on failure.
+ * 
+ * All settings are reset to default values on unlink.
+ * 
+ * int and uint are interchangeable and are considered same type.
+ * 
  */
 
+int psync_get_bool_setting(const char *settingname);
+int psync_set_bool_setting(const char *settingname, int value);
+int64_t psync_setting_get_int_setting(const char *settingname);
+int psync_set_int_setting(const char *settingname, int64_t value);
+uint64_t psync_get_uint_setting(const char *settingname);
+int psync_set_uint_setting(const char *settingname, uint64_t value);
+const char *psync_get_string_setting(const char *settingname);
+int psync_set_string_setting(const char *settingname, const char *value);
+
+/*
+ * Values are like settings, except that you can store and retrieve any key-value pair you want. There are some library-polpulated
+ * values that you are not supposed to change. There are no type mismatch for values, instead they are converted to requested 
+ * representation.
+ * 
+ * The pointer returned by psync_get_string_value is to be freed by the application. This function returns NULL when value does not
+ * exist (as opposed to psync_get_string_setting).
+ * 
+ * The application can store values even when there is no user logged in. However all values are cleared on unlink.
+ * 
+ * Library-populated values are:
+ * dbversion (uint) - version of the database
+ * runstatus (uint) - one of (1, 2, 4) for current run status of (run, pause, stop)
+ * saveauth  (bool) - indicates whether user've chosen to save the password or not
+ * userid    (uint) - userid of the logged in user
+ * username  (string)- username/email of the logged in user
+ * emailverified (bool)- indicates whether the user's email is verified
+ * premium   (bool) - true if user is paid account
+ * premiumexpires (uint) - if premium is true, the expire date of the premium account in unix timestamp
+ * language  (string) - two letter, lowercase ISO 639-1 code of the user's language preference
+ * quota (uint) - user's quota in bytes
+ * usedquota (uint) - used space of the quota in bytes
+ * diffid (uint) - diffid of the user status, see https://docs.pcloud.com/methods/general/diff.html, can be used to detect account changes
+ * auth (string) - user's auth token (if the user is logged in and saveauth is true), see https://docs.pcloud.com/methods/intro/authentication.html
+ * 
+ */
+
+int psync_has_value(const char *valuename);
+int psync_get_bool_value(const char *valuename);
+void psync_set_bool_value(const char *valuename, int value);
+int64_t psync_value_get_int_value(const char *valuename);
+void psync_set_int_value(const char *valuename, int64_t value);
+uint64_t psync_get_uint_value(const char *valuename);
+void psync_set_uint_value(const char *valuename, uint64_t value);
+char *psync_get_string_value(const char *valuename);
+void psync_set_string_value(const char *valuename, const char *value);
 
   
 #ifdef __cplusplus

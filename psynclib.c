@@ -123,19 +123,11 @@ static void clear_db(int save){
   psync_setting_set_bool(_PS(saveauth), save);
 }
 
-static void save_to_db(const char *key, const char *val){
-  psync_sql_res *q;
-  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-  psync_sql_bind_string(q, 1, key);
-  psync_sql_bind_string(q, 2, val);
-  psync_sql_run_free(q);
-}
-
 void psync_set_user_pass(const char *username, const char *password, int save){
   clear_db(save);
   if (save){
-    save_to_db("user", username);
-    save_to_db("pass", password);
+    psync_set_string_value("user", username);
+    psync_set_string_value("pass", password);
   }
   else{
     pthread_mutex_lock(&psync_my_auth_mutex);
@@ -151,7 +143,7 @@ void psync_set_user_pass(const char *username, const char *password, int save){
 void psync_set_pass(const char *password, int save){
   clear_db(save);
   if (save)
-    save_to_db("pass", password);
+    psync_set_string_value("pass", password);
   else{
     pthread_mutex_lock(&psync_my_auth_mutex);
     psync_free(psync_my_pass);
@@ -164,7 +156,7 @@ void psync_set_pass(const char *password, int save){
 void psync_set_auth(const char *auth, int save){
   clear_db(save);
   if (save)
-    save_to_db("auth", auth);
+    psync_set_string_value("auth", auth);
   else
     strcpy(psync_my_auth, auth);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
@@ -338,19 +330,24 @@ int psync_is_name_to_ignore(const char *name){
   return 0;
 }
 
+static void psync_set_run_status(uint32_t status){
+  psync_set_status(PSTATUS_TYPE_RUN, status);
+  psync_set_uint_value("runstatus", status);
+}
+
 int psync_pause(){
-  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_PAUSE);
+  psync_set_run_status(PSTATUS_RUN_PAUSE);
   return 0;
 }
 
 int psync_stop(){
-  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
+  psync_set_run_status(PSTATUS_RUN_STOP);
   psync_timer_notify_exception();
   return 0;
 }
 
 int psync_resume(){
-  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
+  psync_set_run_status(PSTATUS_RUN_RUN);
   return 0;
 }
 
@@ -378,5 +375,114 @@ neterr1:
   if (err)
     *err=psync_strdup("Could not connect to the server.");
   return -1;
+}
+
+int psync_get_bool_setting(const char *settingname){
+  return psync_setting_get_bool(psync_setting_getid(settingname));
+}
+
+int psync_set_bool_setting(const char *settingname, int value){
+  return psync_setting_set_bool(psync_setting_getid(settingname), value);
+}
+
+int64_t psync_setting_get_int_setting(const char *settingname){
+  return psync_setting_get_int(psync_setting_getid(settingname));
+}
+
+int psync_set_int_setting(const char *settingname, int64_t value){
+  return psync_setting_set_int(psync_setting_getid(settingname), value);
+}
+
+uint64_t psync_get_uint_setting(const char *settingname){
+  return psync_setting_get_uint(psync_setting_getid(settingname));
+}
+
+int psync_set_uint_setting(const char *settingname, uint64_t value){
+  return psync_setting_set_uint(psync_setting_getid(settingname), value);
+}
+
+const char *psync_get_string_setting(const char *settingname){
+  return psync_setting_get_string(psync_setting_getid(settingname));
+}
+
+int psync_set_string_setting(const char *settingname, const char *value){
+  return psync_setting_set_string(psync_setting_getid(settingname), value);
+}
+
+int psync_has_value(const char *valuename){
+  psync_sql_res *res;
+  psync_uint_row row;
+  int ret;
+  res=psync_sql_query("SELECT COUNT(*) FROM setting WHERE id=?");
+  psync_sql_bind_string(res, 1, valuename);
+  row=psync_sql_fetch_rowint(res);
+  if (row)
+    ret=row[0];
+  else
+    ret=0;
+  psync_sql_free_result(res);
+  return ret;
+}
+
+int psync_get_bool_value(const char *valuename){
+  return !!psync_get_uint_value(valuename);
+}
+
+void psync_set_bool_value(const char *valuename, int value){
+  psync_set_uint_value(valuename, (uint64_t)(!!value));
+}
+
+int64_t psync_value_get_int_value(const char *valuename){
+  return (int64_t)psync_get_uint_value(valuename);
+}
+
+void psync_set_int_value(const char *valuename, int64_t value){
+  psync_set_uint_value(valuename, (uint64_t)value);
+}
+
+uint64_t psync_get_uint_value(const char *valuename){
+  psync_sql_res *res;
+  psync_uint_row row;
+  uint64_t ret;
+  res=psync_sql_query("SELECT value FROM setting WHERE id=?");
+  psync_sql_bind_string(res, 1, valuename);
+  row=psync_sql_fetch_rowint(res);
+  if (row)
+    ret=row[0];
+  else
+    ret=0;
+  psync_sql_free_result(res);
+  return ret;
+}
+
+void psync_set_uint_value(const char *valuename, uint64_t value){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  psync_sql_bind_string(res, 1, valuename);
+  psync_sql_bind_uint(res, 1, value);
+  psync_sql_run_free(res);
+}
+
+char *psync_get_string_value(const char *valuename){
+  psync_sql_res *res;
+  psync_str_row row;
+  char *ret;
+  res=psync_sql_query("SELECT value FROM setting WHERE id=?");
+  psync_sql_bind_string(res, 1, valuename);
+  row=psync_sql_fetch_rowstr(res);
+  if (row)
+    ret=psync_strdup(row[0]);
+  else
+    ret=NULL;
+  psync_sql_free_result(res);
+  return ret;
+}
+
+void psync_set_string_value(const char *valuename, const char *value){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  psync_sql_bind_string(res, 1, valuename);
+  psync_sql_bind_string(res, 1, value);
+  psync_sql_run_free(res);
 }
 

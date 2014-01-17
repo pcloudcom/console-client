@@ -103,18 +103,16 @@ void psync_increase_local_folder_taskcnt(psync_folderid_t lfolderid){
   psync_sql_res *res;
   res=psync_sql_prep_statement("UPDATE localfolder SET taskcnt=taskcnt+1 WHERE id=?");
   psync_sql_bind_uint(res, 1, lfolderid);
-  psync_sql_run(res);
+  psync_sql_run_free(res);
   assertw(psync_sql_affected_rows()==1);
-  psync_sql_free_result(res);
 }
 
 void psync_decrease_local_folder_taskcnt(psync_folderid_t lfolderid){
   psync_sql_res *res;
   res=psync_sql_prep_statement("UPDATE localfolder SET taskcnt=taskcnt+1 WHERE id=?");
   psync_sql_bind_uint(res, 1, lfolderid);
-  psync_sql_run(res);
+  psync_sql_run_free(res);
   assertw(psync_sql_affected_rows()==1);
-  psync_sql_free_result(res);
 }
 
 psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localparentfolderid, const char *name){

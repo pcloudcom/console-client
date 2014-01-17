@@ -162,8 +162,7 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
   psync_sql_bind_uint(sres, 1, psync_find_result(meta, "hash", PARAM_NUM)->num);
   psync_sql_bind_uint(sres, 2, result);
   psync_sql_bind_lstring(sres, 3, checksum->str, checksum->length);
-  psync_sql_run(sres);
-  psync_sql_free_result(sres);
+  psync_sql_run_free(sres);
   memcpy(hexsum, checksum->str, checksum->length+1);
   psync_free(res);
   return PSYNC_NET_OK;
