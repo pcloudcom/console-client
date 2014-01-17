@@ -28,6 +28,8 @@
 #ifndef _PSYNC_LIB_H
 #define _PSYNC_LIB_H
 
+/* All paths are in UTF-8 regardless of the OS. */
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -322,6 +324,25 @@ uint32_t psync_get_last_error();
 int psync_pause();
 int psync_stop();
 int psync_resume();
+
+/* Regsiters a new user account. email is user e-mail address which will also be
+ * the username after successful registration. Password is user's chosen password
+ * implementations are advised to have the user verify the password by typing it
+ * twice. The termsaccepted field should only be set to true if the user actually
+ * indicated acceptance of pCloud terms and conditions.
+ *
+ * Returns zero on success, -1 if network error occurs or a positive error code from
+ * this list:
+ * https://docs.pcloud.com/methods/auth/register.html
+ * In case of error. 
+ * 
+ * If err is not NULL in all cases of non-zero return it will be set to point to a
+ * psync_malloc-allocated buffer with English language error text, suitable to display
+ * to the user. This buffer must be freed by the application.
+ * 
+ */
+
+int psync_register(const char *email, const char *password, int termsaccepted, char **err);
 
 /* 
  * 

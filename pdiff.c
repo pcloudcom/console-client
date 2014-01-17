@@ -311,6 +311,7 @@ static void process_modifyfolder(const binresult *entry){
   uint32_t i, cnt;
   int oldsync, newsync;
   if (!entry){
+    process_createfolder(NULL);
     if (st){
       psync_sql_free_result(st);
       st=NULL;
@@ -504,11 +505,8 @@ static void process_createfile(const binresult *entry){
     }
     return;
   }
-  if (!st){
+  if (!st)
     st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    if (!st)
-      return;
-  }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
@@ -539,27 +537,60 @@ static void process_createfile(const binresult *entry){
 }
 
 static void process_modifyfile(const binresult *entry){
-  static psync_sql_res *st=NULL;
-  psync_uint_row row;
+  static psync_sql_res *sq=NULL, *st=NULL;
+  const binresult *meta, *name;
+  psync_variant_row row;
+  psync_fileid_t fileid;
+  psync_folderid_t parentfolderid;
+  uint64_t size, userid, hash;
   if (!entry){
+    if (sq){
+      psync_sql_free_result(sq);
+      sq=NULL;
+    }
     if (st){
       psync_sql_free_result(st);
       st=NULL;
     }
+    process_createfile(NULL);
+    return;
   }
-  else {
-    if (st)
-      psync_sql_reset(st);
-    else
-      st=psync_sql_query("SELECT userid, size FROM file WHERE id=?");
-    if (st){
-      psync_sql_bind_uint(st, 1, psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "fileid", PARAM_NUM)->num);
-      row=psync_sql_fetch_rowint(st);
-      if (row && row[0]==psync_my_userid)
-        used_quota-=row[1];
-    }
+  meta=psync_find_result(entry, "metadata", PARAM_HASH);
+  fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+  name=psync_find_result(meta, "name", PARAM_STR);
+  if (sq)
+    psync_sql_reset(sq);
+  else
+    sq=psync_sql_query("SELECT parentfolderid, userid, size, hash, name FROM file WHERE id=?");
+  psync_sql_bind_uint(sq, 1, fileid);
+  row=psync_sql_fetch_row(sq);
+  if (!row){
+    debug(D_ERROR, "got modify for non-existing file %lu (%s), processing as create", (unsigned long)fileid, name->str);
+    process_createfile(entry);
+    return;
   }
-  process_createfile(entry);
+  if (psync_get_number(row[1])==psync_my_userid)
+    used_quota-=psync_get_number(row[2]);
+  if (!st)
+    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  size=psync_find_result(meta, "size", PARAM_NUM)->num;
+  parentfolderid=psync_find_result(meta, "parentfolderid", PARAM_NUM)->num;
+  hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
+    userid=psync_my_userid;
+    used_quota+=size;
+  }
+  else
+    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, fileid);
+  psync_sql_bind_uint(st, 2, parentfolderid);
+  psync_sql_bind_uint(st, 3, userid);
+  psync_sql_bind_uint(st, 4, size);
+  psync_sql_bind_uint(st, 5, hash);
+  psync_sql_bind_lstring(st, 6, name->str, name->length);
+  psync_sql_bind_uint(st, 7, psync_find_result(meta, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 8, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_run(st);
 }
 
 static void process_deletefile(const binresult *entry){

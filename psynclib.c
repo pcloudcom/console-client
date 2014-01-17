@@ -40,6 +40,7 @@
 #include "psettings.h"
 #include "psyncer.h"
 #include "ptasks.h"
+#include "papi.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -351,5 +352,31 @@ int psync_stop(){
 int psync_resume(){
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
   return 0;
+}
+
+int psync_register(const char *email, const char *password, int termsaccepted, char **err){
+  psync_socket *api;
+  binresult *res;
+  uint64_t ret;
+  binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0")};
+  api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+  if (unlikely_log(!api))
+    goto neterr1;
+  res=send_command(api, "register", params);
+  psync_socket_close(api);
+  if (unlikely_log(!res))
+    goto neterr1;
+  ret=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (ret){
+    debug(D_WARNING, "register method returned error %lu", (long unsigned)ret);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+  }
+  psync_free(res);
+  return ret;
+neterr1:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
 }
 
