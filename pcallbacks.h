@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -33,6 +33,6 @@
 void psync_set_status_callback(pstatus_change_callback_t callback);
 void psync_send_status_update();
 void psync_set_event_callback(pevent_callback_t callback);
-void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, uint64_t remoteid);
+void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid);
 
 #endif

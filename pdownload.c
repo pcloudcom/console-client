@@ -375,6 +375,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   fd=psync_file_open(tmpname, P_O_WRONLY, P_O_CREAT);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE))
     goto err0;
+  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_STARTED, syncid, tmpname, fileid);
   hosts=psync_find_result(res, "hosts", PARAM_ARRAY);
   requestpath=psync_find_result(res, "path", PARAM_STR)->str;
   http=NULL;
@@ -421,6 +422,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     psync_free(name);
     goto err0;
   }
+  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FINISHED, syncid, name, fileid);
   debug(D_NOTICE, "file downloaded %s", name);
   psync_free(name);
   psync_free(tmpname);
@@ -433,6 +435,7 @@ err2:
   psync_http_close(http);
 err1:
   psync_file_close(fd);
+  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FAILED, syncid, tmpname, fileid);
 err0:
   psync_free(tmpname);
   psync_free(localpath);
@@ -454,7 +457,7 @@ static int task_delete_file(psync_fileid_t fileid){
   char *name;
   int ret;
   ret=0;
-  res=psync_sql_query("SELECT id FROM localfile WHERE fileid=?");
+  res=psync_sql_query("SELECT id, syncid FROM localfile WHERE fileid=?");
   psync_sql_bind_uint(res, 1, fileid);
   while ((row=psync_sql_fetch_rowint(res))){
     name=psync_local_path_for_local_file(row[0], NULL);
@@ -469,6 +472,7 @@ static int task_delete_file(psync_fileid_t fileid){
       }
       else
         debug(D_NOTICE, "local file %s deleted", name);
+      psync_send_event_by_id(PEVENT_LOCAL_FILE_DELETED, row[1], name, fileid);
       psync_free(name);
     }
     stmt=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");

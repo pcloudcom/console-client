@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@ typedef struct {
   char *localpath;
   char *remotepath;
   char *name;
+  psync_fileorfolderid_t remoteid;
   psync_eventtype_t event;
   psync_syncid_t syncid;
 } event_list_t;
@@ -91,7 +92,7 @@ static void event_thread(void *ptr){
     pthread_mutex_unlock(&eventmutex);
     if (!psync_do_run)
       break;
-    callback(event->event, event->syncid, event->name, event->localpath, event->remotepath);
+    callback(event->event, event->syncid, event->remoteid, event->name, event->localpath, event->remotepath);
     psync_free(event->localpath);
     psync_free(event->remotepath);
     psync_free(event);
@@ -104,7 +105,7 @@ void psync_set_event_callback(pevent_callback_t callback){
   eventthreadrunning=1;
 }
 
-void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, uint64_t remoteid){
+void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid){
   if (eventthreadrunning){
     event_list_t *event;
     char *remotepath;
@@ -118,6 +119,7 @@ void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, co
     event->localpath=psync_strdup(localpath);
     event->remotepath=remotepath;
     event->name=strrchr(remotepath, '/')+1;
+    event->remoteid=remoteid;
     event->event=eventid;
     event->syncid=syncid;
     pthread_mutex_lock(&eventmutex);

@@ -28,13 +28,17 @@
 #ifndef _PSYNC_LIB_H
 #define _PSYNC_LIB_H
 
-/* All paths are in UTF-8 regardless of the OS. */
+/* All paths are in UTF-8 regardless of the OS. 
+ * All functions with int return type unless specified otherwise return 0 for success 
+ * and -1 for failure.
+ */
 
 #include <stdint.h>
 #include <stdlib.h>
 
 typedef uint64_t psync_folderid_t;
 typedef uint64_t psync_fileid_t;
+typedef uint64_t psync_fileorfolderid_t;
 typedef uint32_t psync_syncid_t;
 typedef uint32_t psync_eventtype_t;
 typedef uint32_t psync_synctype_t;
@@ -113,13 +117,17 @@ typedef struct {
 #define PEVENT_TYPE_RENAME           (2<<2)
 #define PEVENT_TYPE_START            (0<<5)
 #define PEVENT_TYPE_FINISH           (1<<5)
+#define PEVENT_TYPE_SUCCESS          (0<<6)
+#define PEVENT_TYPE_FAIL             (1<<6)
 
 #define PEVENT_LOCAL_FOLDER_CREATED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
 #define PEVENT_REMOTE_FOLDER_CREATED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
 #define PEVENT_FILE_DOWNLOAD_STARTED  (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_START)
-#define PEVENT_FILE_DOWNLOAD_FINISHED (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH)
+#define PEVENT_FILE_DOWNLOAD_FINISHED (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH+PEVENT_TYPE_SUCCESS)
+#define PEVENT_FILE_DOWNLOAD_FAILED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH+PEVENT_TYPE_FAIL)
 #define PEVENT_FILE_UPLOAD_STARTED    (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_START)
-#define PEVENT_FILE_UPLOAD_FINISHED   (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH)
+#define PEVENT_FILE_UPLOAD_FINISHED   (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH+PEVENT_TYPE_SUCCESS)
+#define PEVENT_FILE_UPLOAD_FAILED     (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FILE+PEVENT_TYPE_CREATE+PEVENT_TYPE_FINISH+PEVENT_TYPE_FAIL)
 #define PEVENT_LOCAL_FOLDER_DELETED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_DELETE)
 #define PEVENT_REMOTE_FOLDER_DELETED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_DELETE)
 #define PEVENT_LOCAL_FILE_DELETED     (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FILE+PEVENT_TYPE_DELETE)
@@ -188,9 +196,19 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * It is unsafe to use pointers to strings that are passed as parameters after
  * the callback return, if you need to use them this way, strdup() will do the
  * job. Event callbacks will not overlap.
+ * 
+ * If event&PEVENT_TYPE_FOLDER==PEVENT_TYPE_FOLDER is true, remoteid is folderid,
+ * otherwise it is fileid.
+ * 
+ * Events PEVENT_FILE_DOWNLOAD_STARTED and PEVENT_FILE_DOWNLOAD_FINISHED send
+ * different values of localpath for the same download - the former sends a path
+ * of a temporary file that is created while the download is in progress and the
+ * latter sends final path of downloaded file. In case of failure PEVENT_FILE_DOWNLOAD_FAILED
+ * also sends the temporary path as with PEVENT_FILE_DOWNLOAD_STARTED.
  */
 
-typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, const char *name, const char *localpath, const char *remotepath);
+typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, psync_fileorfolderid_t remoteid, 
+                                  const char *name, const char *localpath, const char *remotepath);
 
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,
