@@ -24,6 +24,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #define __STDC_FORMAT_MACROS
 #include <stdio.h>
 #include <ctype.h>
@@ -168,6 +169,49 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
   return PSYNC_NET_OK;
 }
 
+int psync_get_local_file_checksum(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize){
+  psync_stat_t st;
+  psync_hash_ctx hctx;
+  uint64_t rsz;
+  void *buff;
+  size_t rs;
+  ssize_t rrs;
+  psync_file_t fd;
+  unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
+  fd=psync_file_open(filename, P_O_RDONLY, 0);
+  if (fd==INVALID_HANDLE_VALUE)
+    return PSYNC_NET_PERMFAIL;
+  if (unlikely_log(psync_fstat(fd, &st)))
+    goto err1;
+  buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
+  psync_hash_init(&hctx);
+  rsz=psync_stat_size(&st);
+  while (rsz){
+    if (rsz>PSYNC_COPY_BUFFER_SIZE)
+      rs=PSYNC_COPY_BUFFER_SIZE;
+    else
+      rs=rsz;
+    rrs=psync_file_read(fd, buff, rs);
+    if (rrs<=0)
+      goto err2;
+    psync_yield_cpu();
+    psync_hash_update(&hctx, buff, rrs);
+    rsz-=rrs;
+  }
+  psync_free(buff);
+  psync_file_close(fd);
+  psync_hash_final(hashbin, &hctx);
+  psync_binhex(hexsum, hashbin, PSYNC_HASH_DIGEST_LEN);
+  if (fsize)
+    *fsize=psync_stat_size(&st);
+  return PSYNC_NET_OK;
+err2:
+  psync_free(buff);
+err1:
+  psync_file_close(fd);
+  return PSYNC_NET_PERMFAIL;
+}
+
 int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count){
   ssize_t wr;
   while (count){
@@ -219,9 +263,9 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
       goto err2;
     if (unlikely_log(psync_file_writeall_checkoverquota(dfd, buff, rd)))
       goto err2;
+    psync_yield_cpu();
     psync_hash_update(&hctx, buff, rd);
     fsize-=rd;
-    psync_yield_cpu();
   }
   psync_hash_final(hashbin, &hctx);
   psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);

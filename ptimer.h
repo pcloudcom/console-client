@@ -33,13 +33,14 @@
 
 extern time_t psync_current_time;
 
-typedef void (*psync_timer_callback)();
+typedef void (*psync_timer_callback)(void *);
+typedef void (*psync_exception_callback)();
 
 void psync_timer_init();
 time_t psync_timer_time();
 void psync_timer_wake();
-void psync_timer_register(psync_timer_callback func, time_t numsec);
-void psync_timer_exception_handler(psync_timer_callback func);
+void psync_timer_register(psync_timer_callback func, time_t numsec, void *param);
+void psync_timer_exception_handler(psync_exception_callback func);
 void psync_timer_do_notify_exception();
 void psync_timer_wait_next_sec();
 

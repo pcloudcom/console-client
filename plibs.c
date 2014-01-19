@@ -583,7 +583,7 @@ int psync_rename_conflicted_file(const char *path){
   }
 }
 
-static void psync_run_pointers_timer(){
+static void psync_run_pointers_timer(void *ptr){
   struct run_after_ptr *fp, **pfp;
   if (psync_current_time%60==0 && ptrs_to_run_next_min){
     time_t nextmin=psync_current_time+60;
@@ -628,7 +628,7 @@ static void psync_run_pointers_timer(){
 }
 
 void psync_libs_init(){
-  psync_timer_register(psync_run_pointers_timer, 1);
+  psync_timer_register(psync_run_pointers_timer, 1, NULL);
 }
 
 void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds){

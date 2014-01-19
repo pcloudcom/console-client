@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -25,35 +25,37 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_NETLIBS_H
-#define _PSYNC_NETLIBS_H
+#ifndef _PSYNC_POOL_H
+#define _PSYNC_POOL_H
 
-#include "pcompat.h"
+#include <pthread.h>
+#include <time.h>
 
-#define PSYNC_NET_OK        0
-#define PSYNC_NET_PERMFAIL -1
-#define PSYNC_NET_TEMPFAIL -2
+typedef void *(*resourceinit)();
+typedef void (*resourcedestroy)(void *);
 
 typedef struct {
-  psync_socket *sock;
-  void *readbuff;
-  uint32_t readbuffoff;
-  uint32_t readbuffsize;
-} psync_http_socket;
+  void *resource;
+  time_t lastuse;
+} psync_res_and_time;
 
-int psync_rmdir_with_trashes(const char *path);
-int psync_rmdir_recursive(const char *path);
+typedef struct {
+  resourceinit ri;
+  resourcedestroy rd;
+  pthread_mutex_t lock;
+  pthread_cond_t cond;
+  int inuse;
+  int maxfree;
+  int maxused;
+  int maxage;
+  int curfree;
+  int sleepers;
+  psync_res_and_time freeres[];
+} psync_pool;
 
-void psync_set_local_full(int over);
-int psync_handle_api_result(uint64_t result);
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize, psync_socket *restrict useapi);
-int psync_get_local_file_checksum(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize);
-int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize);
-int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);
-int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
-
-psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);
-void psync_http_close(psync_http_socket *http);
-int psync_http_readall(psync_http_socket *http, void *buff, int num);
+psync_pool *psync_pool_create(resourceinit ri, resourcedestroy rd, int maxfree, int maxused, int maxage);
+void *psync_pool_get(psync_pool *pl);
+void psync_pool_release(psync_pool *pl, void *resource);
+void psync_pool_release_bad(psync_pool *pl, void *resource);
 
 #endif

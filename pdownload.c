@@ -290,7 +290,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   const char *requestpath;
   void *buff;
   psync_http_socket *http;
-  uint64_t result, serversize;
+  uint64_t result, serversize, localsize;
   psync_uint_row row;
   psync_hash_ctx hashctx;
   unsigned char serverhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
@@ -333,6 +333,17 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     goto ret0;
   }
   psync_sql_free_result(sql);
+  if (psync_get_local_file_checksum(name, localhashhex, &localsize)==PSYNC_NET_OK){
+    if (localsize==serversize && !memcmp(localhashhex, serverhashhex, PSYNC_HASH_DIGEST_HEXLEN)){
+      psync_socket_close(api);
+      if (unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize)))
+        goto err_sl_ex;
+      else{
+        debug(D_NOTICE, "file already exists %s, not downloading", name);
+        goto ret0;
+      }
+    }
+  }
   sql=psync_sql_query("SELECT id FROM localfile WHERE size=? AND checksum=?");
   psync_sql_bind_uint(sql, 1, serversize);
   psync_sql_bind_lstring(sql, 2, (char *)serverhashhex, PSYNC_HASH_DIGEST_HEXLEN);
@@ -426,11 +437,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     debug(D_WARNING, "got wrong file checksum for file %s", filename);
     goto err0;
   }
-  name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
-  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize))){
-    psync_free(name);
+  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize)))
     goto err0;
-  }
   psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FINISHED, syncid, name, fileid);
   debug(D_NOTICE, "file downloaded %s", name);
   psync_free(name);

@@ -34,13 +34,14 @@ time_t psync_current_time;
 
 struct exception_list {
   struct exception_list *next;
-  psync_timer_callback func;
+  psync_exception_callback func;
   pthread_t threadid;
 };
 
 struct timer_list {
   struct timer_list *next;
   psync_timer_callback func;
+  void *param;
   time_t nextrun;
   time_t runevery;
 };
@@ -84,7 +85,7 @@ static void timer_thread(){
     while (t){
       if (t->nextrun<=psync_current_time){
         t->nextrun=psync_current_time+t->runevery;
-        t->func();
+        t->func(t->param);
       }
       t=t->next;
     }
@@ -108,11 +109,12 @@ void psync_timer_wake(){
   pthread_cond_signal(&timer_cond);
 }
 
-void psync_timer_register(psync_timer_callback func, time_t numsec){
+void psync_timer_register(psync_timer_callback func, time_t numsec, void *param){
   struct timer_list *t;
   t=psync_new(struct timer_list);
   t->next=NULL; /* this is needed as in the timer there is no lock and the two operations between lock and unlock can be reordered*/
   t->func=func;
+  t->param=param;
   t->nextrun=0;
   t->runevery=numsec;
   pthread_mutex_lock(&timer_mutex);
@@ -121,7 +123,7 @@ void psync_timer_register(psync_timer_callback func, time_t numsec){
   pthread_mutex_unlock(&timer_mutex);
 }
 
-void psync_timer_exception_handler(psync_timer_callback func){
+void psync_timer_exception_handler(psync_exception_callback func){
   struct exception_list *t;
   t=psync_new(struct exception_list);
   t->next=NULL;

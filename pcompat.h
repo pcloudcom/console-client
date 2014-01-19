@@ -186,7 +186,7 @@ typedef int psync_file_t;
 #define P_PRI_U64 "I64u"
 #else
 #include <malloc.h>
-#define psync_def_var_arr(name, type, size) type* name = (type*)alloca(sizeof(type)*size)
+#define psync_def_var_arr(name, type, size) type *name = (type *)alloca(sizeof(type)*size)
 #define P_PRI_U64 "llu"
 
 #define atoll _atoi64
