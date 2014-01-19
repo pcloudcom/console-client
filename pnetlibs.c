@@ -225,11 +225,10 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
   }
   psync_hash_final(hashbin, &hctx);
   psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
-  if (unlikely_log(memcmp(hexsum, hashhex, PSYNC_HASH_DIGEST_HEXLEN)))
+  if (unlikely_log(memcmp(hexsum, hashhex, PSYNC_HASH_DIGEST_HEXLEN)) || unlikely_log(psync_file_sync(dfd)))
     goto err2;
   psync_free(buff);
-  psync_file_close(dfd);
-  if (unlikely_log(psync_file_rename_overwrite(tmpdest, destination)))
+  if (unlikely_log(psync_file_close(dfd)) || unlikely_log(psync_file_rename_overwrite(tmpdest, destination)))
     goto err1;
   psync_free(tmpdest);
   psync_file_close(sfd);

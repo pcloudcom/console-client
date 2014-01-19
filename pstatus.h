@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -64,11 +64,13 @@
 #define PSTATUS_COMBINE(type, statuses) (((type)<<24)+(statuses))
 
 void psync_status_init();
+void psync_status_recalc_to_download();
 uint32_t psync_status_get(uint32_t statusid) PSYNC_PURE;
 void psync_set_status(uint32_t statusid, uint32_t status);
 void psync_wait_status(uint32_t statusid, uint32_t status);
 void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt);
 void psync_wait_statuses(uint32_t first, ...);
+int psync_statuses_ok_array(const uint32_t *combinedstatuses, uint32_t cnt);
 
 void psync_status_set_download_speed(uint32_t speed);
 void psync_status_inc_downloads_count();

@@ -200,11 +200,9 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * If event&PEVENT_TYPE_FOLDER==PEVENT_TYPE_FOLDER is true, remoteid is folderid,
  * otherwise it is fileid.
  * 
- * Events PEVENT_FILE_DOWNLOAD_STARTED and PEVENT_FILE_DOWNLOAD_FINISHED send
- * different values of localpath for the same download - the former sends a path
- * of a temporary file that is created while the download is in progress and the
- * latter sends final path of downloaded file. In case of failure PEVENT_FILE_DOWNLOAD_FAILED
- * also sends the temporary path as with PEVENT_FILE_DOWNLOAD_STARTED.
+ * Do not expect localpath to exist after receiving PEVENT_FILE_DOWNLOAD_STARTED
+ * as the file will be created with alternative name first and renamed when download
+ * is finished.
  */
 
 typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, psync_fileorfolderid_t remoteid, 

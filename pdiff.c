@@ -36,6 +36,7 @@
 #include "ptasks.h"
 #include "pfolder.h"
 #include "psyncer.h"
+#include "pdownload.h"
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
@@ -612,8 +613,10 @@ static void process_deletefile(const binresult *entry){
   psync_sql_run(st);
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num)
     used_quota-=psync_find_result(meta, "size", PARAM_NUM)->num;
-  if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num))
+  if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num)){
+    psync_delete_download_tasks_for_file(fileid);
     psync_task_delete_local_file(fileid);
+  }
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}

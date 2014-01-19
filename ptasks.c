@@ -28,6 +28,8 @@
 #include "ptasks.h"
 #include "plibs.h"
 #include "pdownload.h"
+#include "pstatus.h"
+#include "pcallbacks.h"
 
 static void create_task1(psync_uint_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid){
   psync_sql_res *res;
@@ -93,6 +95,8 @@ void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t fold
 
 void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
   create_task3(PSYNC_DOWNLOAD_FILE, syncid, fileid, localfolderid, name);
+  psync_status_recalc_to_download();
+  psync_send_status_update();
 }
 
 void psync_task_delete_local_file(psync_fileid_t fileid){

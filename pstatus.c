@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,7 @@
 #include "pstatus.h"
 #include "pcallbacks.h"
 #include "plibs.h"
+#include "ptasks.h"
 #include <string.h>
 #include <stdarg.h>
 
@@ -115,7 +116,25 @@ void psync_status_init(){
     statuses[PSTATUS_TYPE_RUN]=PSTATUS_RUN_RUN;
     psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('runstatus', " NTO_STR(PSTATUS_RUN_RUN) ")");
   }
+  psync_status_recalc_to_download();
   psync_status.status=psync_calc_status();
+}
+
+void psync_status_recalc_to_download(){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT COUNT(*), SUM(f.size) FROM task t, file f WHERE t.type=? AND t.itemid=f.id");
+  psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
+  if ((row=psync_sql_fetch_rowint(res))){
+    psync_status.filestodownload=row[0];
+    psync_status.bytestodownload=row[1];
+  }
+  else{
+    psync_status.filestodownload=0;
+    psync_status.bytestodownload=0;
+  }
+  psync_sql_free_result(res);
+  
 }
 
 uint32_t psync_status_get(uint32_t statusid){
@@ -183,6 +202,21 @@ void psync_wait_statuses(uint32_t first, ...){
   psync_wait_statuses_array(arr, cnt);
 }
 
+int psync_statuses_ok_array(const uint32_t *combinedstatuses, uint32_t cnt){
+  uint32_t i, statusid, status;
+  pthread_mutex_lock(&statusmutex);
+  for (i=0; i<cnt; i++){
+    statusid=combinedstatuses[i]>>24;
+    status=combinedstatuses[i]&0x00ffffff;
+    if ((statuses[statusid]&status)==0){
+      pthread_mutex_unlock(&statusmutex);
+      return 0;
+    }
+  }
+  pthread_mutex_unlock(&statusmutex);
+  return 1;
+}
+
 void psync_status_set_download_speed(uint32_t speed){
   if (psync_status.downloadspeed!=speed){
     psync_status.downloadspeed=speed;
@@ -200,8 +234,11 @@ void psync_status_inc_downloads_count(){
 
 void psync_status_dec_downloads_count(){
   psync_status.filesdownloading--;
-  if (!psync_status.filesdownloading)
+  if (!psync_status.filesdownloading){
     psync_status.downloadspeed=0;
+    psync_status.bytesdownloaded=0;
+    psync_status.bytestodownloadcurrent=0;
+  }
   psync_status.status=psync_calc_status();
   psync_send_status_update();
 }

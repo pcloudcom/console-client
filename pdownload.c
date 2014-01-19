@@ -301,6 +301,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   int rd, rt;
   downloadingfile=fileid;
   downloadingfilesyncid=syncid;
+  localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
+  name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
   api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
   if (unlikely_log(!api))
     goto err_sl_ex;
@@ -310,7 +312,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     if (rt==PSYNC_NET_TEMPFAIL)
       goto err_sl_ex;
     else
-      return 0;
+      goto ret0;
   }
   sql=psync_sql_query("SELECT fileid, id FROM localfile WHERE size=? AND checksum=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(sql, 1, serversize);
@@ -328,15 +330,13 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
       psync_sql_bind_uint(sql, 2, result);
       psync_sql_run_free(sql);
     }
-    return 0;
+    goto ret0;
   }
   psync_sql_free_result(sql);
   sql=psync_sql_query("SELECT id FROM localfile WHERE size=? AND checksum=?");
   psync_sql_bind_uint(sql, 1, serversize);
   psync_sql_bind_lstring(sql, 2, (char *)serverhashhex, PSYNC_HASH_DIGEST_HEXLEN);
   while ((row=psync_sql_fetch_rowint(sql))){
-    localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
-    name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
     tmpname=psync_local_path_for_local_file(row[0], NULL);
     rt=psync_copy_local_file_if_checksum_matches(tmpname, name, serverhashhex, serversize);
     if (likely(rt==PSYNC_NET_OK)){
@@ -348,12 +348,10 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     else
       debug(D_WARNING, "failed to copy %s from %s", tmpname, name);
     psync_free(tmpname);
-    psync_free(name);
-    psync_free(localpath);
     if (likely_log(rt==PSYNC_NET_OK)){
       psync_sql_free_result(sql);
       psync_socket_close(api);
-      return 0;
+      goto ret0;
     }
   }
   psync_sql_free_result(sql);
@@ -361,21 +359,26 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_socket_close(api);
   if (unlikely_log(!res))
     goto err_sl_ex;
+  tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
-  if (result){
-    psync_free(res);
+  if (unlikely(result)){
     debug(D_WARNING, "got error %lu from getfilelink", (long unsigned)result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
-      return -1;
-    else
-      return 0;
+      goto err0;
+    else{
+      psync_free(res);
+      psync_free(tmpname);
+      goto ret0;
+    }
   }
-  localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
-  tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
   fd=psync_file_open(tmpname, P_O_WRONLY, P_O_CREAT);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE))
     goto err0;
-  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_STARTED, syncid, tmpname, fileid);
+  
+  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_STARTED, syncid, name, fileid);
+  psync_status.bytestodownloadcurrent=serversize;
+  psync_status.bytesdownloaded=0;
+  
   hosts=psync_find_result(res, "hosts", PARAM_ARRAY);
   requestpath=psync_find_result(res, "path", PARAM_STR)->str;
   http=NULL;
@@ -391,8 +394,13 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     if (unlikely_log(psync_file_writeall_checkoverquota(fd, buff, rd)))
       goto err2;
     psync_hash_update(&hashctx, buff, rd);
-    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
+    psync_status.bytesdownloaded+=rd;
+    psync_send_status_update();
+    if (unlikely(!psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses))))
+      goto err2;
   }
+  psync_status.bytestodownloadcurrent=0;
+  psync_status.bytesdownloaded=0;
   downloadingfile=0;
   downloadingfilesyncid=0;
   if (unlikely(stopfile)){
@@ -406,12 +414,13 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     }
     stopfile=0;
   }
-  if (unlikely_log(rd==-1))
+  if (unlikely_log(rd==-1) || unlikely_log(psync_file_sync(fd)))
     goto err2;
   psync_free(buff);
   psync_http_close(http);
-  psync_file_close(fd);
   psync_hash_final(localhashbin, &hashctx);
+  if (unlikely_log(psync_file_close(fd)))
+    goto err0;
   psync_binhex(localhashhex, localhashbin, PSYNC_HASH_DIGEST_LEN);
   if (unlikely_log(memcmp(localhashhex, serverhashhex, PSYNC_HASH_DIGEST_HEXLEN))){
     debug(D_WARNING, "got wrong file checksum for file %s", filename);
@@ -434,21 +443,30 @@ err2:
   psync_free(buff);
   psync_http_close(http);
 err1:
+  psync_status.bytestodownloadcurrent=0;
+  psync_status.bytesdownloaded=0;
   psync_file_close(fd);
-  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FAILED, syncid, tmpname, fileid);
+  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FAILED, syncid, name, fileid);
 err0:
   psync_free(tmpname);
   psync_free(localpath);
+  psync_free(name);
   psync_free(res);
   downloadingfile=0;
   downloadingfilesyncid=0;
   return -1;
 err_sl_ex:
+  psync_free(localpath);
+  psync_free(name);
   downloadingfile=0;
   downloadingfilesyncid=0;
   psync_timer_notify_exception();
   psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
   return -1;
+ret0:
+  psync_free(localpath);
+  psync_free(name);
+  return 0;
 }
 
 static int task_delete_file(psync_fileid_t fileid){
@@ -515,12 +533,14 @@ static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, 
 static void download_thread(){
   psync_sql_res *res;
   psync_variant *row;
+  uint32_t type;
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     
     row=psync_sql_row("SELECT id, type, syncid, itemid, localitemid, newitemid, name FROM task WHERE type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_DOWNLOAD)" ORDER BY id LIMIT 1");
     if (row){
-      if (!download_task(psync_get_number(row[1]), 
+      type=psync_get_number(row[1]);
+      if (!download_task(type, 
                          psync_get_number(row[2]), 
                          psync_get_number(row[3]), 
                          psync_get_number(row[4]), 
@@ -529,6 +549,10 @@ static void download_thread(){
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, psync_get_number(row[0]));
         psync_sql_run_free(res);
+        if (type==PSYNC_DOWNLOAD_FILE){
+          psync_status_recalc_to_download();
+          psync_send_status_update();
+        }
       }
       else
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_DOWNLOAD);
@@ -561,7 +585,12 @@ void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
   res=psync_sql_prep_statement("DELETE FROM task WHERE type=? AND itemid=?");
   psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
   psync_sql_bind_uint(res, 2, fileid);
-  psync_sql_run_free(res);
+  psync_sql_run(res);
+  if (psync_sql_affected_rows()){
+    psync_status_recalc_to_download();
+    psync_send_status_update();
+  }
+  psync_sql_free_result(res);
   if (fileid==downloadingfile)
     stopfile=fileid;
 }
