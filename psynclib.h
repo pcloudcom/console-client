@@ -150,6 +150,7 @@ typedef struct {
 #define PERROR_REMOTE_FOLDER_ACC_DENIED 8
 #define PERROR_FOLDER_ALREADY_SYNCING   9
 #define PERROR_INVALID_SYNCTYPE        10
+#define PERROR_OFFLINE                 11
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
@@ -281,6 +282,16 @@ void psync_unlink();
  * on success syncid is returned, on error -1. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
  * PSYNC_UPLOAD_ONLY or PSYNC_FULL.
  * 
+ * psync_add_sync_by_path_delayed generally works in a way similar to psync_add_sync_by_path, but with few
+ * differences:
+ *  1) it can be called just after psync_init() and before psync_start_sync(), even before logging in and downloading account state
+ *  2) actual creation of the sync will be delayed until login and state download
+ *  3) if remotepath does not exist, it will be created if possible (it is generally possible to create any path
+ *     unless some prefix of the path is a mounted share with no create privileges)
+ *  4) in rare cases when remote path does not exists and could not be created, whole psync_add_sync_by_path_delayed
+ *     request will be silently discarded
+ *  5) psync_add_sync_by_path_delayed does not return syncid, and can only fail if there is some problem with localpath
+ * 
  * psync_change_synctype changes the sync type, on success returns 0 and -1 on error.
  * 
  * psync_delete_sync deletes the sync relationship between folders, on success returns 0
@@ -294,6 +305,7 @@ void psync_unlink();
 
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype);
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype);
+int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath, psync_synctype_t synctype);
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();

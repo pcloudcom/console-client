@@ -31,6 +31,8 @@
 #include "plibs.h"
 #include "psettings.h"
 #include "plist.h"
+#include "pnetlibs.h"
+#include "papi.h"
 
 #define INITIAL_NAME_BUFF 2000
 #define INITIAL_ENTRY_CNT 128
@@ -99,6 +101,85 @@ err:
   if (res)
     psync_sql_free_result(res);
   psync_error=PERROR_REMOTE_FOLDER_NOT_FOUND;
+  return PSYNC_INVALID_FOLDERID;
+}
+
+psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
+  psync_folderid_t cfolderid;
+  const char *sl;
+  psync_sql_res *res;
+  psync_uint_row row;
+  size_t len;
+  res=NULL;
+  if (*path!='/')
+    goto err;
+  cfolderid=0;
+  while (1){
+    while (*path=='/')
+      path++;
+    if (*path==0){
+      if (res)
+        psync_sql_free_result(res);
+      return cfolderid;
+    }
+    sl=strchr(path, '/');
+    if (sl)
+      len=sl-path;
+    else
+      len=strlen(path);
+    if (!res){
+      res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
+      if (unlikely_log(!res)){
+        psync_error=PERROR_DATABASE_ERROR;
+        return PSYNC_INVALID_FOLDERID;
+      }
+    }
+    else
+      psync_sql_reset(res);
+    psync_sql_bind_uint(res, 1, cfolderid);
+    psync_sql_bind_lstring(res, 2, path, len);
+    row=psync_sql_fetch_rowint(res);
+    if (row)
+      cfolderid=row[0];
+    else{
+      binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", cfolderid), P_LSTR("name", path, len)};
+      psync_socket *api;
+      binresult *bres;
+      uint64_t result;
+      api=psync_apipool_get();
+      if (unlikely(!api))
+        goto errnet;
+      bres=send_command(api, "createfolder", params);
+      if (bres)
+        psync_apipool_release(api);
+      else
+        psync_apipool_release_bad(api);
+      if (unlikely(!bres))
+        goto errnet;
+      result=psync_find_result(bres, "result", PARAM_NUM)->num;
+      if (result==0){
+        cfolderid=psync_find_result(psync_find_result(bres, "metadata", PARAM_HASH), "folderid", PARAM_HASH)->num;
+        psync_free(bres);
+      }
+      else{
+        psync_free(bres);
+        if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
+          goto errnet;
+        else
+          goto err;
+      }
+    }
+    path+=len;
+  }  
+err:
+  if (res)
+    psync_sql_free_result(res);
+  psync_error=PERROR_REMOTE_FOLDER_NOT_FOUND;
+  return PSYNC_INVALID_FOLDERID;
+errnet:
+  if (res)
+    psync_sql_free_result(res);
+  psync_error=PERROR_OFFLINE;
   return PSYNC_INVALID_FOLDERID;
 }
 

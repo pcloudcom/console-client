@@ -256,6 +256,28 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   return ret;
 }
 
+int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath, psync_synctype_t synctype){
+  psync_sql_res *res;
+  psync_stat_t st;
+  int unsigned md;
+  if (unlikely_log(synctype<PSYNC_SYNCTYPE_MIN || synctype>PSYNC_SYNCTYPE_MAX))
+    return_error(PERROR_INVALID_SYNCTYPE);
+  if (unlikely_log(psync_stat(localpath, &st)) || unlikely_log(!psync_stat_isfolder(&st)))
+    return_error(PERROR_LOCAL_FOLDER_NOT_FOUND);
+  if (synctype&PSYNC_DOWNLOAD_ONLY)
+    md=7;
+  else
+    md=5;
+  if (unlikely_log(!psync_stat_mode_ok(&st, md)))
+    return_error(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  res=psync_sql_prep_statement("INSERT INTO syncfolderdelayed (localpath, remotepath, synctype) VALUES (?, ?, ?)");
+  psync_sql_bind_string(res, 1, localpath);
+  psync_sql_bind_string(res, 2, remotepath);
+  psync_sql_bind_uint(res, 3, synctype);
+  psync_sql_run_free(res);
+  return 0;
+}
+
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 
 int psync_delete_sync(psync_syncid_t syncid){
