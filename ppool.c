@@ -26,6 +26,7 @@
  */
 
 #include "pcompat.h"
+#include "plibs.h"
 #include "psynclib.h"
 #include "ptimer.h"
 #include "ppool.h"
@@ -47,8 +48,10 @@ static void psync_clean_old_locked(psync_pool *pl){
     }
   if (cnt){
     pthread_mutex_unlock(&pl->lock);
-    for (i=0; i<cnt; i++)
+    for (i=0; i<cnt; i++){
       pl->rd(resources[i]);
+      debug(D_NOTICE, "freeing old item from cache");
+    }
     pthread_mutex_lock(&pl->lock);
   }
 }
@@ -100,12 +103,14 @@ void *psync_pool_get(psync_pool *pl){
         memcpy(&pl->freeres[i], &pl->freeres[pl->curfree-1], sizeof(psync_res_and_time));
       pl->curfree--;
       pthread_mutex_unlock(&pl->lock);
+      debug(D_NOTICE, "got item from cache");
       return ret;
     }
   pl->inuse++;
   pthread_mutex_unlock(&pl->lock);
   ret=pl->ri();
-  if (unlikely(!ret)){
+  debug(D_NOTICE, "allocating new item");
+  if (unlikely_log(!ret)){
     pthread_mutex_lock(&pl->lock);
     pl->inuse--;
     pthread_mutex_unlock(&pl->lock);
@@ -122,6 +127,7 @@ void psync_pool_release(psync_pool *pl, void *resource){
   if (pl->curfree>=pl->maxfree){
     pl->inuse--;
     pthread_mutex_unlock(&pl->lock);
+    debug(D_NOTICE, "freeing item");
     pl->rd(resource);
   }
   else {
@@ -129,6 +135,7 @@ void psync_pool_release(psync_pool *pl, void *resource){
     pl->freeres[pl->curfree].lastuse=psync_timer_time();
     pl->curfree++;
     pthread_mutex_unlock(&pl->lock);
+    debug(D_NOTICE, "put item to cache");
   }
 }
 
@@ -138,5 +145,6 @@ void psync_pool_release_bad(psync_pool *pl, void *resource){
   if (pl->sleepers)
     pthread_cond_broadcast(&pl->cond);
   pthread_mutex_unlock(&pl->lock);
+  debug(D_NOTICE, "freeing item");
   pl->rd(resource);
 }

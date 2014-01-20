@@ -41,12 +41,18 @@ typedef struct {
   uint32_t readbuffsize;
 } psync_http_socket;
 
+void psync_netlibs_init();
+
+psync_socket *psync_apipool_get();
+void psync_apipool_release(psync_socket *api);
+void psync_apipool_release_bad(psync_socket *api);
+
 int psync_rmdir_with_trashes(const char *path);
 int psync_rmdir_recursive(const char *path);
 
 void psync_set_local_full(int over);
 int psync_handle_api_result(uint64_t result);
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize, psync_socket *restrict useapi);
+int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize);
 int psync_get_local_file_checksum(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize);
 int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize);
 int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);

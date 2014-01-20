@@ -41,6 +41,7 @@
 #include "psyncer.h"
 #include "ptasks.h"
 #include "papi.h"
+#include "pnetlibs.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -90,6 +91,7 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_upload_init();
   psync_download_init();
   psync_syncer_init();
+  psync_netlibs_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
@@ -356,11 +358,11 @@ int psync_register(const char *email, const char *password, int termsaccepted, c
   binresult *res;
   uint64_t ret;
   binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0")};
-  api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+  api=psync_apipool_get();
   if (unlikely_log(!api))
     goto neterr1;
   res=send_command(api, "register", params);
-  psync_socket_close(api);
+  psync_apipool_release(api);
   if (unlikely_log(!res))
     goto neterr1;
   ret=psync_find_result(res, "result", PARAM_NUM)->num;

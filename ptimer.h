@@ -28,6 +28,7 @@
 #ifndef _PSYNC_TIMER_H
 #define _PSYNC_TIMER_H
 
+#include "pcompiler.h"
 #include <time.h>
 
 
@@ -37,7 +38,7 @@ typedef void (*psync_timer_callback)(void *);
 typedef void (*psync_exception_callback)();
 
 void psync_timer_init();
-time_t psync_timer_time();
+time_t psync_timer_time() PSYNC_PURE;
 void psync_timer_wake();
 void psync_timer_register(psync_timer_callback func, time_t numsec, void *param);
 void psync_timer_exception_handler(psync_exception_callback func);

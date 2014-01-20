@@ -35,11 +35,14 @@
 #include "ptimer.h"
 #include "pstatus.h"
 #include "papi.h"
+#include "ppool.h"
 
 static time_t current_download_sec=0;
 static psync_uint_t download_bytes_this_sec=0;
 static psync_uint_t download_bytes_off=0;
 static psync_uint_t download_speed=0;
+
+static psync_pool *apipool=NULL;
 
 struct time_bytes {
   time_t tm;
@@ -47,6 +50,43 @@ struct time_bytes {
 };
 
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
+
+static void *psync_get_api(){
+  return psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+}
+
+static void psync_ret_api(void *ptr){
+  psync_socket_close((psync_socket *)ptr);
+}
+
+void psync_netlibs_init(){
+  apipool=psync_pool_create(psync_get_api, psync_ret_api, PSYNC_APIPOOL_MAXIDLE, PSYNC_APIPOOL_MAXACTIVE, PSYNC_APIPOOL_MAXIDLESEC);
+}
+
+psync_socket *psync_apipool_get(){
+  psync_socket *ret;
+  ret=(psync_socket *)psync_pool_get(apipool);
+  if (likely(ret)){
+    while (unlikely(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
+      psync_pool_release_bad(apipool, ret);
+      ret=(psync_socket *)psync_pool_get(apipool);
+      if (!ret)
+        break;
+    }
+  }
+  else
+    psync_timer_notify_exception();
+  return ret;
+}
+
+void psync_apipool_release(psync_socket *api){
+  psync_pool_release(apipool, api);
+}
+
+void psync_apipool_release_bad(psync_socket *api){
+  psync_pool_release_bad(apipool, api);
+}
+
 
 static void rm_all(void *vpath, psync_pstat *st){
   char *path;
@@ -113,7 +153,7 @@ int psync_handle_api_result(uint64_t result){
     return PSYNC_NET_TEMPFAIL;
 }
 
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize, psync_socket *restrict useapi){
+int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize){
   psync_socket *api;
   binresult *res;
   const binresult *meta, *checksum;
@@ -132,18 +172,14 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
     return PSYNC_NET_OK;
   }
   psync_sql_free_result(sres);
-  if (useapi)
-    api=useapi;
-  else{
-    api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
-    if (!api){
-      psync_timer_notify_exception();
-      return PSYNC_NET_TEMPFAIL;
-    }
-  }
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    return PSYNC_NET_TEMPFAIL;
   res=send_command(api, "checksumfile", params);
-  if (!useapi)
-    psync_socket_close(api);
+  if (res)
+    psync_apipool_release(api);
+  else
+    psync_apipool_release_bad(api);
   if (unlikely_log(!res)){
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;

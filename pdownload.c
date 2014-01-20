@@ -303,12 +303,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   downloadingfilesyncid=syncid;
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
-  api=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
-  if (unlikely_log(!api))
-    goto err_sl_ex;
-  rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize, api);
+  rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize);
   if (unlikely_log(rt!=PSYNC_NET_OK)){
-    psync_socket_close(api);
     if (rt==PSYNC_NET_TEMPFAIL)
       goto err_sl_ex;
     else
@@ -323,7 +319,6 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     rt=row[0]!=fileid;
     result=row[1];
     psync_sql_free_result(sql);
-    psync_socket_close(api);
     if (rt){
       sql=psync_sql_prep_statement("UPDATE localfile SET fileid=? WHERE id=?");
       psync_sql_bind_uint(sql, 1, fileid);
@@ -335,7 +330,6 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_sql_free_result(sql);
   if (psync_get_local_file_checksum(name, localhashhex, &localsize)==PSYNC_NET_OK){
     if (localsize==serversize && !memcmp(localhashhex, serverhashhex, PSYNC_HASH_DIGEST_HEXLEN)){
-      psync_socket_close(api);
       if (unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize)))
         goto err_sl_ex;
       else{
@@ -361,13 +355,15 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     psync_free(tmpname);
     if (likely_log(rt==PSYNC_NET_OK)){
       psync_sql_free_result(sql);
-      psync_socket_close(api);
       goto ret0;
     }
   }
   psync_sql_free_result(sql);
+  api=psync_apipool_get();
+  if (unlikely_log(!api))
+    goto err_sl_ex;
   res=send_command(api, "getfilelink", params);
-  psync_socket_close(api);
+  psync_apipool_release(api);
   if (unlikely_log(!res))
     goto err_sl_ex;
   tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
