@@ -303,20 +303,6 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   downloadingfile=fileid;
   downloadingfilesyncid=syncid;
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
-  result=psync_setting_get_uint(_PS(minlocalfreespace));
-  if (result){
-    freespace=psync_get_free_space_by_path(localpath);
-    if (likely_log(freespace!=-1)){
-      if (freespace>=result)
-        psync_set_local_full(0);
-      else{
-        psync_set_local_full(1);
-        psync_free(localpath);
-        psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
-        return -1;
-      }
-    }
-  }
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
   rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize);
   if (unlikely_log(rt!=PSYNC_NET_OK)){
@@ -324,6 +310,21 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
       goto err_sl_ex;
     else
       goto ret0;
+  }
+  result=psync_setting_get_uint(_PS(minlocalfreespace));
+  if (result){
+    freespace=psync_get_free_space_by_path(localpath);
+    if (likely_log(freespace!=-1)){
+      if (freespace>=result+serversize)
+        psync_set_local_full(0);
+      else{
+        psync_set_local_full(1);
+        psync_free(localpath);
+        psync_free(name);
+        psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
+        return -1;
+      }
+    }
   }
   sql=psync_sql_query("SELECT fileid, id FROM localfile WHERE size=? AND checksum=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(sql, 1, serversize);
