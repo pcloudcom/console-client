@@ -378,6 +378,7 @@ int psync_register(const char *email, const char *password, int termsaccepted, c
  * usessl (bool) - use SSL connections to remote servers 
  * maxdownloadspeed (int) - maximum download speed in bytes per second, 0 for auto-shaper, -1 for no limit
  * maxuploadspeed (int) - maximum upload speed in bytes per second, 0 for auto-shaper, -1 for no limit
+ * minlocalfreespace (uint) - minimum free space on local drives to run downloads
  * ignorepatterns (string) - patterns of files and folders to be ignored when syncing, separated by ";" supported widcards are
  *                          * - matches any number of characters (even zero)
  *                          ? - matches exactly one character

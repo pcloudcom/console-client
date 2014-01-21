@@ -30,12 +30,13 @@
 
 #include "pcompiler.h"
 
-#if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_POSIX)
+#if !defined(P_OS_LINUX) && !defined(P_OS_MACOSX) && !defined(P_OS_WINDOWS) && !defined(P_OS_BSD) && !defined(P_OS_POSIX)
 #if defined(__ANDROID__)
 #define P_OS_LINUX
 #define P_OS_POSIX
 #elif defined(__APPLE__)
 #define P_OS_MACOSX
+#define P_OS_BSD
 #define P_OS_POSIX
 #elif defined(__CYGWIN__)
 #define P_OS_POSIX
@@ -46,12 +47,16 @@
 #define P_OS_POSIX
 #elif defined(__FreeBSD__)
 #define P_OS_POSIX
+#define P_OS_BSD
 #elif defined(__DragonFly__)
 #define P_OS_POSIX
+#define P_OS_BSD
 #elif defined(__NetBSD__)
 #define P_OS_POSIX
+#define P_OS_BSD
 #elif defined(__OpenBSD__)
 #define P_OS_POSIX
+#define P_OS_BSD
 #elif defined(__unix__)
 #define P_OS_POSIX
 #elif defined(_WIN32) || defined(WIN32)
@@ -59,7 +64,7 @@
 #endif
 #endif
 
-#if (defined(P_OS_LINUX) || defined(P_OS_MACOSX)) && !defined(P_OS_POSIX)
+#if (defined(P_OS_LINUX) || defined(P_OS_MACOSX) || defined(P_OS_BSD)) && !defined(P_OS_POSIX)
 #define P_OS_POSIX
 #endif
 
@@ -271,6 +276,11 @@ typedef struct {
   psync_stat_t stat;
 } psync_pstat;
 
+typedef struct {
+  const char *name;
+  uint8_t isfolder;
+} psync_pstat_fast;
+
 #ifndef INVALID_SOCKET
 #define INVALID_SOCKET -1
 #endif
@@ -284,6 +294,7 @@ typedef struct {
 #endif
 
 typedef void (*psync_list_dir_callback)(void *, psync_pstat *);
+typedef void (*psync_list_dir_callback_fast)(void *, psync_pstat_fast *);
 typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
@@ -315,6 +326,9 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr);
+int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback, void *ptr);
+
+int64_t psync_get_free_space_by_path(const char *path);
 
 int psync_mkdir(const char *path);
 int psync_rmdir(const char *path);

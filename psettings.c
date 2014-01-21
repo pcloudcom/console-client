@@ -54,7 +54,8 @@ static psync_setting_t settings[]={
   {"saveauth", NULL, NULL, {(char *)1}, PSYNC_TBOOL},
   {"maxdownloadspeed", NULL, NULL, {(char *)PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"maxuploadspeed", NULL, NULL, {(char *)PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"ignorepatterns", NULL, lower_patterns, {PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING}
+  {"ignorepatterns", NULL, lower_patterns, {PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING},
+  {"minlocalfreespace", NULL, NULL, {(char *)PSYNC_MIN_LOCAL_FREE_SPACE}, PSYNC_TNUMBER}
 };
 
 void psync_settings_init(){

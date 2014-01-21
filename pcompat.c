@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/statvfs.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -833,6 +834,117 @@ err1:
   } while (FindNextFileW(dh, &st));
   FindClose(dh);
   return 0;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback, void *ptr){
+#if defined(P_OS_POSIX)
+  psync_pstat_fast pst;
+  struct stat st;
+  DIR *dh;
+  char *cpath;
+  size_t pl, entrylen;
+  long namelen;
+  struct dirent *entry, *de;
+  dh=opendir(path);
+  if (unlikely_log(!dh))
+    goto err1;
+  pl=strlen(path);
+  namelen=pathconf(path, _PC_NAME_MAX);
+  if (namelen==-1)
+    namelen=255;
+  entrylen=offsetof(struct dirent, d_name)+namelen+1;
+  cpath=(char *)psync_malloc(pl+namelen+2);
+  entry=(struct dirent *)psync_malloc(entrylen);
+  memcpy(cpath, path, pl);
+  if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
+    cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
+  while (!readdir_r(dh, entry, &de) && de)
+    if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
+#if defined(DT_UNKNOWN) && defined(DT_DIR) && defined(DT_REG)
+      pst.name=de->d_name;
+      if (de->d_type==DT_UNKNOWN){
+        strcpy(cpath+pl, de->d_name);
+        if (unlikely_log(lstat(cpath, &st)))
+          continue;
+        pst.isfolder=S_ISDIR(st.st_mode);
+      }
+      else if (de->d_type==DT_DIR)
+        pst.isfolder=1;
+      else if (de->d_type==DT_REG)
+        pst.isfolder=0;
+      else
+        continue;
+      callback(ptr, &pst);
+#else
+      strcpy(cpath+pl, de->d_name);
+      if (likely_log(!lstat(cpath, &st))){
+        pst.name=de->d_name;
+        pst.isfolder=S_ISDIR(st.st_mode);
+        callback(ptr, &pst);
+      }
+#endif
+    }
+  psync_free(entry);
+  psync_free(cpath);
+  closedir(dh);
+  return 0;
+err1:
+  psync_error=PERROR_LOCAL_FOLDER_NOT_FOUND;
+  return -1;
+#elif defined(P_OS_WINDOWS)
+  psync_pstat_fast pst;
+  char *spath, *name;
+  wchar_t *wpath;
+  WIN32_FIND_DATAW st;
+  HANDLE dh;
+  spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
+  wpath=utf8_to_wchar(spath);
+  psync_free(spath);
+  dh=FindFirstFileW(wpath, &st);
+  psync_free(wpath);
+  if (dh==INVALID_HANDLE_VALUE){
+    if (GetLastError()==ERROR_FILE_NOT_FOUND)
+      return 0;
+    else{
+      psync_error=PERROR_LOCAL_FOLDER_NOT_FOUND;
+      return -1;
+    }
+  }
+  do {
+    name=wchar_to_utf8(st.cFileName);
+    pst.name=name;
+    pst.isfolder=(st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)>0;
+    callback(ptr, &pst);
+    psync_free(name);
+  } while (FindNextFileW(dh, &st));
+  FindClose(dh);
+  return 0;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int64_t psync_get_free_space_by_path(const char *path){
+#if defined(P_OS_POSIX)
+  struct statvfs buf;
+  if (unlikely_log(statvfs(path, &buf)))
+    return -1;
+  else
+    return (int64_t)buf.f_bavail*(int64_t)buf.f_bsize;
+#elif defined(P_OS_WINDOWS)
+  ULARGE_INTEGER free;
+  wchar_t *wpath;
+  BOOL ret;
+  wpath=utf8_to_wchar(path);
+  ret=GetDiskFreeSpaceExW(wpath, &free, NULL, NULL);
+  psync_free(wpath);
+  if (likely_log(ret))
+    return free.QuadPart;
+  else
+    return -1;
 #else
 #error "Function not implemented for your operating system"
 #endif

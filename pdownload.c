@@ -291,6 +291,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   void *buff;
   psync_http_socket *http;
   uint64_t result, serversize, localsize;
+  int64_t freespace;
   psync_uint_row row;
   psync_hash_ctx hashctx;
   unsigned char serverhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
@@ -302,6 +303,20 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   downloadingfile=fileid;
   downloadingfilesyncid=syncid;
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
+  result=psync_setting_get_uint(_PS(minlocalfreespace));
+  if (result){
+    freespace=psync_get_free_space_by_path(localpath);
+    if (likely_log(freespace!=-1)){
+      if (freespace>=result)
+        psync_set_local_full(0);
+      else{
+        psync_set_local_full(1);
+        psync_free(localpath);
+        psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
+        return -1;
+      }
+    }
+  }
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
   rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize);
   if (unlikely_log(rt!=PSYNC_NET_OK)){
