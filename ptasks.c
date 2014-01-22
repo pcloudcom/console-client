@@ -99,6 +99,21 @@ void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_send_status_update();
 }
 
+void psync_task_rename_local_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t fileid, psync_folderid_t oldlocalfolderid,
+                                  psync_folderid_t newlocalfolderid, const char *newname){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, newsyncid, itemid, localitemid, newitemid, name) VALUES (?, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(res, 1, PSYNC_RENAME_LOCAL_FILE);
+  psync_sql_bind_uint(res, 2, oldsyncid);
+  psync_sql_bind_uint(res, 3, newsyncid);
+  psync_sql_bind_uint(res, 4, fileid);
+  psync_sql_bind_uint(res, 5, oldlocalfolderid);
+  psync_sql_bind_uint(res, 6, newlocalfolderid);
+  psync_sql_bind_string(res, 7, newname);
+  psync_sql_run_free(res);
+  psync_wake_download();
+}
+
 void psync_task_delete_local_file(psync_fileid_t fileid){
   create_task4(PSYNC_DELETE_LOCAL_FILE, fileid);
 }

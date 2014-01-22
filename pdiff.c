@@ -536,11 +536,17 @@ static void process_createfile(const binresult *entry){
 
 static void process_modifyfile(const binresult *entry){
   static psync_sql_res *sq=NULL, *st=NULL;
+  psync_sql_res *res;
+  psync_full_result_int *fres1, *fres2;
   const binresult *meta, *name;
+  const char *oldname;
+  size_t oldnamelen;
   psync_variant_row row;
   psync_fileid_t fileid;
-  psync_folderid_t parentfolderid;
-  uint64_t size, userid, hash;
+  psync_folderid_t parentfolderid, oldparentfolderid;
+  uint64_t size, userid, hash, oldsize;
+  int oldsync, newsync, needdownload, needrename;
+  uint32_t cnt, i;
   if (!entry){
     if (sq){
       psync_sql_free_result(sq);
@@ -567,8 +573,9 @@ static void process_modifyfile(const binresult *entry){
     process_createfile(entry);
     return;
   }
+  oldsize=psync_get_number(row[2]);
   if (psync_get_number(row[1])==psync_my_userid)
-    used_quota-=psync_get_number(row[2]);
+    used_quota-=oldsize;
   if (!st)
     st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
@@ -589,6 +596,38 @@ static void process_modifyfile(const binresult *entry){
   psync_sql_bind_uint(st, 7, psync_find_result(meta, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(st, 8, psync_find_result(meta, "modified", PARAM_NUM)->num);
   psync_sql_run(st);
+  oldparentfolderid=psync_get_number(row[0]);
+  oldsync=psync_is_folder_in_downloadlist(oldparentfolderid);
+  if (oldparentfolderid==parentfolderid)
+    newsync=oldsync;
+  else
+    newsync=psync_is_folder_in_downloadlist(parentfolderid);
+  if (oldsync || newsync){
+    if (psync_is_name_to_ignore(name->str)){
+      psync_delete_download_tasks_for_file(fileid);
+      psync_task_delete_local_file(fileid);
+      return;
+    }
+    needdownload=hash!=psync_get_number(row[3]) || size!=oldsize;
+    oldname=psync_get_lstring(row[4], &oldnamelen);
+    needrename=oldparentfolderid!=parentfolderid || name->length!=oldnamelen || memcmp(name->str, oldname, oldnamelen);
+    res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
+    psync_sql_bind_uint(res, 1, oldparentfolderid);
+    fres1=psync_sql_fetchall_int(res);
+    res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
+    psync_sql_bind_uint(res, 1, parentfolderid);
+    fres2=psync_sql_fetchall_int(res);
+    group_results_by_col(fres1, fres2, 0);
+    cnt=fres2->rows>fres1->rows?fres1->rows:fres2->rows;
+    for (i=0; i<cnt; i++){
+      if (needrename)
+        psync_task_rename_local_file(psync_get_result_cell(fres1, i, 0), psync_get_result_cell(fres2, i, 0), fileid,
+                                     psync_get_result_cell(fres1, i, 1), psync_get_result_cell(fres2, i, 1),
+                                     name->str);
+      if (needdownload)
+        psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+    }
+  }
 }
 
 static void process_deletefile(const binresult *entry){
