@@ -520,8 +520,66 @@ static int task_delete_file(psync_fileid_t fileid){
   psync_sql_free_result(res);
   return ret;
 }
+
+static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t fileid, psync_folderid_t oldlocalfolderid,
+                                  psync_folderid_t newlocalfolderid, const char *newname){
+  char *oldpath, *newfolder, *newpath;
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_fileid_t lfileid;
+  psync_stat_t st;
+  int ret;
+  res=psync_sql_query("SELECT id FROM localfile WHERE syncid=? AND fileid=?");
+  psync_sql_bind_uint(res, 1, oldsyncid);
+  psync_sql_bind_uint(res, 2, fileid);
+  row=psync_sql_fetch_rowint(res);
+  if (row)
+    lfileid=row[0];
+  else
+    lfileid=0;
+  psync_sql_free_result(res);
+  if (unlikely_log(!fileid)){
+    psync_task_download_file(newsyncid, fileid, newlocalfolderid, newname);
+    return 0;
+  }
+  newfolder=psync_local_path_for_local_folder(newlocalfolderid, newsyncid, NULL);
+  if (unlikely_log(!newfolder)){
+    psync_free(newfolder);
+    return 0;
+  }
+  oldpath=psync_local_path_for_local_file(lfileid, NULL);
+  newpath=psync_strcat(newfolder, PSYNC_DIRECTORY_SEPARATOR, newname, NULL);
+  ret=0;
+  if (psync_file_rename_overwrite(oldpath, newpath)){
+    if (psync_fs_err()==P_NOENT){
+      debug(D_WARNING, "renamed from %s to %s failed, downloading", oldpath, newpath);
+      psync_task_download_file(newsyncid, fileid, newlocalfolderid, newname);
+    }
+    else
+      ret=-1;
+  }
+  else{
+    if (likely_log(!psync_stat(newpath, &st))){
+      res=psync_sql_prep_statement("UPDATE localfile SET localparentfolderid=?, syncid=?, name=?, inode=?, mtime=?, mtimenative=? WHERE id=?");
+      psync_sql_bind_uint(res, 1, newlocalfolderid);
+      psync_sql_bind_uint(res, 2, newsyncid);
+      psync_sql_bind_string(res, 3, newname);
+      psync_sql_bind_uint(res, 4, psync_stat_inode(&st));
+      psync_sql_bind_uint(res, 5, psync_stat_mtime(&st));
+      psync_sql_bind_uint(res, 6, psync_stat_mtime_native(&st));
+      psync_sql_bind_uint(res, 7, lfileid);
+      psync_sql_run_free(res);
+      debug(D_NOTICE, "renamed %s to %s", oldpath, newpath);
+    }
+  }
+  psync_free(newpath);
+  psync_free(oldpath);
+  psync_free(newfolder);
+  return ret;
+}
   
-static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name){
+static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
+                                        psync_syncid_t newsyncid){
   int res;
   if (type==PSYNC_CREATE_LOCAL_FOLDER)
     res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_CREATED, task_mkdir, 1, "local folder created");
@@ -541,6 +599,8 @@ static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, 
     res=task_download_file(syncid, itemid, localitemid, name);
   else if (type==PSYNC_DELETE_LOCAL_FILE)
     res=task_delete_file(itemid);
+  else if (type==PSYNC_RENAME_LOCAL_FILE)
+    res=task_rename_file(syncid, newsyncid, itemid, localitemid, newitemid, name);
   else{
     debug(D_BUG, "invalid task type %u", (unsigned)type);
     res=0;
@@ -557,7 +617,7 @@ static void download_thread(){
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     
-    row=psync_sql_row("SELECT id, type, syncid, itemid, localitemid, newitemid, name FROM task WHERE type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_DOWNLOAD)" ORDER BY id LIMIT 1");
+    row=psync_sql_row("SELECT id, type, syncid, itemid, localitemid, newitemid, name, newsyncid FROM task WHERE type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_DOWNLOAD)" ORDER BY id LIMIT 1");
     if (row){
       type=psync_get_number(row[1]);
       if (!download_task(type, 
@@ -565,7 +625,8 @@ static void download_thread(){
                          psync_get_number(row[3]), 
                          psync_get_number(row[4]), 
                          psync_get_number_or_null(row[5]),                          
-                         psync_get_string_or_null(row[6]))){
+                         psync_get_string_or_null(row[6]),
+                         psync_get_number_or_null(row[7]))){
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, psync_get_number(row[0]));
         psync_sql_run_free(res);
