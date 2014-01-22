@@ -1,7 +1,7 @@
 /* Copyright (c) 2013 Anton Titov.
  * Copyright (c) 2013 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,8 +28,8 @@
 #ifndef _PSYNC_LIB_H
 #define _PSYNC_LIB_H
 
-/* All paths are in UTF-8 regardless of the OS. 
- * All functions with int return type unless specified otherwise return 0 for success 
+/* All paths are in UTF-8 regardless of the OS.
+ * All functions with int return type unless specified otherwise return 0 for success
  * and -1 for failure.
  */
 
@@ -176,7 +176,7 @@ typedef struct {
 #ifdef __cplusplus
 extern "C" {
 #endif
-  
+
 typedef void *(*psync_malloc_t)(size_t);
 typedef void *(*psync_realloc_t)(void *, size_t);
 typedef void (*psync_free_t)(void *);
@@ -184,12 +184,12 @@ typedef void (*psync_free_t)(void *);
 extern psync_malloc_t psync_malloc;
 extern psync_realloc_t psync_realloc;
 extern psync_free_t psync_free;
-  
+
 /* Status change callback is called every time value is changed. It may be called quite often
  * when there are active uploads/downloads. Callbacks are issued from a special callback thread
  * (e.g. the same thread all the time) and are guaranteed not to overlap.
  */
-  
+
 typedef void (*pstatus_change_callback_t)(pstatus_t *status);
 
 
@@ -197,42 +197,42 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * It is unsafe to use pointers to strings that are passed as parameters after
  * the callback return, if you need to use them this way, strdup() will do the
  * job. Event callbacks will not overlap.
- * 
+ *
  * If event&PEVENT_TYPE_FOLDER==PEVENT_TYPE_FOLDER is true, remoteid is folderid,
  * otherwise it is fileid.
- * 
+ *
  * Do not expect localpath to exist after receiving PEVENT_FILE_DOWNLOAD_STARTED
  * as the file will be created with alternative name first and renamed when download
  * is finished.
  */
 
-typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, psync_fileorfolderid_t remoteid, 
+typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, psync_fileorfolderid_t remoteid,
                                   const char *name, const char *localpath, const char *remotepath);
 
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,
  * listing and editing syncs is supported.
- * 
+ *
  * Returns 0 on success and -1 otherwise.
- * 
+ *
  * psync_start_sync starts remote sync, both callbacks can be NULL, but most of the time setting
  * at least status_callback will make sense. Applications should expect immediate
  * status_callback with status of PSTATUS_LOGIN_REQUIRED after first run of psync_start_sync().
- * 
+ *
  * psync_download_state is to be called after psync_init but before/instead of psync_start_sync.
  * This function downloads the directory structure into the local state in foreground (e.g. it can
  * take time to complete). It returns one of PSTATUS_-es, specifically PSTATUS_READY, PSTATUS_OFFLINE
  * or one of login-related statuses. After a successful call to this function remote folder listing can
  * be preformed.
- * 
+ *
  * psync_destroy is to be called before application exit. This is not neccessary.
  * In any case psync_destroy will return relatively fast, regardless of blocked
  * network calls and other potentially slow to finish tasks.
- * 
+ *
  * psync_set_alloc can set the allocator to be used by the library. To be called
  * BEFORE psync_init if ever. If allocator is provided, its free() function is to
  * be used to free any memory that is said to be freed when returned by the library.
- * 
+ *
  * psync_set_database_path can set a full path to database file. If it does not exists
  * it will be created. The function should be only called before psync_init. If
  * database path is not set, appropriate location for the given OS will be chosen.
@@ -240,13 +240,13 @@ typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid
  * after the function returns. The path is not checked by the function itself, if it is
  * invalid (directory does not exist, it is not writable, etc) psync_init will return
  * -1 and the error code will be PERROR_DATABASE_OPEN. In this condition it is safe to
- * call psync_set_database_path and psync_init again. A special value of ":memory:" for 
+ * call psync_set_database_path and psync_init again. A special value of ":memory:" for
  * databasepath will create in-memory database that will not be preserved between runs.
  * An empty string will create the database in a temporary file, the net effect being
  * similar to the ":memory:" option with less pressure on the required memory. The
  * underlying database is in fact SQLite, so any other options that work for SQLite will
  * work here.
- * 
+ *
  */
 
 void psync_set_database_path(const char *databasepath);
@@ -262,13 +262,13 @@ void psync_destroy();
 
 void psync_get_status(pstatus_t *status);
 
-/* psync_set_user_pass and psync_set_auth functions can be used for initial login 
+/* psync_set_user_pass and psync_set_auth functions can be used for initial login
  * (PSTATUS_LOGIN_REQUIRED) and when PSTATUS_BAD_LOGIN_DATA error is returned, however
  * if the username do not match previously logged in user, PSTATUS_USER_MISMATCH event
  * will be generated. Preferably on PSTATUS_BAD_LOGIN_DATA the user should be only prompted
  * for new password and psync_set_pass should be called. To change the current user, psync_unlink
  * is to be called first and then the new user may log in.
- * 
+ *
  * The pointer returned by psync_get_username() is to be free()d.
  */
 
@@ -281,7 +281,7 @@ void psync_unlink();
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,
  * on success syncid is returned, on error -1. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
  * PSYNC_UPLOAD_ONLY or PSYNC_FULL.
- * 
+ *
  * psync_add_sync_by_path_delayed generally works in a way similar to psync_add_sync_by_path, but with few
  * differences:
  *  1) it can be called just after psync_init() and before psync_start_sync(), even before logging in and downloading account state
@@ -291,16 +291,16 @@ void psync_unlink();
  *  4) in rare cases when remote path does not exists and could not be created, whole psync_add_sync_by_path_delayed
  *     request will be silently discarded
  *  5) psync_add_sync_by_path_delayed does not return syncid, and can only fail if there is some problem with localpath
- * 
+ *
  * psync_change_synctype changes the sync type, on success returns 0 and -1 on error.
- * 
+ *
  * psync_delete_sync deletes the sync relationship between folders, on success returns 0
  * and -1 on error (it is only likely to fail if syncid is invalid). No files or folders
  * are deleted either in the cloud or locally.
- * 
+ *
  * psync_get_sync_list returns all folders that are set for sync. On error returns NULL.
  * On success the returned pointer is to be free()d.
- * 
+ *
  */
 
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype);
@@ -317,14 +317,14 @@ psync_folder_list_t *psync_get_sync_list();
  * In case of success the returned folder list is to be freed with a
  * single call to free(). In case of error NULL is returned. Parameter
  * listtype should be one of PLIST_FILES, PLIST_FOLDERS or PLIST_ALL.
- * 
+ *
  * Folders do not contain "." or ".." entries.
- * 
- * All files/folders are listed regardless if they are to be ignored 
+ *
+ * All files/folders are listed regardless if they are to be ignored
  * based on 'ignorepatterns' setting. If needed, pass the names to
  * psync_is_name_to_ignore that returns 1 for files tha are to be
  * ignored and 0 for others.
- * 
+ *
  * Remote root folder has 0 folderid.
  */
 
@@ -342,11 +342,11 @@ uint32_t psync_get_last_error();
 /* Pause stops the sync, but both local and remote directories are still
  * monitored for updates and status updates are still received with updated
  * filestoupload/filestodownload and others.
- * 
+ *
  * Stop stops all the actions of the library. No network traffic and no local
  * scans are to be expected after this call. No status updates callback except
  * the one setting PSTATUS_STOPPED status.
- * 
+ *
  * Resume will restart all operations in both paused and stopped state.
  */
 
@@ -363,44 +363,44 @@ int psync_resume();
  * Returns zero on success, -1 if network error occurs or a positive error code from
  * this list:
  * https://docs.pcloud.com/methods/auth/register.html
- * In case of error. 
- * 
+ * In case of error.
+ *
  * If err is not NULL in all cases of non-zero return it will be set to point to a
  * psync_malloc-allocated buffer with English language error text, suitable to display
  * to the user. This buffer must be freed by the application.
- * 
+ *
  */
 
 int psync_register(const char *email, const char *password, int termsaccepted, char **err);
 
-/* 
- * List of settings: 
- * usessl (bool) - use SSL connections to remote servers 
+/*
+ * List of settings:
+ * usessl (bool) - use SSL connections to remote servers
  * maxdownloadspeed (int) - maximum download speed in bytes per second, 0 for auto-shaper, -1 for no limit
  * maxuploadspeed (int) - maximum upload speed in bytes per second, 0 for auto-shaper, -1 for no limit
  * minlocalfreespace (uint) - minimum free space on local drives to run downloads
  * ignorepatterns (string) - patterns of files and folders to be ignored when syncing, separated by ";" supported widcards are
  *                          * - matches any number of characters (even zero)
  *                          ? - matches exactly one character
- * 
+ *
  * The following functions operate on settings. The value of psync_get_string_setting does not have to be freed, however if you are
  * going to store it rather than use it right away, you should strdup() it.
- * 
+ *
  * psync_set_*_setting functions return 0 on success and -1 on failure. Setting a setting may fail if you mismatch the type or give
  * invalid setting name.
- * 
+ *
  * psync_get_string_setting returns empty string on failure (type mismatch or non-existing setting), all other psync_get_*_setting
  * return zero on failure.
- * 
+ *
  * All settings are reset to default values on unlink.
- * 
+ *
  * int and uint are interchangeable and are considered same type.
- * 
+ *
  */
 
 int psync_get_bool_setting(const char *settingname);
 int psync_set_bool_setting(const char *settingname, int value);
-int64_t psync_setting_get_int_setting(const char *settingname);
+int64_t psync_get_int_setting(const char *settingname);
 int psync_set_int_setting(const char *settingname, int64_t value);
 uint64_t psync_get_uint_setting(const char *settingname);
 int psync_set_uint_setting(const char *settingname, uint64_t value);
@@ -409,14 +409,14 @@ int psync_set_string_setting(const char *settingname, const char *value);
 
 /*
  * Values are like settings, except that you can store and retrieve any key-value pair you want. There are some library-polpulated
- * values that you are not supposed to change. There are no type mismatch for values, instead they are converted to requested 
+ * values that you are not supposed to change. There are no type mismatch for values, instead they are converted to requested
  * representation.
- * 
+ *
  * The pointer returned by psync_get_string_value is to be freed by the application. This function returns NULL when value does not
  * exist (as opposed to psync_get_string_setting).
- * 
+ *
  * The application can store values even when there is no user logged in. However all values are cleared on unlink.
- * 
+ *
  * Library-populated values are:
  * dbversion (uint) - version of the database
  * runstatus (uint) - one of (1, 2, 4) for current run status of (run, pause, stop)
@@ -431,20 +431,20 @@ int psync_set_string_setting(const char *settingname, const char *value);
  * usedquota (uint) - used space of the quota in bytes
  * diffid (uint) - diffid of the user status, see https://docs.pcloud.com/methods/general/diff.html, can be used to detect account changes
  * auth (string) - user's auth token (if the user is logged in and saveauth is true), see https://docs.pcloud.com/methods/intro/authentication.html
- * 
+ *
  */
 
 int psync_has_value(const char *valuename);
 int psync_get_bool_value(const char *valuename);
 void psync_set_bool_value(const char *valuename, int value);
-int64_t psync_value_get_int_value(const char *valuename);
+int64_t psync_get_int_value(const char *valuename);
 void psync_set_int_value(const char *valuename, int64_t value);
 uint64_t psync_get_uint_value(const char *valuename);
 void psync_set_uint_value(const char *valuename, uint64_t value);
 char *psync_get_string_value(const char *valuename);
 void psync_set_string_value(const char *valuename, const char *value);
 
-  
+
 #ifdef __cplusplus
 }
 #endif

@@ -754,8 +754,11 @@ int psync_stat(const char *path, psync_stat_t *st){
   wchar_t *wpath;
   HANDLE fd;
   BOOL ret;
+  int flag = FILE_ATTRIBUTE_NORMAL;
   wpath=utf8_to_wchar(path);
-  fd=CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (GetFileAttributesW(wpath)&FILE_ATTRIBUTE_DIRECTORY)
+    flag = FILE_FLAG_BACKUP_SEMANTICS;
+  fd=CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
   psync_free(wpath);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE))
     return -1;

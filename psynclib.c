@@ -409,7 +409,7 @@ int psync_set_bool_setting(const char *settingname, int value){
   return psync_setting_set_bool(psync_setting_getid(settingname), value);
 }
 
-int64_t psync_setting_get_int_setting(const char *settingname){
+int64_t psync_get_int_setting(const char *settingname){
   return psync_setting_get_int(psync_setting_getid(settingname));
 }
 
@@ -456,7 +456,7 @@ void psync_set_bool_value(const char *valuename, int value){
   psync_set_uint_value(valuename, (uint64_t)(!!value));
 }
 
-int64_t psync_value_get_int_value(const char *valuename){
+int64_t psync_get_int_value(const char *valuename){
   return (int64_t)psync_get_uint_value(valuename);
 }
 
