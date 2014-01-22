@@ -301,6 +301,7 @@ typedef void (*psync_thread_start1)(void *);
 void psync_compat_init();
 int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits) PSYNC_PURE;
 char *psync_get_default_database_path();
+char *psync_get_home_dir();
 void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t milisec);

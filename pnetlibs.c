@@ -165,7 +165,8 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
   psync_sql_bind_uint(sres, 1, fileid);
   row=psync_sql_fetch_row(sres);
   if (row){
-    strncpy((char *)hexsum, psync_get_string(row[0]), PSYNC_HASH_DIGEST_HEXLEN);
+    assertw(row[0].length==PSYNC_HASH_DIGEST_HEXLEN);
+    memcpy(hexsum, psync_get_string(row[0]), PSYNC_HASH_DIGEST_HEXLEN);
     if (fsize)
       *fsize=psync_get_number(row[1]);
     psync_sql_free_result(sres);

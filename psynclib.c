@@ -42,6 +42,7 @@
 #include "ptasks.h"
 #include "papi.h"
 #include "pnetlibs.h"
+#include "pscanner.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -298,6 +299,21 @@ int psync_delete_sync(psync_syncid_t syncid){
 
 psync_folder_list_t *psync_get_sync_list(){
   return psync_list_get_list();
+}
+
+psuggested_folders_t *psync_get_sync_suggestions(){
+  char *home;
+  psuggested_folders_t *ret;
+  home=psync_get_home_dir();
+  if (likely_log(home)){
+    ret=psync_scanner_scan_folder(home);
+    psync_free(home);
+    return ret;
+  }
+  else{
+    psync_error=PERROR_NO_HOMEDIR;
+    return NULL;
+  }
 }
 
 pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype){
