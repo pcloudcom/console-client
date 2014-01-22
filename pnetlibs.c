@@ -165,7 +165,7 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
   psync_sql_bind_uint(sres, 1, fileid);
   row=psync_sql_fetch_row(sres);
   if (row){
-    strcpy((char *)hexsum, psync_get_string(row[0]));
+    strncpy((char *)hexsum, psync_get_string(row[0]), PSYNC_HASH_DIGEST_HEXLEN);
     if (fsize)
       *fsize=psync_get_number(row[1]);
     psync_sql_free_result(sres);
@@ -200,7 +200,7 @@ int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexs
   psync_sql_bind_uint(sres, 2, result);
   psync_sql_bind_lstring(sres, 3, checksum->str, checksum->length);
   psync_sql_run_free(sres);
-  memcpy(hexsum, checksum->str, checksum->length+1);
+  memcpy(hexsum, checksum->str, checksum->length);
   psync_free(res);
   return PSYNC_NET_OK;
 }
