@@ -36,6 +36,8 @@ typedef struct _psync_list {
   struct _psync_list *prev;
 } psync_list;
 
+typedef int (*psync_list_compare)(const psync_list *, const psync_list *);
+
 #define psync_list_init(l)\
   do {\
     (l)->next=(l);\
@@ -44,13 +46,12 @@ typedef struct _psync_list {
   
 #define psync_list_isempty(l) ((l)->next==(l))
   
-#define psync_add_between(l1, l2, a)\
-  do {\
-    (a)->next=(l2);\
-    (a)->prev=(l1);\
-    (l2)->prev=(a);\
-    (l1)->next=(a);\
-  } while (0)
+static inline void psync_add_between(psync_list *l1, psync_list *l2, psync_list *a){
+  a->next=l2;
+  a->prev=l1;
+  l1->next=a;
+  l2->prev=a;
+}
 
 #define psync_list_add_head(l, a) psync_add_between(l, (l)->next, a);
 #define psync_list_add_tail(l, a) psync_add_between((l)->prev, l, a);
@@ -83,5 +84,7 @@ static inline psync_list *psync_list_remove_head(psync_list *l){
 }
 
 #define psync_list_remove_head_element(l, t, n) psync_list_element(psync_list_remove_head(l), t, n)
+
+void psync_list_sort(psync_list *l, psync_list_compare cmp);
   
 #endif
