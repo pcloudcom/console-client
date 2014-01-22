@@ -140,6 +140,33 @@ char *psync_get_default_database_path(){
 #endif
 }
 
+char *psync_get_home_dir(){
+#if defined(P_OS_POSIX)
+  struct stat st;
+  const char *dir;
+  dir=getenv("HOME");
+  if (unlikely_log(!dir) || unlikely_log(stat(dir, &st)) || unlikely_log(!psync_stat_mode_ok(&st, 7))){
+    struct passwd pwd;
+    struct passwd *result;
+    char buff[4096];
+    if (unlikely_log(getpwuid_r(getuid(), &pwd, buff, sizeof(buff), &result)) || unlikely_log(stat(result->pw_dir, &st)) ||
+        unlikely_log(!psync_stat_mode_ok(&st, 7)))
+      return NULL;
+    dir=result->pw_dir;
+  }
+  return psync_strdup(dir);
+#elif defined(P_OS_WINDOWS)
+#pragma message ("should we create pCloud directory in user's home directory and put the file there on Windows?")
+  const char *dir;
+  dir=getenv("UserProfile");
+  if (unlikely_log(!dir))
+    return NULL;
+  return psync_strdup(dir);
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
 void psync_yield_cpu(){
 #if defined(_POSIX_PRIORITY_SCHEDULING)
   sched_yield();

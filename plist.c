@@ -28,6 +28,14 @@
 #include "pcompat.h"
 #include "plist.h"
 
+/* Fairly simple in-place merge sort with constant storage requirements.
+ * 
+ * Recursive approach might would use O(log N) storage on the stack but may
+ * have better cache locality for lists that do not fit in processor cache,
+ * may benefit from precise in-half splitting and can go without needless
+ * iterating of the list to reach the half of it. 
+ */
+
 void psync_list_sort(psync_list *l, psync_list_compare cmp){
   psync_list *ls, *l1, *l2, **tail;
   psync_uint_t depth, cnt, i, l1len, l2len;

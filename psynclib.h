@@ -70,6 +70,17 @@ typedef struct {
   pentry_t entries[];
 } pfolder_list_t;
 
+typedef struct {
+  const char *localpath;
+  const char *name;
+  const char *description;
+} psuggested_folder_t;
+
+typedef struct {
+  size_t entrycnt;
+  psuggested_folder_t entries[];
+} psuggested_folders_t;
+
 #define PSTATUS_READY                   0
 #define PSTATUS_DOWNLOADING             1
 #define PSTATUS_UPLOADING               2
@@ -309,6 +320,8 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 int psync_delete_sync(psync_syncid_t syncid);
 psync_folder_list_t *psync_get_sync_list();
+
+psuggested_folders_t *psync_get_sync_suggestions();
 
 /* Use the following functions to list local or remote folders.
  * For local folders fileid and folderid will be set to a value that

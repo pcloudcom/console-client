@@ -28,4 +28,8 @@
 #ifndef _PSYNC_SCANNER_H
 #define _PSYNC_SCANNER_H
 
+#include "psynclib.h"
+
+psuggested_folders_t *psync_scanner_scan_folder(const char *path);
+
 #endif
