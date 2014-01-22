@@ -437,7 +437,7 @@ int psync_set_string_setting(const char *settingname, const char *value);
 int psync_has_value(const char *valuename);
 int psync_get_bool_value(const char *valuename);
 void psync_set_bool_value(const char *valuename, int value);
-int64_t psync_value_get_int_value(const char *valuename);
+int64_t psync_get_int_value(const char *valuename);
 void psync_set_int_value(const char *valuename, int64_t value);
 uint64_t psync_get_uint_value(const char *valuename);
 void psync_set_uint_value(const char *valuename, uint64_t value);
