@@ -75,6 +75,7 @@ void psync_list_sort(psync_list *l, psync_list_compare cmp){
       }
       l1=l2;
     }
+    *tail=NULL;
     if (cnt<=1)
       break;
     depth*=2;

@@ -42,6 +42,12 @@ typedef struct {
   uint32_t filecnt[PSYNC_SCAN_TYPES_CNT];
 } scan_folder;
 
+typedef struct {
+  psync_list list;
+  scan_folder *folder;
+  uint32_t filecnt;
+} suggested_folder;
+
 
 #define _IPATTERN(x) {x, sizeof(x)-1}
 struct {
@@ -142,23 +148,40 @@ static void add_subfolder_counts(scan_folder *f){
   }
 }
 
-static void suggest_folders(scan_folder *f){
+static void suggest_folders(scan_folder *f, psync_list *suggestions){
   psync_list *e;
+  suggested_folder *s;
   psync_uint_t i;
-  size_t sum;
+  uint32_t sum;
   sum=0;
   for (i=1; i<PSYNC_SCAN_TYPES_CNT; i++)
     sum+=f->filecnt[i];
   if (sum>=PSYNC_SCANNER_MIN_FILES && sum>=(f->filecnt[0]+sum)*PSYNC_SCANNER_PERCENT/100){
-    debug(D_NOTICE, "suggesting %s sum %lu", f->path, (unsigned long)sum);
+//    debug(D_NOTICE, "suggesting %s sum %u", f->path, sum);
+    s=psync_new(suggested_folder);
+    s->folder=f;
+    s->filecnt=sum;
+    psync_list_add_tail(suggestions, &s->list);
     return;
   }
   psync_list_for_each(e, &f->subfolders)
-    suggest_folders(psync_list_element(e, scan_folder, nextfolder));
+    suggest_folders(psync_list_element(e, scan_folder, nextfolder), suggestions);
+}
+
+static int sort_comp_rev(const psync_list *l1, const psync_list *l2){
+  return (int)(psync_list_element(l2, suggested_folder, list)->filecnt)-(int)(psync_list_element(l1, suggested_folder, list)->filecnt);
+}
+
+static void free_folder(scan_folder *f){
+  psync_list_for_each_element_call(&f->subfolders, scan_folder, nextfolder, free_folder);
+  psync_free(f);
 }
 
 void psync_scanner_scan_folder(const char *path){
   scan_folder *f;
+  psync_list suggestions;
+  suggested_folder *s;
+  psync_uint_t cnt;
   f=psync_new(scan_folder);
   psync_list_init(&f->nextfolder); 
   psync_list_init(&f->subfolders);
@@ -167,6 +190,16 @@ void psync_scanner_scan_folder(const char *path){
   memset(&f->filecnt, 0, sizeof(f->filecnt));
   scan_folder_by_ptr(f);
   add_subfolder_counts(f);
-  suggest_folders(f);
+  psync_list_init(&suggestions);
+  suggest_folders(f, &suggestions);
+  psync_list_sort(&suggestions, sort_comp_rev);
+  cnt=0;
+  psync_list_for_each_element(s, &suggestions, suggested_folder, list){
+    debug(D_NOTICE, "suggesting %s sum %u", s->folder->path, s->filecnt);
+    if (++cnt>=PSYNC_SCANNER_MAX_SUGGESTIONS)
+      break;
+  }
+  psync_list_for_each_element_call(&suggestions, suggested_folder, list, psync_free);
+  free_folder(f);
   if (psync_scan_typenames[0]);
 }
