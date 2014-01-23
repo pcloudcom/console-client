@@ -335,7 +335,7 @@ psuggested_folders_t *psync_get_sync_suggestions();
  *
  * All files/folders are listed regardless if they are to be ignored
  * based on 'ignorepatterns' setting. If needed, pass the names to
- * psync_is_name_to_ignore that returns 1 for files tha are to be
+ * psync_is_name_to_ignore that returns 1 for files that are to be
  * ignored and 0 for others.
  *
  * Remote root folder has 0 folderid.
