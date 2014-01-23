@@ -383,67 +383,53 @@ static void process_modifyfolder(const binresult *entry){
     fres2=psync_sql_fetchall_int(res);
     if (psync_is_name_to_ignore(name->str))
       fres2->rows=0;
-    if (fres2->rows && !fres1->rows){
-      for (i=0; i<fres2->rows; i++){
-        syncid=psync_get_result_cell(fres2, i, 0);
-        localfolderid=psync_create_local_folder_in_db(syncid, folderid, psync_get_result_cell(fres2, i, 1), name->str);
-        psync_task_create_local_folder(syncid, folderid, localfolderid);
-        psync_add_folder_for_downloadsync(syncid, psync_get_result_cell(fres2, i, 2), folderid, localfolderid);
+    group_results_by_col(fres1, fres2, 0);
+    cnt=fres2->rows>fres1->rows?fres1->rows:fres2->rows;
+    for (i=0; i<cnt; i++){
+      res=psync_sql_query("SELECT localfolderid FROM syncedfolder WHERE folderid=? AND syncid=?");
+      psync_sql_bind_uint(res, 1, folderid);
+      psync_sql_bind_uint(res, 2, psync_get_result_cell(fres1, i, 0));
+      row=psync_sql_fetch_rowint(res);
+      if (unlikely(!row)){
+        debug(D_ERROR, "could not find local folder of folderid %lu", (unsigned long)folderid);
+        psync_sql_free_result(res);
+        continue;
+      }
+      localfolderid=row[0];
+      psync_sql_free_result(res);
+      psync_task_rename_local_folder(psync_get_result_cell(fres2, i, 0), folderid, localfolderid, psync_get_result_cell(fres2, i, 1), name->str);
+      psync_increase_local_folder_taskcnt(localfolderid);
+      if (psync_get_result_cell(fres2, i, 0)!=psync_get_result_cell(fres1, i, 0)){
+        res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE syncid=? AND folderid=?");
+        psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 0));
+        psync_sql_bind_uint(res, 2, psync_get_result_cell(fres2, i, 2));
+        psync_sql_bind_uint(res, 3, psync_get_result_cell(fres1, i, 0));
+        psync_sql_bind_uint(res, 4, folderid);
+        psync_sql_run_free(res);
       }
     }
-    else{
-      group_results_by_col(fres1, fres2, 0);
-      cnt=fres2->rows>fres1->rows?fres1->rows:fres2->rows;
-      for (i=0; i<cnt; i++){
-        res=psync_sql_query("SELECT localfolderid FROM syncedfolder WHERE folderid=? AND syncid=?");
-        psync_sql_bind_uint(res, 1, folderid);
-        psync_sql_bind_uint(res, 2, psync_get_result_cell(fres1, i, 0));
-        row=psync_sql_fetch_rowint(res);
-        if (unlikely(!row)){
-          debug(D_ERROR, "could not find local folder of folderid %lu", (unsigned long)folderid);
-          psync_sql_free_result(res);
-          continue;
-        }
-        localfolderid=row[0];
+    for (/*i is already=cnt*/; i<fres1->rows; i++){
+      syncid=psync_get_result_cell(fres1, i, 0);
+      res=psync_sql_query("SELECT localfolderid FROM syncedfolder WHERE folderid=? AND syncid=?");
+      psync_sql_bind_uint(res, 1, folderid);
+      psync_sql_bind_uint(res, 2, syncid);
+      row=psync_sql_fetch_rowint(res);
+      if (unlikely(!row)){
+        debug(D_ERROR, "could not find local folder of folderid %lu", (unsigned long)folderid);
         psync_sql_free_result(res);
-        psync_task_rename_local_folder(psync_get_result_cell(fres2, i, 0), folderid, localfolderid, psync_get_result_cell(fres2, i, 1), name->str);
-        psync_increase_local_folder_taskcnt(localfolderid);
-        if (psync_get_result_cell(fres2, i, 0)!=psync_get_result_cell(fres1, i, 0)){
-          res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE syncid=? AND folderid=?");
-          psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 0));
-          psync_sql_bind_uint(res, 2, psync_get_result_cell(fres2, i, 2));
-          psync_sql_bind_uint(res, 3, psync_get_result_cell(fres1, i, 0));
-          psync_sql_bind_uint(res, 4, folderid);
-          psync_sql_run_free(res);
-        }
+        continue;
       }
-      if (fres2->rows<fres1->rows){
-        for (i=cnt; i<fres1->rows; i++){
-          syncid=psync_get_result_cell(fres1, i, 0);
-          res=psync_sql_query("SELECT localfolderid FROM syncedfolder WHERE folderid=? AND syncid=?");
-          psync_sql_bind_uint(res, 1, folderid);
-          psync_sql_bind_uint(res, 2, syncid);
-          row=psync_sql_fetch_rowint(res);
-          if (unlikely(!row)){
-            debug(D_ERROR, "could not find local folder of folderid %lu", (unsigned long)folderid);
-            psync_sql_free_result(res);
-            continue;
-          }
-          localfolderid=row[0];
-          psync_sql_free_result(res);
-          del_synced_folder_rec(folderid, syncid);
-          psync_task_delete_local_folder_recursive(syncid, folderid, localfolderid);
-          psync_increase_local_folder_taskcnt(localfolderid);
-        }
-      }
-      else if (fres2->rows>fres1->rows){
-        for (i=cnt; i<fres2->rows; i++){
-          syncid=psync_get_result_cell(fres2, i, 0);
-          localfolderid=psync_create_local_folder_in_db(syncid, folderid, psync_get_result_cell(fres2, i, 1), name->str);
-          psync_task_create_local_folder(syncid, folderid, localfolderid);
-          psync_add_folder_for_downloadsync(syncid, psync_get_result_cell(fres2, i, 2), folderid, localfolderid);
-        }
-      }
+      localfolderid=row[0];
+      psync_sql_free_result(res);
+      del_synced_folder_rec(folderid, syncid);
+      psync_task_delete_local_folder_recursive(syncid, folderid, localfolderid);
+      psync_increase_local_folder_taskcnt(localfolderid);
+    }
+    for (/*i is already=cnt*/; i<fres2->rows; i++){
+      syncid=psync_get_result_cell(fres2, i, 0);
+      localfolderid=psync_create_local_folder_in_db(syncid, folderid, psync_get_result_cell(fres2, i, 1), name->str);
+      psync_task_create_local_folder(syncid, folderid, localfolderid);
+      psync_add_folder_for_downloadsync(syncid, psync_get_result_cell(fres2, i, 2), folderid, localfolderid);
     }
     psync_free(fres1);
     psync_free(fres2);
@@ -627,6 +613,12 @@ static void process_modifyfile(const binresult *entry){
       if (needdownload)
         psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
     }
+    for (/*i is already=cnt*/; i<fres2->rows; i++)
+      psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+    for (/*i is already=cnt*/; i<fres1->rows; i++)
+      psync_task_delete_local_file_syncid(psync_get_result_cell(fres1, i, 0), fileid);
+    psync_free(fres1);
+    psync_free(fres2);
   }
 }
 

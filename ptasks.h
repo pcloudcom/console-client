@@ -65,5 +65,6 @@ void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
 void psync_task_rename_local_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t fileid, psync_folderid_t oldlocalfolderid,
                                   psync_folderid_t newlocalfolderid, const char *newname);
 void psync_task_delete_local_file(psync_fileid_t fileid);
+void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t fileid);
 
 #endif

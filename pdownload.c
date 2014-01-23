@@ -489,13 +489,18 @@ ret0:
   return 0;
 }
 
-static int task_delete_file(psync_fileid_t fileid){
+static int task_delete_file(psync_syncid_t syncid, psync_fileid_t fileid){
   psync_sql_res *res, *stmt;
   psync_uint_row row;
   char *name;
   int ret;
   ret=0;
-  res=psync_sql_query("SELECT id, syncid FROM localfile WHERE fileid=?");
+  if (syncid){
+    res=psync_sql_query("SELECT id, syncid FROM localfile WHERE fileid=? AND syncid=?");
+    psync_sql_bind_uint(res, 2, syncid);
+  }
+  else
+    res=psync_sql_query("SELECT id, syncid FROM localfile WHERE fileid=?");
   psync_sql_bind_uint(res, 1, fileid);
   while ((row=psync_sql_fetch_rowint(res))){
     name=psync_local_path_for_local_file(row[0], NULL);
@@ -598,7 +603,7 @@ static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, 
   else if (type==PSYNC_DOWNLOAD_FILE)
     res=task_download_file(syncid, itemid, localitemid, name);
   else if (type==PSYNC_DELETE_LOCAL_FILE)
-    res=task_delete_file(itemid);
+    res=task_delete_file(syncid, itemid);
   else if (type==PSYNC_RENAME_LOCAL_FILE)
     res=task_rename_file(syncid, newsyncid, itemid, localitemid, newitemid, name);
   else{
