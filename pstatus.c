@@ -37,7 +37,8 @@ static uint32_t statuses[PSTATUS_NUM_STATUSES]={
   PSTATUS_ONLINE_OFFLINE, 
   PSTATUS_AUTH_PROVIDED, 
   PSTATUS_ACCFULL_QUOTAOK,
-  PSTATUS_DISKFULL_OK
+  PSTATUS_DISKFULL_OK,
+  PSTATUS_LOCALSCAN_SCANNING
 };
 
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
@@ -76,6 +77,14 @@ static uint32_t psync_calc_status(){
       return PSTATUS_OFFLINE;
     else {
       debug(D_BUG, "invalid PSTATUS_TYPE_ONLINE %d", statuses[PSTATUS_TYPE_ONLINE]);
+      return -1;
+    }
+  }
+  if (statuses[PSTATUS_TYPE_LOCALSCAN]!=PSTATUS_LOCALSCAN_READY){
+    if (statuses[PSTATUS_TYPE_LOCALSCAN]==PSTATUS_LOCALSCAN_SCANNING)
+      return PSTATUS_SCANNING;
+    else {
+      debug(D_BUG, "invalid PSTATUS_TYPE_LOCALSCAN %d", statuses[PSTATUS_TYPE_LOCALSCAN]);
       return -1;
     }
   }

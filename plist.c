@@ -53,37 +53,46 @@ void psync_list_sort(psync_list *l, psync_list_compare cmp){
       l2=l1;
       for (i=0; i<depth && l2; i++)
         l2=l2->next;
+      if (!l2){
+        *tail=l1;
+        goto nol2;
+      }
       l1len=i;
       l2len=depth;
-      while (l1len && l2len && l2)
+      while (1){
         if (cmp(l1, l2)<=0){
+          l1len--;
           *tail=l1;
           tail=&l1->next;
+          if (!l1len)
+            goto l1fin;
           l1=l1->next;
-          l1len--;
         }
         else{
+          l2len--;
           *tail=l2;
           tail=&l2->next;
           l2=l2->next;
-          l2len--;
+          if (!l2len || !l2)
+            goto l2fin;
         }
-      if (l1len){
-        *tail=l1;
-        for (i=0; i<l1len-1; i++)
-          l1=l1->next;
-        tail=&l1->next;
       }
-      else if (l2len && l2){
-        *tail=l2;
-        for (i=0; l2 && i<l2len-1; i++)
-          l2=l2->next;
-        tail=&l2->next;
-        l2=l2->next;
-      }
+      l2fin:
+      *tail=l1;
+      for (i=0; i<l1len-1; i++)
+        l1=l1->next;
+      tail=&l1->next;
       l1=l2;
+      continue;
+      l1fin:
+      *tail=l2;
+      for (i=0; l2->next && i<l2len-1; i++)
+        l2=l2->next;
+      tail=&l2->next;
+      l1=l2->next;
     }
     *tail=NULL;
+    nol2:
     if (cnt<=1)
       break;
     depth*=2;
@@ -98,3 +107,30 @@ void psync_list_sort(psync_list *l, psync_list_compare cmp){
   l1->next=l;
   l->prev=l1;
 }
+
+void psync_list_extract_repeating(psync_list *l1, psync_list *l2, psync_list *extracted1, psync_list *extracted2, psync_list_compare cmp){
+  psync_list *li1, *li2, *ln1, *ln2;
+  int cr;
+  psync_list_sort(l1, cmp);
+  psync_list_sort(l2, cmp);
+  li1=l1->next;
+  li2=l2->next;
+  while (li1!=l1 && li2!=l2){
+    cr=cmp(li1, li2);
+    if (cr<0)
+      li1=li1->next;
+    else if (cr>0)
+      li2=li2->next;
+    else{
+      ln1=li1->next;
+      ln2=li2->next;
+      psync_list_del(li1);
+      psync_list_add_tail(extracted1, li1);
+      psync_list_del(li2);
+      psync_list_add_tail(extracted2, li2);
+      li1=ln1;
+      li2=ln2;
+    }
+  }
+}
+

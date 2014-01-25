@@ -28,6 +28,7 @@
 #include "ptasks.h"
 #include "plibs.h"
 #include "pdownload.h"
+#include "pupload.h"
 #include "pstatus.h"
 #include "pcallbacks.h"
 
@@ -130,4 +131,18 @@ void psync_task_delete_local_file(psync_fileid_t fileid){
 
 void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t fileid){
   create_task5(PSYNC_DELETE_LOCAL_FILE, syncid, fileid);
+}
+
+void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
+                                   psync_folderid_t newlocalparentfolderid, const char *newname){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, newsyncid, localitemid, newitemid, name, itemid) VALUES (?, ?, ?, ?, ?, ?, 0)");
+  psync_sql_bind_uint(res, 1, PSYNC_RENAME_REMOTE_FILE);
+  psync_sql_bind_uint(res, 2, oldsyncid);
+  psync_sql_bind_uint(res, 3, newsyncid);
+  psync_sql_bind_uint(res, 4, localfileid);
+  psync_sql_bind_uint(res, 5, newlocalparentfolderid);
+  psync_sql_bind_string(res, 6, newname);
+  psync_sql_run_free(res);
+  psync_wake_upload();
 }

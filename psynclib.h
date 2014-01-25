@@ -367,6 +367,12 @@ int psync_pause();
 int psync_stop();
 int psync_resume();
 
+/* Forces rescan of local files and folders. You generally don't need to call this function.
+ * It can be useful only as an option for the user of the program to force local re-scan.
+ */
+
+void psync_run_localscan();
+
 /* Registers a new user account. email is user e-mail address which will also be
  * the username after successful registration. Password is user's chosen password
  * implementations are advised to have the user verify the password by typing it

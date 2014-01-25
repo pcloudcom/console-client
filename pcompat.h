@@ -73,6 +73,16 @@
 #define P_OS_POSIX
 #endif
 
+#if defined(P_OS_WINDOWS)
+#define P_OS_ID 5
+#elif defined(P_OS_MACOSX)
+#define P_OS_ID 6
+#elif defined(P_OS_LINUX)
+#define P_OS_ID 7
+#else
+#define P_OS_ID 0
+#endif
+
 #ifdef P_OS_WINDOWS
 
 #ifndef _WIN32_WINNT
@@ -179,6 +189,7 @@ typedef int psync_socket_t;
 typedef int psync_file_t;
 
 #define PSYNC_FILENAMES_CASESENSITIVE 1
+#define psync_filename_cmp strcmp
 
 #define psync_def_var_arr(name, type, size) type name[size]
 
@@ -257,6 +268,7 @@ typedef SOCKET psync_socket_t;
 typedef HANDLE psync_file_t;
 
 #define PSYNC_FILENAMES_CASESENSITIVE 0
+#define psync_filename_cmp strcasecmp
 
 #else
 #error "Need to define types for your operating system"

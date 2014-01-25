@@ -31,13 +31,14 @@
 #include "pcompiler.h"
 #include <stdint.h>
 
-#define PSTATUS_NUM_STATUSES 5
+#define PSTATUS_NUM_STATUSES 6
 
-#define PSTATUS_TYPE_RUN      0
-#define PSTATUS_TYPE_ONLINE   1
-#define PSTATUS_TYPE_AUTH     2
-#define PSTATUS_TYPE_ACCFULL  3
-#define PSTATUS_TYPE_DISKFULL 4
+#define PSTATUS_TYPE_RUN       0
+#define PSTATUS_TYPE_ONLINE    1
+#define PSTATUS_TYPE_AUTH      2
+#define PSTATUS_TYPE_ACCFULL   3
+#define PSTATUS_TYPE_DISKFULL  4
+#define PSTATUS_TYPE_LOCALSCAN 5
 
 #define PSTATUS_INVALID   0
 
@@ -60,6 +61,9 @@
 
 #define PSTATUS_DISKFULL_OK   1
 #define PSTATUS_DISKFULL_FULL 2
+
+#define PSTATUS_LOCALSCAN_SCANNING 1
+#define PSTATUS_LOCALSCAN_READY    2
 
 #define PSTATUS_COMBINE(type, statuses) (((type)<<24)+(statuses))
 

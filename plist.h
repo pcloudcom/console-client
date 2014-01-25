@@ -86,5 +86,6 @@ static inline psync_list *psync_list_remove_head(psync_list *l){
 #define psync_list_remove_head_element(l, t, n) psync_list_element(psync_list_remove_head(l), t, n)
 
 void psync_list_sort(psync_list *l, psync_list_compare cmp);
+void psync_list_extract_repeating(psync_list *l1, psync_list *l2, psync_list *extracted1, psync_list *extracted2, psync_list_compare cmp);
   
 #endif

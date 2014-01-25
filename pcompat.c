@@ -821,7 +821,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   while (!readdir_r(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
       strcpy(cpath+pl, de->d_name);
-      if (likely_log(!lstat(cpath, &pst.stat))){
+      if (likely_log(!lstat(cpath, &pst.stat)) && (S_ISREG(pst.stat.st_mode) || S_ISDIR(pst.stat.st_mode))){
         pst.name=de->d_name;
         callback(ptr, &pst);
       }
@@ -1028,6 +1028,8 @@ int psync_file_rename(const char *oldpath, const char *newpath){
 }
 
 int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
+  if (!psync_filename_cmp(oldpath, newpath))
+    return 0;
 #if defined(P_OS_POSIX)
   return rename(oldpath, newpath);
 #elif defined(P_OS_WINDOWS) // should we just use rename() here?

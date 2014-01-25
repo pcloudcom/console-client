@@ -43,6 +43,7 @@
 #include "papi.h"
 #include "pnetlibs.h"
 #include "pscanner.h"
+#include "plocalscan.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -93,6 +94,7 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_download_init();
   psync_syncer_init();
   psync_netlibs_init();
+  psync_localscan_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
@@ -391,11 +393,15 @@ int psync_resume(){
   return 0;
 }
 
+void psync_run_localscan(){
+  psync_wake_localscan();
+}
+
 int psync_register(const char *email, const char *password, int termsaccepted, char **err){
   psync_socket *api;
   binresult *res;
   uint64_t ret;
-  binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0")};
+  binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
   api=psync_apipool_get();
   if (unlikely_log(!api))
     goto neterr1;
