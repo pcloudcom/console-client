@@ -746,7 +746,7 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
 }
 
 static const char * PSYNC_CONST get_type_name(uint32_t t){
-  if (t>=ARRAY_SIZE(psync_typenames))
+  if (unlikely(t>=ARRAY_SIZE(psync_typenames)))
     t=0;
   return psync_typenames[t];
 }

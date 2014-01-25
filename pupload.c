@@ -44,15 +44,14 @@ static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK)
 };
 
-static int task_renameremotefile(psync_fileid_t fileid, psync_folderid_t newparentfolderid, const char *newname){
+static int do_run_command(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt){
   psync_socket *api;
   binresult *res;
   uint64_t result;
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname)};
   api=psync_apipool_get();
   if (unlikely(!api))
     return -1;
-  res=send_command(api, "renamefile", params);
+  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
   if (likely(res))
     psync_apipool_release(api);
   else{
@@ -61,9 +60,22 @@ static int task_renameremotefile(psync_fileid_t fileid, psync_folderid_t newpare
   }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
-  if (unlikely_log(result))
+  if (unlikely(result)){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
     return psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL?-1:0;
-  debug(D_NOTICE, "remote fileid %lu moved/renamed to (%lu)/%s", (long unsigned)fileid, (long unsigned)newparentfolderid, newname);
+  }
+  else
+    return 0;
+}
+
+#define run_command(cmd, params) do_run_command(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam))
+
+static int task_renameremotefile(psync_fileid_t fileid, psync_folderid_t newparentfolderid, const char *newname){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname)};
+  int ret;
+  ret=run_command("renamefile", params);
+  if (likely(!ret))
+    debug(D_NOTICE, "remote fileid %lu moved/renamed to (%lu)/%s", (long unsigned)fileid, (long unsigned)newparentfolderid, newname);
   return 0;
 }
 
@@ -93,14 +105,29 @@ static int task_renamefile(psync_syncid_t syncid, psync_fileid_t localfileid, ps
     return task_renameremotefile(fileid, folderid, newname);
 }
 
+static int task_deletefile(psync_fileid_t fileid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
+  int ret;
+  ret=run_command("deletefile", params);
+  if (likely(!ret))
+    debug(D_NOTICE, "remote fileid %lu deleted", (long unsigned)fileid);
+  return ret;
+}
+
 static int upload_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
                                         psync_syncid_t newsyncid){
   int res;
-  if (type==PSYNC_RENAME_REMOTE_FILE)
-    res=task_renamefile(newsyncid, localitemid, newitemid, name);
-  else{
-    debug(D_BUG, "invalid task type %u", (unsigned)type);
-    res=0;
+  switch (type){
+    case PSYNC_RENAME_REMOTE_FILE:
+      res=task_renamefile(newsyncid, localitemid, newitemid, name);
+      break;
+    case PSYNC_DELETE_REMOTE_FILE:
+      res=task_deletefile(itemid);
+      break;
+    default:
+      debug(D_BUG, "invalid task type %u", (unsigned)type);
+      res=0;
+      break;
   }
   if (res)
     debug(D_WARNING, "task of type %u, syncid %u, id %lu localid %lu failed", (unsigned)type, (unsigned)syncid, (unsigned long)itemid, (unsigned long)localitemid);
@@ -152,4 +179,7 @@ void psync_wake_upload(){
 void psync_upload_init(){
   psync_timer_exception_handler(psync_wake_upload);
   psync_run_thread(upload_thread);
+}
+
+void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid){
 }

@@ -28,7 +28,10 @@
 #ifndef _PSYNC_UPLOAD_H
 #define _PSYNC_UPLOAD_H
 
+#include "psynclib.h"
+
 void psync_upload_init();
 void psync_wake_upload();
+void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid);
 
 #endif

@@ -32,6 +32,7 @@
 #include "psettings.h"
 #include "plist.h"
 #include "ptasks.h"
+#include "pupload.h"
 #include <string.h>
 #include <db.h>
 
@@ -300,6 +301,8 @@ static int compare_sizeinodemtime(const psync_list *l1, const psync_list *l2){
 
 static void scan_rename_file(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_sql_res *res;
+  debug(D_NOTICE, "file renamed from %s to %s", rnfr->name, rnto->name);
+  psync_sql_start_transaction();
   res=psync_sql_prep_statement("UPDATE localfile SET localparentfolderid=?, syncid=?, name=? WHERE id=?");
   psync_sql_bind_uint(res, 1, rnto->localparentfolderid);
   psync_sql_bind_uint(res, 2, rnto->syncid);
@@ -307,11 +310,37 @@ static void scan_rename_file(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_sql_bind_uint(res, 4, rnfr->localid);
   psync_sql_run_free(res);
   psync_task_rename_remote_file(rnfr->syncid, rnto->syncid, rnfr->localid, rnto->localparentfolderid, rnto->name);
+  psync_sql_commit_transaction();
+}
+
+static void scan_delete_file(sync_folderlist *fl){
+  debug(D_NOTICE, "file deleted %s", fl->name);
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_fileid_t fileid;
+  psync_sql_start_transaction();
+  // it is also possible to use fl->remoteid, but the file might just been uploaded by the upload thread
+  res=psync_sql_query("SELECT fileid FROM localfile WHERE id=?");
+  psync_sql_bind_uint(res, 1, fl->localid);
+  if (likely_log(row=psync_sql_fetch_rowint(res)))
+    fileid=row[0];
+  else{
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return;
+  }
+  psync_sql_free_result(res);
+  psync_delete_upload_tasks_for_file(fl->localid);
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
+  psync_sql_bind_uint(res, 1, fl->localid);
+  psync_sql_run_free(res);
+  psync_task_delete_remote_file(fl->syncid, fileid);
+  psync_sql_commit_transaction();
 }
 
 static void scanner_scan(int first){
   psync_list slist, *l1, *l2;
-  sync_folderlist *f1, *f2;
+  sync_folderlist *fl;
   sync_list *l;
   psync_uint_t i;
   if (first)
@@ -321,8 +350,8 @@ static void scanner_scan(int first){
     if (!localsleepperfolder)
       localsleepperfolder=1;
     localsleepperfolder=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*1000/localsleepperfolder;
-    if (localsleepperfolder>1000)
-      localsleepperfolder=1000;
+    if (localsleepperfolder>250)
+      localsleepperfolder=250;
     if (localsleepperfolder<1)
       localsleepperfolder=1;
   }
@@ -341,11 +370,10 @@ static void scanner_scan(int first){
   l2=&scan_lists[SCAN_LIST_RENFILESTO];
   psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFILESFROM]){
     l2=l2->next;
-    f1=psync_list_element(l1, sync_folderlist, list);
-    f2=psync_list_element(l2, sync_folderlist, list);
-    debug(D_NOTICE, "file renamed from %s to %s", f1->name, f2->name);
-    scan_rename_file(f1, f2);
+    scan_rename_file(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
   }
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFILES], sync_folderlist, list)
+    scan_delete_file(fl);
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
   psync_list_for_each_element_call(&slist, sync_list, list, psync_free);

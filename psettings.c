@@ -39,8 +39,8 @@ typedef struct {
   setting_callback change_callback;
   filter_callback fix_callback;
   union {
-    char *str;
     uint64_t num;
+    char *str;
     int64_t snum;
     int boolean;
   };
@@ -50,12 +50,12 @@ typedef struct {
 static void lower_patterns(void *ptr);
 
 static psync_setting_t settings[]={
-  {"usessl", psync_timer_do_notify_exception, NULL, {(char *)PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
-  {"saveauth", NULL, NULL, {(char *)1}, PSYNC_TBOOL},
-  {"maxdownloadspeed", NULL, NULL, {(char *)PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"maxuploadspeed", NULL, NULL, {(char *)PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
-  {"ignorepatterns", NULL, lower_patterns, {PSYNC_IGNORE_PATTERNS_DEFAULT}, PSYNC_TSTRING},
-  {"minlocalfreespace", NULL, NULL, {(char *)PSYNC_MIN_LOCAL_FREE_SPACE}, PSYNC_TNUMBER}
+  {"usessl", psync_timer_do_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
+  {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
+  {"maxdownloadspeed", NULL, NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
+  {"ignorepatterns", NULL, lower_patterns, {0}, PSYNC_TSTRING},
+  {"minlocalfreespace", NULL, NULL, {PSYNC_MIN_LOCAL_FREE_SPACE}, PSYNC_TNUMBER}
 };
 
 void psync_settings_init(){
@@ -63,6 +63,7 @@ void psync_settings_init(){
   psync_str_row row;
   const char *name;
   psync_settingid_t i;
+  settings[_PS(ignorepatterns)].str=PSYNC_IGNORE_PATTERNS_DEFAULT;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);
