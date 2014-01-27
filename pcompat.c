@@ -252,6 +252,26 @@ time_t psync_time(){
 #endif
 }
 
+void psync_nanotime(struct timespec *tm){
+#if defined(_POSIX_TIMERS) && _POSIX_TIMERS>0
+  clock_gettime(CLOCK_REALTIME, tm);
+#elif defined(P_OS_WINDOWS)
+  FILETIME ft;
+  uint64_t t;
+  GetSystemTimeAsFileTime(&ft);
+  t=psync_32to64(ft.dwHighDateTime, ft.dwLowDateTime)-116444736000000000ULL;
+  tv->tv_sec=t/10000000UL;
+  tv->tv_usec=(t%10000000UL)*100;
+#elif defined(P_OS_POSIX)
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  tm->tv_sec=tv.tv_sec;
+  tm->tv_nsec=tv.tv_usec*1000;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
 static int psync_wait_socket_writable_microsec(psync_socket_t sock, long sec, long usec){
   fd_set wfds;
   struct timeval tv;

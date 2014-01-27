@@ -101,6 +101,7 @@
 #include <sys/stat.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <errno.h>
 
 typedef long psync_int_t;
@@ -119,6 +120,7 @@ typedef unsigned long psync_uint_t;
 
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/time.h>
 #include <netdb.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -139,8 +141,10 @@ typedef unsigned long psync_uint_t;
   ((s)->st_mtime*1000000ULL+\
   ((struct timespec *)(&(s)->st_mtime))->tv_nsec/1000)
 #endif
+#define psync_mtime_native_to_mtime(n) ((n)/1000000ULL)
 #else
 #define psync_stat_mtime_native(s) ((s)->st_mtime)
+#define psync_mtime_native_to_mtime(n) (n)
 #endif
 
 #define psync_stat_inode(s) ((s)->st_ino)
@@ -214,6 +218,7 @@ typedef SSIZE_T ssize_t;
 #endif
 
 #define psync_filetime_to_timet(ft) ((time_t)(psync_32to64((ft)->dwHighDateTime, (ft)->dwLowDateTime)/10000000ULL-11644473600ULL))
+#define psync_filetime64_to_timet(ft) ((time_t)((ft)/10000000ULL-11644473600ULL))
 
 typedef BY_HANDLE_FILE_INFORMATION psync_stat_t;
 
@@ -223,6 +228,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_stat_size(s) psync_32to64((s)->nFileSizeHigh, (s)->nFileSizeLow)
 #define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
 #define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
+#define psync_mtime_native_to_mtime(n) psync_filetime64_to_timet(n)
 #define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)
 #define psync_stat_device(s) ((s)->dwVolumeSerialNumber)
 
@@ -318,6 +324,7 @@ void psync_run_thread(psync_thread_start0 run);
 void psync_run_thread1(psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t milisec);
 time_t psync_time();
+void psync_nanotime(struct timespec *tm);
 void psync_yield_cpu();
 
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
