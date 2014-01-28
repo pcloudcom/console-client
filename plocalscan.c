@@ -34,7 +34,6 @@
 #include "ptasks.h"
 #include "pupload.h"
 #include <string.h>
-#include <db.h>
 
 typedef struct {
   psync_list list;
@@ -55,7 +54,7 @@ typedef struct {
   uint64_t size;
   psync_syncid_t syncid;
   uint8_t isfolder;
-  char name[];
+  char name[1];
 } sync_folderlist;
 
 typedef sync_folderlist sync_folderlist_tuple[2];
@@ -314,10 +313,10 @@ static void scan_rename_file(sync_folderlist *rnfr, sync_folderlist *rnto){
 }
 
 static void scan_delete_file(sync_folderlist *fl){
-  debug(D_NOTICE, "file deleted %s", fl->name);
   psync_sql_res *res;
   psync_uint_row row;
   psync_fileid_t fileid;
+  debug(D_NOTICE, "file deleted %s", fl->name);
   psync_sql_start_transaction();
   // it is also possible to use fl->remoteid, but the file might just been uploaded by the upload thread
   res=psync_sql_query("SELECT fileid FROM localfile WHERE id=?");
