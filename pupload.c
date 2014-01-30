@@ -313,6 +313,7 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     return -1;
   if (unlikely_log(rsize!=fsize) || unlikely_log(memcmp(hashhexsrv, hashhex, PSYNC_HASH_DIGEST_HEXLEN)))
     return -1;
+  debug(D_NOTICE, "file %s uploaded to %lu/%s", localpath, (long unsigned)folderid, name);
   return 0;
 err2:
   psync_free(buff);

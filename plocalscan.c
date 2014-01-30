@@ -338,7 +338,7 @@ static void scan_upload_file(sync_folderlist *fl){
   psync_fileid_t localfileid;
   debug(D_NOTICE, "file created %s", fl->name);
   psync_sql_start_transaction();
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, size, inode, mtime, mtimenative, name)"
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfile (localparentfolderid, syncid, size, inode, mtime, mtimenative, name)"
                                                           "VALUES (?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);
   psync_sql_bind_uint(res, 2, fl->syncid);
