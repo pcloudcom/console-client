@@ -136,11 +136,35 @@ void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t f
   psync_wake_download();
 }
 
+void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t localfolderid, const char *name){
+  create_task3(PSYNC_CREATE_REMOTE_FOLDER, syncid, 0, localfolderid, name);
+  psync_wake_upload();
+}
+
+void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
+  create_task3(PSYNC_UPLOAD_FILE, syncid, 0, localfileid, name);
+  psync_wake_upload();
+}
+
 void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
                                    psync_folderid_t newlocalparentfolderid, const char *newname){
   psync_sql_res *res;
   res=psync_sql_prep_statement("INSERT INTO task (type, syncid, newsyncid, localitemid, newitemid, name, itemid) VALUES (?, ?, ?, ?, ?, ?, 0)");
   psync_sql_bind_uint(res, 1, PSYNC_RENAME_REMOTE_FILE);
+  psync_sql_bind_uint(res, 2, oldsyncid);
+  psync_sql_bind_uint(res, 3, newsyncid);
+  psync_sql_bind_uint(res, 4, localfileid);
+  psync_sql_bind_uint(res, 5, newlocalparentfolderid);
+  psync_sql_bind_string(res, 6, newname);
+  psync_sql_run_free(res);
+  psync_wake_upload();
+}
+
+void psync_task_rename_remote_folder(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
+                                   psync_folderid_t newlocalparentfolderid, const char *newname){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, newsyncid, localitemid, newitemid, name, itemid) VALUES (?, ?, ?, ?, ?, ?, 0)");
+  psync_sql_bind_uint(res, 1, PSYNC_RENAME_REMOTE_FOLDER);
   psync_sql_bind_uint(res, 2, oldsyncid);
   psync_sql_bind_uint(res, 3, newsyncid);
   psync_sql_bind_uint(res, 4, localfileid);

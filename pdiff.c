@@ -247,12 +247,8 @@ static void process_createfolder(const binresult *entry){
       psync_sql_bind_uint(stmt, 3, localfolderid);
       psync_sql_bind_uint(stmt, 4, row[2]);
       psync_sql_run(stmt);
-      assert(psync_sql_affected_rows()==1);
-      psync_task_create_local_folder(syncid, folderid, localfolderid);
-//      localname=psync_local_path_for_remote_folder(folderid, syncid, NULL);
-//      assert(localname!=NULL);
-//      psync_task_create_local_folder(localname, folderid, syncid);
-//      psync_free(localname);
+      if (psync_sql_affected_rows()==1);
+        psync_task_create_local_folder(syncid, folderid, localfolderid);
     }
     psync_sql_free_result(stmt);
     psync_sql_free_result(res);

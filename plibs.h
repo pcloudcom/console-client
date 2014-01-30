@@ -29,7 +29,6 @@
 #define _PSYNC_LIBS_H
 
 #include <sqlite3.h>
-#include <pthread.h>
 
 #include "pcompiler.h"
 #include "pcompat.h"

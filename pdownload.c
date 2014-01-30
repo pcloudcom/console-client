@@ -586,29 +586,35 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
 static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
                                         psync_syncid_t newsyncid){
   int res;
-  if (type==PSYNC_CREATE_LOCAL_FOLDER)
-    res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_CREATED, task_mkdir, 1, "local folder created");
-  else if (type==PSYNC_DELETE_LOCAL_FOLDER){
-    res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir, 0, "local folder deleted");
-    if (!res)
-      delete_local_folder_from_db(localitemid);
-  }
-  else if (type==PSYNC_DELREC_LOCAL_FOLDER){
-    res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir_rec, 0, "local folder deleted recursively");
-    if (!res)
-      delete_local_folder_from_db(localitemid);
-  }
-  else if (type==PSYNC_RENAME_LOCAL_FOLDER)
-    res=task_renamefolder(syncid, itemid, localitemid, newitemid, name);
-  else if (type==PSYNC_DOWNLOAD_FILE)
-    res=task_download_file(syncid, itemid, localitemid, name);
-  else if (type==PSYNC_DELETE_LOCAL_FILE)
-    res=task_delete_file(syncid, itemid);
-  else if (type==PSYNC_RENAME_LOCAL_FILE)
-    res=task_rename_file(syncid, newsyncid, itemid, localitemid, newitemid, name);
-  else{
-    debug(D_BUG, "invalid task type %u", (unsigned)type);
-    res=0;
+  switch (type) {
+    case PSYNC_CREATE_LOCAL_FOLDER:
+      res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_CREATED, task_mkdir, 1, "local folder created");
+      break;
+    case PSYNC_DELETE_LOCAL_FOLDER:
+      res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir, 0, "local folder deleted");
+      if (!res)
+        delete_local_folder_from_db(localitemid);
+      break;
+    case PSYNC_DELREC_LOCAL_FOLDER:
+      res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir_rec, 0, "local folder deleted recursively");
+      if (!res)
+        delete_local_folder_from_db(localitemid);
+      break;
+    case PSYNC_RENAME_LOCAL_FOLDER:
+      res=task_renamefolder(syncid, itemid, localitemid, newitemid, name);
+      break;
+    case PSYNC_DOWNLOAD_FILE:
+      res=task_download_file(syncid, itemid, localitemid, name);
+      break;
+    case PSYNC_DELETE_LOCAL_FILE:
+      res=task_delete_file(syncid, itemid);
+      break;
+    case PSYNC_RENAME_LOCAL_FILE:
+      res=task_rename_file(syncid, newsyncid, itemid, localitemid, newitemid, name);
+      break;
+    default:
+      debug(D_BUG, "invalid task type %u", (unsigned)type);
+      res=0;
   }
   if (res)
     debug(D_WARNING, "task of type %u, syncid %u, id %lu localid %lu failed", (unsigned)type, (unsigned)syncid, (unsigned long)itemid, (unsigned long)localitemid);

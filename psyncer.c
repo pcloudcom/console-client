@@ -130,7 +130,11 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
     psync_sql_free_result(res);
     return lfolderid;
   }
+  psync_sql_free_result(res);
   res=psync_sql_query("SELECT id FROM localfolder WHERE localparentfolderid=? AND syncid=? AND name=?");
+  psync_sql_bind_uint(res, 1, localparentfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_bind_string(res, 3, name);
   row=psync_sql_fetch_rowint(res);
   if (row)
     lfolderid=row[0];

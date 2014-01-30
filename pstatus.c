@@ -233,11 +233,22 @@ void psync_status_set_download_speed(uint32_t speed){
   }
 }
 
+void psync_status_set_upload_speed(uint32_t speed){
+  if (psync_status.uploadspeed!=speed){
+    psync_status.uploadspeed=speed;
+    psync_send_status_update();
+  }
+}
+
 /* there is just one thread downloading, therefore no locking */
 
 void psync_status_inc_downloads_count(){
   psync_status.filesdownloading++;
   psync_status.status=psync_calc_status();
+  psync_send_status_update();
+}
+
+static void psync_send_status_update_ptr(void *ptr){
   psync_send_status_update();
 }
 
@@ -249,6 +260,6 @@ void psync_status_dec_downloads_count(){
     psync_status.bytestodownloadcurrent=0;
   }
   psync_status.status=psync_calc_status();
-  psync_send_status_update();
+  psync_run_after_sec(psync_send_status_update_ptr, NULL, 5);
 }
 

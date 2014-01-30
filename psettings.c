@@ -39,9 +39,9 @@ typedef struct {
   setting_callback change_callback;
   filter_callback fix_callback;
   union {
+    int64_t snum;
     uint64_t num;
     char *str;
-    int64_t snum;
     int boolean;
   };
   psync_uint_t type;

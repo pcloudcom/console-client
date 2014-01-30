@@ -3,7 +3,7 @@ AR=ar rcu
 RANLIB=ranlib
 USESSL=openssl
 
-CFLAGS=-Wall -g -O2
+CFLAGS=-Wall -Wpointer-arith -g -O2
 
 LIB_A=psynclib.a
 

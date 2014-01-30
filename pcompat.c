@@ -60,8 +60,8 @@
 #include <ws2tcpip.h>
 
 #define psync_close_socket closesocket
-#define psync_read_socket(s, b, c) recv(s, b, c, 0)
-#define psync_write_socket(s, b, c) send(s, b, c, 0)
+#define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
+#define psync_write_socket(s, b, c) send(s, (const char *)(b), c, 0)
 
 #endif
 
@@ -260,8 +260,8 @@ void psync_nanotime(struct timespec *tm){
   uint64_t t;
   GetSystemTimeAsFileTime(&ft);
   t=psync_32to64(ft.dwHighDateTime, ft.dwLowDateTime)-116444736000000000ULL;
-  tv->tv_sec=t/10000000UL;
-  tv->tv_usec=(t%10000000UL)*100;
+  tm->tv_sec=t/10000000UL;
+  tm->tv_usec=(t%10000000UL)*100;
 #elif defined(P_OS_POSIX)
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -518,13 +518,28 @@ int psync_socket_pendingdata_buf(psync_socket *sock){
   return ret;
 }
 
+int psync_socket_readable(psync_socket *sock){
+  if (sock->ssl && psync_ssl_pendingdata(sock->ssl))
+    return 1;
+  else if (psync_wait_socket_readable(sock->sock, 0))
+    return 0;
+  else{
+    sock->pending=1;
+    return 1;
+  }
+}
+
+int psync_socket_writable(psync_socket *sock){
+  return !psync_wait_socket_writable(sock->sock, 0);
+}
+
 static int psync_socket_read_ssl(psync_socket *sock, void *buff, int num){
   int r;
   if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
     return -1;
   sock->pending=0;
   while (1){
-    r=psync_ssl_read(sock->ssl, (char *)buff, num);
+    r=psync_ssl_read(sock->ssl, buff, num);
     if (r==PSYNC_SSL_FAIL){
       if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
         if (wait_sock_ready_for_ssl(sock->sock))
@@ -549,7 +564,7 @@ static int psync_socket_read_plain(psync_socket *sock, void *buff, int num){
       sock->pending=0;
     else if (psync_wait_socket_read_timeout(sock->sock))
       return -1;
-    r=psync_read_socket(sock->sock, (char *)buff, num);
+    r=psync_read_socket(sock->sock, buff, num);
     if (r==SOCKET_ERROR){
       if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
         continue;
@@ -566,6 +581,32 @@ int psync_socket_read(psync_socket *sock, void *buff, int num){
     return psync_socket_read_ssl(sock, buff, num);
   else
     return psync_socket_read_plain(sock, buff, num);
+}
+
+
+int psync_socket_write(psync_socket *sock, const void *buff, int num){
+  int r;
+  if (psync_wait_socket_write_timeout(sock->sock))
+    return -1;
+  if (sock->ssl){
+    r=psync_ssl_write(sock->ssl, buff, num);
+    if (r==PSYNC_SSL_FAIL){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE))
+        return 0;
+      else
+        return -1;
+    }
+  }
+  else{
+    r=psync_write_socket(sock->sock, buff, num);
+    if (r==SOCKET_ERROR){
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+        return 0;
+      else
+        return -1;
+    }
+  }
+  return r;
 }
 
 static int psync_socket_readall_ssl(psync_socket *sock, void *buff, int num){
@@ -726,7 +767,7 @@ int psync_pipe_read(psync_socket_t pfd, void *buff, int num){
 #if defined(P_OS_POSIX)
   return read(pfd, buff, num);
 #elif defined(P_OS_WINDOWS)
-  return recv(pfd, buff, num, 0);
+  return recv(pfd, (char *)buff, num, 0);
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -736,7 +777,7 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
 #if defined(P_OS_POSIX)
   return write(pfd, buff, num);
 #elif defined(P_OS_WINDOWS)
-  return send(pfd, buff, num, 0);
+  return send(pfd, (const char *)buff, num, 0);
 #else
 #error "Function not implemented for your operating system"
 #endif

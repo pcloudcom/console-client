@@ -109,6 +109,11 @@
 #define psync_hash_update        psync_sha1_update
 #define psync_hash_final         psync_sha1_final
 
+#define PSYNC_UPL_AUTO_SHAPER_INITIAL (100*1024)
+#define PSYNC_UPL_AUTO_SHAPER_MIN     (8*1024)
+#define PSYNC_UPL_AUTO_SHAPER_INC_PER 105
+#define PSYNC_UPL_AUTO_SHAPER_DEC_PER 70
+
 /* defaults for database settings */
 #define PSYNC_USE_SSL_DEFAULT 1
 #define PSYNC_DWL_SHAPER_DEFAULT -1

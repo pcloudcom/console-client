@@ -333,7 +333,10 @@ int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);
+int psync_socket_readable(psync_socket *sock);
+int psync_socket_writable(psync_socket *sock);
 int psync_socket_read(psync_socket *sock, void *buff, int num);
+int psync_socket_write(psync_socket *sock, const void *buff, int num);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
 

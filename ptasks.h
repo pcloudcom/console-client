@@ -55,6 +55,9 @@
 #define PSYNC_RENAME_LOCAL_FILE    ((PSYNC_TASK_TYPE_RENAME<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
 #define PSYNC_DELETE_LOCAL_FILE    ((PSYNC_TASK_TYPE_DELETE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_DOWNLOAD)
 
+#define PSYNC_CREATE_REMOTE_FOLDER ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_UPLOAD)
+#define PSYNC_RENAME_REMOTE_FOLDER ((PSYNC_TASK_TYPE_RENAME<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_UPLOAD)
+#define PSYNC_UPLOAD_FILE          ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_UPLOAD)
 #define PSYNC_RENAME_REMOTE_FILE   ((PSYNC_TASK_TYPE_RENAME<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_UPLOAD)
 #define PSYNC_DELETE_REMOTE_FILE   ((PSYNC_TASK_TYPE_DELETE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_UPLOAD)
 
@@ -70,10 +73,16 @@ void psync_task_rename_local_file(psync_syncid_t oldsyncid, psync_syncid_t newsy
 void psync_task_delete_local_file(psync_fileid_t fileid);
 void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t fileid);
 
+
+void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t localfolderid, const char *name);
+void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name);
+
 /* newname should be passed here instead of reading it from localfile in time of renaming as there might be many pending 
  * renames and filename conflict is possible 
  */
 void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
+                                   psync_folderid_t newlocalparentfolderid, const char *newname);
+void psync_task_rename_remote_folder(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
                                    psync_folderid_t newlocalparentfolderid, const char *newname);
 void psync_task_delete_remote_file(psync_syncid_t syncid, psync_fileid_t fileid);
 

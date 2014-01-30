@@ -56,8 +56,7 @@ CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
 CREATE TABLE IF NOT EXISTS syncfolderdelayed (id INTEGER PRIMARY KEY, localpath VARCHAR(4096), remotepath VARCHAR(4096), synctype INTEGER); \
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE SET NULL,\
   localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\
-CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderid ON syncfolder(folderid);\
-CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderlocalpath ON syncfolder(localpath);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderidlocalpath ON syncfolder(folderid, localpath);\
 CREATE TABLE IF NOT EXISTS localfolder (id INTEGER PRIMARY KEY, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, folderid INTEGER, \
   syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, inode INTEGER, mtime INTEGER, mtimenative INTEGER, flags INTEGER, taskcnt INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL");\
 CREATE INDEX IF NOT EXISTS klocalfolderlpfid ON localfolder(localparentfolderid);\
