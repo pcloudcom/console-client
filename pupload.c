@@ -332,7 +332,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   uint64_t fsize;
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN];
   int ret;
-  localpath=psync_local_path_for_local_folder(localfileid, syncid, NULL);
+  localpath=psync_local_path_for_local_file(localfileid, NULL);
   if (unlikely_log(!localpath))
     return 0;
   if (psync_get_local_file_checksum(localpath, hashhex, &fsize)){
