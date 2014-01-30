@@ -479,8 +479,8 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
         dyn_upload_speed=(dyn_upload_speed*PSYNC_UPL_AUTO_SHAPER_INC_PER)/100;
         psync_timer_wait_next_sec();
       }
-      if (num>uplspeed-thissec)
-        wwr=uplspeed-thissec;
+      if (num>dyn_upload_speed-thissec)
+        wwr=dyn_upload_speed-thissec;
       else
         wwr=num;
       if (!psync_socket_writable(sock)){

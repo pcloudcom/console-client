@@ -159,7 +159,7 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
     namelen++;
     e=(sync_folderlist *)psync_malloc(offsetof(sync_folderlist, name)+namelen);
     e->localid=psync_get_number(row[0]);
-    e->remoteid=psync_get_number(row[1]);
+    e->remoteid=psync_get_number_or_null(row[1]);
     e->inode=psync_get_number(row[2]);
     e->mtimenat=psync_get_number(row[3]);
     e->size=psync_get_number(row[4]);
