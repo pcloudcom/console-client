@@ -356,6 +356,14 @@ static void scan_upload_file(sync_folderlist *fl){
   psync_sql_commit_transaction();
 }
 
+static void scan_upload_modified_file(sync_folderlist *fl){
+  debug(D_NOTICE, "file modified %s", fl->name);
+  psync_sql_start_transaction();
+  psync_delete_upload_tasks_for_file(fl->localid);
+  psync_task_upload_file(fl->syncid, fl->localid, fl->name);
+  psync_sql_commit_transaction();
+}
+
 static void scan_delete_file(sync_folderlist *fl){
   psync_sql_res *res;
   psync_uint_row row;
@@ -547,6 +555,8 @@ static void scanner_scan(int first){
   }
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFILES], sync_folderlist, list)
     scan_upload_file(fl);
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_MODFILES], sync_folderlist, list)
+    scan_upload_modified_file(fl);
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFILES], sync_folderlist, list)
     scan_delete_file(fl);
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFOLDERS], sync_folderlist, list)
