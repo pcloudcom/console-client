@@ -261,7 +261,7 @@ void psync_nanotime(struct timespec *tm){
   GetSystemTimeAsFileTime(&ft);
   t=psync_32to64(ft.dwHighDateTime, ft.dwLowDateTime)-116444736000000000ULL;
   tm->tv_sec=t/10000000UL;
-  tm->tv_usec=(t%10000000UL)*100;
+  tm->tv_nsec=(t%10000000UL)*100;
 #elif defined(P_OS_POSIX)
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -922,6 +922,8 @@ err1:
     }
   }
   do {
+    if (st.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
+        continue;
     name=wchar_to_utf8(st.cFileName);
     spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
     pst.name=name;
