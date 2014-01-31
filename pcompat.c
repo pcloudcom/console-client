@@ -1102,15 +1102,17 @@ int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
 #if defined(P_OS_POSIX)
   return rename(oldpath, newpath);
 #elif defined(P_OS_WINDOWS) // should we just use rename() here?
-  wchar_t *oldwpath, *newwpath;
-  int ret;
-  oldwpath=utf8_to_wchar(oldpath);
-  newwpath=utf8_to_wchar(newpath);
-  DeleteFileW(newwpath);
-  ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
-  psync_free(oldwpath);
-  psync_free(newwpath);
-  return ret;
+  {
+    wchar_t *oldwpath, *newwpath;
+    int ret;
+    oldwpath=utf8_to_wchar(oldpath);
+    newwpath=utf8_to_wchar(newpath);
+    DeleteFileW(newwpath);
+    ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
+    psync_free(oldwpath);
+    psync_free(newwpath);
+    return ret;
+  }
 #else
 #error "Function not implemented for your operating system"
 #endif

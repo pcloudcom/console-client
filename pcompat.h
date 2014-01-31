@@ -274,7 +274,7 @@ typedef SOCKET psync_socket_t;
 typedef HANDLE psync_file_t;
 
 #define PSYNC_FILENAMES_CASESENSITIVE 0
-#define psync_filename_cmp strcasecmp
+#define psync_filename_cmp _stricmp
 
 #else
 #error "Need to define types for your operating system"
