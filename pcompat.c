@@ -483,6 +483,14 @@ int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
 #endif
 }
 
+int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize){
+#if defined(SO_SNDBUF) && defined(SOL_SOCKET)
+  return setsockopt(sock->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&bufsize, sizeof(bufsize));
+#else
+  return -1;
+#endif
+}
+
 int psync_socket_isssl(psync_socket *sock){
   if (sock->ssl)
     return 1;

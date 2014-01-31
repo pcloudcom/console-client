@@ -468,6 +468,14 @@ static psync_uint_t get_upload_bytes_this_sec(){
     return 0;
 }
 
+static void set_send_buf(psync_socket *sock){
+  psync_socket_set_sendbuf(sock, dyn_upload_speed*PSYNC_UPL_AUTO_SHAPER_BUF_PER/100);
+}
+
+int psync_set_default_sendbuf(psync_socket *sock){
+  return psync_socket_set_sendbuf(sock, PSYNC_DEFAULT_SEND_BUFF);
+}
+
 int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
   psync_int_t uplspeed, writebytes, wr, wwr;
   psync_uint_t thissec;
@@ -477,8 +485,10 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
     while (num){
       while ((thissec=get_upload_bytes_this_sec())>=dyn_upload_speed){
         dyn_upload_speed=(dyn_upload_speed*PSYNC_UPL_AUTO_SHAPER_INC_PER)/100;
+        set_send_buf(sock);
         psync_timer_wait_next_sec();
       }
+      debug(D_NOTICE, "dyn_upload_speed=%lu", dyn_upload_speed);
       if (num>dyn_upload_speed-thissec)
         wwr=dyn_upload_speed-thissec;
       else
@@ -487,6 +497,8 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
         dyn_upload_speed=(dyn_upload_speed*PSYNC_UPL_AUTO_SHAPER_DEC_PER)/100;
         if (dyn_upload_speed<PSYNC_UPL_AUTO_SHAPER_MIN)
           dyn_upload_speed=PSYNC_UPL_AUTO_SHAPER_MIN;
+        set_send_buf(sock);
+        psync_milisleep(1000);
       }
       wr=psync_socket_write(sock, buff, wwr);
       if (wr==-1)

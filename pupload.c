@@ -280,7 +280,7 @@ static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psy
 }
 
 static int upload_file(const char *localpath, const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name), P_BOOL("nopartial", 1)};
   psync_socket *api;
   void *buff;
   binresult *res;
@@ -307,13 +307,20 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     else
       rd=fsize-bw;
     rrd=psync_file_read(fd, buff, rd);
-    if (unlikely_log(rrd<=0) || unlikely_log(psync_socket_writeall_upload(api, buff, rrd)!=rrd))
+    if (unlikely_log(rrd<=0))
       goto err2;
     bw+=rrd;
+    if (bw==fsize && psync_file_read(fd, buff, 1)!=0){
+      debug(D_WARNING, "file %s has grown while uploading, retrying", localpath);
+      goto err2;
+    }
+    if (unlikely_log(psync_socket_writeall_upload(api, buff, rrd)!=rrd))
+      goto err2;
   }
   psync_free(buff);
   psync_file_close(fd);
   res=get_result(api);
+  psync_set_default_sendbuf(api);
   if (likely(res))
     psync_apipool_release(api);
   else{

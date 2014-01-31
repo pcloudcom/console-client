@@ -330,6 +330,7 @@ void psync_yield_cpu();
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
+int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);

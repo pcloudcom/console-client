@@ -57,6 +57,7 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
 int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize);
 int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);
 
+int psync_set_default_sendbuf(psync_socket *sock);
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
 
