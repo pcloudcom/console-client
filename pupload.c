@@ -410,6 +410,15 @@ static int task_deletefile(psync_fileid_t fileid){
   return ret;
 }
 
+static int task_deletefolderrec(psync_folderid_t folderid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid)};
+  int ret;
+  ret=run_command("deletefolderrecursive", params);
+  if (likely(!ret))
+    debug(D_NOTICE, "remote folder %lu deleted", (long unsigned)folderid);
+  return ret;
+}
+
 static int upload_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
                                         psync_syncid_t newsyncid){
   int res;
@@ -428,6 +437,9 @@ static int upload_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, ui
       break;
     case PSYNC_DELETE_REMOTE_FILE:
       res=task_deletefile(itemid);
+      break;
+    case PSYNC_DELREC_REMOTE_FOLDER:
+      res=task_deletefolderrec(itemid);
       break;
     default:
       debug(D_BUG, "invalid task type %u", (unsigned)type);

@@ -445,6 +445,48 @@ static void scan_rename_folder(sync_folderlist *rnfr, sync_folderlist *rnto){
   }
 }
 
+static void delete_local_folder_rec(psync_folderid_t localfolderid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT id FROM localfolder WHERE localparentfolderid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    delete_local_folder_rec(row[0]);
+  psync_sql_free_result(res);
+  res=psync_sql_query("SELECT id FROM localfile WHERE localparentfolderid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    psync_delete_upload_tasks_for_file(row[0]);
+  psync_sql_free_result(res);
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_run_free(res);
+}
+
+static void scan_delete_folder(sync_folderlist *fl){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_folderid_t folderid;
+  debug(D_NOTICE, "folder deleted %s", fl->name);
+  psync_sql_start_transaction();
+  res=psync_sql_query("SELECT folderid FROM localfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, fl->localid);
+  if (likely_log(row=psync_sql_fetch_rowint(res)))
+    folderid=row[0];
+  else{
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return;
+  }
+  psync_sql_free_result(res);
+  delete_local_folder_rec(fl->localid);
+  psync_task_delete_remote_folder(fl->syncid, folderid);
+  psync_sql_commit_transaction();
+}
+
 static void scanner_scan(int first){
   psync_list slist, *l1, *l2;
   sync_folderlist *fl;
@@ -507,6 +549,8 @@ static void scanner_scan(int first){
     scan_upload_file(fl);
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFILES], sync_folderlist, list)
     scan_delete_file(fl);
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFOLDERS], sync_folderlist, list)
+    scan_delete_folder(fl);
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
   psync_list_for_each_element_call(&slist, sync_list, list, psync_free);

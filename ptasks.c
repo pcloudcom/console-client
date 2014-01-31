@@ -178,3 +178,8 @@ void psync_task_delete_remote_file(psync_syncid_t syncid, psync_fileid_t fileid)
   create_task5(PSYNC_DELETE_REMOTE_FILE, syncid, fileid);
   psync_wake_upload();
 }
+
+void psync_task_delete_remote_folder(psync_syncid_t syncid, psync_folderid_t folderid){
+  create_task5(PSYNC_DELREC_REMOTE_FOLDER, syncid, folderid);
+  psync_wake_upload();
+}

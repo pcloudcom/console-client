@@ -60,6 +60,7 @@
 #define PSYNC_UPLOAD_FILE          ((PSYNC_TASK_TYPE_CREATE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_UPLOAD)
 #define PSYNC_RENAME_REMOTE_FILE   ((PSYNC_TASK_TYPE_RENAME<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_UPLOAD)
 #define PSYNC_DELETE_REMOTE_FILE   ((PSYNC_TASK_TYPE_DELETE<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FILE+PSYNC_TASK_UPLOAD)
+#define PSYNC_DELREC_REMOTE_FOLDER ((PSYNC_TASK_TYPE_DELREC<<PSYNC_TASK_TYPE_OFF)+PSYNC_TASK_FOLDER+PSYNC_TASK_UPLOAD)
 
 
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
@@ -85,5 +86,6 @@ void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t news
 void psync_task_rename_remote_folder(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
                                    psync_folderid_t newlocalparentfolderid, const char *newname);
 void psync_task_delete_remote_file(psync_syncid_t syncid, psync_fileid_t fileid);
+void psync_task_delete_remote_folder(psync_syncid_t syncid, psync_folderid_t folderid);
 
 #endif
