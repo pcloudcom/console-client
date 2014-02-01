@@ -188,6 +188,7 @@ static sync_folderlist *copy_folderlist_element(const sync_folderlist *e, psync_
 
 static void add_element_to_scan_list(psync_uint_t id, sync_folderlist *e){
   psync_list_add_tail(&scan_lists[id], &e->list);
+  localsleepperfolder=0;
 //  scan_list_cnt[id]++;
 }
 
@@ -357,9 +358,17 @@ static void scan_upload_file(sync_folderlist *fl){
 }
 
 static void scan_upload_modified_file(sync_folderlist *fl){
+  psync_sql_res *res;
   debug(D_NOTICE, "file modified %s", fl->name);
   psync_sql_start_transaction();
   psync_delete_upload_tasks_for_file(fl->localid);
+  res=psync_sql_prep_statement("UPDATE localfile SET size=?, inode=?, mtime=?, mtimenative=? WHERE id=?");
+  psync_sql_bind_uint(res, 1, fl->size);
+  psync_sql_bind_uint(res, 2, fl->inode);
+  psync_sql_bind_uint(res, 3, psync_mtime_native_to_mtime(fl->mtimenat));
+  psync_sql_bind_uint(res, 4, fl->mtimenat);
+  psync_sql_bind_uint(res, 5, fl->localid);
+  psync_sql_run_free(res);
   psync_task_upload_file(fl->syncid, fl->localid, fl->name);
   psync_sql_commit_transaction();
 }
@@ -503,10 +512,10 @@ static void scanner_scan(int first){
   if (first)
     localsleepperfolder=0;
   else{
-    localsleepperfolder=psync_sql_cellint("SELECT COUNT(*) FROM localfolder", 100);
-    if (!localsleepperfolder)
-      localsleepperfolder=1;
-    localsleepperfolder=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*1000/localsleepperfolder;
+    i=psync_sql_cellint("SELECT COUNT(*) FROM localfolder", 100);
+    if (!i)
+      i=1;
+    localsleepperfolder=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*1000/i;
     if (localsleepperfolder>250)
       localsleepperfolder=250;
     if (localsleepperfolder<1)
@@ -566,35 +575,43 @@ static void scanner_scan(int first){
   psync_list_for_each_element_call(&slist, sync_list, list, psync_free);
 }
 
-static void scanner_wait(){
+static int scanner_wait(){
   struct timespec tm;
+  int ret;
   tm.tv_sec=psync_current_time+PSYNC_LOCALSCAN_RESCAN_INTERVAL;
   tm.tv_nsec=0;
   pthread_mutex_lock(&scan_mutex);
   if (!scan_wakes)
-    pthread_cond_timedwait(&scan_cond, &scan_mutex, &tm);
+    ret=!pthread_cond_timedwait(&scan_cond, &scan_mutex, &tm);
+  else
+    ret=1;
   scan_wakes=0;
   pthread_mutex_unlock(&scan_mutex);
+  return ret;
 }
 
 static void scanner_thread(){
+  int w;
   psync_milisleep(10);
   psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
   scanner_scan(1);
   psync_set_status(PSTATUS_TYPE_LOCALSCAN, PSTATUS_LOCALSCAN_READY);
   scanner_wait();
+  w=0;
   while (psync_do_run){
     psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
-    scanner_scan(0);
-    scanner_wait();
+    scanner_scan(w);
+    w=scanner_wait();
   }
 }
 
 void psync_wake_localscan(){
+  localsleepperfolder=0;
   pthread_mutex_lock(&scan_mutex);
   if (!scan_wakes++)
     pthread_cond_signal(&scan_cond);
-  pthread_mutex_unlock(&scan_mutex);  
+  pthread_mutex_unlock(&scan_mutex);
+  localsleepperfolder=0;
 }
 
 static void psync_wake_localscan_noscan(){

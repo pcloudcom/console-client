@@ -29,6 +29,7 @@
 #include "plibs.h"
 #include "psettings.h"
 #include "ptasks.h"
+#include "plocalscan.h"
 #include <string.h>
 
 static psync_folderid_t *synced_down_folders[PSYNC_DIR_HASH_SIZE];
@@ -206,8 +207,11 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   res=psync_sql_prep_statement("UPDATE syncfolder SET flags=1 WHERE flags=0 AND id=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
-  if (likely_log(psync_sql_affected_rows()))
+  if (likely_log(psync_sql_affected_rows())){
     psync_sql_commit_transaction();
+    if (synctype&PSYNC_UPLOAD_ONLY)
+      psync_wake_localscan();
+  }
   else
     psync_sql_rollback_transaction();
 }

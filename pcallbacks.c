@@ -123,7 +123,24 @@ void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, co
     event->event=eventid;
     event->syncid=syncid;
     pthread_mutex_lock(&eventmutex);
-    psync_list_add_head(&eventlist, &event->list);
+    psync_list_add_tail(&eventlist, &event->list);
+    pthread_mutex_unlock(&eventmutex);
+    pthread_cond_signal(&eventcond);
+  }
+}
+
+void psync_send_event_by_path(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid, const char *remotepath){
+  if (eventthreadrunning){
+    event_list_t *event;
+    event=psync_new(event_list_t);
+    event->localpath=psync_strdup(localpath);
+    event->remotepath=psync_strdup(remotepath);
+    event->name=strrchr(remotepath, '/')+1;
+    event->remoteid=remoteid;
+    event->event=eventid;
+    event->syncid=syncid;
+    pthread_mutex_lock(&eventmutex);
+    psync_list_add_tail(&eventlist, &event->list);
     pthread_mutex_unlock(&eventmutex);
     pthread_cond_signal(&eventcond);
   }

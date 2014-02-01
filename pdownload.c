@@ -195,6 +195,29 @@ static int call_func_for_folder(psync_folderid_t localfolderid, psync_folderid_t
   return res;
 }
 
+static int call_func_for_folder_name(psync_folderid_t localfolderid, psync_folderid_t folderid, const char *name, psync_syncid_t syncid, psync_eventtype_t event, 
+                                int (*func)(const char *), int updatemtime, const char *debug){
+  char *localpath;
+  int res;
+  localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
+  if (likely(localpath)){
+    res=func(localpath);
+    if (!res){
+      psync_send_event_by_path(event, syncid, localpath, folderid, name);
+      if (updatemtime)
+        update_local_folder_mtime(localpath, localfolderid);
+      psync_decrease_local_folder_taskcnt(localfolderid);
+      debug(D_NOTICE, "%s %s", debug, localpath);
+    }
+    psync_free(localpath);
+  }
+  else{
+    debug(D_ERROR, "could not get path for local folder id %lu, syncid %u", (long unsigned)localfolderid, (unsigned)syncid);
+    res=0;
+  }
+  return res;
+}
+
 static void delete_local_folder_from_db(psync_folderid_t localfolderid){
   psync_sql_res *res;
   if (likely(localfolderid)){
@@ -489,7 +512,7 @@ ret0:
   return 0;
 }
 
-static int task_delete_file(psync_syncid_t syncid, psync_fileid_t fileid){
+static int task_delete_file(psync_syncid_t syncid, psync_fileid_t fileid, const char *remotepath){
   psync_sql_res *res, *stmt;
   psync_uint_row row;
   char *name;
@@ -515,7 +538,7 @@ static int task_delete_file(psync_syncid_t syncid, psync_fileid_t fileid){
       }
       else
         debug(D_NOTICE, "local file %s deleted", name);
-      psync_send_event_by_id(PEVENT_LOCAL_FILE_DELETED, row[1], name, fileid);
+      psync_send_event_by_path(PEVENT_LOCAL_FILE_DELETED, row[1], name, fileid, remotepath);
       psync_free(name);
     }
     stmt=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
@@ -591,7 +614,7 @@ static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, 
       res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_CREATED, task_mkdir, 1, "local folder created");
       break;
     case PSYNC_DELETE_LOCAL_FOLDER:
-      res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir, 0, "local folder deleted");
+      res=call_func_for_folder_name(localitemid, itemid, name, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir, 0, "local folder deleted");
       if (!res)
         delete_local_folder_from_db(localitemid);
       break;
@@ -607,7 +630,7 @@ static int download_task(uint32_t type, psync_syncid_t syncid, uint64_t itemid, 
       res=task_download_file(syncid, itemid, localitemid, name);
       break;
     case PSYNC_DELETE_LOCAL_FILE:
-      res=task_delete_file(syncid, itemid);
+      res=task_delete_file(syncid, itemid, name);
       break;
     case PSYNC_RENAME_LOCAL_FILE:
       res=task_rename_file(syncid, newsyncid, itemid, localitemid, newitemid, name);

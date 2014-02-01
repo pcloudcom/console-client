@@ -287,11 +287,13 @@ int psync_delete_sync(psync_syncid_t syncid){
   psync_sql_res *res;
   psync_uint_row row;
   psync_sql_start_transaction();
-  res=psync_sql_query("SELECT type, itemid FROM task WHERE syncid=?");
+  res=psync_sql_query("SELECT type, itemid, localitemid FROM task WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   while ((row=psync_sql_fetch_rowint(res)))
     if (row[0]==PSYNC_DOWNLOAD_FILE)
       psync_stop_file_download(row[1], syncid);
+    else if (row[0]==PSYNC_UPLOAD_FILE)
+      psync_delete_upload_tasks_for_file(row[2]);
   psync_sql_free_result(res);
   res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);

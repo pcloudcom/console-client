@@ -436,6 +436,7 @@ static void process_modifyfolder(const binresult *entry){
 static void process_deletefolder(const binresult *entry){
   static psync_sql_res *st=NULL;
   psync_sql_res *res, *stmt;
+  char *path;
   psync_folderid_t folderid;
   psync_uint_row row;
   if (!entry){
@@ -460,9 +461,12 @@ static void process_deletefolder(const binresult *entry){
       psync_sql_bind_uint(stmt, 1, row[0]);
       psync_sql_bind_uint(stmt, 2, folderid);
       psync_sql_run_free(stmt);
-      assertw(psync_sql_affected_rows()==1);
-      psync_task_delete_local_folder(row[0], folderid, row[1]);
-      psync_increase_local_folder_taskcnt(row[1]);
+      if (psync_sql_affected_rows()==1){
+        path=psync_get_path_by_folderid(folderid, NULL);
+        psync_task_delete_local_folder(row[0], folderid, row[1], path);
+        psync_free(path);
+        psync_increase_local_folder_taskcnt(row[1]);
+      }
     }
     psync_sql_free_result(res);
   }
@@ -586,8 +590,11 @@ static void process_modifyfile(const binresult *entry){
     newsync=psync_is_folder_in_downloadlist(parentfolderid);
   if (oldsync || newsync){
     if (psync_is_name_to_ignore(name->str)){
+      char *path;
       psync_delete_download_tasks_for_file(fileid);
-      psync_task_delete_local_file(fileid);
+      path=psync_get_path_by_fileid(fileid, NULL);
+      psync_task_delete_local_file(fileid, path);
+      psync_free(path);
       return;
     }
     needdownload=hash!=psync_get_number(row[3]) || size!=oldsize;
@@ -621,6 +628,7 @@ static void process_modifyfile(const binresult *entry){
 static void process_deletefile(const binresult *entry){
   static psync_sql_res *st=NULL;
   const binresult *meta;
+  char *path;
   psync_fileid_t fileid;
   if (!entry){
     if (st){
@@ -636,14 +644,16 @@ static void process_deletefile(const binresult *entry){
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+  if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num)){
+    psync_delete_download_tasks_for_file(fileid);
+    path=psync_get_path_by_fileid(fileid, NULL);
+    psync_task_delete_local_file(fileid, path);
+    psync_free(path);
+  }
   psync_sql_bind_uint(st, 1, fileid);
   psync_sql_run(st);
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num)
     used_quota-=psync_find_result(meta, "size", PARAM_NUM)->num;
-  if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num)){
-    psync_delete_download_tasks_for_file(fileid);
-    psync_task_delete_local_file(fileid);
-  }
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}

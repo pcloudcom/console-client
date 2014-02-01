@@ -143,8 +143,24 @@ void psync_status_recalc_to_download(){
     psync_status.bytestodownload=0;
   }
   psync_sql_free_result(res);
-  
 }
+
+void psync_status_recalc_to_upload(){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT COUNT(*), SUM(f.size) FROM task t, localfile f WHERE t.type=? AND t.localitemid=f.id");
+  psync_sql_bind_uint(res, 1, PSYNC_UPLOAD_FILE);
+  if ((row=psync_sql_fetch_rowint(res))){
+    psync_status.filestoupload=row[0];
+    psync_status.bytestoupload=row[1];
+  }
+  else{
+    psync_status.filestodownload=0;
+    psync_status.bytestodownload=0;
+  }
+  psync_sql_free_result(res);
+}
+
 
 uint32_t psync_status_get(uint32_t statusid){
   pthread_mutex_lock(&statusmutex);
@@ -240,15 +256,15 @@ void psync_status_set_upload_speed(uint32_t speed){
   }
 }
 
-/* there is just one thread downloading, therefore no locking */
+/* there is just one thread downloading/uploading, therefore no locking */
+
+static void psync_send_status_update_ptr(void *ptr){
+  psync_send_status_update();
+}
 
 void psync_status_inc_downloads_count(){
   psync_status.filesdownloading++;
   psync_status.status=psync_calc_status();
-  psync_send_status_update();
-}
-
-static void psync_send_status_update_ptr(void *ptr){
   psync_send_status_update();
 }
 
@@ -258,6 +274,23 @@ void psync_status_dec_downloads_count(){
     psync_status.downloadspeed=0;
     psync_status.bytesdownloaded=0;
     psync_status.bytestodownloadcurrent=0;
+  }
+  psync_status.status=psync_calc_status();
+  psync_run_after_sec(psync_send_status_update_ptr, NULL, 5);
+}
+
+void psync_status_inc_uploads_count(){
+  psync_status.filesuploading++;
+  psync_status.status=psync_calc_status();
+  psync_send_status_update();
+}
+
+void psync_status_dec_uploads_count(){
+  psync_status.filesuploading--;
+  if (!psync_status.filesuploading){
+    psync_status.uploadspeed=0;
+    psync_status.bytesuploaded=0;
+    psync_status.bytestouploadcurrent=0;
   }
   psync_status.status=psync_calc_status();
   psync_run_after_sec(psync_send_status_update_ptr, NULL, 5);

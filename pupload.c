@@ -35,6 +35,7 @@
 #include "pnetlibs.h"
 #include "papi.h"
 #include "pfolder.h"
+#include "pcallbacks.h"
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t upload_cond=PTHREAD_COND_INITIALIZER;
@@ -294,6 +295,9 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     debug(D_WARNING, "could not open local file %s", localpath);
     return 0;
   }
+  psync_status.bytestouploadcurrent=fsize;
+  psync_status.bytesuploaded=0;
+  psync_status_inc_uploads_count();
   api=psync_apipool_get();
   if (unlikely(!api))
     goto err0;
@@ -316,6 +320,8 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     }
     if (unlikely_log(psync_socket_writeall_upload(api, buff, rrd)!=rrd))
       goto err2;
+    psync_status.bytesuploaded+=rrd;
+    psync_send_status_update();
   }
   psync_free(buff);
   psync_file_close(fd);
@@ -325,24 +331,27 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     psync_apipool_release(api);
   else{
     psync_apipool_release_bad(api);
-    return -1;
+    goto err00;
   }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (unlikely(result)){
     psync_free(res);
     debug(D_WARNING, "command uploadfile returned code %u", (unsigned)result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
-      return -1;
-    else
+      goto err00;
+    else{
+      psync_status_dec_uploads_count();
       return 0;
+    }
   }
   fileid=psync_find_result(res, "fileids", PARAM_ARRAY)->array[0]->num;
   psync_free(res);
   if (unlikely_log(psync_get_remote_file_checksum(fileid, hashhexsrv, &rsize)))
-    return -1;
+    goto err00;
   if (unlikely_log(rsize!=fsize) || unlikely_log(memcmp(hashhexsrv, hashhex, PSYNC_HASH_DIGEST_HEXLEN)))
-    return -1;
+    goto err00;
   set_local_file_remote_id(localfileid, fileid);
+  psync_status_dec_uploads_count();
   debug(D_NOTICE, "file %s uploaded to %lu/%s", localpath, (long unsigned)folderid, name);
   return 0;
 err2:
@@ -351,6 +360,8 @@ err1:
   psync_apipool_release_bad(api);
 err0:
   psync_file_close(fd);
+err00:
+  psync_status_dec_uploads_count();
   return -1;
 }
 
@@ -471,6 +482,10 @@ static void upload_thread(){
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, psync_get_number(row[0]));
         psync_sql_run_free(res);
+        if (type==PSYNC_UPLOAD_FILE){
+          psync_status_recalc_to_upload();
+          psync_send_status_update();
+        }
       }
       else
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
