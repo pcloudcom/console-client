@@ -26,11 +26,13 @@
  */
 
 #include <openssl/ssl.h>
+#include <openssl/rand.h>
 #include <pthread.h>
 #include "pssl.h"
 #include "psynclib.h"
 #include "plibs.h"
 #include "psslcerts.h"
+#include "psettings.h"
 
 static SSL_CTX *globalctx=NULL;
 
@@ -64,6 +66,7 @@ int psync_ssl_init(){
   BIO *bio;
   X509 *cert;
   psync_uint_t i;
+  unsigned char seed[PSYNC_HASH_DIGEST_LEN];
   SSL_library_init();
   OpenSSL_add_all_algorithms();
   OpenSSL_add_all_ciphers();
@@ -81,6 +84,10 @@ int psync_ssl_init(){
         X509_free(cert);
       }
     }
+    do {
+      psync_get_random_seed(seed, NULL, 0);
+      RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+    } while (!RAND_status());
     return 0;
   }
   else

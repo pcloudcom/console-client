@@ -36,12 +36,17 @@
 #include "psettings.h"
 #include "pssl.h"
 
+#if defined(P_OS_LINUX)
+#include <sys/sysinfo.h>
+#endif
+
 #if defined(P_OS_POSIX)
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/statvfs.h>
+#include <sys/utsname.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -52,6 +57,8 @@
 #define psync_close_socket close
 #define psync_read_socket read
 #define psync_write_socket write
+
+extern char **environ;
 
 #elif defined(P_OS_WINDOWS)
 
@@ -129,7 +136,6 @@ char *psync_get_default_database_path(){
   }
   return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_POSIX_DBNAME, NULL);
 #elif defined(P_OS_WINDOWS)
-#pragma message ("should we create pCloud directory in user's home directory and put the file there on Windows?")
   const char *dir;
   dir=getenv("UserProfile");
   if (unlikely_log(!dir))
@@ -156,7 +162,6 @@ char *psync_get_home_dir(){
   }
   return psync_strdup(dir);
 #elif defined(P_OS_WINDOWS)
-#pragma message ("should we create pCloud directory in user's home directory and put the file there on Windows?")
   const char *dir;
   dir=getenv("UserProfile");
   if (unlikely_log(!dir))
@@ -270,6 +275,191 @@ void psync_nanotime(struct timespec *tm){
 #else
 #error "Function not implemented for your operating system"
 #endif
+}
+
+#if defined(P_OS_POSIX)
+static void psync_add_file_to_seed(const char *fn, psync_hash_ctx *hctx, size_t max){
+  char buff[4096];
+  ssize_t rd;
+  int fd, mode;
+  mode=O_RDONLY;
+#if defined(O_NONBLOCK)
+  mode+=O_NONBLOCK;
+#elif defined(O_NDELAY)
+  mode+=O_NDELAY;
+#endif
+  fd=open(fn, mode);
+  if (fd!=-1){
+    if (!max || max>sizeof(buff))
+      max=sizeof(buff);
+    rd=read(fd, buff, max);
+    if (rd>0)
+      psync_hash_update(hctx, buff, rd);
+    close(fd);
+  }
+}
+#endif
+
+#if defined(P_OS_LINUX)
+static void psync_get_random_seed_linux(psync_hash_ctx *hctx){
+  struct sysinfo si;
+  if (likely_log(!sysinfo(&si)))
+    psync_hash_update(hctx, &si, sizeof(si));
+  psync_add_file_to_seed("/proc/stat", hctx, 0);
+  psync_add_file_to_seed("/proc/net/dev", hctx, 0);
+}
+#endif
+
+static void psync_get_random_seed_from_query(psync_hash_ctx *hctx, psync_sql_res *res){
+  psync_variant_row row;
+  int i;
+  while ((row=psync_sql_fetch_row(res))){
+    for (i=0; i<res->column_count; i++)
+      if (row[i].type==PSYNC_TSTRING)
+        psync_hash_update(hctx, row[i].str, row[i].length);
+      else if (row[i].type==PSYNC_TNUMBER)
+        psync_hash_update(hctx, &row[i].num, sizeof(uint64_t));
+  }
+  psync_sql_free_result(res);
+}
+
+static void psync_get_random_seed_from_db(psync_hash_ctx *hctx){
+  psync_sql_res *res;
+  struct timespec tm;
+  res=psync_sql_query("SELECT * FROM setting ORDER BY RANDOM()");
+  psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM file ORDER BY RANDOM() LIMIT 10");
+  psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM localfile ORDER BY RANDOM() LIMIT 10");
+  psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM folder ORDER BY RANDOM() LIMIT 5");
+  psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM localfolder ORDER BY RANDOM() LIMIT 5");
+  psync_get_random_seed_from_query(hctx, res);
+  psync_nanotime(&tm);
+  psync_hash_update(hctx, &tm, sizeof(&tm));
+  psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('random', RANDOM())");
+  psync_nanotime(&tm);
+  psync_hash_update(hctx, &tm, sizeof(&tm));
+}
+
+static void psync_store_seed_in_db(const unsigned char *seed){
+  static const char *pass="]lasSX0Q'}#26\\q8\"zlpwnXLtJOhsJ%Ay;gn5((Yh~r|'~wBaUqri$~EE3_0EY+?";
+  psync_hash_ctx hctx;
+  psync_uint_t i;
+  size_t l;
+  psync_sql_res *res;
+  unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
+  char hashhex[PSYNC_HASH_DIGEST_HEXLEN];
+  l=strlen(pass);
+  psync_hash_init(&hctx);
+  psync_hash_update(&hctx, pass, l);
+  for (i=0; i<100000; i++){
+    psync_hash_update(&hctx, seed, PSYNC_HASH_DIGEST_LEN);
+    psync_hash_update(&hctx, pass, l);
+  }
+  psync_hash_final(hashbin, &hctx);
+  psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
+  res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('randomhash', ?)");
+  psync_sql_bind_lstring(res, 1, hashhex, PSYNC_HASH_DIGEST_HEXLEN);
+  psync_sql_run_free(res);
+}
+
+void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen){
+  static unsigned char lastseed[PSYNC_HASH_DIGEST_LEN];
+  psync_hash_ctx hctx;
+  struct timespec tm;
+  psync_stat_t st;
+  char *home;
+  void *ptr;
+  psync_uint_t i, j;
+  pthread_t threadid;
+  unsigned char lsc[100][PSYNC_HASH_DIGEST_LEN];
+#if defined(P_OS_POSIX)
+  struct utsname un;
+  char **env;
+  pid_t pid;
+  psync_nanotime(&tm);
+  psync_hash_init(&hctx);
+  psync_hash_update(&hctx, &tm, sizeof(tm));
+  if (likely_log(!uname(&un)))
+    psync_hash_update(&hctx, &un, sizeof(un));
+  pid=getpid();
+  psync_hash_update(&hctx, &pid, sizeof(pid));
+  for (env=environ; *env!=NULL; env++)
+    psync_hash_update(&hctx, *env, strlen(*env));
+#if defined(_POSIX_TIMERS) && _POSIX_TIMERS>0 && defined(_POSIX_MONOTONIC_CLOCK)
+  if (likely_log(!clock_gettime(CLOCK_MONOTONIC, &tm)))
+    psync_hash_update(&hctx, &tm, sizeof(tm));
+#endif
+  psync_add_file_to_seed("/dev/random", &hctx, PSYNC_HASH_DIGEST_LEN);
+#elif defined(P_OS_WINDOWS)
+  SYSTEM_INFO si;
+  OSVERSIONINFOEX osvi;
+  LARGE_INTEGER li;
+  TCHAR ib[INFO_BUFFER_SIZE];
+  DWORD ibc;
+  psync_nanotime(&tm);
+  psync_hash_init(&hctx);
+  psync_hash_update(&hctx, &tm, sizeof(tm));
+  GetSystemInfo(&si);
+  psync_hash_update(&hctx, &si, sizeof(si));
+  ibc=INFO_BUFFER_SIZE;
+  if (GetComputerName(ib, &ibc))
+    psync_hash_update(&hctx, ib, sizeof(TCHAR)*ibc);
+  ibc=INFO_BUFFER_SIZE;
+  if (GetUserName(ib, &ibc))
+    psync_hash_update(&hctx, ib, sizeof(TCHAR)*ibc);
+  memset(&osvi, 0, sizeof(OSVERSIONINFO));
+  osvi.dwOSVersionInfoSize=sizeof(OSVERSIONINFO);
+  if (GetVersionEx(&osvi))
+    psync_hash_update(&hctx, &osvi, sizeof(osvi));
+  ibc=GetCurrentProcessId();
+  psync_hash_update(&hctx, &ibc, sizeof(ibc));
+  ibc=GetTickCount();
+  psync_hash_update(&hctx, &ibc, sizeof(ibc));
+  if (QueryPerformanceCounter(&li))
+    psync_hash_update(&hctx, &li, sizeof(li));
+#endif
+#if defined(P_OS_LINUX)
+  psync_get_random_seed_linux(&hctx);
+#endif
+  threadid=pthread_self();
+  psync_hash_update(&hctx, &threadid, sizeof(threadid));
+  ptr=(void *)&ptr;
+  psync_hash_update(&hctx, &ptr, sizeof(ptr));
+  ptr=(void *)psync_get_random_seed;
+  psync_hash_update(&hctx, &ptr, sizeof(ptr));
+  ptr=(void *)&lastseed;
+  psync_hash_update(&hctx, &ptr, sizeof(ptr));
+  home=psync_get_home_dir();
+  if (home){
+    psync_hash_update(&hctx, &home, sizeof(home));
+    psync_hash_update(&hctx, home, strlen(home));
+    if (likely_log(!psync_stat(home, &st)))
+      psync_hash_update(&hctx, &st, sizeof(st));
+    psync_free(home);
+  }
+  psync_get_random_seed_from_db(&hctx);
+  if (aelen)
+    psync_hash_update(&hctx, addent, aelen);
+  for (i=0; i<ARRAY_SIZE(lsc); i++){
+    memcpy(&lsc[i], lastseed, PSYNC_HASH_DIGEST_LEN);
+    for (j=0; j<PSYNC_HASH_DIGEST_LEN; j++)
+      lsc[i][j]^=(unsigned char)i;
+  }
+  for (j=0; j<100; j++){
+    for (i=0; i<100; i++){
+      psync_hash_update(&hctx, &i, sizeof(i));
+      psync_hash_update(&hctx, &j, sizeof(j));
+      psync_hash_update(&hctx, lsc, sizeof(lsc));
+    }
+    psync_nanotime(&tm);
+    psync_hash_update(&hctx, &tm, sizeof(&tm));
+  }
+  psync_hash_final(seed, &hctx);
+  memcpy(lastseed, seed, PSYNC_HASH_DIGEST_LEN);
+  psync_store_seed_in_db(seed);
 }
 
 static int psync_wait_socket_writable_microsec(psync_socket_t sock, long sec, long usec){

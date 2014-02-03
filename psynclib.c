@@ -72,8 +72,6 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 
 int psync_init(){
   psync_compat_init();
-  if (unlikely_log(psync_ssl_init()))
-    return_error(PERROR_SSL_INIT_FAILED);
   if (!psync_database){
     psync_database=psync_get_default_database_path();
     if (unlikely_log(!psync_database))
@@ -81,6 +79,8 @@ int psync_init(){
   }
   if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE))
     return_error(PERROR_DATABASE_OPEN);
+  if (unlikely_log(psync_ssl_init()))
+    return_error(PERROR_SSL_INIT_FAILED);
   psync_libs_init();
   psync_settings_init();
   psync_status_init();

@@ -327,6 +327,8 @@ time_t psync_time();
 void psync_nanotime(struct timespec *tm);
 void psync_yield_cpu();
 
+void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen);
+
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
