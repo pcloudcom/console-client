@@ -65,6 +65,7 @@ extern char **environ;
 #include <process.h>
 #include <windows.h>
 #include <ws2tcpip.h>
+#include <wincrypt.h>
 
 #define psync_close_socket closesocket
 #define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
@@ -396,12 +397,22 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
 #elif defined(P_OS_WINDOWS)
   SYSTEM_INFO si;
   OSVERSIONINFOEX osvi;
+  CURSORINFO ci;
   LARGE_INTEGER li;
   TCHAR ib[1024];
   DWORD ibc;
+  HCRYPTPROV cprov;
   psync_nanotime(&tm);
   psync_hash_init(&hctx);
   psync_hash_update(&hctx, &tm, sizeof(tm));
+  if (CryptAcquireContext(&cprov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)){
+    if (CryptGenRandom(cprov, PSYNC_HASH_DIGEST_LEN, lsc[0]))
+      psync_hash_update(&hctx, lsc[0], PSYNC_HASH_DIGEST_LEN);
+    CryptReleaseContext(cprov, 0); 
+  }
+  ci.cbSize=sizeof(ci);
+  if (GetCursorInfo(&ci))
+    psync_hash_update(&hctx, &ci, sizeof(ci));
   GetSystemInfo(&si);
   psync_hash_update(&hctx, &si, sizeof(si));
   ibc=ARRAY_SIZE(ib);
