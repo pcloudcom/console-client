@@ -44,8 +44,15 @@
 #include "pnetlibs.h"
 #include "pscanner.h"
 #include "plocalscan.h"
+#include "plist.h"
 #include <string.h>
 #include <ctype.h>
+#include <stddef.h>
+
+typedef struct {
+  psync_list list;
+  char str[];
+} string_list;
 
 psync_malloc_t psync_malloc=malloc;
 psync_realloc_t psync_realloc=realloc;
@@ -169,30 +176,56 @@ void psync_set_auth(const char *auth, int save){
 
 void psync_unlink(){
   psync_sql_res *res;
-  psync_str_row row;
+  psync_variant_row row;
   char *sql;
+  const char *str;
+  size_t len;
   uint32_t runstatus;
+  psync_list list;
+  string_list *le;
   runstatus=psync_status_get(PSTATUS_TYPE_RUN);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_timer_notify_exception();
   psync_milisleep(20);
   psync_sql_lock();
+  psync_list_init(&list);
   res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='index'");
-  while ((row=psync_sql_fetch_rowstr(res))){
-    sql=psync_strcat("DROP INDEX ", row[0], NULL);
+  while ((row=psync_sql_fetch_row(res))){
+    str=psync_get_lstring(row[0], &len);
+    le=(string_list *)psync_malloc(offsetof(string_list, str)+len+1);
+    memcpy(le->str, str, len+1);
+    psync_list_add_tail(&list, &le->list);
+  }
+  psync_sql_free_result(res);
+  psync_list_for_each_element(le, &list, string_list, list){
+    sql=psync_strcat("DROP INDEX ", le->str, NULL);
     psync_sql_statement(sql);
     psync_free(sql);
   }
-  psync_sql_free_result(res);
+  psync_list_for_each_element_call(&list, string_list, list, psync_free);
+  psync_list_init(&list);
   res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='table'");
-  while ((row=psync_sql_fetch_rowstr(res))){
-    sql=psync_strcat("DROP TABLE ", row[0], NULL);
+  while ((row=psync_sql_fetch_row(res))){
+    str=psync_get_lstring(row[0], &len);
+    le=(string_list *)psync_malloc(offsetof(string_list, str)+len+1);
+    memcpy(le->str, str, len+1);
+    psync_list_add_tail(&list, &le->list);
+  }
+  psync_sql_free_result(res);
+  psync_list_for_each_element(le, &list, string_list, list){
+    sql=psync_strcat("DROP TABLE ", le->str, NULL);
     psync_sql_statement(sql);
     psync_free(sql);
   }
-  psync_sql_free_result(res);
+  psync_list_for_each_element_call(&list, string_list, list, psync_free);
   psync_sql_statement("VACUUM");
   psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
+  pthread_mutex_lock(&psync_my_auth_mutex);
+  memset(psync_my_auth, 0, sizeof(psync_my_auth));
+  psync_my_user=NULL;
+  psync_my_pass=NULL;
+  psync_my_userid=0;
+  pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, runstatus);
