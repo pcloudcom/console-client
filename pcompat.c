@@ -66,6 +66,7 @@ extern char **environ;
 #include <windows.h>
 #include <ws2tcpip.h>
 #include <wincrypt.h>
+#include <tlhelp32.h>
 
 #define psync_close_socket closesocket
 #define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
@@ -307,7 +308,14 @@ static void psync_get_random_seed_linux(psync_hash_ctx *hctx){
   if (likely_log(!sysinfo(&si)))
     psync_hash_update(hctx, &si, sizeof(si));
   psync_add_file_to_seed("/proc/stat", hctx, 0);
+  psync_add_file_to_seed("/proc/vmstat", hctx, 0);
+  psync_add_file_to_seed("/proc/meminfo", hctx, 0);
+  psync_add_file_to_seed("/proc/modules", hctx, 0);
+  psync_add_file_to_seed("/proc/mounts", hctx, 0);
+  psync_add_file_to_seed("/proc/diskstats", hctx, 0);
+  psync_add_file_to_seed("/proc/interrupts", hctx, 0);
   psync_add_file_to_seed("/proc/net/dev", hctx, 0);
+  psync_add_file_to_seed("/proc/net/arp", hctx, 0);
 }
 #endif
 
@@ -374,10 +382,12 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   char *home;
   void *ptr;
   psync_uint_t i, j;
+  int64_t i64;
   pthread_t threadid;
   unsigned char lsc[100][PSYNC_HASH_DIGEST_LEN];
 #if defined(P_OS_POSIX)
   struct utsname un;
+  struct statvfs stfs;
   char **env;
   pid_t pid;
   psync_nanotime(&tm);
@@ -387,6 +397,8 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
     psync_hash_update(&hctx, &un, sizeof(un));
   pid=getpid();
   psync_hash_update(&hctx, &pid, sizeof(pid));
+  if (!statvfs("/", &stfs))
+    psync_hash_update(&hctx, &stfs, sizeof(stfs));
   for (env=environ; *env!=NULL; env++)
     psync_hash_update(&hctx, *env, strlen(*env));
 #if defined(_POSIX_TIMERS) && _POSIX_TIMERS>0 && defined(_POSIX_MONOTONIC_CLOCK)
@@ -398,10 +410,15 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   SYSTEM_INFO si;
   OSVERSIONINFOEX osvi;
   CURSORINFO ci;
+  PROCESSENTRY32 pe;
+  THREADENTRY32 te;
+  MODULEENTRY32 me;
+  MEMORYSTATUSEX ms;
   LARGE_INTEGER li;
   TCHAR ib[1024];
   DWORD ibc;
   HCRYPTPROV cprov;
+  HANDLE pr;
   psync_nanotime(&tm);
   psync_hash_init(&hctx);
   psync_hash_update(&hctx, &tm, sizeof(tm));
@@ -410,6 +427,27 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
       psync_hash_update(&hctx, lsc[0], PSYNC_HASH_DIGEST_LEN);
     CryptReleaseContext(cprov, 0); 
   }
+  if ((pr=CreateToolhelp32Snapshot(TH32CS_SNAPALL, 0))!=INVALID_HANDLE_VALUE){
+    pe.dwSize=sizeof(pe);
+    if (Process32First(pr, &pe))
+      do {
+        psync_hash_update(&hctx, &pe, sizeof(pe));
+      } while(Process32Next(pr, &pe));
+    te.dwSize=sizeof(te);
+    if (Thread32First(pr, &te))
+      do {
+        psync_hash_update(&hctx, &te, sizeof(te));
+      } while(Thread32Next(pr, &te));
+    me.dwSize=sizeof(me);
+    if (Module32First(pr, &me))
+      do {
+        psync_hash_update(&hctx, &me, sizeof(me));
+      } while(Module32Next(pr, &me));
+    CloseHandle(pr);
+  }
+  ms.dwLength=sizeof(ms);
+  if (GlobalMemoryStatusEx(&ms))
+    psync_hash_update(&hctx, &ms, sizeof(ms));
   ci.cbSize=sizeof(ci);
   if (GetCursorInfo(&ci))
     psync_hash_update(&hctx, &ci, sizeof(ci));
@@ -445,6 +483,8 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   psync_hash_update(&hctx, &ptr, sizeof(ptr));
   home=psync_get_home_dir();
   if (home){
+    i64=psync_get_free_space_by_path(home);
+    psync_hash_update(&hctx, &i64, sizeof(i64));
     psync_hash_update(&hctx, &home, sizeof(home));
     psync_hash_update(&hctx, home, strlen(home));
     if (likely_log(!psync_stat(home, &st)))
