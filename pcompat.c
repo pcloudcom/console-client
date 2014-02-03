@@ -394,21 +394,20 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
 #endif
   psync_add_file_to_seed("/dev/random", &hctx, PSYNC_HASH_DIGEST_LEN);
 #elif defined(P_OS_WINDOWS)
-#define INFO_BUFFER_SIZE 1024
   SYSTEM_INFO si;
   OSVERSIONINFOEX osvi;
   LARGE_INTEGER li;
-  TCHAR ib[INFO_BUFFER_SIZE];
+  TCHAR ib[1024];
   DWORD ibc;
   psync_nanotime(&tm);
   psync_hash_init(&hctx);
   psync_hash_update(&hctx, &tm, sizeof(tm));
   GetSystemInfo(&si);
   psync_hash_update(&hctx, &si, sizeof(si));
-  ibc=INFO_BUFFER_SIZE;
+  ibc=ARRAY_SIZE(ib);
   if (GetComputerName(ib, &ibc))
     psync_hash_update(&hctx, ib, sizeof(TCHAR)*ibc);
-  ibc=INFO_BUFFER_SIZE;
+  ibc=ARRAY_SIZE(ib);
   if (GetUserName(ib, &ibc))
     psync_hash_update(&hctx, ib, sizeof(TCHAR)*ibc);
   memset(&osvi, 0, sizeof(OSVERSIONINFO));
