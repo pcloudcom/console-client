@@ -394,6 +394,7 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
 #endif
   psync_add_file_to_seed("/dev/random", &hctx, PSYNC_HASH_DIGEST_LEN);
 #elif defined(P_OS_WINDOWS)
+#define INFO_BUFFER_SIZE 32767
   SYSTEM_INFO si;
   OSVERSIONINFOEX osvi;
   LARGE_INTEGER li;
