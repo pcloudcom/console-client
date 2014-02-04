@@ -48,7 +48,9 @@
 #include <sys/statvfs.h>
 #include <sys/utsname.h>
 #include <netinet/tcp.h>
+#include <net/if.h>
 #include <unistd.h>
+#include <ifaddrs.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -67,6 +69,7 @@ extern char **environ;
 #include <ws2tcpip.h>
 #include <wincrypt.h>
 #include <tlhelp32.h>
+#include <iphlpapi.h>
 
 #define psync_close_socket closesocket
 #define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
@@ -964,6 +967,102 @@ int psync_socket_writeall(psync_socket *sock, const void *buff, int num){
     return psync_socket_writeall_ssl(sock, buff, num);
   else
     return psync_socket_writeall_plain(sock->sock, buff, num);
+}
+
+psync_interface_list_t *psync_list_ip_adapters(){
+  psync_interface_list_t *ret;
+  size_t cnt;
+#if defined(P_OS_POSIX)
+  struct ifaddrs *addrs, *addr;
+  sa_family_t family;
+  size_t sz;
+  if (unlikely_log(getifaddrs(&addrs)))
+    goto empty;
+  cnt=0;
+  addr=addrs;
+  while (addr){
+    family=addr->ifa_addr->sa_family;
+    if ((family==AF_INET || family==AF_INET6) && (addr->ifa_flags&IFF_BROADCAST))
+      cnt++;
+    addr=addr->ifa_next;
+  }
+  ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
+  ret->interfacecnt=cnt;
+  addr=addrs;
+  cnt=0;
+  while (addr){
+    family=addr->ifa_addr->sa_family;
+    if ((family==AF_INET || family==AF_INET6) && (addr->ifa_flags&IFF_BROADCAST)){
+      if (family==AF_INET)
+        sz=sizeof(struct sockaddr_in);
+      else
+        sz=sizeof(struct sockaddr_in6);
+      memcpy(&ret->interfaces[cnt].address, &addr->ifa_addr, sz);
+      memcpy(&ret->interfaces[cnt].broadcast, &addr->ifa_broadaddr, sz);
+      memcpy(&ret->interfaces[cnt].netmask, &addr->ifa_netmask, sz);
+      ret->interfaces[cnt].addrsize=sz;
+      cnt++;
+    }
+    addr=addr->ifa_next;
+  }
+  freeifaddrs(addrs);
+  return ret;
+#elif defined(P_OS_WINDOWS)
+  IP_ADAPTER_ADDRESSES *adapters, *adapter;
+  IP_ADAPTER_UNICAST_ADDRESS *addr;
+  ULONG sz, rt, fl;
+  int sz;
+  sz=16*1024;
+  adapters=(IP_ADAPTER_ADDRESSES *)pcync_malloc(sz);
+  fl=GAA_FLAG_SKIP_DNS_SERVER|GAA_FLAG_SKIP_FRIENDLY_NAME|GAA_FLAG_SKIP_ANYCAST|GAA_FLAG_SKIP_MULTICAST;
+  rt=GetAdaptersAddresses(AF_UNSPEC, fl, NULL, adapters, &sz);
+  if (rt==ERROR_BUFFER_OVERFLOW){
+    adapters=(IP_ADAPTER_ADDRESSES *)pcync_realloc(adapters, sz);
+    rt=GetAdaptersAddresses(AF_UNSPEC, fl, NULL, adapters, &sz);
+  }
+  if (rt!=ERROR_SUCCESS){
+    psync_free(adapters);
+    goto empty;
+  }
+  adapter=adapters;
+  cnt=0;
+  while (adapter){
+    addr=adapter->FirstUnicastAddress;
+    while (addr){
+      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address->lpSockaddr->sa_family==AF_INET || addr->Address->lpSockaddr->sa_family==AF_INET6))
+        cnt++;
+      addr=addr->Next;
+    }
+    adapter=adapter->Next;
+  }
+  ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
+  memset(&ret->interfaces, 0, sizeof(psync_interface_t)*cnt);
+  ret->interfacecnt=cnt;
+  adapter=adapters;
+  cnt=0;
+  while (adapter){
+    addr=adapter->FirstUnicastAddress;
+    while (addr){
+      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address->lpSockaddr->sa_family==AF_INET || addr->Address->lpSockaddr->sa_family==AF_INET6)){
+        sz=addr->Address->iSockaddrLength;
+        memcpy(&ret->interfaces[cnt].address, addr->Address->lpSockaddr, sz);
+        if (addr->Address->lpSockaddr->sa_family==AF_INET)
+          memset(((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr, 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
+        else
+          memset(((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr, 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
+        ret->interfaces[cnt].addrsize=sz;
+        cnt++;
+      }
+      addr=addr->Next;
+    }
+    adapter=adapter->Next;
+  }
+  return ret;
+#endif
+empty:
+  ret=psync_malloc(offsetof(psync_interface_list_t, interfaces));
+  ret->interfacecnt=0;
+  return ret;
 }
 
 int psync_pipe(psync_socket_t pipefd[2]){

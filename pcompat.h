@@ -299,6 +299,18 @@ typedef struct {
   uint8_t isfolder;
 } psync_pstat_fast;
 
+typedef struct {
+  struct sockaddr_storage address;
+  struct sockaddr_storage broadcast;
+  struct sockaddr_storage netmask;
+  int addrsize;
+} psync_interface_t;
+
+typedef struct {
+  size_t interfacecnt;
+  psync_interface_t interfaces[];
+} psync_interface_list_t;
+
 #ifndef INVALID_SOCKET
 #define INVALID_SOCKET -1
 #endif
@@ -342,6 +354,7 @@ int psync_socket_read(psync_socket *sock, void *buff, int num);
 int psync_socket_write(psync_socket *sock, const void *buff, int num);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
+psync_interface_list_t *psync_list_ip_adapters();
 
 /* pipefd[0] is the read end, pipefd[1] is for writing */
 int psync_pipe(psync_socket_t pipefd[2]);
