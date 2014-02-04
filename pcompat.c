@@ -411,7 +411,7 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   psync_add_file_to_seed("/dev/random", &hctx, PSYNC_HASH_DIGEST_LEN);
 #elif defined(P_OS_WINDOWS)
   SYSTEM_INFO si;
-  OSVERSIONINFOEX osvi;
+  OSVERSIONINFO osvi;
   CURSORINFO ci;
   PROCESSENTRY32 pe;
   THREADENTRY32 te;
@@ -428,7 +428,7 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   if (CryptAcquireContext(&cprov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)){
     if (CryptGenRandom(cprov, PSYNC_HASH_DIGEST_LEN, lsc[0]))
       psync_hash_update(&hctx, lsc[0], PSYNC_HASH_DIGEST_LEN);
-    CryptReleaseContext(cprov, 0); 
+    CryptReleaseContext(cprov, 0);
   }
   if ((pr=CreateToolhelp32Snapshot(TH32CS_SNAPALL, 0))!=INVALID_HANDLE_VALUE){
     pe.dwSize=sizeof(pe);
