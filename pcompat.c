@@ -1013,11 +1013,11 @@ psync_interface_list_t *psync_list_ip_adapters(){
   ULONG sz, rt, fl;
   int isz;
   sz=16*1024;
-  adapters=(IP_ADAPTER_ADDRESSES *)pcync_malloc(sz);
+  adapters=(IP_ADAPTER_ADDRESSES *)psync_malloc(sz);
   fl=GAA_FLAG_SKIP_DNS_SERVER|GAA_FLAG_SKIP_FRIENDLY_NAME|GAA_FLAG_SKIP_ANYCAST|GAA_FLAG_SKIP_MULTICAST;
   rt=GetAdaptersAddresses(AF_UNSPEC, fl, NULL, adapters, &sz);
   if (rt==ERROR_BUFFER_OVERFLOW){
-    adapters=(IP_ADAPTER_ADDRESSES *)pcync_realloc(adapters, sz);
+    adapters=(IP_ADAPTER_ADDRESSES *)psync_realloc(adapters, sz);
     rt=GetAdaptersAddresses(AF_UNSPEC, fl, NULL, adapters, &sz);
   }
   if (rt!=ERROR_SUCCESS){
