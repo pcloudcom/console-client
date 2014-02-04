@@ -29,9 +29,16 @@
 #include "psettings.h"
 #include "pp2p.h"
 
+static pthread_mutex_t p2pmutex=PTHREAD_MUTEX_INITIALIZER;
+
 static psync_socket_t udpsock;
+static int running=0;
 
 static void psync_p2p_start(){
+  pthread_mutex_lock(&p2pmutex);
+  if (!running){
+  }
+  pthread_mutex_unlock(&p2pmutex);
 }
 
 void psync_p2p_init(){
