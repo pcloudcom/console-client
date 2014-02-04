@@ -45,6 +45,7 @@
 #include "pscanner.h"
 #include "plocalscan.h"
 #include "plist.h"
+#include "pp2p.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -102,6 +103,7 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_syncer_init();
   psync_netlibs_init();
   psync_localscan_init();
+  psync_p2p_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)

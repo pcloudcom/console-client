@@ -40,6 +40,8 @@
 #define PSYNC_API_APORT     8398
 #define PSYNC_API_APORT_SSL 8399
 
+#define PSYNC_UDP_LAN_PORT 42420
+
 #define PSYNC_DIFF_LIMIT   25000
 
 #define PSYNC_SOCK_CONNECT_TIMEOUT 20
@@ -122,6 +124,7 @@
 #define PSYNC_DWL_SHAPER_DEFAULT -1
 #define PSYNC_UPL_SHAPER_DEFAULT 0
 #define PSYNC_MIN_LOCAL_FREE_SPACE (512*1024*1024)
+#define PSYNC_P2P_SYNC_DEFAULT 1
 #define PSYNC_IGNORE_PATTERNS_DEFAULT ".DS_Store;\
 .DS_Store?;\
 .AppleDouble;\
@@ -146,6 +149,7 @@ $RECYCLE.BIN;\
 #define PSYNC_SETTING_maxuploadspeed    3
 #define PSYNC_SETTING_ignorepatterns    4
 #define PSYNC_SETTING_minlocalfreespace 5
+#define PSYNC_SETTING_p2psync           6
 
 typedef int psync_settingid_t;
 
