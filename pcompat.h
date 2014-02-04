@@ -354,6 +354,7 @@ int psync_socket_read(psync_socket *sock, void *buff, int num);
 int psync_socket_write(psync_socket *sock, const void *buff, int num);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
+
 psync_interface_list_t *psync_list_ip_adapters();
 
 /* pipefd[0] is the read end, pipefd[1] is for writing */

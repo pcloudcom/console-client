@@ -1011,7 +1011,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   IP_ADAPTER_ADDRESSES *adapters, *adapter;
   IP_ADAPTER_UNICAST_ADDRESS *addr;
   ULONG sz, rt, fl;
-  int sz;
+  int isz;
   sz=16*1024;
   adapters=(IP_ADAPTER_ADDRESSES *)pcync_malloc(sz);
   fl=GAA_FLAG_SKIP_DNS_SERVER|GAA_FLAG_SKIP_FRIENDLY_NAME|GAA_FLAG_SKIP_ANYCAST|GAA_FLAG_SKIP_MULTICAST;
@@ -1029,7 +1029,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   while (adapter){
     addr=adapter->FirstUnicastAddress;
     while (addr){
-      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address->lpSockaddr->sa_family==AF_INET || addr->Address->lpSockaddr->sa_family==AF_INET6))
+      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address.lpSockaddr->sa_family==AF_INET || addr->Address.lpSockaddr->sa_family==AF_INET6))
         cnt++;
       addr=addr->Next;
     }
@@ -1043,14 +1043,14 @@ psync_interface_list_t *psync_list_ip_adapters(){
   while (adapter){
     addr=adapter->FirstUnicastAddress;
     while (addr){
-      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address->lpSockaddr->sa_family==AF_INET || addr->Address->lpSockaddr->sa_family==AF_INET6)){
-        sz=addr->Address->iSockaddrLength;
-        memcpy(&ret->interfaces[cnt].address, addr->Address->lpSockaddr, sz);
-        if (addr->Address->lpSockaddr->sa_family==AF_INET)
-          memset(((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr, 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
+      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address.lpSockaddr->sa_family==AF_INET || addr->Address.lpSockaddr->sa_family==AF_INET6)){
+        isz=addr->Address.iSockaddrLength;
+        memcpy(&ret->interfaces[cnt].address, addr->Address.lpSockaddr, isz);
+        if (addr->Address.lpSockaddr->sa_family==AF_INET)
+          memset(&(((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr), 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
         else
-          memset(((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr, 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
-        ret->interfaces[cnt].addrsize=sz;
+          memset(&(((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr), 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
+        ret->interfaces[cnt].addrsize=isz;
         cnt++;
       }
       addr=addr->Next;

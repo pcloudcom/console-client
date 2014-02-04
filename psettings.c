@@ -28,6 +28,7 @@
 #include "psettings.h"
 #include "plibs.h"
 #include "ptimer.h"
+#include "pp2p.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -55,7 +56,8 @@ static psync_setting_t settings[]={
   {"maxdownloadspeed", NULL, NULL, {PSYNC_DWL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"ignorepatterns", NULL, lower_patterns, {0}, PSYNC_TSTRING},
-  {"minlocalfreespace", NULL, NULL, {PSYNC_MIN_LOCAL_FREE_SPACE}, PSYNC_TNUMBER}
+  {"minlocalfreespace", NULL, NULL, {PSYNC_MIN_LOCAL_FREE_SPACE}, PSYNC_TNUMBER},
+  {"p2psync", psync_p2p_change, NULL, {PSYNC_P2P_SYNC_DEFAULT}, PSYNC_TBOOL}
 };
 
 void psync_settings_init(){
