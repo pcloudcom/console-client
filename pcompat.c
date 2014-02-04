@@ -1008,16 +1008,16 @@ psync_interface_list_t *psync_list_ip_adapters(){
   freeifaddrs(addrs);
   return ret;
 #elif defined(P_OS_WINDOWS)
+  {
   IP_ADAPTER_ADDRESSES *adapters, *adapter;
   IP_ADAPTER_UNICAST_ADDRESS *addr;
   ULONG sz, rt, fl;
-  int sz;
   sz=16*1024;
-  adapters=(IP_ADAPTER_ADDRESSES *)pcync_malloc(sz);
+  adapters=(IP_ADAPTER_ADDRESSES *)psync_malloc(sz);
   fl=GAA_FLAG_SKIP_DNS_SERVER|GAA_FLAG_SKIP_FRIENDLY_NAME|GAA_FLAG_SKIP_ANYCAST|GAA_FLAG_SKIP_MULTICAST;
   rt=GetAdaptersAddresses(AF_UNSPEC, fl, NULL, adapters, &sz);
   if (rt==ERROR_BUFFER_OVERFLOW){
-    adapters=(IP_ADAPTER_ADDRESSES *)pcync_realloc(adapters, sz);
+    adapters=(IP_ADAPTER_ADDRESSES *)psync_realloc(adapters, sz);
     rt=GetAdaptersAddresses(AF_UNSPEC, fl, NULL, adapters, &sz);
   }
   if (rt!=ERROR_SUCCESS){
@@ -1029,7 +1029,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   while (adapter){
     addr=adapter->FirstUnicastAddress;
     while (addr){
-      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address->lpSockaddr->sa_family==AF_INET || addr->Address->lpSockaddr->sa_family==AF_INET6))
+        if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address.lpSockaddr->sa_family==AF_INET || addr->Address.lpSockaddr->sa_family==AF_INET6))
         cnt++;
       addr=addr->Next;
     }
@@ -1043,13 +1043,13 @@ psync_interface_list_t *psync_list_ip_adapters(){
   while (adapter){
     addr=adapter->FirstUnicastAddress;
     while (addr){
-      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address->lpSockaddr->sa_family==AF_INET || addr->Address->lpSockaddr->sa_family==AF_INET6)){
-        sz=addr->Address->iSockaddrLength;
-        memcpy(&ret->interfaces[cnt].address, addr->Address->lpSockaddr, sz);
-        if (addr->Address->lpSockaddr->sa_family==AF_INET)
-          memset(((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr, 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
+      if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address.lpSockaddr->sa_family==AF_INET || addr->Address.lpSockaddr->sa_family==AF_INET6)){
+        sz=addr->Address.iSockaddrLength;
+        memcpy(&ret->interfaces[cnt].address, addr->Address.lpSockaddr, sz);
+        if (addr->Address.lpSockaddr->sa_family==AF_INET)
+          memset(&((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr, 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
         else
-          memset(((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr, 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
+          memset(&((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr, 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
         ret->interfaces[cnt].addrsize=sz;
         cnt++;
       }
@@ -1058,6 +1058,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     adapter=adapter->Next;
   }
   return ret;
+  }
 #endif
 empty:
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces));
