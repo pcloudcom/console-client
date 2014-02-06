@@ -1000,6 +1000,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   freeifaddrs(addrs);
   return ret;
 #elif defined(P_OS_WINDOWS)
+  {
   IP_ADAPTER_ADDRESSES *adapters, *adapter;
   IP_ADAPTER_UNICAST_ADDRESS *addr;
   ULONG sz, rt, fl;
@@ -1054,6 +1055,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     adapter=adapter->Next;
   }
   return ret;
+  }
 #endif
 empty:
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces));
