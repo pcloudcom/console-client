@@ -34,5 +34,6 @@ void psync_download_init();
 void psync_wake_download();
 void psync_delete_download_tasks_for_file(psync_fileid_t fileid);
 void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid);
+int psync_get_downloading_hash(unsigned char *hash);
 
 #endif

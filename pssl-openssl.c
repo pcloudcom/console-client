@@ -27,6 +27,7 @@
 
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
+#include <openssl/err.h>
 #include <pthread.h>
 #include "pssl.h"
 #include "psynclib.h"
@@ -216,4 +217,34 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
   err=SSL_get_error(ssl, res);
   psync_set_ssl_error(err);
   return PSYNC_SSL_FAIL;
+}
+
+void psync_ssl_rand_strong(unsigned char *buf, int num){
+  int ret;
+  ret=RAND_bytes(buf, num);
+  if (unlikely(ret==0)){
+    unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+    psync_uint_t cnt;
+    cnt=0;
+    while (ret==0 && cnt++<20){
+      psync_get_random_seed(seed, NULL, 0);
+      RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+      ret=RAND_bytes(buf, num);
+    }
+  }
+  if (unlikely(ret!=1)){
+    debug(D_CRITICAL, "could not generate %d random bytes, error %s, exiting", num, ERR_error_string(ERR_get_error(), NULL));
+    exit(1);
+  }
+}
+
+void psync_ssl_rand_weak(unsigned char *buf, int num){
+  int ret;
+  ret=RAND_pseudo_bytes(buf, num);
+  if (unlikely(ret==-1)){
+    debug(D_CRITICAL, "could not generate %d weak random bytes, error %s, exiting", num, ERR_error_string(ERR_get_error(), NULL));
+    exit(1);
+  }
+  else if (unlikely(ret==0))
+    debug(D_WARNING, "RAND_pseudo_bytes returned weak numbers");
 }

@@ -107,6 +107,14 @@
 #define PSYNC_NONNULL(...)
 #endif
 
+#if __has_attribute(packed)
+#define PSYNC_PACKED_STRUCT struct __attribute__ ((packed))
+#elif defined(_MSC_VER)
+#define PSYNC_PACKED_STRUCT __declspec(align(1)) struct
+#else
+#define PSYNC_PACKED_STRUCT struct
+#endif 
+
 #if _MSC_VER >= 1500 && _MSC_VER < 1700
 #define inline __inline
 #define restrict __restrict

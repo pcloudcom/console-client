@@ -58,4 +58,7 @@ int psync_ssl_pendingdata(void *sslconn) PSYNC_PURE;
 int psync_ssl_read(void *sslconn, void *buf, int num);
 int psync_ssl_write(void *sslconn, const void *buf, int num);
 
+void psync_ssl_rand_strong(unsigned char *buf, int num);
+void psync_ssl_rand_weak(unsigned char *buf, int num);
+
 #endif

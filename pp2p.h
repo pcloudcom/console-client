@@ -28,7 +28,10 @@
 #ifndef _PSYNC_P2P_H
 #define _PSYNC_P2P_H
 
+#include "psynclib.h"
+
 void psync_p2p_init();
 void psync_p2p_change();
+int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehashhex, uint64_t fsize, const char *filename);
 
 #endif

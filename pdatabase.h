@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS localfile (id INTEGER PRIMARY KEY, localparentfolderi
   syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, size INTEGER, inode INTEGER, mtime INTEGER, mtimenative INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL", checksum TEXT);\
 CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
 CREATE INDEX IF NOT EXISTS klocalfilefileid ON localfile(fileid);\
+CREATE INDEX IF NOT EXISTS klocalfilechecksum ON localfile(checksum);\
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfilerpsn ON localfile(syncid, localparentfolderid, name);\
 CREATE TABLE IF NOT EXISTS syncedfolder (syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, folderid INTEGER, localfolderid INTEGER, synctype INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncedfolder(folderid, syncid);\

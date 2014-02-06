@@ -38,6 +38,7 @@
 #include "pfolder.h"
 #include "psyncer.h"
 #include "papi.h"
+#include "pp2p.h"
 
 static pthread_mutex_t download_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t download_cond=PTHREAD_COND_INITIALIZER;
@@ -50,6 +51,8 @@ static const uint32_t requiredstatuses[]={
 
 static volatile psync_fileid_t downloadingfile=0, stopfile=0;
 static volatile psync_syncid_t downloadingfilesyncid=0;
+
+static unsigned char downloadingfilehash[PSYNC_HASH_DIGEST_HEXLEN];
 
 static int task_mkdir(const char *path){
   while (1){
@@ -334,6 +337,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     else
       goto ret0;
   }
+  memcpy(downloadingfilehash, serverhashhex, PSYNC_HASH_DIGEST_HEXLEN);
   result=psync_setting_get_uint(_PS(minlocalfreespace));
   if (result){
     freespace=psync_get_free_space_by_path(localpath);
@@ -398,6 +402,11 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     }
   }
   psync_sql_free_result(sql);
+  rt=psync_p2p_check_download(fileid, serverhashhex, serversize, name);
+  if (rt==PSYNC_NET_OK && likely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize)))
+    goto ret0;
+  else if (rt==PSYNC_NET_TEMPFAIL)
+    goto err_sl_ex;
   api=psync_apipool_get();
   if (unlikely_log(!api))
     goto err_sl_ex;
@@ -474,6 +483,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   }
   if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize)))
     goto err0;
+  memset(downloadingfilehash, 0, PSYNC_HASH_DIGEST_HEXLEN);
   psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FINISHED, syncid, name, fileid);
   debug(D_NOTICE, "file downloaded %s", name);
   psync_free(name);
@@ -497,12 +507,14 @@ err0:
   psync_free(res);
   downloadingfile=0;
   downloadingfilesyncid=0;
+  memset(downloadingfilehash, 0, PSYNC_HASH_DIGEST_HEXLEN);
   return -1;
 err_sl_ex:
   psync_free(localpath);
   psync_free(name);
   downloadingfile=0;
   downloadingfilesyncid=0;
+  memset(downloadingfilehash, 0, PSYNC_HASH_DIGEST_HEXLEN);
   psync_timer_notify_exception();
   psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
   return -1;
@@ -713,4 +725,9 @@ void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
 void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid){
   if (fileid==downloadingfile && syncid==downloadingfilesyncid)
     stopfile=fileid;
+}
+
+int psync_get_downloading_hash(unsigned char *hash){
+  memcpy(hash, downloadingfilehash, PSYNC_HASH_DIGEST_HEXLEN);
+  return hash[0]!=0;
 }

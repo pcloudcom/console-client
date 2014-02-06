@@ -56,10 +56,6 @@
 #include <signal.h>
 #include <pwd.h>
 
-#define psync_close_socket close
-#define psync_read_socket read
-#define psync_write_socket write
-
 extern char **environ;
 
 #elif defined(P_OS_WINDOWS)
@@ -70,10 +66,6 @@ extern char **environ;
 #include <wincrypt.h>
 #include <tlhelp32.h>
 #include <iphlpapi.h>
-
-#define psync_close_socket closesocket
-#define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
-#define psync_write_socket(s, b, c) send(s, (const char *)(b), c, 0)
 
 #endif
 
@@ -1046,10 +1038,14 @@ psync_interface_list_t *psync_list_ip_adapters(){
       if (!(addr->Flags&IP_ADAPTER_ADDRESS_TRANSIENT) && (addr->Address.lpSockaddr->sa_family==AF_INET || addr->Address.lpSockaddr->sa_family==AF_INET6)){
         isz=addr->Address.iSockaddrLength;
         memcpy(&ret->interfaces[cnt].address, addr->Address.lpSockaddr, isz);
-        if (addr->Address.lpSockaddr->sa_family==AF_INET)
+        if (addr->Address.lpSockaddr->sa_family==AF_INET){
+          interfaces[cnt].broadcast.ss_family=AF_INET;
           memset(&(((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr), 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
-        else
+        }
+        else{
+          interfaces[cnt].broadcast.ss_family=AF_INET6;
           memset(&(((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr), 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
+        }
         ret->interfaces[cnt].addrsize=isz;
         cnt++;
       }

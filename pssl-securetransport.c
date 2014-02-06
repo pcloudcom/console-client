@@ -193,3 +193,27 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
   else
     return ret;
 }
+
+void psync_ssl_rand_strong(unsigned char *buf, int num){
+  ssize_t ret;
+  int fd;
+  fd=open("/dev/random", O_RDONLY);
+  if (unlikely(fd!=-1))
+    goto err;
+  while (num){
+    ret=read(fd, buf, num);
+    if (unlikely(ret<=0))
+      goto err;
+    num-=ret;
+    buf+=ret;
+  }
+  close(fd);
+  return;
+err:
+  debug(D_CRITICAL, "could not open /dev/random");
+  exit(1);
+}
+
+void psync_ssl_rand_weak(unsigned char *buf, int num){
+  sqlite3_randomness(num, buf);
+}

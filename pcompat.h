@@ -121,9 +121,11 @@ typedef unsigned long psync_uint_t;
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 #define P_PRI_U64 PRIu64
 
@@ -196,6 +198,10 @@ typedef int psync_file_t;
 #define psync_filename_cmp strcmp
 
 #define psync_def_var_arr(name, type, size) type name[size]
+
+#define psync_close_socket close
+#define psync_read_socket read
+#define psync_write_socket write
 
 #elif defined(P_OS_WINDOWS)
 
@@ -276,6 +282,10 @@ typedef HANDLE psync_file_t;
 #define PSYNC_FILENAMES_CASESENSITIVE 0
 #define psync_filename_cmp _stricmp
 
+#define psync_close_socket closesocket
+#define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
+#define psync_write_socket(s, b, c) send(s, (const char *)(b), c, 0)
+
 #else
 #error "Need to define types for your operating system"
 #endif
@@ -321,6 +331,16 @@ typedef struct {
 
 #ifndef INVALID_HANDLE_VALUE
 #define INVALID_HANDLE_VALUE -1
+#endif
+
+#if !defined(__socklen_t_defined) && !defined(HAVE_SOCKET_LEN_T) && !defined(socklen_t)
+#if defined(P_OS_WINDOWS)
+  typedef int socklen_t;
+#else
+  typedef unsigned int socklen_t;
+#endif
+#define __socklen_t_defined
+#define HAVE_SOCKET_LEN_T
 #endif
 
 typedef void (*psync_list_dir_callback)(void *, psync_pstat *);

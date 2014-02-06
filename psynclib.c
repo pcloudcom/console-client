@@ -129,7 +129,7 @@ void psync_get_status(pstatus_t *status){
 }
 
 char *psync_get_username(){
-  return psync_sql_cellstr("SELECT value FROM setting WHERE id='user'");
+  return psync_sql_cellstr("SELECT value FROM setting WHERE id='username'");
 }
 
 static void clear_db(int save){
