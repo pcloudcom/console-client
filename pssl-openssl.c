@@ -220,7 +220,14 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
 }
 
 void psync_ssl_rand_strong(unsigned char *buf, int num){
+  static int seeds=0;
   int ret;
+  if (seeds<5){
+    unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+    psync_get_random_seed(seed, NULL, 0);
+    RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+    seeds++;
+  }
   ret=RAND_bytes(buf, num);
   if (unlikely(ret==0)){
     unsigned char seed[PSYNC_HASH_DIGEST_LEN];
@@ -247,4 +254,115 @@ void psync_ssl_rand_weak(unsigned char *buf, int num){
   }
   else if (unlikely(ret==0))
     debug(D_WARNING, "RAND_pseudo_bytes returned weak numbers");
+}
+
+psync_rsa_t psync_ssl_gen_rsa(int bits){
+  RSA *rsa;
+  BIGNUM *bn;
+  unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+  psync_get_random_seed(seed, seed, sizeof(seed));
+  RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+  rsa=RSA_new();
+  if (unlikely_log(!rsa))
+    goto err0;
+  bn=BN_new();
+  if (unlikely_log(!bn))
+    goto err1;
+  if (unlikely_log(!BN_set_word(bn, RSA_F4)))
+    goto err2;
+  if (!RSA_generate_key_ex(rsa, bits, bn, NULL))
+    goto err2;
+  BN_free(bn);
+  return rsa;
+err2:
+  BN_free(bn);
+err1:
+  RSA_free(rsa);
+err0:
+  return PSYNC_INVALID_RSA;
+}
+
+void psync_ssl_free_rsa(psync_rsa_t rsa){
+  RSA_free(rsa);
+}
+
+psync_rsa_publickey_t psync_ssl_rsa_get_public(psync_rsa_t rsa){
+  return RSAPublicKey_dup(rsa);
+}
+
+void psync_ssl_rsa_free_public(psync_rsa_publickey_t key){
+  RSA_free(key);
+}
+
+psync_rsa_publickey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
+  return RSAPrivateKey_dup(rsa);
+}
+
+void psync_ssl_rsa_free_private(psync_rsa_publickey_t key){
+  RSA_free(key);
+}
+
+psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen){
+  psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
+  key->keylen=keylen;
+  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), (const unsigned char *)PSYNC_CRYPTO_PASS_TO_KEY_SALT, 
+                                sizeof(PSYNC_CRYPTO_PASS_TO_KEY_SALT)-1, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS, keylen, key->key);
+  return key;
+}
+
+void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
+  memset(key->key, 0, key->keylen);
+  psync_free(key);
+}
+
+psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
+  psync_encrypted_symmetric_key_t ret;
+  int len;
+  ret=(psync_encrypted_symmetric_key_t)psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+RSA_size(rsa));
+  len=RSA_public_encrypt(key->keylen, key->key, ret->data, rsa, RSA_PKCS1_PADDING);
+  if (unlikely_log(len==-1)){
+    psync_free(ret);
+    return PSYNC_INVALID_ENC_SYM_KEY;
+  }
+  ret->datalen=len;
+  return ret;
+}
+
+psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t rsa, const psync_encrypted_symmetric_key_t enckey){
+  unsigned char buff[2048];
+  psync_symmetric_key_t ret;
+  int len;
+  len=RSA_private_decrypt(enckey->datalen, enckey->data, buff, rsa, RSA_PKCS1_PADDING);
+  if (unlikely_log(len==-1))
+    return PSYNC_INVALID_SYM_KEY;
+  ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
+  ret->keylen=len;
+  memcpy(ret->key, buff, len);
+  return ret;
+}
+
+psync_aes256_encoder psync_ssl_aes256_create_encoder(psync_symmetric_key_t key){
+  AES_KEY *aes;
+  assert(key->keylen>=PSYNC_AES256_KEY_SIZE);
+  aes=psync_new(AES_KEY);
+  AES_set_encrypt_key(key->key, 256, aes);
+  return aes;
+}
+
+void psync_ssl_aes256_free_encoder(psync_aes256_encoder aes){
+  memset(aes, 0, sizeof(AES_KEY));
+  psync_free(aes);
+}
+
+psync_aes256_encoder psync_ssl_aes256_create_decoder(psync_symmetric_key_t key){
+  AES_KEY *aes;
+  assert(key->keylen>=PSYNC_AES256_KEY_SIZE);
+  aes=psync_new(AES_KEY);
+  AES_set_decrypt_key(key->key, 256, aes);
+  return aes;
+}
+
+void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
+  memset(aes, 0, sizeof(AES_KEY));
+  psync_free(aes);
 }

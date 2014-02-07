@@ -29,6 +29,26 @@
 #define _PSYNC_SECURETRANSPORT_H
 
 #include <CommonCrypto/CommonDigest.h>
+#include <Security/Security.h>
+
+typedef struct {
+  SecKeyRef public_key;
+  SecKeyRef private_key;
+} psync_rsa_struct_t, *psync_rsa_t;
+
+typedef SecKeyRef psync_rsa_publickey_t;
+typedef SecKeyRef psync_rsa_privatekey_t;
+
+typedef struct {
+  size_t keylen;
+  unsigned char key[];
+} psync_symmetric_key_struct_t, *psync_symmetric_key_t;
+
+typedef CCCryptorRef psync_aes256_encoder;
+typedef CCCryptorRef psync_aes256_decoder;
+
+#define PSYNC_INVALID_RSA NULL
+#define PSYNC_INVALID_SYM_KEY NULL
 
 #define PSYNC_SHA1_DIGEST_LEN 20
 #define PSYNC_SHA1_DIGEST_HEXLEN 40
@@ -37,5 +57,16 @@
 #define psync_sha1_init(pctx) CC_SHA1_Init(pctx)
 #define psync_sha1_update(pctx, data, datalen) CC_SHA1_Update(pctx, data, datalen)
 #define psync_sha1_final(checksum, pctx) CC_SHA1_Final(checksum, pctx)
+
+static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+  size_t n;
+  CCCryptorUpdate(enc, src, 16, dst, 16, &n);
+}
+
+static inline void psync_aes256_decode_block(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
+  size_t n;
+  CCCryptorUpdate(enc, src, 16, dst, 16, &n);
+}
+
 
 #endif

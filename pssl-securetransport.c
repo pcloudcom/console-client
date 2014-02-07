@@ -29,7 +29,10 @@
 #include "psynclib.h"
 #include "plibs.h"
 #include "pcompat.h"
+#include "psettings.h"
 #include <unistd.h>
+#include <string.h>
+#include <stddef.h>
 #include <Security/SecureTransport.h>
 
 PSYNC_THREAD int psync_ssl_errno;
@@ -198,11 +201,11 @@ void psync_ssl_rand_strong(unsigned char *buf, int num){
   ssize_t ret;
   int fd;
   fd=open("/dev/random", O_RDONLY);
-  if (unlikely(fd!=-1))
+  if (unlikely_log(fd==-1))
     goto err;
   while (num){
     ret=read(fd, buf, num);
-    if (unlikely(ret<=0))
+    if (unlikely_log(ret<=0))
       goto err;
     num-=ret;
     buf+=ret;
@@ -216,4 +219,171 @@ err:
 
 void psync_ssl_rand_weak(unsigned char *buf, int num){
   sqlite3_randomness(num, buf);
+}
+
+psync_rsa_t psync_ssl_gen_rsa(int bits){
+  psync_rsa_t ret;
+  SecKeyRef public_key, private_key;
+  CFDictionaryRef dict;
+  CFTypeRef keys[2], values[2];
+  OSStatus st;
+  keys[0]=kSecAttrKeyType;
+  values[0]=kSecAttrKeyTypeRSA;
+  keys[1]=kSecAttrKeySizeInBits;
+  values[1]=CFNumberCreate(NULL, kCFNumberIntType, &bits);
+  dict=CFDictionaryCreate(NULL, keys, values, ARRAY_SIZE(keys), NULL, NULL);
+  st=SecKeyGeneratePair(dict, &public_key, &private_key);
+  CFRelease(dict);
+  CFRelease(values[1]);
+  if (unlikely_log(st!=noErr))
+    return PSYNC_INVALID_RSA;
+  ret=psync_new(psync_rsa_struct_t);
+  ret->public_key=public_key;
+  ret->private_key=private_key;
+  return ret;
+}
+
+void psync_ssl_free_rsa(psync_rsa_t rsa){
+  CFRelease(rsa->public_key);
+  CFRelease(rsa->private_key);
+  psync_free(rsa);
+}
+
+psync_rsa_publickey_t psync_ssl_rsa_get_public(psync_rsa_t rsa){
+  return CFRetain(rsa->public_key);
+}
+
+void psync_ssl_rsa_free_public(psync_rsa_publickey_t key){
+  CFRelease(key);
+}
+
+psync_rsa_publickey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
+  return CFRetain(rsa->private_key);
+}
+
+void psync_ssl_rsa_free_private(psync_rsa_publickey_t key){
+  CFRelease(key);
+}
+
+
+static void PKCS5_PBKDF2_HMAC_SHA1(const char *pass, size_t passlen, const unsigned char *salt, size_t saltlen,
+    unsigned long cnt, size_t keylen, unsigned char *out){
+  unsigned char sha1hmacbin[CC_SHA1_DIGEST_LENGTH], itmp[4];
+  size_t clen;
+  uint32_t iter, i, j;
+  CCHmacContext hctx;
+  iter=1;
+  while (keylen){
+    if (keylen>CC_SHA1_DIGEST_LENGTH)
+      clen=CC_SHA1_DIGEST_LENGTH;
+    else
+      clen=keylen;
+    itmp[0]=(unsigned char)((iter>>24)&0xff);
+    itmp[1]=(unsigned char)((iter>>16)&0xff);
+    itmp[2]=(unsigned char)((iter>>8)&0xff);
+    itmp[3]=(unsigned char)(iter&0xff);
+    CCHmacInit(&hctx, kCCHmacAlgSHA1, pass, passlen);
+    CCHmacUpdate(&hctx, salt, saltlen);
+    CCHmacUpdate(&hctx, itmp, 4);
+    CCHmacFinal(&hctx, sha1hmacbin);
+    memcpy(out, sha1hmacbin, clen);
+    for (i=1; i<cnt; i++){
+      CCHmac(kCCHmacAlgSHA1, pass, passlen, sha1hmacbin, CC_SHA1_DIGEST_LENGTH, sha1hmacbin);
+      for(j=0; j<clen; j++)
+        out[j]^=sha1hmacbin[j];
+    }
+    out+=clen;
+    keylen-=clen;
+    iter++;
+  }
+}
+
+psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen){
+  psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
+  key->keylen=keylen;
+  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), (const unsigned char *)PSYNC_CRYPTO_PASS_TO_KEY_SALT, 
+                                sizeof(PSYNC_CRYPTO_PASS_TO_KEY_SALT)-1, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS, keylen, key->key);
+  return key;
+/*  CFDictionaryRef dict;
+  CFTypeRef keys[4], values[4];
+  CFStringRef pass;
+  SecKeyRef ret;
+  int num;
+  keys[0]=kSecAttrSalt;
+  values[0]=CFDataCreate(kCFAllocatorDefault, (const unsigned char *)PSYNC_CRYPTO_PASS_TO_KEY_SALT, sizeof(PSYNC_CRYPTO_PASS_TO_KEY_SALT)-1);
+  keys[1]=kSecAttrPRF;
+  values[1]=kSecAttrPRFHmacAlgSHA1;
+  num=PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS;
+  keys[2]=kSecAttrRounds;
+  values[2]=CFNumberCreate(NULL, kCFNumberIntType, &num);
+  num=keylen*8;
+  keys[3]=kSecAttrKeySizeInBits;
+  values[3]=CFNumberCreate(NULL, kCFNumberIntType, &num);
+  dict=CFDictionaryCreate(NULL, keys, values, ARRAY_SIZE(keys), NULL, NULL);
+  pass=CFStringCreateWithCStringNoCopy(NULL, password, kCFStringEncodingUTF8, NULL);
+  ret=SecKeyDeriveFromPassword(pass, dict, NULL);
+  CFRelease(pass);
+  CFRelease(dict);
+  CFRelease(values[0]);
+  CFRelease(values[2]);
+  CFRelease(values[3]);
+  return ret;*/
+}
+
+void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
+  psync_free(key);
+}
+
+psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
+  unsigned char buff[2048];
+  size_t elen;
+  psync_encrypted_symmetric_key_t ret;
+  OSStatus st;
+  st=SecKeyEncrypt(rsa, kSecPaddingPKCS1, key->key, key->keylen, buff, &elen);
+  if (unlikely_log(st!=noErr))
+    return PSYNC_INVALID_ENC_SYM_KEY;
+  ret=(psync_encrypted_symmetric_key_t)psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+elen);
+  ret->datalen=elen;
+  memcpy(ret->data, buff, elen);
+  return ret;
+}
+
+psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t rsa, const psync_encrypted_symmetric_key_t enckey){
+  unsigned char buff[2048];
+  size_t len;
+  psync_symmetric_key_t ret;
+  OSStatus st;
+  st=SecKeyDecrypt(rsa, kSecPaddingPKCS1, enckey->data, enckey->datalen, buff, &len);
+  if (unlikely_log(st!=noErr))
+    return PSYNC_INVALID_SYM_KEY;
+  ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
+  ret->keylen=len;
+  memcpy(ret->key, buff, len);
+  return ret;
+}
+
+psync_aes256_encoder psync_ssl_aes256_create_encoder(psync_symmetric_key_t key){
+  CCCryptorRef ret;
+  assert(key->keylen>=PSYNC_AES256_KEY_SIZE);
+  if (unlikely_log(CCCryptorCreate(kCCEncrypt, kCCAlgorithmAES128, kCCOptionECBMode, key->key, PSYNC_AES256_KEY_SIZE, NULL, &ret)!=kCCSuccess))
+    return PSYNC_INVALID_ENCODER;
+  else
+    return ret;
+}
+
+void psync_ssl_aes256_free_encoder(psync_aes256_encoder aes){
+  CCCryptorRelease(aes);
+}
+
+psync_aes256_encoder psync_ssl_aes256_create_decoder(psync_symmetric_key_t key){
+  CCCryptorRef ret;
+  assert(key->keylen>=PSYNC_AES256_KEY_SIZE);
+  if (unlikely_log(CCCryptorCreate(kCCDecrypt, kCCAlgorithmAES128, kCCOptionECBMode, key->key, PSYNC_AES256_KEY_SIZE, NULL, &ret)!=kCCSuccess))
+    return PSYNC_INVALID_ENCODER;
+  else
+    return ret;
+}
+
+void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
+  CCCryptorRelease(aes);
 }

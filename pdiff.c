@@ -126,13 +126,13 @@ static psync_socket *get_connected_socket(){
         continue;
       }
       strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
-	  if (saveauth){
-		  q = psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-		  psync_sql_bind_string(q, 1, "auth");
-		  psync_sql_bind_string(q, 2, psync_my_auth);
-		  psync_sql_run(q);
-		  psync_sql_free_result(q);
-	  }
+      if (saveauth){
+        q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+        psync_sql_bind_string(q, 1, "auth");
+        psync_sql_bind_string(q, 2, psync_my_auth);
+        psync_sql_run(q);
+        psync_sql_free_result(q);
+      }
     }
     else{
       strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);

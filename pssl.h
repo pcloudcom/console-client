@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,7 @@
 #include "pssl-securetransport.h"
 #else
 #error "Please specify SSL library to use"
+#include "pssl-openssl.h"
 #endif
 
 extern PSYNC_THREAD int psync_ssl_errno;
@@ -49,6 +50,19 @@ extern PSYNC_THREAD int psync_ssl_errno;
 #define PSYNC_SSL_FAIL         -1
 #define PSYNC_SSL_SUCCESS       0
 
+typedef struct {
+  size_t datalen;
+  unsigned char data[];
+} psync_encrypted_data_struct_t, *psync_encrypted_data_t;
+
+typedef psync_encrypted_data_t psync_encrypted_symmetric_key_t;
+
+#define PSYNC_INVALID_ENC_SYM_KEY NULL
+#define PSYNC_INVALID_ENCODER NULL
+
+#define PSYNC_AES256_BLOCK_SIZE 16
+#define PSYNC_AES256_KEY_SIZE 32
+
 int psync_ssl_init();
 int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname);
 int psync_ssl_connect_finish(void *sslconn, const char *hostname);
@@ -60,5 +74,23 @@ int psync_ssl_write(void *sslconn, const void *buf, int num);
 
 void psync_ssl_rand_strong(unsigned char *buf, int num);
 void psync_ssl_rand_weak(unsigned char *buf, int num);
+
+psync_rsa_t psync_ssl_gen_rsa(int bits);
+void psync_ssl_free_rsa(psync_rsa_t rsa);
+psync_rsa_publickey_t psync_ssl_rsa_get_public(psync_rsa_t rsa);
+void psync_ssl_rsa_free_public(psync_rsa_publickey_t key);
+psync_rsa_publickey_t psync_ssl_rsa_get_private(psync_rsa_t rsa);
+void psync_ssl_rsa_free_private(psync_rsa_publickey_t key);
+
+psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen);
+void psync_ssl_free_symmetric_key(psync_symmetric_key_t key);
+
+psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key);
+psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t rsa, const psync_encrypted_symmetric_key_t enckey);
+
+psync_aes256_encoder psync_ssl_aes256_create_encoder(psync_symmetric_key_t key);
+void psync_ssl_aes256_free_encoder(psync_aes256_encoder aes);
+psync_aes256_encoder psync_ssl_aes256_create_decoder(psync_symmetric_key_t key);
+void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes);
 
 #endif

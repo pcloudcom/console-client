@@ -67,7 +67,7 @@ static void create_task3(psync_uint_t type, psync_syncid_t syncid, uint64_t entr
 
 static void create_task4(psync_uint_t type, uint64_t entryid, const char *name){
   psync_sql_res *res;
-  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid) VALUES (?, 0, ?, 0, ?)");
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid, name) VALUES (?, 0, ?, 0, ?)");
   psync_sql_bind_uint(res, 1, type);
   psync_sql_bind_uint(res, 2, entryid);
   psync_sql_bind_string(res, 3, name);
