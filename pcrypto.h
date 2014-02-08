@@ -36,12 +36,22 @@ typedef struct {
     long unsigned __aligner;
     unsigned char iv[PSYNC_AES256_BLOCK_SIZE];
   };
-} psync_crypto_aes256_ctr_encoder_decoder_struct_t, *psync_crypto_aes256_ctr_encoder_decoder_t;
+} psync_crypto_aes256_key_struct_t, *psync_crypto_aes256_ctr_encoder_decoder_t;
+
+typedef psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_text_encoder_t;
+typedef psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_text_decoder_t;
 
 #define PSYNC_CRYPTO_INVALID_ENCODER NULL
 
 psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_ctr_encoder_decoder_create(psync_symmetric_key_t key);
 void psync_crypto_aes256_ctr_encoder_decoder_free(psync_crypto_aes256_ctr_encoder_decoder_t enc);
 void psync_crypto_aes256_ctr_encode_decode_inplace(psync_crypto_aes256_ctr_encoder_decoder_t enc, void *data, size_t datalen, uint64_t dataoffset);
+
+psync_crypto_aes256_text_encoder_t psync_crypto_aes256_text_encoder_create(psync_symmetric_key_t key);
+void psync_crypto_aes256_text_encoder_free(psync_crypto_aes256_text_encoder_t enc);
+psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync_symmetric_key_t key);
+void psync_crypto_aes256_text_decoder_free(psync_crypto_aes256_text_decoder_t enc);
+void psync_crypto_aes256_encode_text(psync_crypto_aes256_text_encoder_t enc, const unsigned char *txt, size_t txtlen, unsigned char **out, size_t *outlen);
+unsigned char *psync_crypto_aes256_decode_text(psync_crypto_aes256_text_decoder_t enc, const unsigned char *data, size_t datalen);
 
 #endif

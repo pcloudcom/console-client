@@ -79,8 +79,8 @@ psync_rsa_t psync_ssl_gen_rsa(int bits);
 void psync_ssl_free_rsa(psync_rsa_t rsa);
 psync_rsa_publickey_t psync_ssl_rsa_get_public(psync_rsa_t rsa);
 void psync_ssl_rsa_free_public(psync_rsa_publickey_t key);
-psync_rsa_publickey_t psync_ssl_rsa_get_private(psync_rsa_t rsa);
-void psync_ssl_rsa_free_private(psync_rsa_publickey_t key);
+psync_rsa_privatekey_t psync_ssl_rsa_get_private(psync_rsa_t rsa);
+void psync_ssl_rsa_free_private(psync_rsa_privatekey_t key);
 
 psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen);
 void psync_ssl_free_symmetric_key(psync_symmetric_key_t key);

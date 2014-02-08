@@ -294,11 +294,11 @@ void psync_ssl_rsa_free_public(psync_rsa_publickey_t key){
   RSA_free(key);
 }
 
-psync_rsa_publickey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
+psync_rsa_privatekey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
   return RSAPrivateKey_dup(rsa);
 }
 
-void psync_ssl_rsa_free_private(psync_rsa_publickey_t key){
+void psync_ssl_rsa_free_private(psync_rsa_privatekey_t key){
   RSA_free(key);
 }
 
