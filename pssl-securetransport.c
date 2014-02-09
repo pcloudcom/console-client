@@ -37,7 +37,33 @@
 #include <Security/SecureTransport.h>
 #include <Security/Security.h>
 #include <Security/SecKey.h>
-//#include <Security/SecRSAKey.h>
+
+typedef uint32_t SecPadding;
+enum
+{
+    kSecPaddingNone      = 0,
+    kSecPaddingPKCS1     = 1,
+    kSecPaddingOAEP      = 2,
+    kSecPaddingPKCS1MD2  = 0x8000,
+    kSecPaddingPKCS1MD5  = 0x8001,
+    kSecPaddingPKCS1SHA1 = 0x8002
+};
+
+OSStatus SecKeyEncrypt(
+    SecKeyRef           key,
+        SecPadding          padding,
+        const uint8_t           *plainText,
+        size_t              plainTextLen,
+        uint8_t             *cipherText,
+        size_t              *cipherTextLen);
+
+OSStatus SecKeyDecrypt(
+    SecKeyRef           key,
+        SecPadding          padding,
+        const uint8_t       *cipherText,
+        size_t              cipherTextLen,
+        uint8_t             *plainText, 
+        size_t              *plainTextLen);
 
 PSYNC_THREAD int psync_ssl_errno;
 
