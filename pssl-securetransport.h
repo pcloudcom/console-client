@@ -29,6 +29,7 @@
 #define _PSYNC_SECURETRANSPORT_H
 
 #include <CommonCrypto/CommonDigest.h>
+#include <CommonCrypto/CommonCryptor.h>
 #include <Security/Security.h>
 
 typedef struct {
