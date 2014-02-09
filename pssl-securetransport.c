@@ -35,19 +35,11 @@
 #include <stddef.h>
 #include <CommonCrypto/CommonHMAC.h>
 #include <Security/SecureTransport.h>
+#include <Security/SecImportExport.h>
 #include <Security/Security.h>
 #include <Security/SecKey.h>
 
-typedef uint32_t SecPadding;
-enum
-{
-    kSecPaddingNone      = 0,
-    kSecPaddingPKCS1     = 1,
-    kSecPaddingOAEP      = 2,
-    kSecPaddingPKCS1MD2  = 0x8000,
-    kSecPaddingPKCS1MD5  = 0x8001,
-    kSecPaddingPKCS1SHA1 = 0x8002
-};
+#define kSecPaddingOAEP 2
 
 OSStatus SecKeyEncrypt(
     SecKeyRef           key,
@@ -361,11 +353,53 @@ psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rs
   return ret;
 }
 psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
-  return SecKeyCreateRSAPublicKey(kCFAllocatorDefault, bin->data, bin->datalen, kSecKeyEncodingPkcs1);
+  SecKeyRef ret;
+  SecExternalFormat form;
+  SecExternalItemType type;
+  CFDataRef data;
+  CFArrayRef out;
+  OSStatus st;
+  
+  form=kSecFormatUnknown;
+  type=kSecItemTypePublicKey;
+  data=CFDataCreate(NULL, bin->data, bin->datalen);
+  st=SecItemImport(data, NULL, &form, &type, 0, NULL, NULL, &out);
+  CFRelease(data);
+  if (unlikely_log(st!=errSecSuccess))
+    PSYNC_INVALID_RSA;    
+  ret=(SecKeyRef)CFArrayGetValueAtIndex(out, 0);
+  if (unlikely_log(ret==NULL)){
+    CFRelease(out);
+    return PSYNC_INVALID_RSA;
+  }  
+  CFRetain(ret);
+  CFRelease(out);
+  return ret;
 }
 
 psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bin){
-  return SecKeyCreateRSAPrivateKey(kCFAllocatorDefault, bin->data, bin->datalen, kSecKeyEncodingPkcs1);
+  SecKeyRef ret;
+  SecExternalFormat form;
+  SecExternalItemType type;
+  CFDataRef data;
+  CFArrayRef out;
+  OSStatus st;
+  
+  form=kSecFormatUnknown;
+  type=kSecItemTypePrivateKey;
+  data=CFDataCreate(NULL, bin->data, bin->datalen);
+  st=SecItemImport(data, NULL, &form, &type, 0, NULL, NULL, &out);
+  CFRelease(data);
+  if (unlikely_log(st!=errSecSuccess))
+    PSYNC_INVALID_RSA;    
+  ret=(SecKeyRef)CFArrayGetValueAtIndex(out, 0);
+  if (unlikely_log(ret==NULL)){
+    CFRelease(out);
+    return PSYNC_INVALID_RSA;
+  }  
+  CFRetain(ret);
+  CFRelease(out);
+  return ret;
 }
 
 
