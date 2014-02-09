@@ -266,25 +266,27 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
 }
 
 void psync_ssl_free_rsa(psync_rsa_t rsa){
-  CFReleaseSafe(rsa->public_key);
-  CFReleaseSafe(rsa->private_key);
+  CFRelease(rsa->public_key);
+  CFRelease(rsa->private_key);
   psync_free(rsa);
 }
 
 psync_rsa_publickey_t psync_ssl_rsa_get_public(psync_rsa_t rsa){
-  return CFRetain(rsa->public_key);
+  CFRetain(rsa->public_key);
+  return rsa->public_key;
 }
 
 void psync_ssl_rsa_free_public(psync_rsa_publickey_t key){
-  CFReleaseSafe(key);
+  CFRelease(key);
 }
 
 psync_rsa_privatekey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
-  return CFRetain(rsa->private_key);
+  CFRetain(rsa->private_key);
+  return rsa->private_key;
 }
 
 void psync_ssl_rsa_free_private(psync_rsa_privatekey_t key){
-  CFReleaseSafe(key);
+  CFRelease(key);
 }
 
 psync_binary_rsa_key_t psync_ssl_rsa_public_to_binary(psync_rsa_publickey_t rsa){
@@ -316,7 +318,7 @@ psync_binary_rsa_key_t psync_ssl_rsa_public_to_binary(psync_rsa_publickey_t rsa)
   ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
   ret->datalen=len;
   memcpy(ret->data, CFDataGetBytePtr(data), len);
-  CFReleaseSafe(data);
+  CFRelease(data);
   return ret;
 }
 
@@ -349,7 +351,7 @@ psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rs
   ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
   ret->datalen=len;
   memcpy(ret->data, CFDataGetBytePtr(data), len);
-  CFReleaseSafe(data);
+  CFRelease(data);
   return ret;
 }
 psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
