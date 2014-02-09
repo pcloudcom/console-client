@@ -275,7 +275,7 @@ static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psy
   if (ret==1)
     debug(D_NOTICE, "file %lu/%s copied to %lu/%s instead of uploading due to matching checksum", 
           (long unsigned)psync_find_result(meta, "parentfolderid", PARAM_NUM)->num, psync_find_result(meta, "name", PARAM_STR)->str,
-          folderid, name);
+          (long unsigned)folderid, name);
   psync_free(res);
   return ret;
 }
