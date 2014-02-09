@@ -36,6 +36,7 @@
 #include <CommonCrypto/CommonHMAC.h>
 #include <Security/SecureTransport.h>
 #include <Security/Security.h>
+#include <Security/SecKey.h>
 //#include <Security/SecRSAKey.h>
 
 PSYNC_THREAD int psync_ssl_errno;
