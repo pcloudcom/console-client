@@ -302,6 +302,50 @@ void psync_ssl_rsa_free_private(psync_rsa_privatekey_t key){
   RSA_free(key);
 }
 
+psync_binary_rsa_key_t psync_ssl_rsa_public_to_binary(psync_rsa_publickey_t rsa){
+  psync_binary_rsa_key_t ret;
+  unsigned char *p;
+  int len;
+  len=i2d_RSAPublicKey(rsa, NULL);
+  if (unlikely_log(len<0))
+    return PSYNC_INVALID_BIN_RSA;
+  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
+  ret->datalen=len;
+  p=ret->data;
+  if (unlikely_log(i2d_RSAPublicKey(rsa, &p)!=len)){
+    psync_free(ret);
+    return PSYNC_INVALID_BIN_RSA;
+  }
+  return ret;
+}
+
+psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rsa){
+  psync_binary_rsa_key_t ret;
+  unsigned char *p;
+  int len;
+  len=i2d_RSAPrivateKey(rsa, NULL);
+  if (unlikely_log(len<0))
+    return PSYNC_INVALID_BIN_RSA;
+  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
+  ret->datalen=len;
+  p=ret->data;
+  if (unlikely_log(i2d_RSAPrivateKey(rsa, &p)!=len)){
+    psync_free(ret);
+    return PSYNC_INVALID_BIN_RSA;
+  }
+  return ret;
+}
+
+psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
+  const unsigned char *p=bin->data;
+  return d2i_RSAPublicKey(NULL, &p, bin->datalen);
+}
+
+psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bin){
+  const unsigned char *p=bin->data;
+  return d2i_RSAPrivateKey(NULL, &p, bin->datalen);
+}
+
 psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen){
   psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
   key->keylen=keylen;
@@ -310,16 +354,11 @@ psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password
   return key;
 }
 
-void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
-  memset(key->key, 0, key->keylen);
-  psync_free(key);
-}
-
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
   psync_encrypted_symmetric_key_t ret;
   int len;
   ret=(psync_encrypted_symmetric_key_t)psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+RSA_size(rsa));
-  len=RSA_public_encrypt(key->keylen, key->key, ret->data, rsa, RSA_PKCS1_PADDING);
+  len=RSA_public_encrypt(key->keylen, key->key, ret->data, rsa, RSA_PKCS1_OAEP_PADDING);
   if (unlikely_log(len==-1)){
     psync_free(ret);
     return PSYNC_INVALID_ENC_SYM_KEY;
@@ -332,7 +371,7 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t
   unsigned char buff[2048];
   psync_symmetric_key_t ret;
   int len;
-  len=RSA_private_decrypt(enckey->datalen, enckey->data, buff, rsa, RSA_PKCS1_PADDING);
+  len=RSA_private_decrypt(enckey->datalen, enckey->data, buff, rsa, RSA_PKCS1_OAEP_PADDING);
   if (unlikely_log(len==-1))
     return PSYNC_INVALID_SYM_KEY;
   ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);

@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <Security/SecureTransport.h>
+#include <Security/SecRSAKey.h>
 
 PSYNC_THREAD int psync_ssl_errno;
 
@@ -235,7 +236,7 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
   st=SecKeyGeneratePair(dict, &public_key, &private_key);
   CFRelease(dict);
   CFRelease(values[1]);
-  if (unlikely_log(st!=noErr))
+  if (unlikely_log(st!=errSecSuccess))
     return PSYNC_INVALID_RSA;
   ret=psync_new(psync_rsa_struct_t);
   ret->public_key=public_key;
@@ -244,8 +245,8 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
 }
 
 void psync_ssl_free_rsa(psync_rsa_t rsa){
-  CFRelease(rsa->public_key);
-  CFRelease(rsa->private_key);
+  CFReleaseSafe(rsa->public_key);
+  CFReleaseSafe(rsa->private_key);
   psync_free(rsa);
 }
 
@@ -254,7 +255,7 @@ psync_rsa_publickey_t psync_ssl_rsa_get_public(psync_rsa_t rsa){
 }
 
 void psync_ssl_rsa_free_public(psync_rsa_publickey_t key){
-  CFRelease(key);
+  CFReleaseSafe(key);
 }
 
 psync_rsa_privatekey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
@@ -262,7 +263,80 @@ psync_rsa_privatekey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
 }
 
 void psync_ssl_rsa_free_private(psync_rsa_privatekey_t key){
-  CFRelease(key);
+  CFReleaseSafe(key);
+}
+
+psync_binary_rsa_key_t psync_ssl_rsa_public_to_binary(psync_rsa_publickey_t rsa){
+  psync_binary_rsa_key_t ret;
+  CFDictionaryRef dict;
+  CFTypeRef keys[4], values[4], arrval[1];
+  CFArrayRef arr;
+  OSStatus st;
+  CFDataRef data;
+  CFIndex len;
+  arrval[0]=rsa;
+  arr=CFArrayCreate(NULL, arrval, 1, NULL);
+  keys[0]=kSecAttrKeyType;
+  values[0]=kSecAttrKeyTypeRSA;
+  keys[1]=kSecReturnData;
+  values[1]=kCFBooleanTrue;
+  keys[2]=kSecClass;
+  values[2]=kSecClassKey;
+  keys[3]=kSecMatchItemList;
+  values[3]=arr;
+  dict=CFDictionaryCreate(NULL, keys, values, ARRAY_SIZE(keys), NULL, NULL);
+  data=NULL;
+  st=SecItemCopyMatching(dict, (CFTypeRef *)&data);
+  CFRelease(dict);
+  CFRelease(arr);
+  if (unlikely_log(st!=errSecSuccess))
+    return PSYNC_INVALID_BIN_RSA;
+  len=CFDataGetLength(data);
+  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
+  ret->datalen=len;
+  memcpy(ret->data, CFDataGetBytePtr(data), len);
+  CFReleaseSafe(data);
+  return ret;
+}
+
+psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rsa){
+  psync_binary_rsa_key_t ret;
+  CFDictionaryRef dict;
+  CFTypeRef keys[4], values[4], arrval[1];
+  CFArrayRef arr;
+  OSStatus st;
+  CFDataRef data;
+  CFIndex len;
+  arrval[0]=rsa;
+  arr=CFArrayCreate(NULL, arrval, 1, NULL);
+  keys[0]=kSecAttrKeyType;
+  values[0]=kSecAttrKeyTypeRSA;
+  keys[1]=kSecReturnData;
+  values[1]=kCFBooleanTrue;
+  keys[2]=kSecClass;
+  values[2]=kSecAttrKeyClassPrivate;
+  keys[3]=kSecMatchItemList;
+  values[3]=arr;
+  dict=CFDictionaryCreate(NULL, keys, values, ARRAY_SIZE(keys), NULL, NULL);
+  data=NULL;
+  st=SecItemCopyMatching(dict, (CFTypeRef *)&data);
+  CFRelease(dict);
+  CFRelease(arr);
+  if (unlikely_log(st!=errSecSuccess))
+    return PSYNC_INVALID_BIN_RSA;
+  len=CFDataGetLength(data);
+  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
+  ret->datalen=len;
+  memcpy(ret->data, CFDataGetBytePtr(data), len);
+  CFReleaseSafe(data);
+  return ret;
+}
+psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
+  return SecKeyCreateRSAPublicKey(kCFAllocatorDefault, bin->data, bin->datalen, kSecKeyEncodingPkcs1);
+}
+
+psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bin){
+  return SecKeyCreateRSAPrivateKey(kCFAllocatorDefault, bin->data, bin->datalen, kSecKeyEncodingPkcs1);
 }
 
 
@@ -330,21 +404,18 @@ psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password
   return ret;*/
 }
 
-void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
-  psync_free(key);
-}
-
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
-  unsigned char buff[2048];
   size_t elen;
   psync_encrypted_symmetric_key_t ret;
   OSStatus st;
-  st=SecKeyEncrypt(rsa, kSecPaddingPKCS1, key->key, key->keylen, buff, &elen);
-  if (unlikely_log(st!=noErr))
-    return PSYNC_INVALID_ENC_SYM_KEY;
+  elen=SecKeyGetBlockSize(rsa);
   ret=(psync_encrypted_symmetric_key_t)psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+elen);
+  st=SecKeyEncrypt(rsa, kSecPaddingOAEP, key->key, key->keylen, ret->data, &elen);
+  if (unlikely_log(st!=errSecSuccess)){
+    psync_free(ret);
+    return PSYNC_INVALID_ENC_SYM_KEY;
+  }
   ret->datalen=elen;
-  memcpy(ret->data, buff, elen);
   return ret;
 }
 
@@ -353,8 +424,8 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t
   size_t len;
   psync_symmetric_key_t ret;
   OSStatus st;
-  st=SecKeyDecrypt(rsa, kSecPaddingPKCS1, enckey->data, enckey->datalen, buff, &len);
-  if (unlikely_log(st!=noErr))
+  st=SecKeyDecrypt(rsa, kSecPaddingOAEP, enckey->data, enckey->datalen, buff, &len);
+  if (unlikely_log(st!=errSecSuccess))
     return PSYNC_INVALID_SYM_KEY;
   ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
   ret->keylen=len;
