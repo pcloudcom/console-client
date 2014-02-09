@@ -34,7 +34,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <Security/SecureTransport.h>
-#include <Security/SecRSAKey.h>
+//#include <Security/SecRSAKey.h>
 
 PSYNC_THREAD int psync_ssl_errno;
 

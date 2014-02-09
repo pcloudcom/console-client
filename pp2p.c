@@ -236,7 +236,8 @@ static void psync_p2p_wake(){
   addr.sin_port=htons(PSYNC_P2P_PORT);
   addr.sin_addr.s_addr=htonl(0x7f000001UL);
   pack=P2P_WAKE;
-  if (connect(sock, (struct sockaddr *)&addr, sizeof(addr))!=SOCKET_ERROR &&  psync_write_socket(sock, &pack, sizeof(pack))==sizeof(pack));
+  if (connect(sock, (struct sockaddr *)&addr, sizeof(addr))!=SOCKET_ERROR)
+    assertw(psync_write_socket(sock, &pack, sizeof(pack))==sizeof(pack));
   psync_close_socket(sock);
 }
 

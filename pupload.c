@@ -392,7 +392,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   if (likely_log(row=psync_sql_fetch_rowint(res)))
     folderid=row[0];
   else{
-    debug(D_WARNING, "could not get remote folderid for local file %lu", localfileid);
+    debug(D_WARNING, "could not get remote folderid for local file %lu", (unsigned long)localfileid);
     psync_sql_free_result(res);
     psync_free(localpath);
     return 0;    
