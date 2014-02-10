@@ -233,20 +233,25 @@ static void delete_local_folder_from_db(psync_folderid_t localfolderid){
 static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid, psync_folderid_t localfolderid,
                              psync_folderid_t newlocalparentfolderid, const char *newname){
   psync_sql_res *res;
-  psync_uint_row row;
+  psync_variant_row row;
   char *oldpath, *newpath;
   psync_syncid_t oldsyncid;
   int ret;
   assert(newname!=NULL);
-  res=psync_sql_query("SELECT syncid FROM localfolder WHERE id=?");
+  res=psync_sql_query("SELECT syncid, localparentfolderid, name FROM localfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, localfolderid);
-  row=psync_sql_fetch_rowint(res);
+  row=psync_sql_fetch_row(res);
   if (unlikely(!row)){
     psync_sql_free_result(res);
     debug(D_ERROR, "could not find local folder id %lu", (unsigned long)localfolderid);
     return 0;
   }
-  oldsyncid=row[0];
+  oldsyncid=psync_get_number(row[0]);
+  if (oldsyncid==newsyncid && psync_get_number(row[1])==newlocalparentfolderid && !psync_filename_cmp(psync_get_string(row[2]), newname)){
+    psync_sql_free_result(res);
+    debug(D_NOTICE, "folder %s already renamed locally, probably update initiated from this client", newname);
+    return 0;
+  }
   psync_sql_free_result(res);
   oldpath=psync_local_path_for_local_folder(localfolderid, oldsyncid, NULL);
   if (unlikely(!oldpath)){
@@ -274,7 +279,7 @@ static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid
     psync_decrease_local_folder_taskcnt(localfolderid);
     psync_sql_commit_transaction();
     psync_send_event_by_id(PEVENT_LOCAL_FOLDER_RENAMED, newsyncid, newpath, folderid);
-    debug(D_NOTICE, "local folder renamed from %s ro %s", oldpath, newpath);
+    debug(D_NOTICE, "local folder renamed from %s to %s", oldpath, newpath);
   }
   psync_free(newpath);
   psync_free(oldpath);
@@ -565,29 +570,39 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
                                   psync_folderid_t newlocalfolderid, const char *newname){
   char *oldpath, *newfolder, *newpath;
   psync_sql_res *res;
-  psync_uint_row row;
+  psync_variant_row row;
   psync_fileid_t lfileid;
   psync_stat_t st;
+  psync_syncid_t syncid;
   int ret;
-  res=psync_sql_query("SELECT id FROM localfile WHERE syncid=? AND fileid=?");
-  psync_sql_bind_uint(res, 1, oldsyncid);
-  psync_sql_bind_uint(res, 2, fileid);
-  row=psync_sql_fetch_rowint(res);
-  if (row)
-    lfileid=row[0];
-  else
-    lfileid=0;
+  res=psync_sql_query("SELECT id, localparentfolderid, syncid, name FROM localfile WHERE fileid=?");
+  psync_sql_bind_uint(res, 1, fileid);
+  lfileid=0;
+  while ((row=psync_sql_fetch_row(res))){
+    syncid=psync_get_number(row[2]);
+    if (psync_get_number(row[1])==newlocalfolderid && syncid==newsyncid && !psync_filename_cmp(psync_get_string(row[3]), newname)){
+      debug(D_NOTICE, "file %s already renamed locally, probably update initiated from this client", newname);
+      psync_sql_free_result(res);
+      return 0;
+    }
+    else if (syncid==oldsyncid){
+      lfileid=psync_get_number(row[0]);
+      break;
+    }
+  }
   psync_sql_free_result(res);
-  if (unlikely_log(!fileid)){
+  if (unlikely_log(!lfileid)){
     psync_task_download_file(newsyncid, fileid, newlocalfolderid, newname);
     return 0;
   }
   newfolder=psync_local_path_for_local_folder(newlocalfolderid, newsyncid, NULL);
-  if (unlikely_log(!newfolder)){
+  if (unlikely_log(!newfolder))
+    return 0;
+  oldpath=psync_local_path_for_local_file(lfileid, NULL);
+  if (unlikely_log(!oldpath)){
     psync_free(newfolder);
     return 0;
   }
-  oldpath=psync_local_path_for_local_file(lfileid, NULL);
   newpath=psync_strcat(newfolder, PSYNC_DIRECTORY_SEPARATOR, newname, NULL);
   ret=0;
   if (psync_file_rename_overwrite(oldpath, newpath)){

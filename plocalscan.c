@@ -78,10 +78,9 @@ static uint32_t scan_wakes=0;
 #define SCAN_LIST_RENFOLDERSTO  8
 
 static psync_list scan_lists[SCAN_LIST_CNT];
-//static psync_uint_t scan_list_cnt[SCAN_LIST_CNT];
-
 static uint64_t localsleepperfolder;
 static time_t starttime;
+static psync_uint_t changes;
 
 
 static void scanner_set_syncs_to_list(psync_list *lst){
@@ -189,7 +188,7 @@ static sync_folderlist *copy_folderlist_element(const sync_folderlist *e, psync_
 static void add_element_to_scan_list(psync_uint_t id, sync_folderlist *e){
   psync_list_add_tail(&scan_lists[id], &e->list);
   localsleepperfolder=0;
-//  scan_list_cnt[id]++;
+  changes++;
 }
 
 static void add_new_element(const sync_folderlist *e, psync_folderid_t folderid, psync_folderid_t localfolderid, psync_syncid_t syncid, psync_synctype_t synctype){
@@ -236,11 +235,15 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
     fdb=psync_list_element(ldb, sync_folderlist, list);
     cmp=psync_filename_cmp(fdisk->name, fdb->name);
     if (cmp==0){
-      if (likely_log(fdisk->isfolder==fdb->isfolder)){
+      if (fdisk->isfolder==fdb->isfolder){
         fdisk->localid=fdb->localid;
         fdisk->remoteid=fdb->remoteid;
         if (!fdisk->isfolder && (fdisk->mtimenat!=fdb->mtimenat || fdisk->size!=fdb->size || fdisk->inode!=fdb->inode))
           add_modified_file(fdisk, folderid, localfolderid, syncid, synctype);
+      }
+      else{
+        add_deleted_element(fdb, folderid, localfolderid, syncid, synctype);
+        add_new_element(fdisk, folderid, localfolderid, syncid, synctype);
       }
       ldisk=ldisk->next;
       ldb=ldb->next;
@@ -526,6 +529,7 @@ static void scanner_scan(int first){
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_init(&scan_lists[i]);
   scanner_set_syncs_to_list(&slist);
+  changes=0;
   psync_list_for_each_element(l, &slist, sync_list, list)
     scanner_scan_folder(l->localpath, l->folderid, 0, l->syncid, l->synctype);
   do {
@@ -551,6 +555,10 @@ static void scanner_scan(int first){
     }
     psync_list_for_each_element_call(&scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list, psync_free);
     psync_list_init(&scan_lists[SCAN_LIST_NEWFOLDERS]);
+    if (changes){
+      i++;
+      changes=0;
+    }
   } while (i);
   psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFILES], 
                                &scan_lists[SCAN_LIST_NEWFILES], 

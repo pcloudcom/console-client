@@ -355,6 +355,7 @@ psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rs
   return ret;
 }
 psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
+  /* on iOS SecKeyCreateRSAPublicKey can be used */
   SecKeyRef ret;
   SecExternalFormat form;
   SecExternalItemType type;
