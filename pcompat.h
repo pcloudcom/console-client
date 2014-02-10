@@ -205,6 +205,7 @@ typedef int psync_file_t;
 
 #elif defined(P_OS_WINDOWS)
 
+#include <ws2tcpip.h>
 #include <winsock2.h>
 #include <BaseTsd.h>
 #if defined(__GNUC__)

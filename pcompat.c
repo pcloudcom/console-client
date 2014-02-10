@@ -1040,11 +1040,11 @@ psync_interface_list_t *psync_list_ip_adapters(){
         isz=addr->Address.iSockaddrLength;
         memcpy(&ret->interfaces[cnt].address, addr->Address.lpSockaddr, isz);
         if (addr->Address.lpSockaddr->sa_family==AF_INET){
-          interfaces[cnt].broadcast.ss_family=AF_INET;
+          ret->interfaces[cnt].broadcast.ss_family=AF_INET;
           memset(&(((struct sockaddr_in *)(&ret->interfaces[cnt].broadcast))->sin_addr), 0xff, sizeof(((struct sockaddr_in *)NULL)->sin_addr));
         }
         else{
-          interfaces[cnt].broadcast.ss_family=AF_INET6;
+          ret->interfaces[cnt].broadcast.ss_family=AF_INET6;
           memset(&(((struct sockaddr_in6 *)(&ret->interfaces[cnt].broadcast))->sin6_addr), 0xff, sizeof(((struct sockaddr_in6 *)NULL)->sin6_addr));
         }
         ret->interfaces[cnt].addrsize=isz;
