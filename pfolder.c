@@ -158,7 +158,7 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
         goto errnet;
       result=psync_find_result(bres, "result", PARAM_NUM)->num;
       if (result==0){
-        cfolderid=psync_find_result(psync_find_result(bres, "metadata", PARAM_HASH), "folderid", PARAM_HASH)->num;
+        cfolderid=psync_find_result(psync_find_result(bres, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
         psync_free(bres);
       }
       else{
