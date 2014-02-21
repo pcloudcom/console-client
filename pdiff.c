@@ -605,6 +605,8 @@ static void process_modifyfile(const binresult *entry){
     }
     needdownload=hash!=psync_get_number(row[3]) || size!=oldsize;
     oldname=psync_get_lstring(row[4], &oldnamelen);
+    if (needdownload)
+      psync_delete_download_tasks_for_file(fileid);
     needrename=oldparentfolderid!=parentfolderid || name->length!=oldnamelen || memcmp(name->str, oldname, oldnamelen);
     res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
     psync_sql_bind_uint(res, 1, oldparentfolderid);

@@ -373,7 +373,12 @@ int psync_delete_sync(psync_syncid_t syncid){
   res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
-  return psync_sql_commit_transaction();
+  if (psync_sql_commit_transaction())
+    return -1;
+  else{
+    psync_stop_sync_download(syncid);
+    return 0;
+  }
 }
 
 psync_folder_list_t *psync_get_sync_list(){

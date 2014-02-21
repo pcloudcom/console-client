@@ -746,6 +746,11 @@ void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid){
     stopfile=fileid;
 }
 
+void psync_stop_sync_download(psync_syncid_t syncid){
+  if (syncid==downloadingfilesyncid)
+    stopfile=downloadingfile;
+}
+
 int psync_get_downloading_hash(unsigned char *hash){
   memcpy(hash, downloadingfilehash, PSYNC_HASH_DIGEST_HEXLEN);
   return hash[0]!=0;

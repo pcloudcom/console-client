@@ -321,6 +321,7 @@ static int psync_add_local_path_to_list_by_localfolderid(psync_list *lst, psync_
   row=psync_sql_fetch_row(res);
   if (unlikely(!row)){
     debug(D_ERROR, "could not find sync id %lu", (long unsigned)syncid);
+    psync_sql_free_result(res);
     return -1;
   }
   str=psync_get_lstring(row[0], &len);
