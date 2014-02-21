@@ -401,6 +401,8 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   int sret;
   unsigned char hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN];
   unsigned char *token;
+  return PSYNC_NET_PERMFAIL;
+  
   if (!psync_setting_get_bool(_PS(p2psync)))
     return PSYNC_NET_PERMFAIL;
   pct1.type=P2P_CHECK;

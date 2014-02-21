@@ -204,6 +204,13 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   psync_sql_free_result(res);
   if (synctype&PSYNC_DOWNLOAD_ONLY)
     psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0);
+  else {
+    res=psync_sql_prep_statement("INSERT INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, 0, ?)");
+    psync_sql_bind_uint(res, 1, syncid);
+    psync_sql_bind_uint(res, 2, folderid);
+    psync_sql_bind_uint(res, 3, synctype);
+    psync_sql_run_free(res);
+  }
   res=psync_sql_prep_statement("UPDATE syncfolder SET flags=1 WHERE flags=0 AND id=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
