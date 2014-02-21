@@ -585,6 +585,19 @@ static psync_socket_t connect_res(struct addrinfo *res){
   return INVALID_SOCKET;
 }
 
+psync_socket_t psync_create_socket(int domain, int type, int protocol){
+  int ret;
+  ret=socket(domain, type, protocol);
+#if defined(P_OS_WINDOWS)
+  if (unlikely(ret==INVALID_SOCKET && WSAGetLastError()==WSANOTINITIALISED)){
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+      return INVALID_SOCKET;
+    ret=socket(domain, type, protocol);
+  }
+#endif
+  return ret;
+}
 
 static psync_socket_t connect_socket(const char *host, const char *port){
   struct addrinfo *res=NULL;

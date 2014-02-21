@@ -61,6 +61,9 @@ psync_free_t psync_free=free;
 
 const char *psync_database=NULL;
 
+static int psync_libstate=0;
+static pthread_mutex_t psync_libstate_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 #define return_error(err) do {psync_error=err; return -1;} while (0)
 #define return_isyncid(err) do {psync_error=err; return PSYNC_INVALID_SYNCID;} while (0)
 
@@ -79,23 +82,60 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 int psync_init(){
+  if (IS_DEBUG){
+    pthread_mutex_lock(&psync_libstate_mutex);
+    if (psync_libstate!=0){
+      pthread_mutex_unlock(&psync_libstate_mutex);
+      debug(D_BUG, "you are not supposed to call psync_init for a second time");
+      return 0;
+    }
+  }
   psync_compat_init();
   if (!psync_database){
     psync_database=psync_get_default_database_path();
-    if (unlikely_log(!psync_database))
+    if (unlikely_log(!psync_database)){
+      if (IS_DEBUG)
+        pthread_mutex_unlock(&psync_libstate_mutex);
       return_error(PERROR_NO_HOMEDIR);
+    }
   }
-  if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE))
+  if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE)){
+    if (IS_DEBUG)
+      pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_DATABASE_OPEN);
-  if (unlikely_log(psync_ssl_init()))
+  }
+  if (unlikely_log(psync_ssl_init())){
+    if (IS_DEBUG)
+      pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_SSL_INIT_FAILED);
+  }
   psync_libs_init();
   psync_settings_init();
   psync_status_init();
+  if (IS_DEBUG){
+    psync_libstate=1;
+    pthread_mutex_unlock(&psync_libstate_mutex);
+  }
   return 0;
 }
 
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback){
+  if (IS_DEBUG){
+    pthread_mutex_lock(&psync_libstate_mutex);
+    if (psync_libstate==0){
+      pthread_mutex_unlock(&psync_libstate_mutex);
+      debug(D_BUG, "you are calling psync_start_sync before psync_init");
+      return;
+    }
+    else if (psync_libstate==2){
+      pthread_mutex_unlock(&psync_libstate_mutex);
+      debug(D_BUG, "you are calling psync_start_sync for a second time");
+      return;
+    }
+    else
+      psync_libstate=2;
+    pthread_mutex_unlock(&psync_libstate_mutex);
+  }
   psync_timer_init();
   psync_diff_init();
   psync_upload_init();

@@ -108,11 +108,11 @@ static uint32_t psync_calc_status(){
   /* This will work quite as well probably:
    * return (!!psync_status.filesdownloading)+(!!psync_status.filesuploading)<<1;
    */
-  if (psync_status.filesdownloading && psync_status.filesuploading)
+  if ((psync_status.filesdownloading || psync_status.filestodownload) && (psync_status.filesuploading || psync_status.filestoupload))
     return PSTATUS_DOWNLOADINGANDUPLOADING;
-  else if (psync_status.filesdownloading)
+  else if (psync_status.filesdownloading || psync_status.filestodownload)
     return PSTATUS_DOWNLOADING;
-  else if (psync_status.filesuploading)
+  else if (psync_status.filesuploading || psync_status.filestoupload)
     return PSTATUS_UPLOADING;
   else
     return PSTATUS_READY;
@@ -143,6 +143,8 @@ void psync_status_recalc_to_download(){
     psync_status.bytestodownload=0;
   }
   psync_sql_free_result(res);
+  if (!psync_status.filestodownload)
+    psync_status.downloadspeed=0;
 }
 
 void psync_status_recalc_to_upload(){
@@ -159,6 +161,8 @@ void psync_status_recalc_to_upload(){
     psync_status.bytestodownload=0;
   }
   psync_sql_free_result(res);
+  if (!psync_status.filestoupload)
+    psync_status.uploadspeed=0;
 }
 
 
@@ -258,9 +262,9 @@ void psync_status_set_upload_speed(uint32_t speed){
 
 /* there is just one thread downloading/uploading, therefore no locking */
 
-static void psync_send_status_update_ptr(void *ptr){
+/*static void psync_send_status_update_ptr(void *ptr){
   psync_send_status_update();
-}
+}*/
 
 void psync_status_inc_downloads_count(){
   psync_status.filesdownloading++;
@@ -271,12 +275,11 @@ void psync_status_inc_downloads_count(){
 void psync_status_dec_downloads_count(){
   psync_status.filesdownloading--;
   if (!psync_status.filesdownloading){
-    psync_status.downloadspeed=0;
     psync_status.bytesdownloaded=0;
     psync_status.bytestodownloadcurrent=0;
   }
   psync_status.status=psync_calc_status();
-  psync_run_after_sec(psync_send_status_update_ptr, NULL, 5);
+  psync_send_status_update();
 }
 
 void psync_status_inc_uploads_count(){
@@ -288,11 +291,10 @@ void psync_status_inc_uploads_count(){
 void psync_status_dec_uploads_count(){
   psync_status.filesuploading--;
   if (!psync_status.filesuploading){
-    psync_status.uploadspeed=0;
     psync_status.bytesuploaded=0;
     psync_status.bytestouploadcurrent=0;
   }
   psync_status.status=psync_calc_status();
-  psync_run_after_sec(psync_send_status_update_ptr, NULL, 5);
+  psync_send_status_update();
 }
 
