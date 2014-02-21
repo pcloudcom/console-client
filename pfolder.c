@@ -590,7 +590,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
   uint64_t perms;
   list=folder_list_init();
   if (listtype&PLIST_FOLDERS){
-    res=psync_sql_query("SELECT id, permissions, name FROM folder WHERE parentfolderid=?");
+    res=psync_sql_query("SELECT id, permissions, name FROM folder WHERE parentfolderid=? ORDER BY name");
     if (res){
       psync_sql_bind_uint(res, 1, folderid);
       while ((row=psync_sql_fetch_row(res))){
