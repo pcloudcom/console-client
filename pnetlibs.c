@@ -342,7 +342,6 @@ psync_socket *psync_socket_connect_download(const char *host, int unsigned port,
         dwlspeed=PSYNC_RECV_BUFFER_SHAPED;
       psync_socket_set_recvbuf(sock, (uint32_t)dwlspeed);
     }
-    psync_status_inc_downloads_count();
   }
   return sock;
 }
@@ -358,15 +357,17 @@ psync_socket *psync_api_connect_download(){
         dwlspeed=PSYNC_RECV_BUFFER_SHAPED;
       psync_socket_set_recvbuf(sock, (uint32_t)dwlspeed);
     }
-    psync_status_inc_downloads_count();
   }
   return sock;
 }
 
 void psync_socket_close_download(psync_socket *sock){
-  psync_status_dec_downloads_count();
   psync_socket_close(sock);
 }
+
+/* generally this should be protected by mutex as downloading is multi threaded, but it is not so important to
+ * have that accurate download speed
+ */
 
 static void account_downloaded_bytes(int unsigned bytes){
   if (current_download_sec==psync_current_time)

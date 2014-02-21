@@ -75,6 +75,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidlocalfolderid ON syncedfo
 CREATE INDEX IF NOT EXISTS ksyncedfoldersyncid ON syncedfolder(syncid);\
 CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, \
   newsyncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, itemid INTEGER, localitemid INTEGER, newitemid INTEGER, \
+  inprogress INTEGER NOT NULL DEFAULT 0,\
   name VARCHAR(4096));\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\

@@ -143,8 +143,10 @@ void psync_status_recalc_to_download(){
     psync_status.bytestodownload=0;
   }
   psync_sql_free_result(res);
-  if (!psync_status.filestodownload)
+  if (!psync_status.filestodownload){
     psync_status.downloadspeed=0;
+    psync_status.status=psync_calc_status();
+  }
 }
 
 void psync_status_recalc_to_upload(){
@@ -161,8 +163,10 @@ void psync_status_recalc_to_upload(){
     psync_status.bytestodownload=0;
   }
   psync_sql_free_result(res);
-  if (!psync_status.filestoupload)
+  if (!psync_status.filestoupload){
     psync_status.uploadspeed=0;
+    psync_status.status=psync_calc_status();
+  }
 }
 
 
@@ -260,11 +264,9 @@ void psync_status_set_upload_speed(uint32_t speed){
   }
 }
 
-/* there is just one thread downloading/uploading, therefore no locking */
-
 /*static void psync_send_status_update_ptr(void *ptr){
   psync_send_status_update();
-}*/
+}
 
 void psync_status_inc_downloads_count(){
   psync_status.filesdownloading++;
@@ -280,7 +282,7 @@ void psync_status_dec_downloads_count(){
   }
   psync_status.status=psync_calc_status();
   psync_send_status_update();
-}
+}*/
 
 void psync_status_inc_uploads_count(){
   psync_status.filesuploading++;
@@ -298,3 +300,7 @@ void psync_status_dec_uploads_count(){
   psync_send_status_update();
 }
 
+void psync_status_send_update(){
+  psync_status.status=psync_calc_status();
+  psync_send_status_update();
+}
