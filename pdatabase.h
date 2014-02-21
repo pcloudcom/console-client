@@ -69,10 +69,10 @@ CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
 CREATE INDEX IF NOT EXISTS klocalfilefileid ON localfile(fileid);\
 CREATE INDEX IF NOT EXISTS klocalfilechecksum ON localfile(checksum);\
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfilerpsn ON localfile(syncid, localparentfolderid, name);\
-CREATE TABLE IF NOT EXISTS syncedfolder (syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, folderid INTEGER, localfolderid INTEGER, synctype INTEGER);\
-CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidfolderid ON syncedfolder(folderid, syncid);\
-CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderdownsyncidlocalfolderid ON syncedfolder(localfolderid, syncid);\
-CREATE INDEX IF NOT EXISTS ksyncedfoldersyncid ON syncedfolder(syncid);\
+CREATE TABLE IF NOT EXISTS syncedfolder (syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, folderid INTEGER, localfolderid INTEGER, synctype INTEGER,\
+  PRIMARY KEY (syncid, folderid));\
+CREATE INDEX IF NOT EXISTS ksyncedfolderdownfolderid ON syncedfolder(folderid);\
+CREATE UNIQUE INDEX IF NOT EXISTS ksyncedfolderdownsyncidlocalfolderid ON syncedfolder(localfolderid, syncid);\
 CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, \
   newsyncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, itemid INTEGER, localitemid INTEGER, newitemid INTEGER, \
   inprogress INTEGER NOT NULL DEFAULT 0,\
