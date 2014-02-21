@@ -138,10 +138,10 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
     pthread_mutex_unlock(&psync_libstate_mutex);
   }
   psync_timer_init();
+  psync_syncer_init();
   psync_diff_init();
   psync_upload_init();
   psync_download_init();
-  psync_syncer_init();
   psync_netlibs_init();
   psync_localscan_init();
   psync_p2p_init();
