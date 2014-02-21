@@ -334,6 +334,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   downloadingfile=fileid;
   downloadingfilesyncid=syncid;
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
+  if (unlikely_log(!localpath))
+    return 0;
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
   rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize);
   if (unlikely_log(rt!=PSYNC_NET_OK)){
@@ -391,6 +393,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_sql_bind_lstring(sql, 2, (char *)serverhashhex, PSYNC_HASH_DIGEST_HEXLEN);
   while ((row=psync_sql_fetch_rowint(sql))){
     tmpname=psync_local_path_for_local_file(row[0], NULL);
+    if (unlikely_log(!tmpname))
+      continue;
     rt=psync_copy_local_file_if_checksum_matches(tmpname, name, serverhashhex, serversize);
     if (likely(rt==PSYNC_NET_OK)){
       if (unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize)))
