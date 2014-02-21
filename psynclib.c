@@ -367,6 +367,7 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_rowint(res)))
     psync_delete_local_recursive(syncid, row[0]);  
+  psync_sql_free_result(res);
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);

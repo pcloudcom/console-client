@@ -253,6 +253,5 @@ void psync_syncer_init(){
   while ((row=psync_sql_fetch_rowint(res)))
     psync_add_folder_to_downloadlist(row[0]);
   psync_sql_free_result(res);
-  if (psync_sql_cellint("SELECT id FROM syncfolder WHERE flags=0", -1)!=-1)
-    psync_run_thread(psync_syncer_thread);
+  psync_run_thread(psync_syncer_thread);
 }
