@@ -359,6 +359,28 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
 
 int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
 
+static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t localfolderid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT id FROM localfolder WHERE localparentfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    psync_delete_local_recursive(syncid, row[0]);  
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+}
+
 int psync_delete_sync(psync_syncid_t syncid){
   psync_sql_res *res;
   psync_uint_row row;
@@ -371,6 +393,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     else if (row[0]==PSYNC_UPLOAD_FILE)
       psync_delete_upload_tasks_for_file(row[2]);
   psync_sql_free_result(res);
+  psync_delete_local_recursive(syncid, 0);
   res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
