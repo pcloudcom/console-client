@@ -145,7 +145,17 @@ void psync_sql_close(){
 }
 
 void psync_sql_lock(){
-  pthread_mutex_lock(&psync_db_mutex);
+  if (IS_DEBUG){
+    if (pthread_mutex_trylock(&psync_db_mutex)){
+      debug(D_WARNING, "psync_db_mutex contended");
+      pthread_mutex_lock(&psync_db_mutex);
+      debug(D_WARNING, "got psync_db_mutex after contention");
+    }
+    else
+      return;
+  }
+  else
+    pthread_mutex_lock(&psync_db_mutex);
 }
 
 void psync_sql_unlock(){
