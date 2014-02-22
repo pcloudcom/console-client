@@ -201,7 +201,7 @@ static uint64_t get_permissions(const binresult *meta){
 
 static void process_createfolder(const binresult *entry){
   static psync_sql_res *st=NULL;
-  psync_sql_res *res, *stmt;
+  psync_sql_res *res, *stmt, *stmt2;
   const binresult *meta, *name;
   uint64_t userid, perms;
   psync_uint_row row;
@@ -255,6 +255,13 @@ static void process_createfolder(const binresult *entry){
       psync_sql_run(stmt);
       if (psync_sql_affected_rows()==1)
         psync_task_create_local_folder(syncid, folderid, localfolderid);
+      else{
+        stmt2=psync_sql_prep_statement("UPDATE syncedfolder SET folderid=? WHERE syncid=? AND localfolderid=?");
+        psync_sql_bind_uint(stmt2, 1, folderid);
+        psync_sql_bind_uint(stmt2, 2, syncid);
+        psync_sql_bind_uint(stmt2, 3, localfolderid);
+        psync_sql_run_free(stmt2);
+      }
     }
     psync_sql_free_result(stmt);
     psync_sql_free_result(res);

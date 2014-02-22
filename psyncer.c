@@ -119,7 +119,7 @@ void psync_decrease_local_folder_taskcnt(psync_folderid_t lfolderid){
 psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localparentfolderid, const char *name){
   psync_sql_res *res;
   psync_uint_row row;
-  psync_folderid_t lfolderid;
+  psync_folderid_t lfolderid, dbfolderid;
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, folderid, syncid, flags, taskcnt, name) VALUES (?, ?, ?, 0, 1, ?)");
   psync_sql_bind_uint(res, 1, localparentfolderid);
   psync_sql_bind_uint(res, 2, folderid);
@@ -132,18 +132,27 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
     return lfolderid;
   }
   psync_sql_free_result(res);
-  res=psync_sql_query("SELECT id FROM localfolder WHERE localparentfolderid=? AND syncid=? AND name=?");
+  res=psync_sql_query("SELECT id, folderid FROM localfolder WHERE localparentfolderid=? AND syncid=? AND name=?");
   psync_sql_bind_uint(res, 1, localparentfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_bind_string(res, 3, name);
   row=psync_sql_fetch_rowint(res);
-  if (row)
+  if (row){
     lfolderid=row[0];
+    dbfolderid=row[1];
+  }
   else{
     lfolderid=0;
     debug(D_ERROR, "local folder %s not found in the database", name);
   }
   psync_sql_free_result(res);
+  if (lfolderid && !dbfolderid){
+    debug(D_NOTICE, "local folder %lu does not have folderid associated, setting to %lu", (unsigned long)lfolderid, (unsigned long)folderid);
+    res=psync_sql_prep_statement("UPDATE localfolder SET folderid=? WHERE id=?");
+    psync_sql_bind_uint(res, 1, lfolderid);
+    psync_sql_bind_uint(res, 2, folderid);
+    psync_sql_run_free(res);
+  }
   psync_increase_local_folder_taskcnt(lfolderid);
   return lfolderid;
 }
