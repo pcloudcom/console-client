@@ -463,6 +463,8 @@ void psync_set_uint_value(const char *valuename, uint64_t value);
 char *psync_get_string_value(const char *valuename);
 void psync_set_string_value(const char *valuename, const char *value);
 
+void psync_network_exception();
+
 
 #ifdef __cplusplus
 }

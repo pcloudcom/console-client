@@ -795,6 +795,7 @@ static psync_socket_t setup_exeptions(){
 }
 
 static void handle_exception(psync_socket **sock, char ex){
+  debug(D_NOTICE, "exception handler %c", ex);
   if (ex=='r' || 
       psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || 
       psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED ||
@@ -806,12 +807,15 @@ static void handle_exception(psync_socket **sock, char ex){
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
     if (!send_command_no_res(*sock, "nop", diffparams) || psync_select_in(&(*sock)->sock, 1, PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000)!=0){
+      debug(D_NOTICE, "reconnecting diff");
       psync_socket_close(*sock);
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
     }
-    else
+    else{
+      debug(D_NOTICE, "diff socket seems to be alive");
       (*sock)->pending=1;
+    }
   }
 }
 

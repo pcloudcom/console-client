@@ -639,3 +639,6 @@ void psync_set_string_value(const char *valuename, const char *value){
   psync_sql_run_free(res);
 }
 
+void psync_network_exception(){
+  psync_timer_notify_exception();
+}
