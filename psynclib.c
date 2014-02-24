@@ -554,6 +554,10 @@ int psync_change_password(const char *currentpass, const char *newpass, char **e
   return run_command("changepassword", params, err);
 }
 
+const char *psync_get_auth_string(){
+  return psync_my_auth;
+}
+
 int psync_get_bool_setting(const char *settingname){
   return psync_setting_get_bool(psync_setting_getid(settingname));
 }

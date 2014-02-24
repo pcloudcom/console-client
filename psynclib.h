@@ -408,6 +408,12 @@ int psync_lost_password(const char *email, char **err);
 
 int psync_change_password(const char *currentpass, const char *newpass, char **err);
 
+/* Returns auth string of the current user. Do not free the returned string (which should be obvious from
+ * the const anyway).
+ */
+
+const char *psync_get_auth_string();
+
 /*
  * List of settings:
  * usessl (bool) - use SSL connections to remote servers
