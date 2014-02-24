@@ -31,6 +31,14 @@
 #include "plist.h"
 #include "plibs.h"
 
+#define NOTIFY_MSG_ADD 0
+#define NOTIFY_MSG_DEL 1
+
+typedef struct{
+  uint32_t type;
+  psync_syncid_t syncid;
+} localnotify_msg;
+
 #if defined(P_OS_LINUX)
 
 #include <sys/inotify.h>
@@ -44,15 +52,7 @@
 static int pipe_read, pipe_write, epoll_fd;
 static psync_list dirs=PSYNC_LIST_STATIC_INIT(dirs);
 
-#define NOTIFY_MSG_ADD 0
-#define NOTIFY_MSG_DEL 1
-
 #define WATCH_HASH 512
-
-typedef struct{
-  uint32_t type;
-  psync_syncid_t syncid;
-} localnotify_msg;
 
 typedef struct _localnotify_watch{
   struct _localnotify_watch *next;
@@ -284,6 +284,123 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
   msg.type=NOTIFY_MSG_DEL;
   msg.syncid=syncid;
   if (write(pipe_write, &msg, sizeof(msg))!=sizeof(msg))
+    debug(D_ERROR, "write to pipe failed");
+}
+
+#elif defined(P_OS_WINDOWS)
+
+static HANDLE pipe_read, pipe_write, *handles;
+static psync_syncid_t *syncids=NULL;
+static DWORD handlecnt;
+
+static wchar_t *utf8_to_wchar(const char *str){
+  int len;
+  wchar_t *ret;
+  len=MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+  ret=psync_new_cnt(wchar_t, len);
+  MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+  return ret;
+}
+
+static void process_notification(DWORD handleid){
+  if (!FindNextChangeNotification(handles[handleid]))
+    debug(D_ERROR, "FindNextChangeNotification failed");
+  psync_wake_localscan();
+}
+
+static void add_syncid(psync_syncid_t syncid){
+  psync_sql_res *res;
+  psync_variant_row row;
+  wchar_t *path;
+  DWORD idx;
+  HANDLE h;
+  res=psync_sql_query("SELECT localpath FROM syncfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  if (likely(row=psync_sql_fetch_row(res))){
+    path=utf8_to_wchar(psync_get_string(row[0]));
+    psync_sql_free_result(res);
+  }
+  else{
+    psync_sql_free_result(res);
+    debug(D_ERROR, "could not find syncfolder with id %u", (unsigned int)syncid);
+    return;
+  }
+  h=FindFirstChangeNotificationW(path, TRUE, FILE_NOTIFY_CHANGE_FILE_NAME|FILE_NOTIFY_CHANGE_DIR_NAME|FILE_NOTIFY_CHANGE_SIZE|FILE_NOTIFY_CHANGE_LAST_WRITE);
+  psync_free(path);
+  if (unlikely(h==INVALID_HANDLE_VALUE)){
+    debug(D_ERROR, "FindFirstChangeNotificationW failed");
+    return;
+  }
+  idx=handlecnt++;
+  handles=(HANDLE *)psync_realloc(handles, sizeof(HANDLE)*handlecnt);
+  syncids=(psync_syncid_t *)psync_realloc(syncids, sizeof(psync_syncid_t)*handlecnt);
+  handles[idx]=h;
+  syncids[idx]=syncid;
+}
+
+static void del_syncid(psync_syncid_t syncid){
+  DWORD i;
+  for (i=1; i<handlecnt; i++)
+    if (syncids[i]==syncid){
+      handlecnt--;
+      handles[i]=handles[handlecnt];
+      syncids[i]=syncids[handlecnt];
+      break;
+    }
+}
+
+static void process_pipe(){
+  localnotify_msg msg;
+  DWORD br;
+  if (!ReadFile(pipe_read, &msg, sizeof(&msg), &br, NULL) || br!=sizeof(msg)){
+    debug(D_ERROR, "reading from pipe failed");
+    return;
+  }
+  if (msg.type==NOTIFY_MSG_ADD)
+    add_syncid(msg.syncid);
+  else if (msg.type==NOTIFY_MSG_DEL)
+    del_syncid(msg.syncid);
+  else
+    debug(D_ERROR, "invalid message type %u", (unsigned int)msg.type);
+}
+
+static void psync_localnotify_thread(){
+  DWORD ret;
+  while (psync_do_run){
+    ret=WaitForMultipleObjects(handlecnt, handles, FALSE, INFINITE);
+    if (ret>=WAIT_OBJECT_0 && ret<WAIT_OBJECT_0+handlecnt){
+      ret-=WAIT_OBJECT_0;
+      if (ret)
+        process_notification(ret);
+      else
+        process_pipe();
+    }
+  }
+}
+
+int psync_localnotify_init(){
+  if (!CreatePipe(&pipe_read, &pipe_write, NULL, 0))
+    return -1;
+  handlecnt=1;
+  handles=psync_new(HANDLE);
+  handles[0]=pipe_read;
+  psync_run_thread(psync_localnotify_thread);
+  return 0;
+}
+
+void psync_localnotify_add_sync(psync_syncid_t syncid){
+  localnotify_msg msg;
+  msg.type=NOTIFY_MSG_ADD;
+  msg.syncid=syncid;
+  if (!WriteFile(pipe_write, &msg, sizeof(msg), NULL, NULL))
+    debug(D_ERROR, "write to pipe failed");
+}
+
+void psync_localnotify_del_sync(psync_syncid_t syncid){
+  localnotify_msg msg;
+  msg.type=NOTIFY_MSG_DEL;
+  msg.syncid=syncid;
+  if (!WriteFile(pipe_write, &msg, sizeof(msg), NULL, NULL))
     debug(D_ERROR, "write to pipe failed");
 }
 
