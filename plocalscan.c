@@ -26,6 +26,7 @@
  */
 
 #include "plocalscan.h"
+#include "plocalnotify.h"
 #include "ptimer.h"
 #include "pstatus.h"
 #include "plibs.h"
@@ -81,6 +82,7 @@ static psync_list scan_lists[SCAN_LIST_CNT];
 static uint64_t localsleepperfolder;
 static time_t starttime;
 static psync_uint_t changes;
+static int localnotify;
 
 
 static void scanner_set_syncs_to_list(psync_list *lst){
@@ -586,7 +588,10 @@ static void scanner_scan(int first){
 static int scanner_wait(){
   struct timespec tm;
   int ret;
-  tm.tv_sec=psync_current_time+PSYNC_LOCALSCAN_RESCAN_INTERVAL;
+  if (localnotify==0)
+    tm.tv_sec=psync_current_time+PSYNC_LOCALSCAN_RESCAN_NOTIFY_SUPPORTED;
+  else
+    tm.tv_sec=psync_current_time+PSYNC_LOCALSCAN_RESCAN_INTERVAL;
   tm.tv_nsec=0;
   pthread_mutex_lock(&scan_mutex);
   if (!scan_wakes)
@@ -600,7 +605,7 @@ static int scanner_wait(){
 
 static void scanner_thread(){
   int w;
-  psync_milisleep(10);
+  psync_milisleep(25);
   psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
   scanner_scan(1);
   psync_set_status(PSTATUS_TYPE_LOCALSCAN, PSTATUS_LOCALSCAN_READY);
@@ -629,6 +634,14 @@ static void psync_wake_localscan_noscan(){
 }
 
 void psync_localscan_init(){
+  psync_sql_res *res;
+  psync_full_result_int *result;
+  uint32_t i;
   psync_timer_exception_handler(psync_wake_localscan_noscan);
+  localnotify=psync_localnotify_init();
+  res=psync_sql_query("SELECT id FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
+  result=psync_sql_fetchall_int(res);
+  for (i=0; i<result->rows; i++)
+    psync_localnotify_add_sync(psync_get_result_cell(result, i, 0));
   psync_run_thread(scanner_thread);
 }

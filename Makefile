@@ -25,7 +25,8 @@ else
 endif
 
 OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o pupload.o pdownload.o pfolder.o\
-     psyncer.o ptasks.o psettings.o pnetlibs.o ppool.o pscanner.o plist.o plocalscan.o pp2p.o pcrypto.o pssl.o
+     psyncer.o ptasks.o psettings.o pnetlibs.o ppool.o pscanner.o plist.o plocalscan.o plocalnotify.o pp2p.o\
+     pcrypto.o pssl.o
 
 ifeq ($(USESSL),openssl)
   OBJ += pssl-openssl.o

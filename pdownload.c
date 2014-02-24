@@ -72,7 +72,7 @@ static psync_uint_t current_downloads_waiters=0;
 static pthread_mutex_t current_downloads_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t current_downloads_cond=PTHREAD_COND_INITIALIZER;
 
-static psync_list downloads=PSYNC_STATIC_INIT(downloads);
+static psync_list downloads=PSYNC_LIST_STATIC_INIT(downloads);
 
 static void task_wait_no_downloads(){
   pthread_mutex_lock(&current_downloads_mutex);

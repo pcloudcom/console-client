@@ -44,7 +44,7 @@ typedef int (*psync_list_compare)(const psync_list *, const psync_list *);
     (l)->prev=(l);\
   } while (0)
   
-#define PSYNC_STATIC_INIT(l) {&l, &l}
+#define PSYNC_LIST_STATIC_INIT(l) {&l, &l}
   
 #define psync_list_isempty(l) ((l)->next==(l))
   
