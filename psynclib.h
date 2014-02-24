@@ -387,10 +387,26 @@ void psync_run_localscan();
  * If err is not NULL in all cases of non-zero return it will be set to point to a
  * psync_malloc-allocated buffer with English language error text, suitable to display
  * to the user. This buffer must be freed by the application.
- *
+ * 
  */
 
 int psync_register(const char *email, const char *password, int termsaccepted, char **err);
+
+/* Sends email verification mail to the user, return value and err are the same as with registering.
+ */
+
+int psync_verify_email(char **err);
+
+/* Sends email with link to reset password to the user with specified email, return value and err are 
+ * the same as with registering.
+ */
+
+int psync_lost_password(const char *email, char **err);
+
+/* Changes the password of the user, return value and err are the same as with registering.
+ */
+
+int psync_change_password(const char *currentpass, const char *newpass, char **err);
 
 /*
  * List of settings:

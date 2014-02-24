@@ -504,30 +504,54 @@ void psync_run_localscan(){
   psync_wake_localscan();
 }
 
-int psync_register(const char *email, const char *password, int termsaccepted, char **err){
+#define run_command(cmd, params, err) do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
+
+static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
   psync_socket *api;
   binresult *res;
-  uint64_t ret;
-  binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
+  uint64_t result;
   api=psync_apipool_get();
-  if (unlikely_log(!api))
-    goto neterr1;
-  res=send_command(api, "register", params);
-  psync_apipool_release(api);
-  if (unlikely_log(!res))
-    goto neterr1;
-  ret=psync_find_result(res, "result", PARAM_NUM)->num;
-  if (ret){
-    debug(D_WARNING, "register method returned error %lu", (long unsigned)ret);
+  if (unlikely(!api))
+    goto neterr;
+  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+  if (likely(res))
+    psync_apipool_release(api);
+  else{
+    psync_apipool_release_bad(api);
+    goto neterr;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
     if (err)
       *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
   }
   psync_free(res);
-  return ret;
-neterr1:
+  return (int)result;
+neterr:
   if (err)
     *err=psync_strdup("Could not connect to the server.");
   return -1;
+}
+
+int psync_register(const char *email, const char *password, int termsaccepted, char **err){
+  binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
+  return run_command("register", params, err);
+}
+
+int psync_verify_email(char **err){
+  binparam params[]={P_STR("auth", psync_my_auth)};
+  return run_command("sendverificationemail", params, err);
+}
+
+int psync_lost_password(const char *email, char **err){
+  binparam params[]={P_STR("mail", email)};
+  return run_command("lostpassword", params, err);
+}
+
+int psync_change_password(const char *currentpass, const char *newpass, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_STR("oldpassword", currentpass), P_STR("newpassword", newpass)};
+  return run_command("changepassword", params, err);
 }
 
 int psync_get_bool_setting(const char *settingname){

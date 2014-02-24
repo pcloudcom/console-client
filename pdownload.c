@@ -912,8 +912,3 @@ downloading_files_hashes *psync_get_downloading_hashes(){
   return ret;
 }
 
-int psync_get_downloading_hash(unsigned char *hash){
-//  memcpy(hash, downloadingfilehash, PSYNC_HASH_DIGEST_HEXLEN);
-//  return hash[0]!=0;
-  return 0;
-}

@@ -131,20 +131,25 @@ static psync_fileid_t psync_p2p_has_file(const unsigned char *hashstart, const u
 
 static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsigned char *genhash, const unsigned char *rand, uint64_t filesize, 
                                     unsigned char *realhash){
-/*  unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], hashbin[PSYNC_HASH_DIGEST_LEN], hashsource[PSYNC_HASH_BLOCK_SIZE];
-  if (!psync_get_downloading_hash(hashsource))
-    return 0;
-  if (memcmp(hashstart, hashsource, PSYNC_P2P_HEXHASH_BYTES))
-    return 0;
-  memcpy(hashsource+PSYNC_HASH_DIGEST_HEXLEN, rand, PSYNC_HASH_BLOCK_SIZE-PSYNC_HASH_DIGEST_HEXLEN);
-  psync_hash(hashsource, PSYNC_HASH_BLOCK_SIZE, hashbin);
-  psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
-  if (!memcmp(hashhex, genhash, PSYNC_HASH_DIGEST_HEXLEN)){
-    memcpy(realhash, hashsource, PSYNC_HASH_DIGEST_HEXLEN);
-    return 1;
+  downloading_files_hashes *hashes;
+  unsigned char hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN], hashhex[PSYNC_HASH_DIGEST_HEXLEN];
+  size_t i;
+  hashes=psync_get_downloading_hashes();
+  for (i=0; i<hashes->hashcnt; i++){
+    if (memcmp(hashstart, hashes->hashes[i], PSYNC_P2P_HEXHASH_BYTES))
+      continue;
+    memcpy(hashsource, hashes->hashes[i], PSYNC_HASH_DIGEST_HEXLEN);
+    memcpy(hashsource+PSYNC_HASH_DIGEST_HEXLEN, rand, PSYNC_HASH_BLOCK_SIZE-PSYNC_HASH_DIGEST_HEXLEN);
+    psync_hash(hashsource, PSYNC_HASH_BLOCK_SIZE, hashbin);
+    psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
+    if (!memcmp(hashhex, genhash, PSYNC_HASH_DIGEST_HEXLEN)){
+      if (realhash)
+        memcpy(realhash, hashsource, PSYNC_HASH_DIGEST_HEXLEN);
+      psync_free(hashes);
+      return 1;
+    }
   }
-  else
-    return 0;*/
+  psync_free(hashes);
   return 0;
 }
 
