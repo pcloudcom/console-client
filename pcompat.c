@@ -243,7 +243,11 @@ void psync_milisleep(uint64_t milisec){
 }
 
 time_t psync_time(){
-#if defined(_POSIX_TIMERS) && _POSIX_TIMERS>0
+#if defined(P_OS_MACOSX)
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec;
+#elif defined(_POSIX_TIMERS) && _POSIX_TIMERS>0
   struct timespec ts;
   if (likely_log(clock_gettime(CLOCK_REALTIME, &ts)==0))
     return ts.tv_sec;
