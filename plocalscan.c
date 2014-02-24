@@ -492,6 +492,9 @@ static void scan_delete_folder(sync_folderlist *fl){
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t folderid;
+  int tries;
+  tries=0;
+retry:
   debug(D_NOTICE, "folder deleted %s", fl->name);
   psync_sql_start_transaction();
   res=psync_sql_query("SELECT folderid FROM localfolder WHERE id=?");
@@ -504,6 +507,15 @@ static void scan_delete_folder(sync_folderlist *fl){
     return;
   }
   psync_sql_free_result(res);
+  if (unlikely_log(!folderid)){
+    /* folder is not yet created, folderid is not 0 but NULL actually */
+    psync_sql_rollback_transaction();
+    if (tries>=50)
+      return;
+    tries++;
+    psync_milisleep(20+tries*20);
+    goto retry;
+  }
   delete_local_folder_rec(fl->localid);
   psync_task_delete_remote_folder(fl->syncid, folderid);
   psync_sql_commit_transaction();

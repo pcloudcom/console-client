@@ -155,6 +155,10 @@ int psync_handle_api_result(uint64_t result){
   }
   else if (result==2003 || result==2009 || result==2005)
     return PSYNC_NET_PERMFAIL;
+  else if (result==2007){
+    debug(D_ERROR, "trying to delete root folder");
+    return PSYNC_NET_PERMFAIL;
+  }
   else
     return PSYNC_NET_TEMPFAIL;
 }
