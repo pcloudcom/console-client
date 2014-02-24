@@ -858,6 +858,7 @@ void psync_download_init(){
 
 void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
   psync_sql_res *res;
+  download_list_t *dwl;
   res=psync_sql_prep_statement("DELETE FROM task WHERE type=? AND itemid=?");
   psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
   psync_sql_bind_uint(res, 2, fileid);
@@ -867,18 +868,48 @@ void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
     psync_send_status_update();
   }
   psync_sql_free_result(res);
-//  if (fileid==downloadingfile)
-//    stopfile=fileid;
+  pthread_mutex_lock(&current_downloads_mutex);
+  psync_list_for_each_element(dwl, &downloads, download_list_t, list)
+    if (dwl->fileid==fileid)
+      dwl->stop=1;
+  pthread_mutex_unlock(&current_downloads_mutex);
 }
 
 void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid){
-//  if (fileid==downloadingfile && syncid==downloadingfilesyncid)
-//    stopfile=fileid;
+  download_list_t *dwl;
+  pthread_mutex_lock(&current_downloads_mutex);
+  psync_list_for_each_element(dwl, &downloads, download_list_t, list)
+    if (dwl->fileid==fileid && dwl->syncid==syncid)
+      dwl->stop=1;
+  pthread_mutex_unlock(&current_downloads_mutex);
 }
 
 void psync_stop_sync_download(psync_syncid_t syncid){
-//  if (syncid==downloadingfilesyncid)
-//    stopfile=downloadingfile;
+  download_list_t *dwl;
+  pthread_mutex_lock(&current_downloads_mutex);
+  psync_list_for_each_element(dwl, &downloads, download_list_t, list)
+    if (dwl->syncid==syncid)
+      dwl->stop=1;
+  pthread_mutex_unlock(&current_downloads_mutex);
+}
+
+downloading_files_hashes *psync_get_downloading_hashes(){
+  download_list_t *dwl;
+  downloading_files_hashes *ret;
+  size_t cnt;
+  cnt=0;
+  pthread_mutex_lock(&current_downloads_mutex);
+  psync_list_for_each_element(dwl, &downloads, download_list_t, list)
+    cnt++;
+  ret=(downloading_files_hashes *)psync_malloc(offsetof(downloading_files_hashes, hashes)+sizeof(psync_hex_hash)*cnt);
+  ret->hashcnt=cnt;
+  cnt=0;
+  psync_list_for_each_element(dwl, &downloads, download_list_t, list){
+    memcpy(ret->hashes[cnt], dwl->hash, PSYNC_HASH_DIGEST_HEXLEN);
+    cnt++;
+  }
+  pthread_mutex_unlock(&current_downloads_mutex);
+  return ret;
 }
 
 int psync_get_downloading_hash(unsigned char *hash){

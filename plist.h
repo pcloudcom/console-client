@@ -55,8 +55,8 @@ static inline void psync_add_between(psync_list *l1, psync_list *l2, psync_list 
   l2->prev=a;
 }
 
-#define psync_list_add_head(l, a) psync_add_between(l, (l)->next, a);
-#define psync_list_add_tail(l, a) psync_add_between((l)->prev, l, a);
+#define psync_list_add_head(l, a) psync_add_between(l, (l)->next, a)
+#define psync_list_add_tail(l, a) psync_add_between((l)->prev, l, a)
 
 #define psync_list_del(a)\
   do {\

@@ -153,7 +153,7 @@ int psync_handle_api_result(uint64_t result){
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
   }
-  else if (result==2003 || result==2009)
+  else if (result==2003 || result==2009 || result==2005)
     return PSYNC_NET_PERMFAIL;
   else
     return PSYNC_NET_TEMPFAIL;

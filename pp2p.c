@@ -131,7 +131,7 @@ static psync_fileid_t psync_p2p_has_file(const unsigned char *hashstart, const u
 
 static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsigned char *genhash, const unsigned char *rand, uint64_t filesize, 
                                     unsigned char *realhash){
-  unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], hashbin[PSYNC_HASH_DIGEST_LEN], hashsource[PSYNC_HASH_BLOCK_SIZE];
+/*  unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], hashbin[PSYNC_HASH_DIGEST_LEN], hashsource[PSYNC_HASH_BLOCK_SIZE];
   if (!psync_get_downloading_hash(hashsource))
     return 0;
   if (memcmp(hashstart, hashsource, PSYNC_P2P_HEXHASH_BYTES))
@@ -144,7 +144,8 @@ static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsign
     return 1;
   }
   else
-    return 0;
+    return 0;*/
+  return 0;
 }
 
 static void psync_p2p_check(packet_check *packet){

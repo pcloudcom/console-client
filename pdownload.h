@@ -29,12 +29,21 @@
 #define _PSYNC_DOWNLOAD_H
 
 #include "psynclib.h"
+#include "psettings.h"
+#include "pssl.h"
+
+typedef unsigned char psync_hex_hash[PSYNC_HASH_DIGEST_HEXLEN];
+
+typedef struct {
+  size_t hashcnt;
+  psync_hex_hash hashes[];
+} downloading_files_hashes;
 
 void psync_download_init();
 void psync_wake_download();
 void psync_delete_download_tasks_for_file(psync_fileid_t fileid);
 void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid);
 void psync_stop_sync_download(psync_syncid_t syncid);
-int psync_get_downloading_hash(unsigned char *hash);
+downloading_files_hashes *psync_get_downloading_hashes();
 
 #endif

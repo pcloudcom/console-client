@@ -463,6 +463,11 @@ void psync_set_uint_value(const char *valuename, uint64_t value);
 char *psync_get_string_value(const char *valuename);
 void psync_set_string_value(const char *valuename, const char *value);
 
+/* If your application has a way to detect network change (e.g. wireless access point change), you should subscribe for
+ * such notifications and call psync_network_exception() in those cases. There is no harm in calling it too often.
+ * 
+ */
+
 void psync_network_exception();
 
 
