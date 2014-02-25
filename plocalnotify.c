@@ -578,6 +578,7 @@ static void process_notification(localnotify_dir *dir){
   long namelen;
   struct stat st;
   int cmp;
+  debug(D_NOTICE, "got notification for folder %s", dir->path);
   dh=opendir(dir->path);
   if (unlikely_log(!dh)){
     psync_list_del(&dir->nextfolder);
