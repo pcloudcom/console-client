@@ -39,7 +39,7 @@ typedef struct{
   psync_syncid_t syncid;
 } localnotify_msg;
 
-#if defined(P_OS_LINUX)
+#if defined(P_OS_LINUX) && 0
 
 #include <sys/inotify.h>
 #include <sys/epoll.h>
@@ -401,6 +401,189 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
   msg.type=NOTIFY_MSG_DEL;
   msg.syncid=syncid;
   if (!WriteFile(pipe_write, &msg, sizeof(msg), NULL, NULL))
+    debug(D_ERROR, "write to pipe failed");
+}
+
+#elif defined(P_OS_MACOSX) || defined(P_OS_BSD) || 1
+
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <string.h>
+
+static int pipe_read, pipe_write, kevent_fd;
+
+static void add_dir_scan(localnotify_dir *dir, const char *path){
+  DIR *dh;
+  char *cpath;
+  size_t pl, entrylen;
+  long namelen;
+  struct dirent *entry, *de;
+  localnotify_watch *wch;
+  struct stat st;
+  int wid;
+  pl=strlen(path);
+  if (unlikely((wid=inotify_add_watch(dir->inotifyfd, path, IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_MODIFY|IN_MOVED_FROM|IN_MOVED_TO|IN_DELETE_SELF))==-1)){
+    debug(D_ERROR, "inotify_add_watch failed");
+    return;
+  }
+  namelen=pathconf(path, _PC_NAME_MAX);
+  if (namelen==-1)
+    namelen=255;
+  wch=(localnotify_watch *)psync_malloc(offsetof(localnotify_watch, path)+pl+1+namelen+1);
+  wch->next=dir->watches[wid%WATCH_HASH];
+  dir->watches[wid%WATCH_HASH]=wch;
+  wch->watchid=wid;
+  wch->pathlen=pl;
+  memcpy(wch->path, path, pl+1);
+  if (likely_log(dh=opendir(path))){
+    entrylen=offsetof(struct dirent, d_name)+namelen+1;
+    cpath=(char *)psync_malloc(pl+namelen+2);
+    entry=(struct dirent *)psync_malloc(entrylen);
+    memcpy(cpath, path, pl);
+    if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
+      cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
+    while (!readdir_r(dh, entry, &de) && de)
+      if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
+        strcpy(cpath+pl, de->d_name);
+        if (!lstat(cpath, &st) && S_ISDIR(st.st_mode))
+          add_dir_scan(dir, cpath);
+      }
+    psync_free(entry);
+    psync_free(cpath);
+    closedir(dh);
+  }
+}
+
+static void add_syncid(psync_syncid_t syncid){
+  psync_sql_res *res;
+  psync_variant_row row;
+  localnotify_dir *dir;
+  const char *str;
+  size_t len;
+  struct epoll_event e;
+  res=psync_sql_query("SELECT localpath FROM syncfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  if (likely(row=psync_sql_fetch_row(res))){
+    str=psync_get_lstring(row[0], &len);
+    len++;
+    dir=(localnotify_dir *)psync_malloc(offsetof(localnotify_dir, path)+len);
+    memcpy(dir->path, str, len);
+    psync_sql_free_result(res);
+  }
+  else{
+    psync_sql_free_result(res);
+    debug(D_ERROR, "could not find syncfolder with id %u", (unsigned int)syncid);
+    return;
+  }
+  dir->syncid=syncid;
+  dir->inotifyfd=inotify_init();
+  if (unlikely_log(dir->inotifyfd==-1))
+    goto err;
+  add_dir_scan(dir, dir->path);
+  e.events=EPOLLIN;
+  e.data.ptr=dir;
+  if (unlikely_log(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, dir->inotifyfd, &e)))
+    goto err2;
+  psync_list_add_tail(&dirs, &dir->list);
+  return;
+err2:
+  close(dir->inotifyfd);
+err:
+  psync_free(dir);
+}
+
+static void del_syncid(psync_syncid_t syncid){
+  localnotify_dir *dir;
+  localnotify_watch *wch, *next;
+  psync_uint_t i;
+  psync_list_for_each_element(dir, &dirs, localnotify_dir, list)
+    if (dir->syncid==syncid){
+      psync_list_del(&dir->list);
+      for (i=0; i<WATCH_HASH; i++){
+        wch=dir->watches[i];
+        while (wch){
+          next=wch->next;
+          inotify_rm_watch(dir->inotifyfd, wch->watchid);
+          psync_free(wch);
+          wch=next;
+        }
+      }
+      epoll_ctl(epoll_fd, EPOLL_CTL_DEL, dir->inotifyfd, NULL);
+      close(dir->inotifyfd);
+      psync_free(dir);
+      return;
+    }
+}
+
+static void process_pipe(){
+  localnotify_msg msg;
+  if (read(pipe_read, &msg, sizeof(msg))!=sizeof(msg)){
+    debug(D_ERROR, "read from pipe failed");
+    return;
+  }
+  if (msg.type==NOTIFY_MSG_ADD)
+    add_syncid(msg.syncid);
+  else if (msg.type==NOTIFY_MSG_DEL)
+    del_syncid(msg.syncid);
+  else
+    debug(D_ERROR, "invalid message type %u", (unsigned int)msg.type);
+}
+
+static void psync_localnotify_thread(){
+  struct kevent ke;
+  while (psync_do_run){
+    if (unlikely_log(keveent(kevent_fd, NULL, 0, &ke, 1, NULL)!=1))
+      continue;
+    if (ke.udata)
+      process_notification((localnotify_dir *)ke.udata);
+    else
+      process_pipe();
+  }
+}
+
+int psync_localnotify_init(){
+  struct kevent ke;
+  struct timespec ts;
+  int pfd[2];
+  if (unlikely_log(pipe(pfd)))
+    goto err0;
+  pipe_read=pfd[0];
+  pipe_write=pfd[1];
+  kevent_fd=kqueue();
+  if (unlikely_log(kevent_fd==-1))
+    goto err1;
+  EV_SET(&ke, pipe_read, EVFILT_READ, EV_ADD, 0, 0, 0);
+  memset(&ts, 0, sizeof(ts));
+  if (unlikely_log(keveent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
+    goto err2;
+  psync_run_thread(psync_localnotify_thread);
+  return 0;
+err2:
+  close(kevent_fd);
+err1:
+  close(pfd[0]);
+  close(pfd[1]);
+err0:
+  pipe_read=pipe_write=-1;
+  return -1;
+}
+
+void psync_localnotify_add_sync(psync_syncid_t syncid){
+  localnotify_msg msg;
+  msg.type=NOTIFY_MSG_ADD;
+  msg.syncid=syncid;
+  if (write(pipe_write, &msg, sizeof(msg))!=sizeof(msg))
+    debug(D_ERROR, "write to pipe failed");
+}
+
+void psync_localnotify_del_sync(psync_syncid_t syncid){
+  localnotify_msg msg;
+  msg.type=NOTIFY_MSG_DEL;
+  msg.syncid=syncid;
+  if (write(pipe_write, &msg, sizeof(msg))!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
 }
 
