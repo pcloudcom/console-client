@@ -340,11 +340,14 @@ static void add_syncid(psync_syncid_t syncid){
 
 static void del_syncid(psync_syncid_t syncid){
   DWORD i;
+  HANDLE h;
   for (i=1; i<handlecnt; i++)
     if (syncids[i]==syncid){
+      h=handles[i];
       handlecnt--;
       handles[i]=handles[handlecnt];
       syncids[i]=syncids[handlecnt];
+      FindCloseChangeNotification(h);
       break;
     }
 }
