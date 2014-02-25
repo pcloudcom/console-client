@@ -486,6 +486,9 @@ static void delete_local_folder_rec(psync_folderid_t localfolderid){
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfoderid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_run_free(res);
 }
 
 static void scan_delete_folder(sync_folderlist *fl){
