@@ -121,6 +121,7 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t lfolderid, dbfolderid;
+  debug(D_NOTICE, "creating local folder int db as %lu/%s for folderid %lu", (unsigned long)localparentfolderid, name, (unsigned long)folderid);
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, folderid, syncid, flags, taskcnt, name) VALUES (?, ?, ?, 0, 1, ?)");
   psync_sql_bind_uint(res, 1, localparentfolderid);
   psync_sql_bind_uint(res, 2, folderid);
@@ -147,7 +148,7 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
     debug(D_ERROR, "local folder %s not found in the database", name);
   }
   psync_sql_free_result(res);
-  if (lfolderid && !dbfolderid){
+  if (lfolderid && dbfolderid!=folderid){
     debug(D_NOTICE, "local folder %lu does not have folderid associated, setting to %lu", (unsigned long)lfolderid, (unsigned long)folderid);
     res=psync_sql_prep_statement("UPDATE localfolder SET folderid=? WHERE id=?");
     psync_sql_bind_uint(res, 1, lfolderid);
@@ -178,7 +179,7 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
       if (psync_is_name_to_ignore(name))
         continue;
       cfolderid=psync_get_number(row[0]);
-      clfolderid=psync_create_local_folder_in_db(syncid, folderid, lfoiderid, name);
+      clfolderid=psync_create_local_folder_in_db(syncid, cfolderid, lfoiderid, name);
       psync_task_create_local_folder(syncid, cfolderid, clfolderid);
       psync_add_folder_for_downloadsync(syncid, synctype, cfolderid, clfolderid/*, path*/);
     }

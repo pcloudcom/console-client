@@ -248,6 +248,7 @@ static void process_createfolder(const binresult *entry){
     stmt=psync_sql_prep_statement("INSERT OR IGNORE INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, ?, ?)");
     while ((row=psync_sql_fetch_rowint(res))){
       syncid=row[0];
+      debug(D_NOTICE, "creating local folder %lu/%s for folderid %lu, parentfolderid %lu", (unsigned long)row[1], name->str, (unsigned long)folderid, (unsigned long)parentfolderid);
       localfolderid=psync_create_local_folder_in_db(syncid, folderid, row[1], name->str);
       psync_sql_bind_uint(stmt, 1, syncid);
       psync_sql_bind_uint(stmt, 2, folderid);
@@ -437,6 +438,7 @@ static void process_modifyfolder(const binresult *entry){
     }
     for (/*i is already=cnt*/; i<fres2->rows; i++){
       syncid=psync_get_result_cell(fres2, i, 0);
+      debug(D_NOTICE, "creating local folder %lu/%s for folderid %lu, parentfolderid %lu", (unsigned long)psync_get_result_cell(fres2, i, 1), name->str, (unsigned long)folderid, (unsigned long)parentfolderid);
       localfolderid=psync_create_local_folder_in_db(syncid, folderid, psync_get_result_cell(fres2, i, 1), name->str);
       psync_task_create_local_folder(syncid, folderid, localfolderid);
       psync_add_folder_for_downloadsync(syncid, psync_get_result_cell(fres2, i, 2), folderid, localfolderid);
