@@ -46,6 +46,7 @@
 #include "plocalscan.h"
 #include "plist.h"
 #include "pp2p.h"
+#include "plocalnotify.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -402,6 +403,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     return -1;
   else{
     psync_stop_sync_download(syncid);
+    psync_localnotify_del_sync(syncid);
     return 0;
   }
 }

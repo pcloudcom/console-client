@@ -30,6 +30,7 @@
 #include "psettings.h"
 #include "ptasks.h"
 #include "plocalscan.h"
+#include "plocalnotify.h"
 #include <string.h>
 
 static psync_folderid_t *synced_down_folders[PSYNC_DIR_HASH_SIZE];
@@ -227,6 +228,7 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
     psync_sql_commit_transaction();
     if (synctype&PSYNC_UPLOAD_ONLY)
       psync_wake_localscan();
+      psync_localnotify_add_sync(syncid);
   }
   else
     psync_sql_rollback_transaction();

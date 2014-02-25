@@ -404,7 +404,7 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
     debug(D_ERROR, "write to pipe failed");
 }
 
-#elif defined(P_OS_MACOSX) || defined(P_OS_BSD) || 1
+#elif (defined(P_OS_MACOSX) || defined(P_OS_BSD)) && 0
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -413,7 +413,17 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
 #include <unistd.h>
 #include <string.h>
 
+typedef struct{
+  psync_list nextfolder;
+  psync_list subfolders;
+  psync_syncid_t syncid;
+  int fd;
+  uint32_t nameoff; /* can also be uint16_t */
+  char path[];
+} localnotify_dir;
+
 static int pipe_read, pipe_write, kevent_fd;
+static psync_list dirs=PSYNC_LIST_STATIC_INIT(dirs);
 
 static void add_dir_scan(localnotify_dir *dir, const char *path){
   DIR *dh;
@@ -495,27 +505,25 @@ err:
   psync_free(dir);
 }
 
+static void free_dir(localnotify_dir *dir){
+  psync_list *e;
+  psync_list_for_each(e, &dir->subfolders)
+    free_dir(psync_list_element(e, localnotify_dir, nextfolder));
+  close(dir->fd);
+  psync_free(dir);
+}
+
 static void del_syncid(psync_syncid_t syncid){
+  psync_list *e;
   localnotify_dir *dir;
-  localnotify_watch *wch, *next;
-  psync_uint_t i;
-  psync_list_for_each_element(dir, &dirs, localnotify_dir, list)
+  psync_list_for_each(e, &dirs){
+    dir=psync_list_element(e, localnotify_dir, nextfolder);
     if (dir->syncid==syncid){
-      psync_list_del(&dir->list);
-      for (i=0; i<WATCH_HASH; i++){
-        wch=dir->watches[i];
-        while (wch){
-          next=wch->next;
-          inotify_rm_watch(dir->inotifyfd, wch->watchid);
-          psync_free(wch);
-          wch=next;
-        }
-      }
-      epoll_ctl(epoll_fd, EPOLL_CTL_DEL, dir->inotifyfd, NULL);
-      close(dir->inotifyfd);
-      psync_free(dir);
+      psync_list_del(e);
+      free_dir(dir);
       return;
     }
+  }
 }
 
 static void process_pipe(){
