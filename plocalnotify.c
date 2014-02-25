@@ -470,7 +470,7 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
   );
   if (unlikely_log(dir->fd==-1))
     goto err;
-  EV_SET(&ke, dir->fd, EVFILT_VNODE, EV_ADD, NOTE_WRITE|NOTE_EXTEND, 0, dir);
+  EV_SET(&ke, dir->fd, EVFILT_VNODE, EV_ADD|EV_CLEAR, NOTE_WRITE|NOTE_EXTEND, 0, dir);
   memset(&ts, 0, sizeof(ts));
   if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
@@ -660,7 +660,7 @@ int psync_localnotify_init(){
   kevent_fd=kqueue();
   if (unlikely_log(kevent_fd==-1))
     goto err1;
-  EV_SET(&ke, pipe_read, EVFILT_READ, EV_ADD, 0, 0, 0);
+  EV_SET(&ke, pipe_read, EVFILT_READ, EV_ADD|EV_CLEAR, 0, 0, 0);
   memset(&ts, 0, sizeof(ts));
   if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
