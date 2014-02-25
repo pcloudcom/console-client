@@ -58,6 +58,16 @@ static uint32_t psync_calc_status(){
       return -1;
     }
   }
+  if (statuses[PSTATUS_TYPE_RUN]!=PSTATUS_RUN_RUN){
+    if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_PAUSE)
+      return PSTATUS_PAUSED;
+    else if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_STOP)
+      return PSTATUS_STOPPED;
+    else {
+      debug(D_BUG, "invalid PSTATUS_TYPE_RUN %d", statuses[PSTATUS_TYPE_RUN]);
+      return -1;
+    }
+  }
   if (statuses[PSTATUS_TYPE_ONLINE]!=PSTATUS_ONLINE_ONLINE){
     if (statuses[PSTATUS_TYPE_ONLINE]==PSTATUS_ONLINE_CONNECTING)
       return PSTATUS_CONNECTING;
@@ -67,16 +77,6 @@ static uint32_t psync_calc_status(){
       return PSTATUS_OFFLINE;
     else {
       debug(D_BUG, "invalid PSTATUS_TYPE_ONLINE %d", statuses[PSTATUS_TYPE_ONLINE]);
-      return -1;
-    }
-  }
-  if (statuses[PSTATUS_TYPE_RUN]!=PSTATUS_RUN_RUN){
-    if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_PAUSE)
-      return PSTATUS_PAUSED;
-    else if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_STOP)
-      return PSTATUS_STOPPED;
-    else {
-      debug(D_BUG, "invalid PSTATUS_TYPE_RUN %d", statuses[PSTATUS_TYPE_RUN]);
       return -1;
     }
   }
