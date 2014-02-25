@@ -640,7 +640,7 @@ static void process_notification(localnotify_dir *dir){
 static void psync_localnotify_thread(){
   struct kevent ke;
   while (psync_do_run){
-    if (unlikely_log(keveent(kevent_fd, NULL, 0, &ke, 1, NULL)!=1))
+    if (unlikely_log(kevent(kevent_fd, NULL, 0, &ke, 1, NULL)!=1))
       continue;
     if (ke.udata)
       process_notification((localnotify_dir *)ke.udata);
@@ -662,7 +662,7 @@ int psync_localnotify_init(){
     goto err1;
   EV_SET(&ke, pipe_read, EVFILT_READ, EV_ADD, 0, 0, 0);
   memset(&ts, 0, sizeof(ts));
-  if (unlikely_log(keveent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
+  if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
   psync_run_thread(psync_localnotify_thread);
   return 0;
