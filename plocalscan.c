@@ -486,7 +486,7 @@ static void delete_local_folder_rec(psync_folderid_t localfolderid){
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfoderid=?");
+  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_run_free(res);
 }
@@ -515,6 +515,8 @@ retry:
     psync_sql_rollback_transaction();
     if (tries>=50)
       return;
+    else if (tries==10)
+      psync_timer_notify_exception();
     tries++;
     psync_milisleep(20+tries*20);
     goto retry;
