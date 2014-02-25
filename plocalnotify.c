@@ -532,8 +532,8 @@ static void add_syncid(psync_syncid_t syncid){
 }
 
 static void free_dir(localnotify_dir *dir){
-  psync_list *e;
-  psync_list_for_each(e, &dir->subfolders)
+  psync_list *e, *b;
+  psync_list_for_each_safe(e, b, &dir->subfolders)
     free_dir(psync_list_element(e, localnotify_dir, nextfolder));
   close(dir->fd);
   psync_free(dir);
