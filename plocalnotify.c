@@ -39,7 +39,7 @@ typedef struct{
   psync_syncid_t syncid;
 } localnotify_msg;
 
-#if defined(P_OS_LINUX) && 0
+#if defined(P_OS_LINUX)
 
 #include <sys/inotify.h>
 #include <sys/epoll.h>
@@ -404,7 +404,7 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
     debug(D_ERROR, "write to pipe failed");
 }
 
-#elif (defined(P_OS_MACOSX) || defined(P_OS_BSD)) && 0
+#elif defined(P_OS_MACOSX) || defined(P_OS_BSD)
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -422,65 +422,101 @@ typedef struct{
   char path[];
 } localnotify_dir;
 
+typedef struct{
+  psync_list list;
+  uint32_t nameoff;
+  char path[];
+} localnotify_tmpdir;
+
 static int pipe_read, pipe_write, kevent_fd;
 static psync_list dirs=PSYNC_LIST_STATIC_INIT(dirs);
 
-static void add_dir_scan(localnotify_dir *dir, const char *path){
+static int sort_dir_by_name(const psync_list *l1, const psync_list *l2){
+  const localnotify_dir *d1=psync_list_element(l1, localnotify_dir, nextfolder);
+  const localnotify_dir *d2=psync_list_element(l2, localnotify_dir, nextfolder);
+  return strcmp(d1->path+d1->nameoff, d2->path+d2->nameoff);
+}
+
+static int sort_tdir_by_name(const psync_list *l1, const psync_list *l2){
+  const localnotify_tmpdir *d1=psync_list_element(l1, localnotify_tmpdir, list);
+  const localnotify_tmpdir *d2=psync_list_element(l2, localnotify_tmpdir, list);
+  return strcmp(d1->path+d1->nameoff, d2->path+d2->nameoff);
+}
+
+static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
+  struct kevent ke;
+  struct timespec ts;
+  localnotify_dir *dir, *child;
+  char *str, *cpath;
   DIR *dh;
-  char *cpath;
-  size_t pl, entrylen;
+  struct dirent *de, *entry;
+  size_t len, entrylen;
   long namelen;
-  struct dirent *entry, *de;
-  localnotify_watch *wch;
   struct stat st;
-  int wid;
-  pl=strlen(path);
-  if (unlikely((wid=inotify_add_watch(dir->inotifyfd, path, IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_MODIFY|IN_MOVED_FROM|IN_MOVED_TO|IN_DELETE_SELF))==-1)){
-    debug(D_ERROR, "inotify_add_watch failed");
-    return;
-  }
+  len=strlen(path)+1;
+  len++;
+  dir=(localnotify_dir *)psync_malloc(offsetof(localnotify_dir, path)+len);
+  psync_list_init(&dir->subfolders);
+  memcpy(dir->path, path, len);
+  str=strrchr(dir->path);
+  if (str)
+    dir->nameoff=str-dir->path+1;
+  else
+    dir->nameoff=0;
+  dir->syncid=syncid;
+  dir->fd=open(dir->path, O_RDONLY
+#ifdef O_EVTONLY
+  | O_EVTONLY
+#endif
+  );
+  if (unlikely_log(dir->fd==-1))
+    goto err;
+  EV_SET(&ke, dir->fd, EVFILT_VNODE, EV_ADD, NOTE_WRITE|NOTE_EXTEND, 0, dir);
+  memset(&ts, 0, sizeof(ts));
+  if (unlikely_log(keveent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
+    goto err2;
   namelen=pathconf(path, _PC_NAME_MAX);
   if (namelen==-1)
     namelen=255;
-  wch=(localnotify_watch *)psync_malloc(offsetof(localnotify_watch, path)+pl+1+namelen+1);
-  wch->next=dir->watches[wid%WATCH_HASH];
-  dir->watches[wid%WATCH_HASH]=wch;
-  wch->watchid=wid;
-  wch->pathlen=pl;
-  memcpy(wch->path, path, pl+1);
   if (likely_log(dh=opendir(path))){
     entrylen=offsetof(struct dirent, d_name)+namelen+1;
-    cpath=(char *)psync_malloc(pl+namelen+2);
+    cpath=(char *)psync_malloc(len+namelen+1);
     entry=(struct dirent *)psync_malloc(entrylen);
-    memcpy(cpath, path, pl);
-    if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
-      cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
+    len--;
+    memcpy(cpath, path, len);
+    if (!len || cpath[len-1]!=PSYNC_DIRECTORY_SEPARATORC)
+      cpath[len++]=PSYNC_DIRECTORY_SEPARATORC;
     while (!readdir_r(dh, entry, &de) && de)
       if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
-        strcpy(cpath+pl, de->d_name);
-        if (!lstat(cpath, &st) && S_ISDIR(st.st_mode))
-          add_dir_scan(dir, cpath);
+        strcpy(cpath+len, de->d_name);
+        if (!lstat(cpath, &st) && S_ISDIR(st.st_mode)){
+          child=get_dir_scan(cpath, syncid);
+          if (child)
+            psync_list_add_tail(&dir->subfolders, &child->nextfolder);
+        }
       }
     psync_free(entry);
     psync_free(cpath);
     closedir(dh);
   }
+  psync_list_sort(&dir->subfolders, sort_dir_by_name);
+  return dir;
+err2:
+  close(dir->fd);
+err:
+  psync_free(dir);
+  return NULL;
 }
 
 static void add_syncid(psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_variant_row row;
+  psync_str_row row;
+  char *str;
   localnotify_dir *dir;
-  const char *str;
-  size_t len;
-  struct epoll_event e;
   res=psync_sql_query("SELECT localpath FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);
-  if (likely(row=psync_sql_fetch_row(res))){
-    str=psync_get_lstring(row[0], &len);
-    len++;
-    dir=(localnotify_dir *)psync_malloc(offsetof(localnotify_dir, path)+len);
-    memcpy(dir->path, str, len);
+  if (likely(row=psync_sql_fetch_rowstr(res))){
+    str=psync_strdup(row[0]);
     psync_sql_free_result(res);
   }
   else{
@@ -488,21 +524,12 @@ static void add_syncid(psync_syncid_t syncid){
     debug(D_ERROR, "could not find syncfolder with id %u", (unsigned int)syncid);
     return;
   }
-  dir->syncid=syncid;
-  dir->inotifyfd=inotify_init();
-  if (unlikely_log(dir->inotifyfd==-1))
-    goto err;
-  add_dir_scan(dir, dir->path);
-  e.events=EPOLLIN;
-  e.data.ptr=dir;
-  if (unlikely_log(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, dir->inotifyfd, &e)))
-    goto err2;
-  psync_list_add_tail(&dirs, &dir->list);
-  return;
-err2:
-  close(dir->inotifyfd);
-err:
-  psync_free(dir);
+  dir=get_dir_scan(str, syncid);
+  if (!dir)
+    debug(D_ERROR, "could not scan folder %s", str);
+  psync_free(str);
+  if (dir)
+    psync_list_add_tail(&dirs, &dir->nextfolder);
 }
 
 static void free_dir(localnotify_dir *dir){
@@ -538,6 +565,76 @@ static void process_pipe(){
     del_syncid(msg.syncid);
   else
     debug(D_ERROR, "invalid message type %u", (unsigned int)msg.type);
+}
+
+static void process_notification(localnotify_dir *dir){
+  DIR *dh;
+  char *cpath;
+  struct dirent *de, *entry;
+  localnotify_tmpdir *tdir;
+  localnotify_dir *cdir;
+  psync_list tlist;
+  psync_list *l1, *l2;
+  size_t len, len2, entrylen;
+  long namelen;
+  struct stat st;
+  int cmp;
+  dh=opendir(dir->path);
+  if (unlikely_log(!dh)){
+    psync_list_del(&dir->nextfolder);
+    free_dir(dir);
+    return;
+  }
+  len=strlen(dir->path);
+  namelen=pathconf(dir->, _PC_NAME_MAX);
+  if (namelen==-1)
+    namelen=255;
+  entrylen=offsetof(struct dirent, d_name)+namelen+1;
+  cpath=(char *)psync_malloc(len+namelen+2);
+  entry=(struct dirent *)psync_malloc(entrylen);
+  memcpy(cpath, dir->path, len);
+  if (!len || cpath[len-1]!=PSYNC_DIRECTORY_SEPARATORC)
+    cpath[len++]=PSYNC_DIRECTORY_SEPARATORC;
+  psync_list_init(&tlist);
+  while (!readdir_r(dh, entry, &de) && de)
+    if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
+      len2=strlen(de->d_name);
+      memcpy(cpath+len, de->d_name, len2+1);
+      if (!lstat(cpath, &st) && S_ISDIR(st.st_mode)){
+        tdir=(localnotify_tmpdir *)psync_malloc(offsetof(localnotify_tmpdir, path)+len+len2+1);
+        tdir->nameoff=len;
+        memcpy(tdir->path, cpath, len+len2+1);
+        psync_list_add_tail(&tlist, &tdir->list);
+      }
+    }
+  psync_free(entry);
+  psync_free(cpath);
+  closedir(dh);
+  psync_list_sort(&tlist, sort_tdir_by_name);
+  l1=dir->subfolders.next;
+  l2=tlist.next;
+  while (l1!=&dir->subfolders && l2!=&tlist){
+    cdir=psync_list_element(l1, localnotify_dir, nextfolder);
+    tdir=psync_list_element(l2, localnotify_tmpdir, list);
+    cmp=strcmp(cdir->path+cdir->nameoff, tdir->path+tdir->nameoff);
+    if (cmp==0){
+      l1=l1->next;
+      l2=l2->next;
+    }
+    else if (cmp<0){ /* deleted folder */
+      l1=l1->next;
+      psync_list_del(&cdir->nextfolder);
+      free_dir(cdir);
+    }
+    else{
+      l2=l2->next;
+      cdir=get_dir_scan(tdir->path, dir->syncid);
+      if (cdir)
+        psync_list_add_between(l1->prev, l1, &cdir->nextfolder);
+    }
+  }
+  psync_list_for_each_element_call(&tlist, localnotify_tmpdir, list, psync_free);
+  psync_wake_localscan();
 }
 
 static void psync_localnotify_thread(){
