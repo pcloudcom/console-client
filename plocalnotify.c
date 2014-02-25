@@ -454,7 +454,6 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
   long namelen;
   struct stat st;
   len=strlen(path)+1;
-  len++;
   dir=(localnotify_dir *)psync_malloc(offsetof(localnotify_dir, path)+len);
   psync_list_init(&dir->subfolders);
   memcpy(dir->path, path, len);
