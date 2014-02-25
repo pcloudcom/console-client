@@ -458,7 +458,7 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
   dir=(localnotify_dir *)psync_malloc(offsetof(localnotify_dir, path)+len);
   psync_list_init(&dir->subfolders);
   memcpy(dir->path, path, len);
-  str=strrchr(dir->path);
+  str=strrchr(dir->path, '/');
   if (str)
     dir->nameoff=str-dir->path+1;
   else
@@ -473,7 +473,7 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
     goto err;
   EV_SET(&ke, dir->fd, EVFILT_VNODE, EV_ADD, NOTE_WRITE|NOTE_EXTEND, 0, dir);
   memset(&ts, 0, sizeof(ts));
-  if (unlikely_log(keveent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
+  if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
   namelen=pathconf(path, _PC_NAME_MAX);
   if (namelen==-1)
@@ -586,7 +586,7 @@ static void process_notification(localnotify_dir *dir){
     return;
   }
   len=strlen(dir->path);
-  namelen=pathconf(dir->, _PC_NAME_MAX);
+  namelen=pathconf(dir->path, _PC_NAME_MAX);
   if (namelen==-1)
     namelen=255;
   entrylen=offsetof(struct dirent, d_name)+namelen+1;
