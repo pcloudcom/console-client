@@ -37,6 +37,7 @@
 #include "pfolder.h"
 #include "psyncer.h"
 #include "pdownload.h"
+#include "pcallbacks.h"
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
@@ -835,7 +836,7 @@ static void psync_diff_thread(){
   int sel;
   char ex;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
-  psync_milisleep(2);
+  psync_send_status_update();
 restart:
   sock=get_connected_socket();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
