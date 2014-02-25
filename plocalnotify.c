@@ -393,17 +393,19 @@ int psync_localnotify_init(){
 
 void psync_localnotify_add_sync(psync_syncid_t syncid){
   localnotify_msg msg;
+  DWORD bw;
   msg.type=NOTIFY_MSG_ADD;
   msg.syncid=syncid;
-  if (!WriteFile(pipe_write, &msg, sizeof(msg), NULL, NULL))
+  if (!WriteFile(pipe_write, &msg, sizeof(msg), &bw, NULL) || bw!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
 }
 
 void psync_localnotify_del_sync(psync_syncid_t syncid){
   localnotify_msg msg;
+  DWORD bw;
   msg.type=NOTIFY_MSG_DEL;
   msg.syncid=syncid;
-  if (!WriteFile(pipe_write, &msg, sizeof(msg), NULL, NULL))
+  if (!WriteFile(pipe_write, &msg, sizeof(msg), &bw, NULL) || bw!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
 }
 
