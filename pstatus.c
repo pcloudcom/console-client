@@ -46,16 +46,6 @@ static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
 static psync_uint_t status_waiters=0;
 
 static uint32_t psync_calc_status(){
-  if (statuses[PSTATUS_TYPE_RUN]!=PSTATUS_RUN_RUN){
-    if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_PAUSE)
-      return PSTATUS_PAUSED;
-    else if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_STOP)
-      return PSTATUS_STOPPED;
-    else {
-      debug(D_BUG, "invalid PSTATUS_TYPE_RUN %d", statuses[PSTATUS_TYPE_RUN]);
-      return -1;
-    }
-  }
   if (statuses[PSTATUS_TYPE_AUTH]!=PSTATUS_AUTH_PROVIDED){
     if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_REQUIRED)
       return PSTATUS_LOGIN_REQUIRED;
@@ -77,6 +67,16 @@ static uint32_t psync_calc_status(){
       return PSTATUS_OFFLINE;
     else {
       debug(D_BUG, "invalid PSTATUS_TYPE_ONLINE %d", statuses[PSTATUS_TYPE_ONLINE]);
+      return -1;
+    }
+  }
+  if (statuses[PSTATUS_TYPE_RUN]!=PSTATUS_RUN_RUN){
+    if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_PAUSE)
+      return PSTATUS_PAUSED;
+    else if (statuses[PSTATUS_TYPE_RUN]==PSTATUS_RUN_STOP)
+      return PSTATUS_STOPPED;
+    else {
+      debug(D_BUG, "invalid PSTATUS_TYPE_RUN %d", statuses[PSTATUS_TYPE_RUN]);
       return -1;
     }
   }
