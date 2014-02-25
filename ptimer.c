@@ -73,9 +73,10 @@ static void timer_thread(){
     pthread_mutex_unlock(&timer_mutex);
     if (unlikely(psync_current_time-lt>=5)){
       debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
+      debug(D_NOTICE, "was supposed to sleep until %lu, slept until %lu", (unsigned long)tm.tv_sec, (unsigned long)psync_current_time);
       psync_timer_notify_exception();
     }
-    else if (unlikely(psync_current_time==lt)){
+    else if (unlikely_log(psync_current_time==lt)){
       if (!psync_do_run)
         break;
       psync_milisleep(1000);
@@ -85,6 +86,7 @@ static void timer_thread(){
     while (t){
       if (t->nextrun<=psync_current_time){
         t->nextrun=psync_current_time+t->runevery;
+//        debug(D_NOTICE, "running timer %p(%p)", t->func, t->param);
         t->func(t->param);
       }
       t=t->next;

@@ -892,6 +892,7 @@ restart:
       if (psync_pipe_read(exceptionsock, &ex, 1)!=1)
         continue;
       handle_exception(&sock, diffid, ex);
+      while (psync_select_in(socks, 1, 0)==0 && psync_pipe_read(exceptionsock, &ex, 1)==1);
       socks[1]=sock->sock;
     }
     else if (sel==1){
