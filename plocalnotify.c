@@ -345,6 +345,7 @@ static void del_syncid(psync_syncid_t syncid){
     if (syncids[i]==syncid){
       h=handles[i];
       handlecnt--;
+      FindCloseChangeNotification(handles[i]);
       handles[i]=handles[handlecnt];
       syncids[i]=syncids[handlecnt];
       FindCloseChangeNotification(h);
