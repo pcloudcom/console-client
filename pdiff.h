@@ -29,5 +29,7 @@
 #define _PSYNC_DIFF_H
 
 void psync_diff_init();
+void psync_diff_lock();
+void psync_diff_unlock();
 
 #endif

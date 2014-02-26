@@ -36,6 +36,7 @@
 #include "papi.h"
 #include "pfolder.h"
 #include "pcallbacks.h"
+#include "pdiff.h"
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t upload_cond=PTHREAD_COND_INITIALIZER;
@@ -89,6 +90,7 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   psync_socket *api;
   binresult *bres;
   uint64_t result;
+  int ret;
   res=psync_sql_query("SELECT s.folderid FROM localfolder l, syncedfolder s WHERE l.id=? AND l.syncid=? AND l.localparentfolderid=s.localfolderid AND s.syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
@@ -105,15 +107,18 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
     api=psync_apipool_get();
     if (unlikely(!api))
       return -1;
+    psync_diff_lock();
     bres=send_command(api, "createfolderifnotexists", params);
     if (likely(bres))
       psync_apipool_release(api);
     else{
+      psync_diff_unlock();
       psync_apipool_release_bad(api);
       return -1;
     }
     result=psync_find_result(bres, "result", PARAM_NUM)->num;
     if (unlikely(result)){
+      psync_diff_unlock();
       debug(D_WARNING, "command createfolderifnotexists returned code %u", (unsigned)result);
       if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
         return -1;
@@ -134,7 +139,9 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
     psync_sql_bind_uint(res, 2, localfolderid);
     psync_sql_bind_uint(res, 3, syncid);
     psync_sql_run_free(res);
-    return psync_sql_commit_transaction();
+    ret=psync_sql_commit_transaction();
+    psync_diff_unlock();
+    return ret;
   }  
 }
 

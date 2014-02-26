@@ -287,6 +287,7 @@ char *psync_get_username();
 void psync_set_user_pass(const char *username, const char *password, int save);
 void psync_set_pass(const char *password, int save);
 void psync_set_auth(const char *auth, int save);
+void psync_logout();
 void psync_unlink();
 
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,

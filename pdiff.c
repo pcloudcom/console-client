@@ -44,6 +44,8 @@
 static uint64_t used_quota=0, current_quota=0;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 
+static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 static psync_socket *get_connected_socket(){
   char *auth, *user, *pass;
   psync_socket *sock;
@@ -695,9 +697,18 @@ static struct {
 
 #define event_list_size ARRAY_SIZE(event_list)
 
+void psync_diff_lock(){
+  pthread_mutex_lock(&diff_mutex);
+}
+
+void psync_diff_unlock(){
+  pthread_mutex_unlock(&diff_mutex);
+}
+
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
   uint32_t i, j;
+  psync_diff_lock();
   psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
     entry=entries->array[i];
@@ -714,6 +725,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_set_uint_value("diffid", newdiffid);
   psync_set_uint_value("usedquota", used_quota);
   psync_sql_commit_transaction();
+  psync_diff_unlock();
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
 }

@@ -122,6 +122,17 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
   psync_uint_row row;
   psync_folderid_t lfolderid, dbfolderid;
   debug(D_NOTICE, "creating local folder int db as %lu/%s for folderid %lu", (unsigned long)localparentfolderid, name, (unsigned long)folderid);
+  res=psync_sql_query("SELECT id FROM localfolder WHERE syncid=? AND folderid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_bind_uint(res, 2, folderid);
+  row=psync_sql_fetch_rowint(res);
+  if (row)
+    lfolderid=row[0];
+  else
+    lfolderid=0;
+  psync_sql_free_result(res);
+  if (lfolderid)
+    return lfolderid;  
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, folderid, syncid, flags, taskcnt, name) VALUES (?, ?, ?, 0, 1, ?)");
   psync_sql_bind_uint(res, 1, localparentfolderid);
   psync_sql_bind_uint(res, 2, folderid);

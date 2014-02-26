@@ -218,6 +218,17 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
+void psync_logout(){
+  psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
+  memset(psync_my_auth, 0, sizeof(psync_my_auth));
+  pthread_mutex_lock(&psync_my_auth_mutex);
+  psync_free(psync_my_pass);
+  psync_my_pass=NULL;
+  pthread_mutex_unlock(&psync_my_auth_mutex);
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
+  psync_timer_notify_exception();
+}
+
 void psync_unlink(){
   psync_sql_res *res;
   psync_variant_row row;
