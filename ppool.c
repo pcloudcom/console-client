@@ -45,6 +45,7 @@ static void psync_clean_old_locked(psync_pool *pl){
       if (i!=pl->curfree-1)
         memcpy(&pl->freeres[i], &pl->freeres[pl->curfree-1], sizeof(psync_res_and_time));
       pl->curfree--;
+      pl->inuse--;
     }
   if (cnt){
     pthread_mutex_unlock(&pl->lock);
