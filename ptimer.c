@@ -65,12 +65,18 @@ static void timer_thread(){
      * matter how much time actual timers wasted, they get called every second sharply
      */
     tm.tv_sec=psync_current_time+1;
+    debug(D_NOTICE, "1");
     pthread_mutex_lock(&timer_mutex);
+    debug(D_NOTICE, "2");
     if (timer_waiters)
       pthread_cond_broadcast(&timer_wait_cond);
+    debug(D_NOTICE, "3");
     pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
+    debug(D_NOTICE, "4");
     psync_current_time=psync_time();
+    debug(D_NOTICE, "5");
     pthread_mutex_unlock(&timer_mutex);
+    debug(D_NOTICE, "6");
     if (unlikely(psync_current_time-lt>=5)){
       debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
       debug(D_NOTICE, "was supposed to sleep until %lu, slept until %lu", (unsigned long)tm.tv_sec, (unsigned long)psync_current_time);
