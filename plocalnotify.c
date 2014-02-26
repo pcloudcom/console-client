@@ -469,14 +469,16 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
   else
     dir->nameoff=0;
   dir->syncid=syncid;
-  dir->fd=open(dir->path, O_RDONLY
+  dir->fd=open(dir->path,
 #ifdef O_EVTONLY
-  | O_EVTONLY
+  O_EVTONLY
+#else
+  O_RDONLY
 #endif
   );
   if (unlikely_log(dir->fd==-1))
     goto err;
-  EV_SET(&ke, dir->fd, EVFILT_VNODE, EV_ADD|EV_CLEAR, NOTE_WRITE|NOTE_EXTEND, 0, dir);
+  EV_SET(&ke, dir->fd, EVFILT_VNODE, EV_ADD|EV_CLEAR, NOTE_WRITE|NOTE_EXTEND|NOTE_ATTRIB, 0, dir);
   memset(&ts, 0, sizeof(ts));
   if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
