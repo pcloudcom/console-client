@@ -340,12 +340,15 @@ static void add_syncid(psync_syncid_t syncid){
 
 static void del_syncid(psync_syncid_t syncid){
   DWORD i;
+  HANDLE h;
   for (i=1; i<handlecnt; i++)
     if (syncids[i]==syncid){
+      h=handles[i];
       handlecnt--;
       FindCloseChangeNotification(handles[i]);
       handles[i]=handles[handlecnt];
       syncids[i]=syncids[handlecnt];
+      FindCloseChangeNotification(h);
       break;
     }
 }
@@ -391,19 +394,19 @@ int psync_localnotify_init(){
 
 void psync_localnotify_add_sync(psync_syncid_t syncid){
   localnotify_msg msg;
-  DWORD bytes;
+  DWORD bw;
   msg.type=NOTIFY_MSG_ADD;
   msg.syncid=syncid;
-  if (!WriteFile(pipe_write, &msg, sizeof(msg), &bytes, NULL))
+  if (!WriteFile(pipe_write, &msg, sizeof(msg), &bw, NULL) || bw!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
 }
 
 void psync_localnotify_del_sync(psync_syncid_t syncid){
   localnotify_msg msg;
-  DWORD bytes;
+  DWORD bw;
   msg.type=NOTIFY_MSG_DEL;
   msg.syncid=syncid;
-  if (!WriteFile(pipe_write, &msg, sizeof(msg), &bytes, NULL))
+  if (!WriteFile(pipe_write, &msg, sizeof(msg), &bw, NULL) || bw!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
 }
 
