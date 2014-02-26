@@ -83,6 +83,15 @@ static void create_task5(psync_uint_t type, psync_syncid_t syncid, uint64_t entr
   psync_sql_run_free(res);
 }
 
+static void create_task6(psync_uint_t type, psync_syncid_t syncid, uint64_t entryid, const char *name){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid, name) VALUES (?, ?, ?, 0, ?)");
+  psync_sql_bind_uint(res, 1, type);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_bind_uint(res, 3, entryid);
+  psync_sql_bind_string(res, 4, name);
+  psync_sql_run_free(res);
+}
 
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid){
   create_task1(PSYNC_CREATE_LOCAL_FOLDER, syncid, folderid, localfolderid);
@@ -132,8 +141,8 @@ void psync_task_delete_local_file(psync_fileid_t fileid, const char *remotepath)
   psync_wake_download();
 }
 
-void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t fileid){
-  create_task5(PSYNC_DELETE_LOCAL_FILE, syncid, fileid);
+void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t fileid, const char *remotepath){
+  create_task6(PSYNC_DELETE_LOCAL_FILE, syncid, fileid, remotepath);
   psync_wake_download();
 }
 

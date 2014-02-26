@@ -636,8 +636,11 @@ static void process_modifyfile(const binresult *entry){
     }
     for (/*i is already=cnt*/; i<fres2->rows; i++)
       psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
-    for (/*i is already=cnt*/; i<fres1->rows; i++)
-      psync_task_delete_local_file_syncid(psync_get_result_cell(fres1, i, 0), fileid);
+    for (/*i is already=cnt*/; i<fres1->rows; i++){
+      char *path=psync_get_path_by_fileid(fileid, NULL);
+      psync_task_delete_local_file_syncid(psync_get_result_cell(fres1, i, 0), fileid, path);
+      psync_free(path);
+    }
     psync_free(fres1);
     psync_free(fres2);
   }
