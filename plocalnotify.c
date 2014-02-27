@@ -458,6 +458,7 @@ static void psync_localnotify_thread(){
     CFRelease(dirs);
     FSEventStreamStart(stream);
     CFRunLoopRun();
+    FSEventStreamStop(stream);
     FSEventStreamInvalidate(stream);
     FSEventStreamRelease(stream);
   }
