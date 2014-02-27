@@ -438,6 +438,7 @@ static CFRunLoopTimerRef get_timer(){
   CFRunLoopTimerRef timer;
   CFRunLoopTimerContext context={0, NULL, NULL, NULL, NULL};
   timer=CFRunLoopTimerCreate(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent(), 3600, 0, 0, timer_callback, &context);
+  return timer;
 }
 
 static void psync_localnotify_thread(){
