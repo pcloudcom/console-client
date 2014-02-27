@@ -443,12 +443,12 @@ static void psync_localnotify_thread(){
   lastevent=kFSEventStreamEventIdSinceNow;
   runloop=CFRunLoopGetCurrent();
   while (psync_do_run){
-    dirs=CFArrayCreateMutable(kCFAllocatorDefault, 0, kCFTypeArrayCallBacks);
+    dirs=CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
     res=psync_sql_query("SELECT localpath FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
     while ((row=psync_sql_fetch_rowstr(res))){
       if (stat(row[0], &st) || !S_ISDIR(st.st_mode))
         continue;
-      dir=CFStringCreateWithBytes(kCFAllocatorDefault, row[0], strlen(row[0]), kCFStringEncodingUTF8, false);
+      dir=CFStringCreateWithBytes(kCFAllocatorDefault, (const unsigned char *)row[0], strlen(row[0]), kCFStringEncodingUTF8, false);
       CFArrayAppendValue(dirs, dir);
       CFRelease(dir);
     }
