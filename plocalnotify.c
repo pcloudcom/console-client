@@ -413,6 +413,7 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
 #elif defined(P_OS_MACOSX)
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreServices/CoreServices.h>
 
 static CFRunLoopRef runloop=NULL;
 static FSEventStreamEventId lastevent;
@@ -438,7 +439,7 @@ static void psync_localnotify_thread(){
   FSEventStreamRef stream;
   CFAbsoluteTime latency;
   struct stat st;
-  latency=0.0;
+  latency=0.2;
   lastevent=kFSEventStreamEventIdSinceNow;
   runloop=CFRunLoopGetCurrent();
   while (psync_do_run){
