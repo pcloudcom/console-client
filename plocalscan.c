@@ -225,7 +225,7 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   sync_folderlist *l, *fdisk, *fdb;
   char *subpath;
   int cmp;
-  debug(D_NOTICE, "scanning folder %s", localpath);
+//  debug(D_NOTICE, "scanning folder %s", localpath);
   scanner_local_folder_to_list(localpath, &disklist);
   scanner_db_folder_to_list(syncid, localfolderid, &dblist);
   psync_list_sort(&dblist, folderlist_cmp);

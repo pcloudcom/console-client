@@ -431,6 +431,15 @@ static void stream_callback(ConstFSEventStreamRef streamRef,
   psync_wake_localscan();
 }
 
+static void timer_callback(CFRunLoopTimerRef timer, void *info){
+}
+
+static CFRunLoopTimerRef get_timer(){
+  CFRunLoopTimerRef timer;
+  CFRunLoopTimerContext context={0, NULL, NULL, NULL, NULL};
+  timer=CFRunLoopTimerCreate(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent(), 3600, 0, 0, timer_callback, &context);
+}
+
 static void psync_localnotify_thread(){
   psync_sql_res *res;
   psync_str_row row;
@@ -438,12 +447,18 @@ static void psync_localnotify_thread(){
   CFStringRef dir;
   FSEventStreamRef stream;
   CFAbsoluteTime latency;
+  CFRunLoopTimerRef timer;
   struct stat st;
+  psync_uint_t cnt;
   latency=0.2;
   lastevent=kFSEventStreamEventIdSinceNow;
   runloop=CFRunLoopGetCurrent();
+  /* the timer is needed only for cases with no directories to monitor, because loops do not like to run empty */
+  timer=get_timer();
+  CFRunLoopAddTimer(runloop, timer, kCFRunLoopCommonModes);
   while (psync_do_run){
     dirs=CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    cnt=0;
     res=psync_sql_query("SELECT localpath FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
     while ((row=psync_sql_fetch_rowstr(res))){
       if (stat(row[0], &st) || !S_ISDIR(st.st_mode))
@@ -451,16 +466,21 @@ static void psync_localnotify_thread(){
       dir=CFStringCreateWithBytes(kCFAllocatorDefault, (const unsigned char *)row[0], strlen(row[0]), kCFStringEncodingUTF8, false);
       CFArrayAppendValue(dirs, dir);
       CFRelease(dir);
+      cnt++;
     }
     psync_sql_free_result(res);
-    stream=FSEventStreamCreate(kCFAllocatorDefault, stream_callback, NULL, dirs, lastevent, latency, kFSEventStreamCreateFlagNone);
-    FSEventStreamScheduleWithRunLoop(stream, runloop, kCFRunLoopDefaultMode);
+    if (likely(cnt)){
+      stream=FSEventStreamCreate(kCFAllocatorDefault, stream_callback, NULL, dirs, lastevent, latency, kFSEventStreamCreateFlagNone);
+      FSEventStreamScheduleWithRunLoop(stream, runloop, kCFRunLoopDefaultMode);
+      FSEventStreamStart(stream);
+    }
     CFRelease(dirs);
-    FSEventStreamStart(stream);
     CFRunLoopRun();
-    FSEventStreamStop(stream);
-    FSEventStreamInvalidate(stream);
-    FSEventStreamRelease(stream);
+    if (likely(cnt)){
+      FSEventStreamStop(stream);
+      FSEventStreamInvalidate(stream);
+      FSEventStreamRelease(stream);
+    }
   }
 }
 
