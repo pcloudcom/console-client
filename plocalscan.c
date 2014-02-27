@@ -552,6 +552,7 @@ static void scanner_scan(int first){
   psync_list_for_each_element(l, &slist, sync_list, list)
     scanner_scan_folder(l->localpath, l->folderid, 0, l->syncid, l->synctype);
   do {
+    debug(D_NOTICE, "run checks");
     i=0;
     psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFOLDERS], 
                                 &scan_lists[SCAN_LIST_NEWFOLDERS], 
