@@ -410,7 +410,88 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
     debug(D_ERROR, "write to pipe failed");
 }
 
-#elif defined(P_OS_MACOSX) || defined(P_OS_BSD)
+#elif defined(P_OS_MACOSX)
+
+#include <CoreFoundation/CoreFoundation.h>
+
+static CFRunLoopRef runloop=NULL;
+static FSEventStreamEventId lastevent;
+
+static void stream_callback(ConstFSEventStreamRef streamRef,
+    void *clientCallBackInfo,
+    size_t numEvents,
+    void *eventPaths,
+    const FSEventStreamEventFlags eventFlags[],
+    const FSEventStreamEventId eventIds[]){
+  size_t i;
+  for (i=0; i<numEvents; i++)
+    if (eventIds[i]>lastevent)
+      lastevent=eventIds[i];
+  psync_wake_localscan();
+}
+
+static void psync_localnotify_thread(){
+  psync_sql_res *res;
+  psync_str_row row;
+  CFMutableArrayRef dirs;
+  CFStringRef dir;
+  FSEventStreamRef stream;
+  CFAbsoluteTime latency;
+  struct stat st;
+  latency=0.0;
+  lastevent=kFSEventStreamEventIdSinceNow;
+  runloop=CFRunLoopGetCurrent();
+  while (psync_do_run){
+    dirs=CFArrayCreateMutable(kCFAllocatorDefault, 0, kCFTypeArrayCallBacks);
+    res=psync_sql_query("SELECT localpath FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
+    while ((row=psync_sql_fetch_rowstr(res))){
+      if (stat(row[0], &st) || !S_ISDIR(st.st_mode))
+        continue;
+      dir=CFStringCreateWithBytes(kCFAllocatorDefault, row[0], strlen(row[0]), kCFStringEncodingUTF8, false);
+      CFArrayAppendValue(dirs, dir);
+      CFRelease(dir);
+    }
+    psync_sql_free_result(res);
+    stream=FSEventStreamCreate(kCFAllocatorDefault, stream_callback, NULL, dirs, lastevent, latency, kFSEventStreamCreateFlagNone);
+    FSEventStreamScheduleWithRunLoop(stream, runloop, kCFRunLoopDefaultMode);
+    CFRelease(dirs);
+    FSEventStreamStart(stream);
+    CFRunLoopRun();
+    FSEventStreamInvalidate(stream);
+    FSEventStreamRelease(stream);
+  }
+}
+
+int psync_localnotify_init(){
+  psync_run_thread(psync_localnotify_thread);
+  return 0;
+}
+
+
+static void wake_loop(){
+  if (unlikely(!runloop)){
+    unsigned int tries=0;
+    while (!runloop && tries++<1000)
+      psync_milisleep(2);
+    if (!runloop)
+      return;
+  }
+  CFRunLoopStop(runloop);
+}
+
+void psync_localnotify_add_sync(psync_syncid_t syncid){
+  wake_loop();
+}
+
+void psync_localnotify_del_sync(psync_syncid_t syncid){
+  wake_loop();
+}
+
+#elif defined(P_OS_BSD)
+
+/* this implementation only monitors folder changes - it does not catch 
+ * file changes (however it does catch deleted and created files).
+ */
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -673,7 +754,8 @@ int psync_localnotify_init(){
   if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
   psync_run_thread(psync_localnotify_thread);
-  return 0;
+  /* return -1 so we still run frequent rescans */
+  return -1;
 err2:
   close(kevent_fd);
 err1:
