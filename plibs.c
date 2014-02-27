@@ -732,7 +732,9 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
   va_list ap;
   const char *errname;
   psync_uint_t i;
+  unsigned int u;
   time_t currenttime;
+  pthread_t threadid;
   errname="BAD_ERROR_CODE";
   for (i=0; i<ARRAY_SIZE(debug_levels); i++)
     if (debug_levels[i].level==level){
@@ -746,7 +748,9 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
   }
   currenttime=psync_timer_time();
   time_format(currenttime, dttime);
-  snprintf(format, sizeof(format), "%s %s: %s:%u (function %s): %s\n", dttime, errname, file, line, function, fmt);
+  threadid=pthread_self();
+  memcpy(&u, &threadid, sizeof(u));
+  snprintf(format, sizeof(format), "%s %u %s: %s:%u (function %s): %s\n", dttime, u, errname, file, line, function, fmt);
   format[sizeof(format)-1]=0;
   va_start(ap, fmt);
   vfprintf(log, format, ap);

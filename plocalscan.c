@@ -655,10 +655,10 @@ void psync_localscan_init(){
   psync_full_result_int *result;
   uint32_t i;
   psync_timer_exception_handler(psync_wake_localscan_noscan);
+  psync_run_thread(scanner_thread);
   localnotify=psync_localnotify_init();
   res=psync_sql_query("SELECT id FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   result=psync_sql_fetchall_int(res);
   for (i=0; i<result->rows; i++)
     psync_localnotify_add_sync(psync_get_result_cell(result, i, 0));
-  psync_run_thread(scanner_thread);
 }
