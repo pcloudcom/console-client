@@ -147,9 +147,9 @@ void psync_sql_close(){
 void psync_sql_lock(){
   if (IS_DEBUG){
     if (pthread_mutex_trylock(&psync_db_mutex)){
-      debug(D_WARNING, "psync_db_mutex contended");
+//      debug(D_NOTICE, "psync_db_mutex contended");
       pthread_mutex_lock(&psync_db_mutex);
-      debug(D_WARNING, "got psync_db_mutex after contention");
+//      debug(D_NOTICE, "got psync_db_mutex after contention");
     }
     else
       return;
