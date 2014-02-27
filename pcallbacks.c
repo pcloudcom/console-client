@@ -68,8 +68,10 @@ static void status_change_thread(void *ptr){
 }
 
 void psync_set_status_callback(pstatus_change_callback_t callback){
-  psync_run_thread1(status_change_thread, callback);
+  pthread_mutex_lock(&statusmutex);
   statusthreadrunning=1;
+  pthread_mutex_unlock(&statusmutex);
+  psync_run_thread1(status_change_thread, callback);
 }
 
 void psync_send_status_update(){
@@ -100,9 +102,11 @@ static void event_thread(void *ptr){
 }
 
 void psync_set_event_callback(pevent_callback_t callback){
+  pthread_mutex_lock(&statusmutex);
+  eventthreadrunning=1;
+  pthread_mutex_unlock(&statusmutex);
   psync_list_init(&eventlist);
   psync_run_thread1(event_thread, callback);
-  eventthreadrunning=1;
 }
 
 void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid){
@@ -139,6 +143,23 @@ void psync_send_event_by_path(psync_eventtype_t eventid, psync_syncid_t syncid, 
     event->remoteid=remoteid;
     event->event=eventid;
     event->syncid=syncid;
+    pthread_mutex_lock(&eventmutex);
+    psync_list_add_tail(&eventlist, &event->list);
+    pthread_mutex_unlock(&eventmutex);
+    pthread_cond_signal(&eventcond);
+  }
+}
+
+void psync_send_eventid(psync_eventtype_t eventid){
+  if (eventthreadrunning){
+    event_list_t *event;
+    event=psync_new(event_list_t);
+    event->localpath=psync_strdup("");
+    event->remotepath=psync_strdup("");
+    event->name="";
+    event->remoteid=0;
+    event->event=eventid;
+    event->syncid=0;
     pthread_mutex_lock(&eventmutex);
     psync_list_add_tail(&eventlist, &event->list);
     pthread_mutex_unlock(&eventmutex);

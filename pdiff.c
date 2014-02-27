@@ -495,11 +495,13 @@ static void process_deletefolder(const binresult *entry){
 static void process_createfile(const binresult *entry){
   static psync_sql_res *st=NULL;
   const binresult *meta, *name;
-  psync_sql_res *res;
+  psync_sql_res *res, *res2;
   psync_folderid_t parentfolderid;
   psync_fileid_t fileid;
-  uint64_t size, userid;
+  uint64_t size, userid, hash;
   psync_uint_row row;
+  psync_str_row row2;
+  int hasit;
   if (!entry){
     if (st){
       psync_sql_free_result(st);
@@ -519,12 +521,13 @@ static void process_createfile(const binresult *entry){
   }
   else
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
   name=psync_find_result(meta, "name", PARAM_STR);
   psync_sql_bind_uint(st, 1, fileid);
   psync_sql_bind_uint(st, 2, parentfolderid);
   psync_sql_bind_uint(st, 3, userid);
   psync_sql_bind_uint(st, 4, size);
-  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 5, hash);
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   psync_sql_bind_uint(st, 7, psync_find_result(meta, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(st, 8, psync_find_result(meta, "modified", PARAM_NUM)->num);
@@ -532,8 +535,23 @@ static void process_createfile(const binresult *entry){
   if (psync_is_folder_in_downloadlist(parentfolderid) && !psync_is_name_to_ignore(name->str)){
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
     psync_sql_bind_uint(res, 1, parentfolderid);
-    while ((row=psync_sql_fetch_rowint(res)))
-      psync_task_download_file(row[0], fileid, row[1], name->str);
+    while ((row=psync_sql_fetch_rowint(res))){
+      res2=psync_sql_query("SELECT name FROM localfile WHERE syncid=? AND localparentfolderid=? AND hash=? AND fileid=?");
+      psync_sql_bind_uint(res2, 1, row[0]);
+      psync_sql_bind_uint(res2, 2, row[1]);
+      psync_sql_bind_uint(res2, 3, hash);
+      psync_sql_bind_uint(res2, 4, fileid);
+      hasit=0;
+      if ((row2=psync_sql_fetch_rowstr(res2)))
+        hasit=!psync_filename_cmp(row2[0], name->str);
+      psync_sql_free_result(res2);
+      if (!hasit){
+        debug(D_NOTICE, "downloading file %s with hash %ld to local folder %lu", name->str, (long)hash, (unsigned long)row[1]);
+        psync_task_download_file(row[0], fileid, row[1], name->str);
+      }
+      else
+        debug(D_NOTICE, "file %s with hash %ld already exists in local folder %lu", name->str, (long)hash, (unsigned long)row[1]);
+    }
     psync_sql_free_result(res);
   }
 }
@@ -679,6 +697,44 @@ static void process_deletefile(const binresult *entry){
     used_quota-=psync_find_result(meta, "size", PARAM_NUM)->num;
 }
 
+static void process_modifyuserinfo(const binresult *entry){
+  const binresult *res;
+  psync_sql_res *q;
+  uint64_t u;
+  if (!entry)
+    return;
+  res=psync_find_result(entry, "userinfo", PARAM_HASH);
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  psync_sql_bind_string(q, 1, "userid");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "userid", PARAM_NUM)->num);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "quota");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "quota", PARAM_NUM)->num);
+  psync_sql_run(q);
+  u=psync_find_result(res, "premium", PARAM_BOOL)->num;
+  psync_sql_bind_string(q, 1, "premium");
+  psync_sql_bind_uint(q, 2, u);
+  psync_sql_run(q);
+  if (u)
+    u=psync_find_result(res, "premiumexpires", PARAM_NUM)->num;
+  else
+    u=0;
+  psync_sql_bind_string(q, 1, "premiumexpires");
+  psync_sql_bind_uint(q, 2, u);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "emailverified");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "emailverified", PARAM_BOOL)->num);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "username");
+  psync_sql_bind_string(q, 2, psync_find_result(res, "email", PARAM_STR)->str);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "language");
+  psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
+  psync_sql_run(q);
+  psync_sql_free_result(q);
+  psync_send_eventid(PEVENT_USERINFO_CHANGED);
+}
+
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
 
 static struct {
@@ -692,7 +748,8 @@ static struct {
   FN(deletefolder),
   FN(createfile),
   FN(modifyfile),
-  FN(deletefile)
+  FN(deletefile),
+  FN(modifyuserinfo)
 };
 
 #define event_list_size ARRAY_SIZE(event_list)

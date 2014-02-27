@@ -419,11 +419,11 @@ static CFRunLoopRef runloop=NULL;
 static FSEventStreamEventId lastevent;
 
 static void stream_callback(ConstFSEventStreamRef streamRef,
-    void *clientCallBackInfo,
-    size_t numEvents,
-    void *eventPaths,
-    const FSEventStreamEventFlags eventFlags[],
-    const FSEventStreamEventId eventIds[]){
+                            void *clientCallBackInfo,
+                            size_t numEvents,
+                            void *eventPaths,
+                            const FSEventStreamEventFlags eventFlags[],
+                            const FSEventStreamEventId eventIds[]){
   size_t i;
   for (i=0; i<numEvents; i++)
     if (eventIds[i]>lastevent)
@@ -489,7 +489,6 @@ int psync_localnotify_init(){
   psync_run_thread(psync_localnotify_thread);
   return 0;
 }
-
 
 static void wake_loop(){
   if (unlikely(!runloop)){
