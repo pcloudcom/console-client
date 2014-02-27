@@ -51,8 +51,12 @@ CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGE
   name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
 CREATE INDEX IF NOT EXISTS kfolderfolderid ON folder(parentfolderid);\
 CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, size INTEGER, hash INTEGER,\
-  name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
+  name VARCHAR(1024), ctime INTEGER, mtime INTEGER, category INTEGER, thumb INTEGER, icon VARCHAR(32),\
+  artist TEXT, album TEXT, title TEXT, genre TEXT, trackno INTEGER, width INTEGER, height INTEGER, duration REAL,\
+  fps REAL, videocodec TEXT, audiocodec TEXT, videobitrate INTEGER, audiobitrate INTEGER, audiosamplerate INTEGER, rotate INTEGER);\
 CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
+CREATE INDEX IF NOT EXISTS kfilecategory ON file(category);\
+CREATE INDEX IF NOT EXISTS kfileartist ON file(artist, album);\
 CREATE TABLE IF NOT EXISTS syncfolderdelayed (id INTEGER PRIMARY KEY, localpath VARCHAR(4096), remotepath VARCHAR(4096), synctype INTEGER); \
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE SET NULL,\
   localpath VARCHAR(4096), synctype INTEGER, flags INTEGER);\

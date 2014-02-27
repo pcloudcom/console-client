@@ -89,8 +89,6 @@
 
 #define PSYNC_APPEND_PARTIAL_FILES ".part"
 
-#define PSYNC_DIFF_FILTER_META "parentfolderid,ismine,userid,name,fileid,folderid,deletedfileid,created,modified,size,hash,canread,canmodify,candelete,cancreate"
-
 /* in miliseconds */
 #define PSYNC_SLEEP_BEFORE_RECONNECT   5000
 #define PSYNC_SLEEP_ON_DISK_FULL       10000

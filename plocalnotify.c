@@ -136,6 +136,7 @@ static void add_syncid(psync_syncid_t syncid){
   dir->inotifyfd=inotify_init();
   if (unlikely_log(dir->inotifyfd==-1))
     goto err;
+  memset(dir->watches, 0, sizeof(dir->watches));
   add_dir_scan(dir, dir->path);
   e.events=EPOLLIN;
   e.data.ptr=dir;

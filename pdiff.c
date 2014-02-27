@@ -82,7 +82,6 @@ static psync_socket *get_connected_socket(){
     }
     if (user && pass){
       binparam params[]={P_STR("timeformat", "timestamp"), 
-                         P_STR("filtermeta", PSYNC_DIFF_FILTER_META),  
                          P_STR("username", user), 
                          P_STR("password", pass), 
                          P_BOOL("getauth", 1)};
@@ -90,7 +89,6 @@ static psync_socket *get_connected_socket(){
     }
     else {
       binparam params[]={P_STR("timeformat", "timestamp"), 
-                         P_STR("filtermeta", PSYNC_DIFF_FILTER_META),  
                          P_STR("auth", auth),
                          P_BOOL("getauth", 1)};
       res=send_command(sock, "userinfo", params);
@@ -492,6 +490,71 @@ static void process_deletefolder(const binresult *entry){
   psync_sql_run(st);
 }
 
+static void check_for_deletedfileid(const binresult *meta){
+  const binresult *delfileid;
+  delfileid=psync_check_result(meta, "deletedfileid", PARAM_NUM);
+  if (likely(!delfileid))
+    return;
+  else{
+    psync_sql_res *res;
+    res=psync_sql_prep_statement("DELETE FROM file WHERE id=?");
+    psync_sql_bind_uint(res, 1, delfileid->num);
+    psync_sql_run_free(res);
+  }
+}
+
+#define bind_num(s) psync_sql_bind_uint(res, off++, psync_find_result(meta, s, PARAM_NUM)->num)
+#define bind_bool(s) psync_sql_bind_uint(res, off++, psync_find_result(meta, s, PARAM_BOOL)->num)
+#define bind_str(s) do {br=psync_find_result(meta, s, PARAM_STR); psync_sql_bind_lstring(res, off++, br->str, br->length);} while (0)
+#define bind_opt_str(s) \
+  do {\
+    br=psync_check_result(meta, s, PARAM_STR);\
+    if (br)\
+      psync_sql_bind_lstring(res, off++, br->str, br->length);\
+    else\
+      psync_sql_bind_null(res, off++);\
+  } while (0)
+#define bind_opt_num(s) \
+  do {\
+    br=psync_check_result(meta, s, PARAM_NUM);\
+    if (br)\
+      psync_sql_bind_uint(res, off++, br->num);\
+    else\
+      psync_sql_bind_null(res, off++);\
+  } while (0)
+#define bind_opt_double(s) \
+  do {\
+    br=psync_check_result(meta, s, PARAM_STR);\
+    if (br)\
+      psync_sql_bind_double(res, off++, atof(br->str));\
+    else\
+      psync_sql_bind_null(res, off++);\
+  } while (0)
+  
+static void bind_meta(psync_sql_res *res, const binresult *meta, int off){
+  const binresult *br;
+  bind_num("created");
+  bind_num("modified");
+  bind_num("category");
+  bind_bool("thumb");
+  bind_str("icon");
+  bind_opt_str("artist");
+  bind_opt_str("album");
+  bind_opt_str("title");
+  bind_opt_str("genre");
+  bind_opt_num("trackno");
+  bind_opt_num("width");
+  bind_opt_num("height");
+  bind_opt_double("duration");
+  bind_opt_double("fps");
+  bind_opt_str("videocodec");
+  bind_opt_str("audiocodec");
+  bind_opt_num("videobitrate");
+  bind_opt_num("audiobitrate");
+  bind_opt_num("audiosamplerate");
+  bind_opt_num("rotate");
+}
+
 static void process_createfile(const binresult *entry){
   static psync_sql_res *st=NULL;
   const binresult *meta, *name;
@@ -510,7 +573,9 @@ static void process_createfile(const binresult *entry){
     return;
   }
   if (!st)
-    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+                                "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
+                                "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
@@ -523,14 +588,14 @@ static void process_createfile(const binresult *entry){
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
   name=psync_find_result(meta, "name", PARAM_STR);
+  check_for_deletedfileid(meta);
   psync_sql_bind_uint(st, 1, fileid);
   psync_sql_bind_uint(st, 2, parentfolderid);
   psync_sql_bind_uint(st, 3, userid);
   psync_sql_bind_uint(st, 4, size);
   psync_sql_bind_uint(st, 5, hash);
   psync_sql_bind_lstring(st, 6, name->str, name->length);
-  psync_sql_bind_uint(st, 7, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 8, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  bind_meta(st, meta, 7);
   psync_sql_run(st);
   if (psync_is_folder_in_downloadlist(parentfolderid) && !psync_is_name_to_ignore(name->str)){
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
@@ -599,7 +664,9 @@ static void process_modifyfile(const binresult *entry){
   if (psync_get_number(row[1])==psync_my_userid)
     used_quota-=oldsize;
   if (!st)
-    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+                                "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
+                                "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
   parentfolderid=psync_find_result(meta, "parentfolderid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
@@ -609,14 +676,14 @@ static void process_modifyfile(const binresult *entry){
   }
   else
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  check_for_deletedfileid(meta);
   psync_sql_bind_uint(st, 1, fileid);
   psync_sql_bind_uint(st, 2, parentfolderid);
   psync_sql_bind_uint(st, 3, userid);
   psync_sql_bind_uint(st, 4, size);
   psync_sql_bind_uint(st, 5, hash);
   psync_sql_bind_lstring(st, 6, name->str, name->length);
-  psync_sql_bind_uint(st, 7, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 8, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  bind_meta(st, meta, 7);
   psync_sql_run(st);
   oldparentfolderid=psync_get_number(row[0]);
   oldsync=psync_is_folder_in_downloadlist(oldparentfolderid);
@@ -735,6 +802,9 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
 }
 
+static void process_requestsharein(const binresult *entry){
+}
+
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
 
 static struct {
@@ -749,7 +819,8 @@ static struct {
   FN(createfile),
   FN(modifyfile),
   FN(deletefile),
-  FN(modifyuserinfo)
+  FN(modifyuserinfo),
+  FN(requestsharein)
 };
 
 #define event_list_size ARRAY_SIZE(event_list)

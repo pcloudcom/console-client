@@ -441,6 +441,12 @@ void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val){
     debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
 }
 
+void psync_sql_bind_double(psync_sql_res *res, int n, double val){
+  int code=sqlite3_bind_double(res->stmt, n, val);
+  if (unlikely(code!=SQLITE_OK))
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
+}
+
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str){
   int code=sqlite3_bind_text(res->stmt, n, str, -1, SQLITE_STATIC);
   if (unlikely(code!=SQLITE_OK))
@@ -448,6 +454,12 @@ void psync_sql_bind_string(psync_sql_res *res, int n, const char *str){
 
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len){
   int code=sqlite3_bind_blob(res->stmt, n, str, len, SQLITE_STATIC);
+  if (unlikely(code!=SQLITE_OK))
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
+}
+
+void psync_sql_bind_null(psync_sql_res *res, int n){
+  int code=sqlite3_bind_null(res->stmt, n);
   if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
 }
