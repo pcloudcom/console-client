@@ -154,9 +154,9 @@ void psync_send_eventid(psync_eventtype_t eventid){
   if (eventthreadrunning){
     event_list_t *event;
     event=psync_new(event_list_t);
-    event->localpath=psync_strdup("");
-    event->remotepath=psync_strdup("");
-    event->name="";
+    event->localpath=NULL;
+    event->remotepath=NULL;
+    event->name=NULL;
     event->remoteid=0;
     event->event=eventid;
     event->syncid=0;

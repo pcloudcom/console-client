@@ -801,8 +801,35 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_free_result(q);
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
 }
+/*
+ * CREATE TABLE IF NOT EXISTS sharerequest(id INTEGER, isincoming INTEGER, folderid INTEGER, ctime INTEGER, etime INTEGER, permissions INTEGER,\
+  name VARCHAR(1024), message TEXT);*/
+
 
 static void process_requestsharein(const binresult *entry){
+  psync_sql_res *q;
+  const binresult *share, *br;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, isincoming, folderid, ctime, etime, permissions, userid, mail, name, message) "
+                                                "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3, psync_find_result(share, "ctime", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 4, psync_find_result(share, "etime", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 5, get_permissions(share));
+  psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
+  br=psync_find_result(share, "frommail", PARAM_STR);
+  psync_sql_bind_lstring(q, 7, br->str, br->length);
+  br=psync_find_result(share, "name", PARAM_STR);
+  psync_sql_bind_lstring(q, 8, br->str, br->length);
+  br=psync_check_result(share, "message", PARAM_STR);
+  if (br)
+    psync_sql_bind_lstring(q, 9, br->str, br->length);
+  else
+    psync_sql_bind_null(q, 9);
+  psync_sql_run_free(q);
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
@@ -835,7 +862,9 @@ void psync_diff_unlock(){
 
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
+  uint64_t oused_quota;
   uint32_t i, j;
+  oused_quota=used_quota;
   psync_diff_lock();
   psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
@@ -855,6 +884,8 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_sql_commit_transaction();
   psync_diff_unlock();
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
+  if (oused_quota!=used_quota)
+    psync_send_eventid(PEVENT_USEDQUOTA_CHANGED);
   return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
 }
 
@@ -1060,6 +1091,7 @@ restart:
         if (entries->length){
           newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
           diffid=process_entries(entries, newdiffid);
+          check_overquota();
         }
         else
           debug(D_NOTICE, "diff with 0 entries, did we send a nop recently?");

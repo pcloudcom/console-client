@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid IN
   inprogress INTEGER NOT NULL DEFAULT 0,\
   name VARCHAR(4096));\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS sharerequest (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, etime INTEGER, permissions INTEGER,\
+  userid INTEGER, mail TEXT, name VARCHAR(1024), message TEXT);\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\
 COMMIT;\

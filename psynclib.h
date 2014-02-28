@@ -148,6 +148,7 @@ typedef struct {
 #define PEVENT_LOCAL_FOLDER_RENAMED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_RENAME)
 
 #define PEVENT_USERINFO_CHANGED PEVENT_FIRST_USER_EVENT
+#define PEVENT_USEDQUOTA_CHANGED (PEVENT_FIRST_USER_EVENT+1)
 
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
@@ -219,6 +220,11 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * Do not expect localpath to exist after receiving PEVENT_FILE_DOWNLOAD_STARTED
  * as the file will be created with alternative name first and renamed when download
  * is finished.
+ * 
+ * PEVENT_USERINFO_CHANGED and PEVENT_USEDQUOTA_CHANGED do not set any meaningful
+ * values to syncid, remoteid, name, localpath and remotepath. Observe the changes
+ * by calling psync_get_*_value() functions.
+ * 
  */
 
 typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, psync_fileorfolderid_t remoteid,
