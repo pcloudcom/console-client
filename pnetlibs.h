@@ -29,6 +29,8 @@
 #define _PSYNC_NETLIBS_H
 
 #include "pcompat.h"
+#include "psynclib.h"
+#include "plist.h"
 
 #define PSYNC_NET_OK        0
 #define PSYNC_NET_PERMFAIL -1
@@ -41,6 +43,17 @@ typedef struct {
   uint32_t readbuffsize;
 } psync_http_socket;
 
+#define PSYNC_RANGE_TRANSFER 0
+#define PSYNC_RANGE_COPY     1
+
+typedef struct {
+  psync_list list;
+  uint64_t off;
+  uint64_t len;
+  uint32_t type;
+  const char *filename;
+} psync_range_list_t;
+
 void psync_netlibs_init();
 
 psync_socket *psync_apipool_get();
@@ -52,7 +65,7 @@ int psync_rmdir_recursive(const char *path);
 
 void psync_set_local_full(int over);
 int psync_handle_api_result(uint64_t result);
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize);
+int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize);
 int psync_get_local_file_checksum(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize);
 int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize);
 int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);
@@ -64,5 +77,7 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
 psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);
 void psync_http_close(psync_http_socket *http);
 int psync_http_readall(psync_http_socket *http, void *buff, int num);
+
+int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filesize, char *const *files, uint32_t filecnt);
 
 #endif

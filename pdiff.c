@@ -801,10 +801,6 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_free_result(q);
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
 }
-/*
- * CREATE TABLE IF NOT EXISTS sharerequest(id INTEGER, isincoming INTEGER, folderid INTEGER, ctime INTEGER, etime INTEGER, permissions INTEGER,\
-  name VARCHAR(1024), message TEXT);*/
-
 
 static void process_requestsharein(const binresult *entry){
   psync_sql_res *q;

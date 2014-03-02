@@ -37,6 +37,42 @@
 #include "papi.h"
 #include "ppool.h"
 
+struct time_bytes {
+  time_t tm;
+  psync_uint_t bytes;
+};
+
+typedef struct {
+  unsigned char sha1[PSYNC_SHA1_DIGEST_LEN];
+  uint32_t adler;
+} psync_block_checksum;
+
+typedef struct {
+  uint64_t filesize;
+  uint32_t blocksize;
+  uint32_t blockcnt;
+  uint32_t *next;
+  psync_block_checksum blocks[];
+} psync_file_checksums;
+
+typedef struct {
+  psync_uint_t elementcnt;
+  uint32_t elements[];
+} psync_file_checksum_hash;
+
+typedef struct {
+  uint64_t filesize;
+  uint32_t blocksize;
+  unsigned char _reserved[12];
+} psync_block_checksum_header;
+
+typedef struct {
+  uint64_t off;
+  uint32_t idx;
+  uint32_t type;
+} psync_block_action;
+
+
 static time_t current_download_sec=0;
 static psync_uint_t download_bytes_this_sec=0;
 static psync_uint_t download_bytes_off=0;
@@ -49,11 +85,6 @@ static psync_uint_t upload_speed=0;
 static psync_uint_t dyn_upload_speed=PSYNC_UPL_AUTO_SHAPER_INITIAL;
 
 static psync_pool *apipool=NULL;
-
-struct time_bytes {
-  time_t tm;
-  psync_uint_t bytes;
-};
 
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], upload_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
 
@@ -163,7 +194,7 @@ int psync_handle_api_result(uint64_t result){
     return PSYNC_NET_TEMPFAIL;
 }
 
-int psync_get_remote_file_checksum(uint64_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize){
+int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum, uint64_t *fsize){
   psync_socket *api;
   binresult *res;
   const binresult *meta, *checksum;
@@ -626,4 +657,416 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
     return psync_socket_readall_download(http->sock, buff, num);
 }
 
+static int psync_net_get_checksums(psync_fileid_t fileid, psync_file_checksums **checksums){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
+  psync_socket *api;
+  binresult *res;
+  const binresult *hosts;
+  const char *requestpath;
+  psync_http_socket *http;
+  psync_file_checksums *cs;
+  psync_block_checksum_header hdr;
+  uint64_t result;
+  uint32_t i;
+  *checksums=NULL; /* gcc is not smart enough to notice that initialization is not needed */
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    return PSYNC_NET_TEMPFAIL;
+  res=send_command(api, "getchecksumlink", params);
+  if (res)
+    psync_apipool_release(api);
+  else
+    psync_apipool_release_bad(api);
+  if (unlikely_log(!res)){
+    psync_timer_notify_exception();
+    return PSYNC_NET_TEMPFAIL;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_ERROR, "getchecksumlink returned error %lu", (unsigned long)result);
+    psync_free(res);
+    return psync_handle_api_result(result);
+  }
+  hosts=psync_find_result(res, "hosts", PARAM_ARRAY);
+  requestpath=psync_find_result(res, "path", PARAM_STR)->str;
+  http=NULL;
+  for (i=0; i<hosts->length; i++)
+    if ((http=psync_http_connect(hosts->array[i]->str, requestpath, 0, 0)))
+      break;
+  psync_free(res);
+  if (unlikely_log(!http))
+    return PSYNC_NET_TEMPFAIL;
+  if (unlikely_log(psync_http_readall(http, &hdr, sizeof(hdr))!=sizeof(hdr)))
+    goto err0;
+  i=(hdr.filesize+hdr.blocksize-1)/hdr.blocksize;
+  cs=(psync_file_checksums *)psync_malloc(offsetof(psync_file_checksums, blocks)+(sizeof(psync_block_checksum)+sizeof(uint32_t))*i);
+  cs->filesize=hdr.filesize;
+  cs->blocksize=hdr.blocksize;
+  cs->blockcnt=i;
+  cs->next=(uint32_t *)((char *)(cs+offsetof(psync_file_checksums, blocks)+sizeof(psync_block_checksum)*i));
+  if (unlikely_log(psync_http_readall(http, cs->blocks, sizeof(psync_block_checksum)*i)!=sizeof(psync_block_checksum)*i))
+    goto err1;
+  psync_http_close(http);
+  memset(cs->next, 0, sizeof(uint32_t)*i);
+  *checksums=cs;
+  return PSYNC_NET_OK;
+err1:
+  psync_free(cs);
+err0:
+  psync_http_close(http);
+  return PSYNC_NET_TEMPFAIL;
+}
 
+/*
+static int psync_sha1_cmp(const void *p1, const void *p2){
+  psync_block_checksum **b1=(psync_block_checksum **)p1;
+  psync_block_checksum **b2=(psync_block_checksum **)p2;
+  return memcmp((*b1)->sha1, (*b2)->sha1, PSYNC_SHA1_DIGEST_LEN);
+}
+
+static psync_block_checksum **psync_net_get_sorted_checksums(psync_file_checksums *checksums){
+  psync_block_checksum **ret;
+  uint32_t i;
+  ret=psync_new_cnt(psync_block_checksum *, checksums->blockcnt);
+  for (i=0; i<checksums->blockcnt; i++)
+    ret[i]=&checksums->blocks[i];
+  qsort(ret, checksums->blockcnt, sizeof(psync_block_checksum *), psync_sha1_cmp);
+  return ret;
+}*/
+
+static int psync_is_prime(psync_uint_t num){
+  psync_uint_t i;
+  for (i=5; i*i<=num; i+=2)
+    if (num%i==0)
+      return 0;
+  return 1;
+}
+
+#define MAX_ADLER_COLL 64
+
+/* Since it is fairly easy to generate adler32 collisions, a file can be crafted to contain many colliding blocks.
+ * Our hash will drop entries if more than MAX_ADLER_COLL collisions are detected (actually we just don't travel more
+ * than MAX_ADLER_COLL from our "perfect" position in the hash).
+ */
+
+static psync_file_checksum_hash *psync_net_create_hash(const psync_file_checksums *checksums){
+  psync_file_checksum_hash *h;
+  psync_uint_t cnt, col;
+  uint32_t i, o;
+  cnt=((checksums->blockcnt+1)/2)*6+1;
+  while (1){
+    if (psync_is_prime(cnt))
+      break;
+    cnt+=4;
+    if (psync_is_prime(cnt))
+      break;
+    cnt+=2;
+  }
+  h=(psync_file_checksum_hash *)psync_malloc(offsetof(psync_file_checksum_hash, elements)+sizeof(uint32_t)*cnt);
+  h->elementcnt=cnt;
+  memset(h->elements, 0, sizeof(uint32_t)*cnt);
+  for (i=0; i<checksums->blockcnt; i++){
+    o=checksums->blocks[i].adler%cnt;
+    if (h->elements[o]){
+      col=0;
+      do {
+        if (!memcmp(checksums->blocks[i].sha1, checksums->blocks[h->elements[o]-1].sha1, PSYNC_SHA1_DIGEST_LEN)){
+          checksums->next[i]=h->elements[o];
+          break;
+        }
+        if (++o>=cnt)
+          o=0;
+        if (++col>MAX_ADLER_COLL)
+          break;
+      } while (h->elements[o]);
+      if (col>MAX_ADLER_COLL)
+        continue;
+    }
+    h->elements[o]=i+1;
+  }
+  return h;
+}
+
+static void psync_net_hash_remove(psync_file_checksum_hash *restrict hash, psync_file_checksums *restrict checksums,
+                                  uint32_t adler, const unsigned char *sha1){
+  uint32_t idx, o, bp;
+  o=adler%hash->elementcnt;
+  while (1){
+    idx=hash->elements[o];
+    if (unlikely_log(!idx))
+      return;
+    else if (checksums->blocks[idx-1].adler==adler && !memcmp(checksums->blocks[idx-1].sha1, sha1, PSYNC_SHA1_DIGEST_LEN))
+      break;
+    else if (++o>=hash->elementcnt)
+      o=0;
+  }
+  hash->elements[o]=0;
+  while (1){
+    if (++o>=hash->elementcnt)
+      o=0;
+    idx=hash->elements[o];
+    if (!idx)
+      return;
+    bp=checksums->blocks[idx].adler%hash->elementcnt;
+    if (bp!=o && hash->elements[bp]==0){
+      hash->elements[bp]=idx;
+      hash->elements[o]=0;
+    }
+  }  
+}
+
+static void psync_net_block_match_found(psync_file_checksum_hash *restrict hash, psync_file_checksums *restrict checksums, 
+                                        psync_block_action *restrict blockactions, uint32_t idx, uint32_t fileidx, uint64_t fileoffset){
+  uint32_t cidx;
+  idx--;
+  if (blockactions[idx].type!=PSYNC_RANGE_TRANSFER)
+    return;
+  cidx=idx;
+  while (1) {
+    blockactions[cidx].type=PSYNC_RANGE_COPY;
+    blockactions[cidx].idx=fileidx;
+    blockactions[cidx].off=fileoffset;
+    cidx=checksums->next[cidx];
+    if (cidx)
+      cidx--;
+    else
+      break;
+  }
+  psync_net_hash_remove(hash, checksums, checksums->blocks[idx].adler, checksums->blocks[idx].sha1);
+}
+
+static int psync_net_hash_has_adler(const psync_file_checksum_hash *hash, const psync_file_checksums *checksums, uint32_t adler){
+  uint32_t idx, o;
+  o=adler%hash->elementcnt;
+  while (1){
+    idx=hash->elements[o];
+    if (!idx)
+      return 0;
+    else if (checksums->blocks[idx-1].adler==adler)
+      return 1;
+    else if (++o>=hash->elementcnt)
+      o=0;
+  }
+}
+
+static uint32_t psync_net_hash_has_adler_and_sha1(const psync_file_checksum_hash *hash, const psync_file_checksums *checksums, uint32_t adler,
+                                                  const unsigned char *sha1){
+  uint32_t idx, o;
+  o=adler%hash->elementcnt;
+  while (1){
+    idx=hash->elements[o];
+    if (!idx)
+      return 0;
+    else if (checksums->blocks[idx-1].adler==adler && !memcmp(checksums->blocks[idx-1].sha1, sha1, PSYNC_SHA1_DIGEST_LEN))
+      return idx;
+    else if (++o>=hash->elementcnt)
+      o=0;
+  }
+}
+
+#define ADLER32_1(o) adler+=buff[o]; sum+=adler
+#define ADLER32_2(o) ADLER32_1(o); ADLER32_1(o+1)
+#define ADLER32_4(o) ADLER32_2(o); ADLER32_2(o+2)
+#define ADLER32_8(o) ADLER32_4(o); ADLER32_4(o+4)
+#define ADLER32_16() do{ ADLER32_8(0); ADLER32_8(8); } while (0)
+
+#define ADLER32_BASE    65521U
+#define ADLER32_NMAX    5552U
+#define ADLER32_INITIAL 1U
+
+static uint32_t adler32(uint32_t adler, const unsigned char *buff, size_t len){
+  uint32_t sum, i;
+  sum=adler>>16;
+  adler&=0xffff;
+  while (len>=ADLER32_NMAX) {
+    len-=ADLER32_NMAX;
+    for (i=0; i<ADLER32_NMAX/16; i++){
+      ADLER32_16();
+      buff+=16;
+    }
+    adler%=ADLER32_BASE;
+    sum%=ADLER32_BASE;
+  }
+  while (len>=16){
+    len-=16;
+    ADLER32_16();
+    buff+=16;
+  }
+  while (len--){
+    adler+=*buff++;
+    sum+=adler;
+  }
+  adler%=ADLER32_BASE;
+  sum%=ADLER32_BASE;
+  return adler|(sum<<16);
+}
+
+static uint32_t adler32_roll(uint32_t adler, unsigned char byteout, unsigned char bytein, uint32_t len){
+  uint32_t sum;
+  sum=adler>>16;
+  adler&=0xffff;
+  adler+=ADLER32_BASE+bytein-byteout;
+  sum=(ADLER32_BASE*ADLER32_BASE+sum-len*byteout-ADLER32_INITIAL+adler)%ADLER32_BASE;
+  /* dividing after sum calculation gives processor a chance to run the divisions in parallel */
+  adler%=ADLER32_BASE;
+  return adler|(sum<<16);
+}
+
+static void psync_net_check_file_for_blocks(const char *name, psync_file_checksums *restrict checksums, 
+                                            psync_file_checksum_hash *restrict hash, psync_block_action *restrict blockactions,
+                                            uint32_t fileidx){
+  unsigned char *buff;
+  uint64_t buffoff;
+  psync_uint_t buffersize, hbuffersize, bufferlen, inbyteoff, outbyteoff, blockmask;
+  ssize_t rd;
+  psync_file_t fd;
+  uint32_t adler, off;
+  psync_sha1_ctx ctx;
+  unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
+  fd=psync_file_open(name, P_O_RDONLY, 0);
+  if (fd==INVALID_HANDLE_VALUE)
+    return;
+  if (checksums->blocksize*2>PSYNC_COPY_BUFFER_SIZE)
+    buffersize=checksums->blocksize*2;
+  else
+    buffersize=PSYNC_COPY_BUFFER_SIZE;
+  hbuffersize=buffersize/2;
+  buff=psync_malloc(buffersize);
+  rd=psync_file_read(fd, buff, hbuffersize);
+  if (unlikely(rd<(ssize_t)hbuffersize)){
+    if (rd<(ssize_t)checksums->blocksize){
+      psync_free(buff);
+      psync_file_close(fd);
+      return;
+    }
+    bufferlen=(rd+checksums->blocksize-1)/checksums->blocksize*checksums->blocksize;
+    memset(buff+rd, 0, bufferlen-rd);
+  }
+  else
+    bufferlen=buffersize;
+  adler=adler32(ADLER32_INITIAL, buff, checksums->blocksize);
+  outbyteoff=0;
+  buffoff=0;
+  inbyteoff=checksums->blocksize;
+  blockmask=checksums->blocksize-1;
+  while (1){
+    if (unlikely((inbyteoff&blockmask)==0)){
+      if (outbyteoff>=bufferlen)
+        outbyteoff=0;
+      if (inbyteoff==bufferlen){ /* not >=, bufferlen might be lower than current inbyteoff */
+        if (bufferlen!=buffersize)
+          break;
+        buffoff+=buffersize;
+        inbyteoff=0;
+        rd=psync_file_read(fd, buff, hbuffersize);
+        if (unlikely(rd!=hbuffersize)){
+          if (rd<=0)
+            break;
+          else{
+            bufferlen=(rd+checksums->blocksize-1)/checksums->blocksize*checksums->blocksize;
+            memset(buff+hbuffersize+rd, 0, bufferlen-rd);
+            bufferlen+=hbuffersize;
+          }
+        }
+      }
+      else if (inbyteoff==hbuffersize){
+        rd=psync_file_read(fd, buff+hbuffersize, hbuffersize);
+        if (unlikely(rd!=hbuffersize)){
+          if (rd<=0)
+            break;
+          else{
+            bufferlen=(rd+checksums->blocksize-1)/checksums->blocksize*checksums->blocksize;
+            memset(buff+hbuffersize+rd, 0, bufferlen-rd);
+            bufferlen+=hbuffersize;
+          }
+        }
+      }
+    }
+    if (psync_net_hash_has_adler(hash, checksums, adler)){
+      if (outbyteoff<inbyteoff)
+        psync_sha1(buff+outbyteoff, checksums->blocksize, sha1bin);
+      else{
+        psync_sha1_init(&ctx);
+        psync_sha1_update(&ctx, buff+outbyteoff, buffersize-outbyteoff);
+        psync_sha1_update(&ctx, buff, inbyteoff);
+        psync_sha1_final(sha1bin, &ctx);
+      }
+      off=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
+      if (off)
+        psync_net_block_match_found(hash, checksums, blockactions, off, fileidx, buffoff+outbyteoff);
+    }
+    adler=adler32_roll(adler, buff[outbyteoff++], buff[inbyteoff++], checksums->blocksize);
+  }
+  psync_free(buff);
+  psync_file_close(fd);
+}
+
+int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filesize, char *const *files, uint32_t filecnt){
+  psync_range_list_t *range;
+  psync_file_checksums *checksums;
+  psync_file_checksum_hash *hash;
+  psync_block_action *blockactions;
+  uint32_t i, bs;
+  int rt;
+  if (!filecnt)
+    goto fulldownload;
+  rt=psync_net_get_checksums(fileid, &checksums);
+  if (unlikely_log(rt==PSYNC_NET_PERMFAIL))
+    goto fulldownload;
+  else if (unlikely_log(rt==PSYNC_NET_TEMPFAIL))
+    return PSYNC_NET_TEMPFAIL;
+  if (unlikely_log(checksums->filesize!=filesize)){
+    psync_free(checksums);
+    return PSYNC_NET_TEMPFAIL;
+  }
+  hash=psync_net_create_hash(checksums);
+  blockactions=psync_new_cnt(psync_block_action, checksums->blockcnt);
+  memset(blockactions, 0, sizeof(psync_block_action)*checksums->blockcnt);
+  for (i=0; i<filecnt; i++)
+    psync_net_check_file_for_blocks(files[i], checksums, hash, blockactions, i);
+  psync_free(hash);
+  psync_free(checksums);
+  range=psync_new(psync_range_list_t);
+  range->len=checksums->blocksize;
+  range->type=blockactions[0].type;
+  if (range->type==PSYNC_RANGE_COPY){
+    range->off=blockactions[0].off;
+    range->filename=files[blockactions[0].idx];
+  }
+  else
+    range->off=0;
+  psync_list_add_tail(ranges, &range->list);
+  for (i=1; i<checksums->blockcnt; i++){
+    if (i==checksums->blockcnt-1){
+      bs=checksums->filesize%checksums->blocksize;
+      if (!bs)
+        bs=checksums->blocksize;
+    }
+    else
+      bs=checksums->blocksize;
+    if (blockactions[i].type!=range->type || (range->type==PSYNC_RANGE_COPY && 
+         (range->filename!=files[blockactions[i].idx] || range->off+range->len!=blockactions[i].off))){
+      range=psync_new(psync_range_list_t);
+      range->len=bs;
+      range->type=blockactions[i].type;
+      if (range->type==PSYNC_RANGE_COPY){
+        range->off=blockactions[i].off;
+        range->filename=files[blockactions[i].idx];
+      }
+      else
+        range->off=(uint64_t)i*checksums->blocksize;
+      psync_list_add_tail(ranges, &range->list);
+    }
+    else
+      range->len+=bs;
+  }
+  psync_free(blockactions);
+  return PSYNC_NET_OK;
+fulldownload:
+  range=psync_new(psync_range_list_t);
+  range->off=0;
+  range->len=filesize;
+  range->type=PSYNC_RANGE_TRANSFER;
+  psync_list_add_tail(ranges, &range->list);
+  return PSYNC_NET_OK;
+}
