@@ -1039,7 +1039,6 @@ int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_
   for (i=0; i<filecnt; i++)
     psync_net_check_file_for_blocks(files[i], checksums, hash, blockactions, i);
   psync_free(hash);
-  psync_free(checksums);
   range=psync_new(psync_range_list_t);
   range->len=checksums->blocksize;
   range->type=blockactions[0].type;
@@ -1074,6 +1073,7 @@ int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_
     else
       range->len+=bs;
   }
+  psync_free(checksums);
   psync_free(blockactions);
   return PSYNC_NET_OK;
 fulldownload:
