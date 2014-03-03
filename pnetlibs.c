@@ -703,7 +703,7 @@ static int psync_net_get_checksums(psync_fileid_t fileid, psync_file_checksums *
   cs->filesize=hdr.filesize;
   cs->blocksize=hdr.blocksize;
   cs->blockcnt=i;
-  cs->next=(uint32_t *)((char *)(cs+offsetof(psync_file_checksums, blocks)+sizeof(psync_block_checksum)*i));
+  cs->next=(uint32_t *)(((char *)cs)+offsetof(psync_file_checksums, blocks)+sizeof(psync_block_checksum)*i);
   if (unlikely_log(psync_http_readall(http, cs->blocks, sizeof(psync_block_checksum)*i)!=sizeof(psync_block_checksum)*i))
     goto err1;
   psync_http_close(http);
@@ -779,8 +779,10 @@ static psync_file_checksum_hash *psync_net_create_hash(const psync_file_checksum
         if (++col>MAX_ADLER_COLL)
           break;
       } while (h->elements[o]);
-      if (col>MAX_ADLER_COLL)
+      if (col>MAX_ADLER_COLL){
+        debug(D_WARNING, "too many collisions, ignoring a checksum %u", (unsigned)checksums->blocks[i].adler);
         continue;
+      }
     }
     h->elements[o]=i+1;
   }
@@ -789,7 +791,7 @@ static psync_file_checksum_hash *psync_net_create_hash(const psync_file_checksum
 
 static void psync_net_hash_remove(psync_file_checksum_hash *restrict hash, psync_file_checksums *restrict checksums,
                                   uint32_t adler, const unsigned char *sha1){
-  uint32_t idx, o, bp;
+  uint32_t idx, zeroidx, o, bp;
   o=adler%hash->elementcnt;
   while (1){
     idx=hash->elements[o];
@@ -801,16 +803,27 @@ static void psync_net_hash_remove(psync_file_checksum_hash *restrict hash, psync
       o=0;
   }
   hash->elements[o]=0;
+  zeroidx=o;
   while (1){
     if (++o>=hash->elementcnt)
       o=0;
     idx=hash->elements[o];
     if (!idx)
       return;
-    bp=checksums->blocks[idx].adler%hash->elementcnt;
-    if (bp!=o && hash->elements[bp]==0){
-      hash->elements[bp]=idx;
-      hash->elements[o]=0;
+    bp=checksums->blocks[idx-1].adler%hash->elementcnt;
+    if (bp!=o){
+      while (1){
+        if (bp==zeroidx){
+          hash->elements[bp]=idx;
+          hash->elements[o]=0;
+          zeroidx=o;
+          break;
+        }
+        else if (bp==o)
+          break;
+        else if (++bp>=hash->elementcnt)
+          bp=0;
+      }
     }
   }  
 }
@@ -923,6 +936,7 @@ static void psync_net_check_file_for_blocks(const char *name, psync_file_checksu
   uint32_t adler, off;
   psync_sha1_ctx ctx;
   unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
+  debug(D_NOTICE, "scanning file %s for blocks", name);
   fd=psync_file_open(name, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE)
     return;
@@ -950,13 +964,27 @@ static void psync_net_check_file_for_blocks(const char *name, psync_file_checksu
   inbyteoff=checksums->blocksize;
   blockmask=checksums->blocksize-1;
   while (1){
+    if (psync_net_hash_has_adler(hash, checksums, adler)){
+      if (outbyteoff<inbyteoff)
+        psync_sha1(buff+outbyteoff, checksums->blocksize, sha1bin);
+      else{
+        psync_sha1_init(&ctx);
+        psync_sha1_update(&ctx, buff+outbyteoff, buffersize-outbyteoff);
+        psync_sha1_update(&ctx, buff, inbyteoff);
+        psync_sha1_final(sha1bin, &ctx);
+      }
+      off=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
+      if (off)
+        psync_net_block_match_found(hash, checksums, blockactions, off, fileidx, buffoff+outbyteoff);
+    }
     if (unlikely((inbyteoff&blockmask)==0)){
-      if (outbyteoff>=bufferlen)
+      if (outbyteoff>=bufferlen){
         outbyteoff=0;
+        buffoff+=buffersize;
+      }
       if (inbyteoff==bufferlen){ /* not >=, bufferlen might be lower than current inbyteoff */
         if (bufferlen!=buffersize)
           break;
-        buffoff+=buffersize;
         inbyteoff=0;
         rd=psync_file_read(fd, buff, hbuffersize);
         if (unlikely(rd!=hbuffersize)){
@@ -964,8 +992,7 @@ static void psync_net_check_file_for_blocks(const char *name, psync_file_checksu
             break;
           else{
             bufferlen=(rd+checksums->blocksize-1)/checksums->blocksize*checksums->blocksize;
-            memset(buff+hbuffersize+rd, 0, bufferlen-rd);
-            bufferlen+=hbuffersize;
+            memset(buff+rd, 0, bufferlen-rd);
           }
         }
       }
@@ -981,19 +1008,6 @@ static void psync_net_check_file_for_blocks(const char *name, psync_file_checksu
           }
         }
       }
-    }
-    if (psync_net_hash_has_adler(hash, checksums, adler)){
-      if (outbyteoff<inbyteoff)
-        psync_sha1(buff+outbyteoff, checksums->blocksize, sha1bin);
-      else{
-        psync_sha1_init(&ctx);
-        psync_sha1_update(&ctx, buff+outbyteoff, buffersize-outbyteoff);
-        psync_sha1_update(&ctx, buff, inbyteoff);
-        psync_sha1_final(sha1bin, &ctx);
-      }
-      off=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
-      if (off)
-        psync_net_block_match_found(hash, checksums, blockactions, off, fileidx, buffoff+outbyteoff);
     }
     adler=adler32_roll(adler, buff[outbyteoff++], buff[inbyteoff++], checksums->blocksize);
   }

@@ -369,6 +369,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
   psync_stat_t st;
   psync_list ranges;
+  psync_range_list_t *range;
   psync_socket *api;
   binresult *res;
   psync_sql_res *sql;
@@ -389,7 +390,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
                 localhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
                 localhashbin[PSYNC_HASH_DIGEST_LEN];
   uint32_t i;
-  psync_file_t fd;
+  psync_file_t fd, ifd;
   int rd, rt, downloadingcounted;
   downloadedsize=0;
   addedsize=0;
@@ -563,41 +564,85 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   
   hosts=psync_find_result(res, "hosts", PARAM_ARRAY);
   requestpath=psync_find_result(res, "path", PARAM_STR)->str;
-  http=NULL;
-  for (i=0; i<hosts->length; i++)
-    if ((http=psync_http_connect(hosts->array[i]->str, requestpath, 0, 0)))
-      break;
-  if (unlikely_log(!http))
-    goto err1;
-  psync_hash_init(&hashctx);
-  rd=0;
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
-  while (!dwl.stop && (rd=psync_http_readall(http, buff, PSYNC_COPY_BUFFER_SIZE))>0){
-    if (unlikely_log(psync_file_writeall_checkoverquota(fd, buff, rd)))
-      goto err2;
-    psync_hash_update(&hashctx, buff, rd);
-    pthread_mutex_lock(&current_downloads_mutex);
-    psync_status.bytesdownloaded+=rd;
-    if (current_downloads_waiters && psync_status.bytestodownloadcurrent-psync_status.bytesdownloaded<=PSYNC_START_NEW_DOWNLOADS_TRESHOLD)
-      pthread_cond_signal(&current_downloads_cond);
-    pthread_mutex_unlock(&current_downloads_mutex);
-    psync_send_status_update();
-    downloadedsize+=rd;
-    if (unlikely(!psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses))))
-      goto err2;
+  http=NULL;
+  psync_hash_init(&hashctx);
+  psync_list_for_each_element(range, &ranges, psync_range_list_t, list){
+    if (range->type==PSYNC_RANGE_TRANSFER){
+      debug(D_NOTICE, "downloading %lu bytes from offset %lu", (unsigned long)range->len, (unsigned long)range->off);
+      for (i=0; i<hosts->length; i++)
+        if ((http=psync_http_connect(hosts->array[i]->str, requestpath, range->off, (range->len==serversize&&range->off==0)?0:(range->len+range->off-1))))
+          break;
+      if (unlikely_log(!http))
+        goto err2;
+      rd=0;
+      while (!dwl.stop){
+        rd=psync_http_readall(http, buff, PSYNC_COPY_BUFFER_SIZE);
+        if (rd==0)
+          break;
+        if (unlikely_log(rd<0) ||
+            unlikely_log(psync_file_writeall_checkoverquota(fd, buff, rd)))
+          goto err2;
+        psync_hash_update(&hashctx, buff, rd);
+        pthread_mutex_lock(&current_downloads_mutex);
+        psync_status.bytesdownloaded+=rd;
+        if (current_downloads_waiters && psync_status.bytestodownloadcurrent-psync_status.bytesdownloaded<=PSYNC_START_NEW_DOWNLOADS_TRESHOLD)
+          pthread_cond_signal(&current_downloads_cond);
+        pthread_mutex_unlock(&current_downloads_mutex);
+        psync_send_status_update();
+        downloadedsize+=rd;
+        if (unlikely(!psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses))))
+          goto err2;
+      }
+      psync_http_close(http);
+      http=NULL;
+    }
+    else{
+      debug(D_NOTICE, "copying %lu bytes from %s offset %lu", (unsigned long)range->len, range->filename, (unsigned long)range->off);
+      ifd=psync_file_open(range->filename, P_O_RDONLY, 0);
+      if (unlikely_log(ifd==INVALID_HANDLE_VALUE))
+        goto err2;
+      if (unlikely_log(psync_file_seek(ifd, range->off, P_SEEK_SET)==-1)){
+        psync_file_close(ifd);
+        goto err2;
+      }
+      result=range->len;
+      while (!dwl.stop && result){
+        if (result>PSYNC_COPY_BUFFER_SIZE)
+          rd=PSYNC_COPY_BUFFER_SIZE;
+        else
+          rd=result;
+        rd=psync_file_read(ifd, buff, rd);
+        if (unlikely_log(rd<=0) || unlikely_log(psync_file_writeall_checkoverquota(fd, buff, rd)) || 
+            unlikely(!psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses)))){
+          psync_file_close(ifd);
+          goto err2;
+        }
+        result-=rd;
+        psync_hash_update(&hashctx, buff, rd);
+        pthread_mutex_lock(&current_downloads_mutex);
+        psync_status.bytesdownloaded+=rd;
+        if (current_downloads_waiters && psync_status.bytestodownloadcurrent-psync_status.bytesdownloaded<=PSYNC_START_NEW_DOWNLOADS_TRESHOLD)
+          pthread_cond_signal(&current_downloads_cond);
+        pthread_mutex_unlock(&current_downloads_mutex);
+        psync_send_status_update();
+        downloadedsize+=rd;
+      }
+      psync_file_close(ifd);
+    }
+    if (dwl.stop)
+      break;
   }
   if (unlikely(dwl.stop)){
     psync_free(buff);
-    psync_http_close(http);
     psync_file_close(fd);
     psync_hash_final(localhashbin, &hashctx);
     psync_file_delete(tmpname);
     goto err0;
   }
-  if (unlikely_log(rd==-1) || unlikely_log(psync_file_sync(fd)))
+  if (unlikely_log(psync_file_sync(fd)))
     goto err2;
   psync_free(buff);
-  psync_http_close(http);
   psync_hash_final(localhashbin, &hashctx);
   if (unlikely_log(psync_file_close(fd)))
     goto err0;
@@ -624,7 +669,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
 err2:
   psync_hash_final(localhashbin, &hashctx); /* just in case */
   psync_free(buff);
-  psync_http_close(http);
+  if (http)
+    psync_http_close(http);
 err1:
   psync_file_close(fd);
   psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FAILED, syncid, name, fileid);
@@ -769,6 +815,7 @@ static void task_run_download_file_thread(void *ptr){
     res=psync_sql_prep_statement("UPDATE task SET inprogress=0 WHERE id=?");
     psync_sql_bind_uint(res, 1, dt->taskid);
     psync_sql_run_free(res);
+    psync_wake_download();
   }
   else{
     res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");

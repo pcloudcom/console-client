@@ -79,7 +79,7 @@ static void add_dir_scan(localnotify_dir *dir, const char *path){
   struct stat st;
   int wid;
   pl=strlen(path);
-  if (unlikely((wid=inotify_add_watch(dir->inotifyfd, path, IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_MODIFY|IN_MOVED_FROM|IN_MOVED_TO|IN_DELETE_SELF))==-1)){
+  if (unlikely((wid=inotify_add_watch(dir->inotifyfd, path, IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_MOVED_FROM|IN_MOVED_TO|IN_DELETE_SELF))==-1)){
     debug(D_ERROR, "inotify_add_watch failed");
     return;
   }
