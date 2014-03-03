@@ -357,8 +357,8 @@ static void del_syncid(psync_syncid_t syncid){
 static void process_pipe(){
   localnotify_msg msg;
   DWORD br;
-  if (!ReadFile(pipe_read, &msg, sizeof(&msg), &br, NULL) || br!=sizeof(msg)){
-    debug(D_ERROR, "reading from pipe failed");
+  if (!ReadFile(pipe_read, &msg, sizeof(msg), &br, NULL) || br!=sizeof(msg)){
+    debug(D_ERROR, "reading from pipe failed %d", GetLastError());
     return;
   }
   if (msg.type==NOTIFY_MSG_ADD)
@@ -384,10 +384,13 @@ static void psync_localnotify_thread(){
 }
 
 int psync_localnotify_init(){
+  DWORD state = PIPE_NOWAIT;
   if (!CreatePipe(&pipe_read, &pipe_write, NULL, 0))
     return -1;
-  handlecnt=1;
+  if(!SetNamedPipeHandleState(pipe_read, &state, NULL, NULL))
+    state = GetLastError();
   handles=psync_new(HANDLE);
+  handlecnt = 1;
   handles[0]=pipe_read;
   psync_run_thread(psync_localnotify_thread);
   return 0;
