@@ -59,6 +59,7 @@ static const uint8_t __hex_lookupl[513]={
 };
 
 uint16_t const *__hex_lookup=(uint16_t *)__hex_lookupl;
+static char normalize_table[256];
 
 static pthread_mutex_t ptrs_to_run_mutex=PTHREAD_MUTEX_INITIALIZER;
 static struct run_after_ptr *ptrs_to_run_next_min=NULL;
@@ -82,6 +83,16 @@ char *psync_strdup(const char *str){
   len=strlen(str)+1;
   ptr=psync_new_cnt(char, len);
   memcpy(ptr, str, len);
+  return ptr;
+}
+
+char *psync_strnormalize_filename(const char *str){
+  size_t len, i;
+  char *ptr;
+  len=strlen(str)+1;
+  ptr=psync_new_cnt(char, len);
+  for (i=0; i<len; i++)
+    ptr[i]=normalize_table[(unsigned char)str[i]];
   return ptr;
 }
 
@@ -650,6 +661,12 @@ static void psync_run_pointers_timer(void *ptr){
 }
 
 void psync_libs_init(){
+  psync_uint_t i;
+  for (i=0; i<256; i++)
+    normalize_table[i]=i;
+  normalize_table[':']='_';
+  normalize_table['/']='_';
+  normalize_table['\\']='_';
   psync_timer_register(psync_run_pointers_timer, 1, NULL);
 }
 

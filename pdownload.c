@@ -40,6 +40,7 @@
 #include "papi.h"
 #include "pp2p.h"
 #include "plist.h"
+#include "plocalscan.h"
 
 typedef struct {
   uint64_t taskid;
@@ -127,14 +128,14 @@ static int task_rmdir(const char *path){
 //    return 0;
 }
 
-static int task_rmdir_rec(const char *path){
+/*static int task_rmdir_rec(const char *path){
   task_wait_no_downloads();
   if (likely_log(!psync_rmdir_recursive(path)))
     return 0;
   if (psync_fs_err()==P_BUSY || psync_fs_err()==P_ROFS)
     return -1;
   return 0;
-}
+}*/
 
 static void do_move(void *ptr, psync_pstat *st){
   const char **arr;
@@ -292,6 +293,7 @@ static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid
     return 0;
   }
   psync_sql_start_transaction();
+  psync_restart_localscan();
   res=psync_sql_prep_statement("UPDATE localfolder SET syncid=?, localparentfolderid=?, name=? WHERE id=?");
   psync_sql_bind_uint(res, 1, newsyncid);
   psync_sql_bind_uint(res, 2, newlocalparentfolderid);
@@ -651,8 +653,13 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     debug(D_WARNING, "got wrong file checksum for file %s", filename);
     goto err0;
   }
-  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize)))
+  psync_sql_lock();
+  psync_restart_localscan();
+  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize))){
+    psync_sql_unlock();
     goto err0;
+  }
+  psync_sql_unlock();
   psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FINISHED, syncid, name, fileid);
   debug(D_NOTICE, "file downloaded %s", name);
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted, &dwl);
@@ -714,6 +721,7 @@ static int task_delete_file(psync_syncid_t syncid, psync_fileid_t fileid, const 
   else
     res=psync_sql_query("SELECT id, syncid FROM localfile WHERE fileid=?");
   psync_sql_bind_uint(res, 1, fileid);
+  psync_restart_localscan();
   while ((row=psync_sql_fetch_rowint(res))){
     name=psync_local_path_for_local_file(row[0], NULL);
     if (likely_log(name)){
@@ -778,7 +786,10 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
   }
   newpath=psync_strcat(newfolder, PSYNC_DIRECTORY_SEPARATOR, newname, NULL);
   ret=0;
+  psync_sql_lock();
+  psync_restart_localscan();
   if (psync_file_rename_overwrite(oldpath, newpath)){
+    psync_sql_unlock();
     if (psync_fs_err()==P_NOENT){
       debug(D_WARNING, "renamed from %s to %s failed, downloading", oldpath, newpath);
       psync_task_download_file(newsyncid, fileid, newlocalfolderid, newname);
@@ -799,6 +810,7 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
       psync_sql_run_free(res);
       debug(D_NOTICE, "renamed %s to %s", oldpath, newpath);
     }
+    psync_sql_unlock();
   }
   psync_free(newpath);
   psync_free(oldpath);
@@ -852,6 +864,66 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   psync_run_thread1(task_run_download_file_thread, dt);
   return -1;
 }
+
+static void task_del_folder_rec_do(const char *localpath, psync_folderid_t localfolderid, psync_syncid_t syncid){
+  psync_sql_res *res;
+  psync_str_row row;
+  psync_variant_row vrow;
+  char *nm;
+  res=psync_sql_query("SELECT name FROM localfile WHERE localparentfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  while ((row=psync_sql_fetch_rowstr(res))){
+    nm=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, row[0], NULL);
+    debug(D_NOTICE, "deleting %s", nm);
+    psync_file_delete(nm);
+    psync_free(nm);
+  }
+  psync_sql_free_result(res);
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_query("SELECT id, name FROM localfolder WHERE localparentfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  while ((vrow=psync_sql_fetch_row(res))){
+    nm=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, psync_get_string(vrow[1]), NULL);
+    task_del_folder_rec_do(nm, psync_get_number(vrow[0]), syncid);
+    psync_free(nm);
+  }
+  psync_sql_free_result(res);
+  res=psync_sql_prep_statement("DELETE FROM localfolder WHERE localparentfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+}
+
+static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t folderid, psync_syncid_t syncid){
+  char *localpath;
+  psync_sql_res *res;
+  task_wait_no_downloads();
+  psync_sql_lock();
+  psync_restart_localscan();
+  localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
+  if (unlikely_log(!localpath)){
+    psync_sql_unlock();
+    return 0;
+  }
+  debug(D_NOTICE, "got recursive delete for localfolder %lu %s", (unsigned long)localfolderid, localpath);
+  task_del_folder_rec_do(localpath, localfolderid, syncid);
+  res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=? AND syncid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+  psync_rmdir_with_trashes(localpath);
+  psync_sql_unlock();
+  return 0;
+}
   
 static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
                                         psync_syncid_t newsyncid){
@@ -866,9 +938,7 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
         delete_local_folder_from_db(localitemid);
       break;
     case PSYNC_DELREC_LOCAL_FOLDER:
-      res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir_rec, 0, "local folder deleted recursively");
-      if (!res)
-        delete_local_folder_from_db(localitemid);
+      res=task_del_folder_rec(localitemid, itemid, syncid);
       break;
     case PSYNC_RENAME_LOCAL_FOLDER:
       res=task_renamefolder(syncid, itemid, localitemid, newitemid, name);

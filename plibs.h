@@ -147,6 +147,7 @@ extern PSYNC_THREAD uint32_t psync_error;
 extern uint16_t const *__hex_lookup;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
+char *psync_strnormalize_filename(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strndup(const char *str, size_t len) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
 
