@@ -102,6 +102,7 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   psync_folderid_t parentfolderid, folderid;
   psync_socket *api;
   binresult *bres;
+  char *nname;
   uint64_t result;
   int ret;
   res=psync_sql_query("SELECT s.folderid FROM localfolder l, syncedfolder s WHERE l.id=? AND l.syncid=? AND l.localparentfolderid=s.localfolderid AND s.syncid=?");
@@ -113,15 +114,21 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   else
     parentfolderid=PSYNC_INVALID_FOLDERID;
   psync_sql_free_result(res);
-  if (unlikely(parentfolderid==PSYNC_INVALID_FOLDERID))
+  nname=psync_strnormalize_filename(name);
+  if (unlikely(parentfolderid==PSYNC_INVALID_FOLDERID)){
+    psync_free(nname);
     return 0;
+  }
   else{
-    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", nname)};
     api=psync_apipool_get();
-    if (unlikely(!api))
+    if (unlikely(!api)){
+      psync_free(nname);
       return -1;
+    }
     psync_diff_lock();
     bres=send_command(api, "createfolderifnotexists", params);
+    psync_free(nname);
     if (likely(bres))
       psync_apipool_release(api);
     else{
@@ -172,6 +179,8 @@ static int task_renamefile(psync_syncid_t syncid, psync_fileid_t localfileid, ps
   psync_uint_row row;
   psync_fileid_t fileid;
   psync_folderid_t folderid;
+  char *nname;
+  int ret;
   res=psync_sql_query("SELECT fileid FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res)))
@@ -189,8 +198,12 @@ static int task_renamefile(psync_syncid_t syncid, psync_fileid_t localfileid, ps
   psync_sql_free_result(res);
   if (unlikely_log(!fileid) || unlikely_log(!folderid))
     return 0;
-  else
-    return task_renameremotefile(fileid, folderid, newname);
+  else{
+    nname=psync_strnormalize_filename(newname);
+    ret=task_renameremotefile(fileid, folderid, nname);
+    psync_free(nname);
+    return ret;
+  }
 }
 
 static int task_renameremotefolder(psync_folderid_t folderid, psync_folderid_t newparentfolderid, const char *newname){
@@ -206,6 +219,8 @@ static int task_renamefolder(psync_syncid_t syncid, psync_fileid_t localfolderid
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t folderid, parentfolderid;
+  char *nname;
+  int ret;
   res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, localfolderid);
@@ -224,8 +239,12 @@ static int task_renamefolder(psync_syncid_t syncid, psync_fileid_t localfolderid
   psync_sql_free_result(res);
   if (unlikely_log(!folderid) || unlikely_log(!parentfolderid))
     return 0;
-  else
-    return task_renameremotefolder(folderid, parentfolderid, newname);
+  else{
+    nname=psync_strnormalize_filename(newname);
+    ret=task_renameremotefolder(folderid, parentfolderid, nname);
+    psync_free(nname);
+    return ret;
+  }
 }
 
 static void set_local_file_remote_id(psync_fileid_t localfileid, psync_fileid_t fileid, uint64_t hash){
@@ -419,16 +438,18 @@ err00:
 static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, const char *name){
   psync_sql_res *res;
   psync_uint_row row;
-  char *localpath;
+  char *localpath, *nname;
   psync_folderid_t folderid;
   uint64_t fsize;
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN];
   int ret;
   localpath=psync_local_path_for_local_file(localfileid, NULL);
+  nname=psync_strnormalize_filename(name);
   if (unlikely_log(!localpath))
     return 0;
   if (psync_get_local_file_checksum(localpath, hashhex, &fsize)){
     debug(D_WARNING, "could not open local file %s", localpath);
+    psync_free(nname);
     psync_free(localpath);
     return 0;
   }
@@ -445,20 +466,24 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   else{
     debug(D_WARNING, "could not get remote folderid for local file %lu", (unsigned long)localfileid);
     psync_sql_free_result(res);
+    psync_free(nname);
     psync_free(localpath);
     return 0;    
   }
   psync_sql_free_result(res);
-  ret=copy_file_if_exists(hashhex, fsize, folderid, name, localfileid);
+  ret=copy_file_if_exists(hashhex, fsize, folderid, nname, localfileid);
   if (ret==-1){
+    psync_free(nname);
     psync_free(localpath);
     return -1;
   }
   else if (ret==1){
+    psync_free(nname);
     psync_free(localpath);
     return 0;
   }
-  ret=upload_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid);
+  ret=upload_file(localpath, hashhex, fsize, folderid, nname, localfileid, syncid);
+  psync_free(nname);
   psync_free(localpath);
   return ret;
 }

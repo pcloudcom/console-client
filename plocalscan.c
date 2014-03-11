@@ -65,6 +65,7 @@ typedef sync_folderlist sync_folderlist_tuple[2];
 static pthread_mutex_t scan_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t scan_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t scan_wakes=0;
+static uint32_t restart_scan=0;
 
 #define SCAN_LIST_CNT 9
 
@@ -544,7 +545,10 @@ static void scanner_scan(int first){
       localsleepperfolder=1;
   }
   starttime=psync_current_time;
-  //memset(scan_list_cnt, 0, sizeof(scan_list_cnt));
+restart:
+  pthread_mutex_lock(&scan_mutex);
+  restart_scan=0;
+  pthread_mutex_unlock(&scan_mutex);
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_init(&scan_lists[i]);
   scanner_set_syncs_to_list(&slist);
@@ -552,6 +556,14 @@ static void scanner_scan(int first){
   psync_list_for_each_element(l, &slist, sync_list, list)
     scanner_scan_folder(l->localpath, l->folderid, 0, l->syncid, l->synctype);
   do {
+    pthread_mutex_lock(&scan_mutex);
+    if (unlikely(restart_scan)){
+      pthread_mutex_unlock(&scan_mutex);
+      for (i=0; i<SCAN_LIST_CNT; i++)
+        psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
+      goto restart;
+    }
+    pthread_mutex_unlock(&scan_mutex);
     debug(D_NOTICE, "run checks");
     i=0;
     psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFOLDERS], 
@@ -643,6 +655,12 @@ void psync_wake_localscan(){
     pthread_cond_signal(&scan_cond);
   pthread_mutex_unlock(&scan_mutex);
   localsleepperfolder=0;
+}
+
+void psync_restart_localscan(){
+  pthread_mutex_lock(&scan_mutex);
+  restart_scan=1;
+  pthread_mutex_unlock(&scan_mutex);
 }
 
 static void psync_wake_localscan_noscan(){

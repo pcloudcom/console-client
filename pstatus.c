@@ -126,6 +126,7 @@ void psync_status_init(){
     psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('runstatus', " NTO_STR(PSTATUS_RUN_RUN) ")");
   }
   psync_status_recalc_to_download();
+  psync_status_recalc_to_upload();
   psync_status.status=psync_calc_status();
 }
 

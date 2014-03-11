@@ -357,6 +357,11 @@ static void del_syncid(psync_syncid_t syncid){
 static void process_pipe(){
   localnotify_msg msg;
   DWORD br;
+
+  if (PeekNamedPipe(pipe_read, &msg, sizeof(msg), &br, NULL, NULL) && br != sizeof(msg)){
+    ResetEvent(handles[0]);
+    return;
+  }
   if (!ReadFile(pipe_read, &msg, sizeof(msg), &br, NULL) || br!=sizeof(msg)){
     debug(D_ERROR, "reading from pipe failed %d", GetLastError());
     return;
@@ -385,13 +390,13 @@ static void psync_localnotify_thread(){
 
 int psync_localnotify_init(){
   DWORD state = PIPE_NOWAIT;
+   
   if (!CreatePipe(&pipe_read, &pipe_write, NULL, 0))
     return -1;
-  if(!SetNamedPipeHandleState(pipe_read, &state, NULL, NULL))
-    state = GetLastError();
+
   handles=psync_new(HANDLE);
   handlecnt = 1;
-  handles[0]=pipe_read;
+  handles[0] = CreateEvent(NULL, TRUE, FALSE, NULL);
   psync_run_thread(psync_localnotify_thread);
   return 0;
 }
@@ -403,6 +408,7 @@ void psync_localnotify_add_sync(psync_syncid_t syncid){
   msg.syncid=syncid;
   if (!WriteFile(pipe_write, &msg, sizeof(msg), &bw, NULL) || bw!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
+  SetEvent(handles[0]);
 }
 
 void psync_localnotify_del_sync(psync_syncid_t syncid){

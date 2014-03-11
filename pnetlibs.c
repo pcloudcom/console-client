@@ -139,14 +139,17 @@ static void rm_all(void *vpath, psync_pstat *st){
 
 static void rm_ign(void *vpath, psync_pstat *st){
   char *path;
-  if (!psync_is_name_to_ignore(st->name))
-    return;
+  int ign;
+  ign=psync_is_name_to_ignore(st->name);
   path=psync_strcat((char *)vpath, PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
   if (psync_stat_isfolder(&st->stat)){
-    psync_list_dir(path, rm_all, path);
+    if (ign)
+      psync_list_dir(path, rm_all, path);
+    else
+      psync_list_dir(path, rm_ign, path);
     psync_rmdir(path);
   }
-  else
+  else if (ign)
     psync_file_delete(path);
   psync_free(path);
 }
