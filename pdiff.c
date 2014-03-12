@@ -915,7 +915,7 @@ static int send_diff_command(psync_socket *sock, uint64_t diffid){
   return send_command_no_res(sock, "diff", diffparams)?0:-1;
 }
 
-static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
+static void handle_exception(psync_socket **sock, uint64_t *diffid, char ex){
   debug(D_NOTICE, "exception handler %c", ex);
   if (ex=='r' || 
       psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || 
@@ -925,7 +925,8 @@ static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
     *sock=get_connected_socket();
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
     psync_syncer_check_delayed_syncs();
-    send_diff_command(*sock, diffid);
+    *diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+    send_diff_command(*sock, *diffid);
   }
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
@@ -935,7 +936,7 @@ static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
       psync_syncer_check_delayed_syncs();
-      send_diff_command(*sock, diffid);
+      send_diff_command(*sock, *diffid);
     }
     else{
       debug(D_NOTICE, "diff socket seems to be alive");
@@ -1006,7 +1007,7 @@ restart:
         break;
       if (psync_pipe_read(exceptionsock, &ex, 1)!=1)
         continue;
-      handle_exception(&sock, diffid, ex);
+      handle_exception(&sock, &diffid, ex);
       while (psync_select_in(socks, 1, 0)==0 && psync_pipe_read(exceptionsock, &ex, 1)==1);
       socks[1]=sock->sock;
     }
@@ -1015,7 +1016,7 @@ restart:
       res=get_result(sock);
       if (unlikely_log(!res)){
         psync_timer_notify_exception();
-        handle_exception(&sock, diffid, 'r');
+        handle_exception(&sock, &diffid, 'r');
         socks[1]=sock->sock;
         continue;
       }
@@ -1023,7 +1024,7 @@ restart:
       if (unlikely(result)){
         debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
         psync_free(res);
-        handle_exception(&sock, diffid, 'r');
+        handle_exception(&sock, &diffid, 'r');
         socks[1]=sock->sock;
         continue;
       }

@@ -235,10 +235,8 @@ void psync_unlink(){
   char *sql;
   const char *str;
   size_t len;
-  uint32_t runstatus;
   psync_list list;
   string_list *le;
-  runstatus=psync_status_get(PSTATUS_TYPE_RUN);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_stop_all_download();
   psync_stop_all_upload();
@@ -285,7 +283,7 @@ void psync_unlink(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
-  psync_set_status(PSTATUS_TYPE_RUN, runstatus);
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
 }
 
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype){
