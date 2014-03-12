@@ -44,6 +44,7 @@ void psync_wake_download();
 void psync_delete_download_tasks_for_file(psync_fileid_t fileid);
 void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid);
 void psync_stop_sync_download(psync_syncid_t syncid);
+void psync_stop_all_download();
 downloading_files_hashes *psync_get_downloading_hashes();
 
 #endif

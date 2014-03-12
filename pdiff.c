@@ -118,6 +118,7 @@ static psync_socket *get_connected_socket(){
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
+    strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
     if (luserid){
       if (unlikely_log(luserid!=userid)){
         psync_socket_close(sock);
@@ -126,17 +127,13 @@ static psync_socket *get_connected_socket(){
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
         continue;
       }
-      strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
       if (saveauth){
-        q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-        psync_sql_bind_string(q, 1, "auth");
-        psync_sql_bind_string(q, 2, psync_my_auth);
-        psync_sql_run(q);
-        psync_sql_free_result(q);
+        q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('auth', ?)");
+        psync_sql_bind_string(q, 1, psync_my_auth);
+        psync_sql_run_free(q);
       }
     }
     else{
-      strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
       used_quota=0;
       q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
       psync_sql_bind_string(q, 1, "userid");
@@ -898,61 +895,6 @@ static void check_overquota(){
   }
 }
 
-static void delete_delayed_sync(uint64_t id){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("DELETE FROM syncfolderdelayed WHERE id=?");
-  psync_sql_bind_uint(res, 1, id);
-  psync_sql_run_free(res);
-}
-
-static void check_delayed_syncs(){
-  psync_stat_t st;
-  psync_sql_res *res, *stmt;
-  psync_variant_row row;
-  const char *localpath, *remotepath;
-  uint64_t id, synctype;
-  int64_t syncid;
-  psync_folderid_t folderid;
-  int unsigned md;
-  res=psync_sql_query("SELECT id, localpath, remotepath, synctype FROM syncfolderdelayed");
-  while ((row=psync_sql_fetch_row(res))){
-    id=psync_get_number(row[0]);
-    localpath=psync_get_string(row[1]);
-    remotepath=psync_get_string(row[2]);
-    synctype=psync_get_number(row[3]);
-    if (synctype&PSYNC_DOWNLOAD_ONLY)
-      md=7;
-    else
-      md=5;
-    if (unlikely_log(psync_stat(localpath, &st)) || unlikely_log(!psync_stat_isfolder(&st)) || unlikely_log(!psync_stat_mode_ok(&st, md))){
-      debug(D_WARNING, "ignoring delayed sync id %"P_PRI_U64" for local path %s", id, localpath);
-      delete_delayed_sync(id);
-      continue;
-    }
-    folderid=psync_get_folderid_by_path_or_create(remotepath);
-    if (unlikely_log(folderid==PSYNC_INVALID_FOLDERID)){
-      if (psync_error!=PERROR_OFFLINE)
-        delete_delayed_sync(id);
-      continue;        
-    }
-    psync_sql_start_transaction();
-    stmt=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags) VALUES (?, ?, ?, 0)");
-    psync_sql_bind_uint(stmt, 1, folderid);
-    psync_sql_bind_string(stmt, 2, localpath);
-    psync_sql_bind_uint(stmt, 3, synctype);
-    psync_sql_run(stmt);
-    if (likely_log(psync_sql_affected_rows()))
-      syncid=psync_sql_insertid();
-    else
-      syncid=-1;
-    psync_sql_free_result(stmt);
-    delete_delayed_sync(id);
-    if (!psync_sql_commit_transaction() && syncid!=-1)
-      psync_syncer_new(syncid);
-  }
-  psync_sql_free_result(res);
-}
-
 static void diff_exception_handler(){
   debug(D_NOTICE, "got exception");
   if (likely(exceptionsockwrite!=INVALID_SOCKET))
@@ -973,7 +915,7 @@ static int send_diff_command(psync_socket *sock, uint64_t diffid){
   return send_command_no_res(sock, "diff", diffparams)?0:-1;
 }
 
-static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
+static void handle_exception(psync_socket **sock, uint64_t *diffid, char ex){
   debug(D_NOTICE, "exception handler %c", ex);
   if (ex=='r' || 
       psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || 
@@ -982,7 +924,9 @@ static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
     psync_socket_close(*sock);
     *sock=get_connected_socket();
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
-    send_diff_command(*sock, diffid);
+    psync_syncer_check_delayed_syncs();
+    *diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+    send_diff_command(*sock, *diffid);
   }
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
@@ -991,7 +935,8 @@ static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
       psync_socket_close(*sock);
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
-      send_diff_command(*sock, diffid);
+      psync_syncer_check_delayed_syncs();
+      send_diff_command(*sock, *diffid);
     }
     else{
       debug(D_NOTICE, "diff socket seems to be alive");
@@ -1041,8 +986,8 @@ restart:
     psync_free(res);
   } while (result);
   check_overquota();
-  check_delayed_syncs();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  psync_syncer_check_delayed_syncs();
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){
     debug(D_ERROR, "could not create pipe");
@@ -1062,7 +1007,7 @@ restart:
         break;
       if (psync_pipe_read(exceptionsock, &ex, 1)!=1)
         continue;
-      handle_exception(&sock, diffid, ex);
+      handle_exception(&sock, &diffid, ex);
       while (psync_select_in(socks, 1, 0)==0 && psync_pipe_read(exceptionsock, &ex, 1)==1);
       socks[1]=sock->sock;
     }
@@ -1071,7 +1016,7 @@ restart:
       res=get_result(sock);
       if (unlikely_log(!res)){
         psync_timer_notify_exception();
-        handle_exception(&sock, diffid, 'r');
+        handle_exception(&sock, &diffid, 'r');
         socks[1]=sock->sock;
         continue;
       }
@@ -1079,7 +1024,7 @@ restart:
       if (unlikely(result)){
         debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
         psync_free(res);
-        handle_exception(&sock, diffid, 'r');
+        handle_exception(&sock, &diffid, 'r');
         socks[1]=sock->sock;
         continue;
       }

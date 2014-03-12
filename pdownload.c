@@ -1048,6 +1048,14 @@ void psync_stop_sync_download(psync_syncid_t syncid){
   pthread_mutex_unlock(&current_downloads_mutex);
 }
 
+void psync_stop_all_download(){
+  download_list_t *dwl;
+  pthread_mutex_lock(&current_downloads_mutex);
+  psync_list_for_each_element(dwl, &downloads, download_list_t, list)
+    dwl->stop=1;
+  pthread_mutex_unlock(&current_downloads_mutex);
+}
+
 downloading_files_hashes *psync_get_downloading_hashes(){
   download_list_t *dwl;
   downloading_files_hashes *ret;
