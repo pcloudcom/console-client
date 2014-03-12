@@ -924,6 +924,7 @@ static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
     psync_socket_close(*sock);
     *sock=get_connected_socket();
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+    psync_syncer_check_delayed_syncs();
     send_diff_command(*sock, diffid);
   }
   else if (ex=='e'){
@@ -933,6 +934,7 @@ static void handle_exception(psync_socket **sock, uint64_t diffid, char ex){
       psync_socket_close(*sock);
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+      psync_syncer_check_delayed_syncs();
       send_diff_command(*sock, diffid);
     }
     else{
