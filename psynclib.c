@@ -219,7 +219,7 @@ void psync_set_auth(const char *auth, int save){
 }
 
 void psync_logout(){
-  psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
+  psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth', 'saveauth')");
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
   pthread_mutex_lock(&psync_my_auth_mutex);
   psync_free(psync_my_pass);
@@ -240,6 +240,8 @@ void psync_unlink(){
   string_list *le;
   runstatus=psync_status_get(PSTATUS_TYPE_RUN);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
+  psync_stop_all_download();
+  psync_stop_all_upload();
   psync_timer_notify_exception();
   psync_milisleep(20);
   psync_sql_lock();
@@ -366,6 +368,8 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
   psync_sql_bind_string(res, 2, remotepath);
   psync_sql_bind_uint(res, 3, synctype);
   psync_sql_run_free(res);
+  if (psync_status_get(PSTATUS_TYPE_ONLINE)==PSTATUS_ONLINE_ONLINE)
+    psync_run_thread(psync_syncer_check_delayed_syncs);
   return 0;
 }
 

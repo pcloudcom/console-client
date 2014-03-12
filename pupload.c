@@ -616,3 +616,11 @@ void psync_stop_sync_upload(psync_syncid_t syncid){
       upl->stop=1;
   pthread_mutex_unlock(&current_uploads_mutex);
 }
+
+void psync_stop_all_upload(){
+  upload_list_t *upl;
+  pthread_mutex_lock(&current_uploads_mutex);
+  psync_list_for_each_element(upl, &uploads, upload_list_t, list)
+    upl->stop=1;
+  pthread_mutex_unlock(&current_uploads_mutex);
+}

@@ -34,5 +34,6 @@ void psync_upload_init();
 void psync_wake_upload();
 void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid);
 void psync_stop_sync_upload(psync_syncid_t syncid);
+void psync_stop_all_upload();
 
 #endif
