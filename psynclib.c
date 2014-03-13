@@ -226,6 +226,8 @@ void psync_logout(){
   psync_my_pass=NULL;
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
+  psync_stop_all_download();
+  psync_stop_all_upload();
   psync_timer_notify_exception();
 }
 
