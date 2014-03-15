@@ -197,15 +197,15 @@ int psync_handle_api_result(uint64_t result){
     return PSYNC_NET_TEMPFAIL;
 }
 
-int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum, uint64_t *fsize){
+int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum, uint64_t *fsize, uint64_t *hash){
   psync_socket *api;
   binresult *res;
   const binresult *meta, *checksum;
   psync_sql_res *sres;
   psync_variant_row row;
-  uint64_t result;
+  uint64_t result, h;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
-  sres=psync_sql_query("SELECT h.checksum, f.size FROM hashchecksum h, file f WHERE f.id=? AND f.hash=h.hash AND f.size=h.size");
+  sres=psync_sql_query("SELECT h.checksum, f.size, f.hash FROM hashchecksum h, file f WHERE f.id=? AND f.hash=h.hash AND f.size=h.size");
   psync_sql_bind_uint(sres, 1, fileid);
   row=psync_sql_fetch_row(sres);
   if (row){
@@ -213,6 +213,8 @@ int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum,
     memcpy(hexsum, psync_get_string(row[0]), PSYNC_HASH_DIGEST_HEXLEN);
     if (fsize)
       *fsize=psync_get_number(row[1]);
+    if (hash)
+      *hash=psync_get_number(row[2]);
     psync_sql_free_result(sres);
     return PSYNC_NET_OK;
   }
@@ -238,10 +240,13 @@ int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum,
   meta=psync_find_result(res, "metadata", PARAM_HASH);
   checksum=psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR);
   result=psync_find_result(meta, "size", PARAM_NUM)->num;
+  h=psync_find_result(meta, "hash", PARAM_NUM)->num;
   if (fsize)
     *fsize=result;
+  if (hash)
+    *hash=h;
   sres=psync_sql_prep_statement("REPLACE INTO hashchecksum (hash, size, checksum) VALUES (?, ?, ?)");
-  psync_sql_bind_uint(sres, 1, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_uint(sres, 1, h);
   psync_sql_bind_uint(sres, 2, result);
   psync_sql_bind_lstring(sres, 3, checksum->str, checksum->length);
   psync_sql_run_free(sres);
@@ -275,14 +280,71 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
     rrs=psync_file_read(fd, buff, rs);
     if (rrs<=0)
       goto err2;
-    psync_yield_cpu();
     psync_hash_update(&hctx, buff, rrs);
     rsz-=rrs;
+    psync_yield_cpu();
   }
   psync_free(buff);
   psync_file_close(fd);
   psync_hash_final(hashbin, &hctx);
   psync_binhex(hexsum, hashbin, PSYNC_HASH_DIGEST_LEN);
+  if (fsize)
+    *fsize=psync_stat_size(&st);
+  return PSYNC_NET_OK;
+err2:
+  psync_free(buff);
+err1:
+  psync_file_close(fd);
+  return PSYNC_NET_PERMFAIL;
+}
+
+int psync_get_local_file_checksum_part(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize,
+                                       unsigned char *restrict phexsum, uint64_t pfsize){
+  psync_stat_t st;
+  psync_hash_ctx hctx, hctxp;
+  uint64_t rsz;
+  void *buff;
+  size_t rs;
+  ssize_t rrs;
+  psync_file_t fd;
+  unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
+  fd=psync_file_open(filename, P_O_RDONLY, 0);
+  if (fd==INVALID_HANDLE_VALUE)
+    return PSYNC_NET_PERMFAIL;
+  if (unlikely_log(psync_fstat(fd, &st)))
+    goto err1;
+  buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
+  psync_hash_init(&hctx);
+  psync_hash_init(&hctxp);
+  rsz=psync_stat_size(&st);
+  while (rsz){
+    if (rsz>PSYNC_COPY_BUFFER_SIZE)
+      rs=PSYNC_COPY_BUFFER_SIZE;
+    else
+      rs=rsz;
+    rrs=psync_file_read(fd, buff, rs);
+    if (rrs<=0)
+      goto err2;
+    psync_hash_update(&hctx, buff, rrs);
+    if (pfsize){
+      if (pfsize<rrs){
+        psync_hash_update(&hctxp, buff, pfsize);
+        pfsize=0;
+      }
+      else{
+        psync_hash_update(&hctxp, buff, rrs);
+        pfsize-=rrs;
+      }
+    }
+    rsz-=rrs;
+    psync_yield_cpu();
+  }
+  psync_free(buff);
+  psync_file_close(fd);
+  psync_hash_final(hashbin, &hctx);
+  psync_binhex(hexsum, hashbin, PSYNC_HASH_DIGEST_LEN);
+  psync_hash_final(hashbin, &hctxp);
+  psync_binhex(phexsum, hashbin, PSYNC_HASH_DIGEST_LEN);
   if (fsize)
     *fsize=psync_stat_size(&st);
   return PSYNC_NET_OK;
