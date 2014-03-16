@@ -452,6 +452,18 @@ err0:
   return PSYNC_NET_TEMPFAIL;
 }
 
+static int upload_from_file(psync_socket *api, psync_upload_range_list_t *r, psync_uploadid_t uploadid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadoffset", r->uploadoffset), P_NUM("id", r->id), P_NUM("uploadid", uploadid),
+                     P_NUM("fileid", r->file.fileid), P_NUM("hash", r->file.hash), P_NUM("offset", r->off), P_NUM("count", r->len)};
+  if (unlikely_log(!send_command_no_res(api, "upload_writefromfile", params)))
+    return PSYNC_NET_TEMPFAIL;
+  else{
+    psync_status.bytesuploaded+=r->len;
+    psync_send_status_update();
+    return PSYNC_NET_OK;
+  }
+}
+
 static int upload_get_checksum(psync_socket *api, psync_uploadid_t uploadid, uint32_t id){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid), P_NUM("id", id)};
   if (unlikely_log(!send_command_no_res(api, "upload_info", params)))
@@ -492,6 +504,8 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
   psync_socket *api;
   binresult *res;
   psync_sql_res *sql;
+  psync_uint_row row;
+  psync_full_result_int *fr;
   psync_upload_range_list_t *le, *le2;
   psync_list rlist;
   uint64_t result;
@@ -529,8 +543,9 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     psync_sql_run_free(sql);
   }
   psync_list_init(&rlist);
-  if (uploadoffset<fsize){
+  if (likely(uploadoffset<fsize)){
     le=psync_new(psync_upload_range_list_t);
+    le->uploadoffset=uploadoffset;
     le->off=uploadoffset;
     le->len=fsize-uploadoffset;
     le->type=PSYNC_URANGE_UPLOAD;
@@ -543,7 +558,29 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     psync_list_for_each_element_call(&rlist, psync_upload_range_list_t, list, psync_free);
     return 0;
   }
-  //TODO: find ranges to copy_file
+  if (likely(uploadoffset<fsize)){
+    sql=psync_sql_query("SELECT fileid, hash FROM localfile WHERE id=?");
+    psync_sql_bind_uint(sql, 1, localfileid);
+    if ((row=psync_sql_fetch_rowint(sql))){
+      uint64_t fileid, hash;
+      fileid=row[0];
+      hash=row[1];
+      psync_sql_free_result(sql);
+      if (fileid && psync_net_scan_file_for_blocks(api, &rlist, fileid, hash, fd)==PSYNC_NET_TEMPFAIL)
+        goto err1;
+    }
+    else
+      psync_sql_free_result(sql);
+    sql=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid LIMIT 5");
+    psync_sql_bind_uint(sql, 1, localfileid);
+    fr=psync_sql_fetchall_int(sql);
+    for (id=0; id<fr->rows; id++)
+      if (psync_get_result_cell(fr, id, 0)!=uploadid && psync_net_scan_upload_for_blocks(api, &rlist, psync_get_result_cell(fr, id, 0), fd)==PSYNC_NET_TEMPFAIL){
+        psync_free(fr);
+        goto err1;
+      }
+    psync_free(fr);
+  }
   rid=0;
   respwait=0;
   le=psync_new(psync_upload_range_list_t);
@@ -581,11 +618,11 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
         psync_list_for_each_element(le2, &rlist, psync_upload_range_list_t, list)
           if (le2->id==id){
             if (le2->type==PSYNC_URANGE_LAST || le2->type==PSYNC_URANGE_UPLOAD){
-              debug(D_ERROR, "range of type %u failed with error %lu", (unsigned)le->type, (unsigned long)result);
+              debug(D_ERROR, "range of type %u failed with error %lu", (unsigned)le2->type, (unsigned long)result);
               goto err1;
             }
             else{
-              debug(D_WARNING, "range of type %u failed with error %lu, restarting as upload range", (unsigned)le->type, (unsigned long)result);
+              debug(D_WARNING, "range of type %u failed with error %lu, restarting as upload range", (unsigned)le2->type, (unsigned long)result);
               le2->type=PSYNC_URANGE_UPLOAD;
               uploadoffset=le2->uploadoffset;
               le=le2;
@@ -618,6 +655,11 @@ restart:
     if (le->type==PSYNC_URANGE_UPLOAD){
       debug(D_NOTICE, "uploading %lu bytes", (unsigned long)le->len);
       ret=upload_range(api, le, upload, uploadid, fd);
+    }
+    else if (le->type==PSYNC_URANGE_COPY_FILE){
+      debug(D_NOTICE, "copying %lu bytes from fileid %lu hash %lu offset %lu", (unsigned long)le->len, (unsigned long)le->file.fileid,
+                                                                               (unsigned long)le->file.hash, le->off);
+      ret=upload_from_file(api, le, uploadid);
     }
     else if (le->type==PSYNC_URANGE_LAST)
       break;
@@ -717,7 +759,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   upload_list_t upload;
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], uhashhex[PSYNC_HASH_DIGEST_HEXLEN], phashhex[PSYNC_HASH_DIGEST_HEXLEN];
   int ret;
-  res=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC");
+  res=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 1");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res)))
     uploadid=row[0];

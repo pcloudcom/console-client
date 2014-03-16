@@ -722,9 +722,8 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
     return psync_socket_readall_download(http->sock, buff, num);
 }
 
-static int psync_net_get_checksums(psync_fileid_t fileid, psync_file_checksums **checksums){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
-  psync_socket *api;
+static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uint64_t hash, psync_file_checksums **checksums){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("hash", hash)};
   binresult *res;
   const binresult *hosts;
   const char *requestpath;
@@ -734,14 +733,18 @@ static int psync_net_get_checksums(psync_fileid_t fileid, psync_file_checksums *
   uint64_t result;
   uint32_t i;
   *checksums=NULL; /* gcc is not smart enough to notice that initialization is not needed */
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    return PSYNC_NET_TEMPFAIL;
-  res=send_command(api, "getchecksumlink", params);
-  if (res)
-    psync_apipool_release(api);
-  else
-    psync_apipool_release_bad(api);
+  if (api)
+    res=send_command(api, "getchecksumlink", params);
+  else {
+    api=psync_apipool_get();
+    if (unlikely(!api))
+      return PSYNC_NET_TEMPFAIL;
+    res=send_command(api, "getchecksumlink", params);
+    if (res)
+      psync_apipool_release(api);
+    else
+      psync_apipool_release_bad(api);
+  }
   if (unlikely_log(!res)){
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
@@ -1080,7 +1083,7 @@ static void psync_net_check_file_for_blocks(const char *name, psync_file_checksu
   psync_file_close(fd);
 }
 
-int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filesize, char *const *files, uint32_t filecnt){
+int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filehash, uint64_t filesize, char *const *files, uint32_t filecnt){
   psync_range_list_t *range;
   psync_file_checksums *checksums;
   psync_file_checksum_hash *hash;
@@ -1089,7 +1092,7 @@ int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_
   int rt;
   if (!filecnt)
     goto fulldownload;
-  rt=psync_net_get_checksums(fileid, &checksums);
+  rt=psync_net_get_checksums(NULL, fileid, filehash, &checksums);
   if (unlikely_log(rt==PSYNC_NET_PERMFAIL))
     goto fulldownload;
   else if (unlikely_log(rt==PSYNC_NET_TEMPFAIL))
@@ -1149,3 +1152,202 @@ fulldownload:
   psync_list_add_tail(ranges, &range->list);
   return PSYNC_NET_OK;
 }
+
+static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_checksum_hash *hash, 
+                                  uint64_t off, uint64_t len, psync_file_t fd, psync_list *nr){
+  unsigned char *buff;
+  psync_upload_range_list_t *ur;
+  uint64_t buffoff, blen;
+  psync_uint_t buffersize, hbuffersize, bufferlen, inbyteoff, outbyteoff, blockmask;
+  ssize_t rd;
+  uint32_t adler, blockidx;
+  int32_t skipbytes;
+  psync_sha1_ctx ctx;
+  unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
+  if (unlikely_log(psync_file_seek(fd, off, P_SEEK_SET)==-1))
+    return PSYNC_NET_TEMPFAIL;
+  if (checksums->blocksize*2>PSYNC_COPY_BUFFER_SIZE || len<PSYNC_COPY_BUFFER_SIZE)
+    buffersize=checksums->blocksize*2;
+  else
+    buffersize=PSYNC_COPY_BUFFER_SIZE;
+  hbuffersize=buffersize/2;
+  buff=psync_malloc(buffersize);
+  rd=psync_file_read(fd, buff, hbuffersize);
+  if (unlikely(rd<(ssize_t)hbuffersize)){
+    psync_free(buff);
+    return PSYNC_NET_OK;
+  }
+  else
+    bufferlen=buffersize;
+  adler=adler32(ADLER32_INITIAL, buff, checksums->blocksize);
+  outbyteoff=0;
+  buffoff=0;
+  inbyteoff=checksums->blocksize;
+  blockmask=checksums->blocksize-1;
+  ur=NULL;
+  skipbytes=-1;
+  while (buffoff+outbyteoff<len){
+    if (psync_net_hash_has_adler(hash, checksums, adler)){
+      if (outbyteoff<inbyteoff)
+        psync_sha1(buff+outbyteoff, checksums->blocksize, sha1bin);
+      else{
+        psync_sha1_init(&ctx);
+        psync_sha1_update(&ctx, buff+outbyteoff, buffersize-outbyteoff);
+        psync_sha1_update(&ctx, buff, inbyteoff);
+        psync_sha1_final(sha1bin, &ctx);
+      }
+      blockidx=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
+      if (blockidx){
+        if (buffoff+outbyteoff+checksums->blocksize<=len)
+          blen=checksums->blocksize;
+        else
+          blen=len-buffoff+outbyteoff;
+        if (ur && ur->off+ur->len==(blockidx-1)*checksums->blocksize)
+          ur->len+=blen;
+        else{
+          ur=psync_new(psync_upload_range_list_t);
+          ur->uploadoffset=off+buffoff+outbyteoff;
+          ur->off=(blockidx-1)*checksums->blocksize;
+          ur->len=blen;
+          psync_list_add_tail(nr, &ur->list);
+        }
+        if (blen!=checksums->blocksize)
+          break;
+        blockidx=checksums->blocksize-(inbyteoff&blockmask);
+        skipbytes=checksums->blocksize-blockidx;
+        inbyteoff+=blockidx;
+        outbyteoff+=blockidx;
+      }
+    }
+    if (unlikely((inbyteoff&blockmask)==0)){
+      if (outbyteoff>=bufferlen){
+        outbyteoff-=bufferlen;
+        buffoff+=buffersize;
+      }
+      if (inbyteoff==bufferlen){ /* not >=, bufferlen might be lower than current inbyteoff */
+        if (bufferlen!=buffersize)
+          break;
+        inbyteoff=0;
+        rd=psync_file_read(fd, buff, hbuffersize);
+        if (unlikely(rd!=hbuffersize)){
+          if (rd<=0)
+            break;
+          else{
+            bufferlen=(rd+checksums->blocksize-1)/checksums->blocksize*checksums->blocksize;
+            memset(buff+rd, 0, bufferlen-rd);
+          }
+        }
+      }
+      else if (inbyteoff==hbuffersize){
+        rd=psync_file_read(fd, buff+hbuffersize, hbuffersize);
+        if (unlikely(rd!=hbuffersize)){
+          if (rd<=0)
+            break;
+          else{
+            bufferlen=(rd+checksums->blocksize-1)/checksums->blocksize*checksums->blocksize;
+            memset(buff+hbuffersize+rd, 0, bufferlen-rd);
+            bufferlen+=hbuffersize;
+          }
+        }
+      }
+      if (skipbytes!=-1){
+        inbyteoff+=skipbytes;
+        outbyteoff+=skipbytes;
+        skipbytes=-1;
+        if (outbyteoff<inbyteoff)
+          adler=adler32(ADLER32_INITIAL, buff+outbyteoff, checksums->blocksize);
+        else{
+          adler=adler32(ADLER32_INITIAL, buff+outbyteoff, buffersize-outbyteoff);
+          adler=adler32(adler, buff, inbyteoff);
+        }
+        continue;
+      }
+    }
+    adler=adler32_roll(adler, buff[outbyteoff++], buff[inbyteoff++], checksums->blocksize);
+  }
+  psync_free(buff);
+  return PSYNC_NET_OK;
+}
+
+static void merge_list_to_element(psync_upload_range_list_t *le, psync_list *rlist){
+  psync_list *l, *lb;
+  psync_upload_range_list_t *ur, *n;
+  psync_list_for_each_safe(l, lb, rlist){
+    ur=psync_list_element(l, psync_upload_range_list_t, list);
+    psync_list_del(l);
+    assertw(ur->len<=le->len);
+    assertw(ur->uploadoffset>=le->uploadoffset);
+    assertw(ur->uploadoffset+ur->len<=le->uploadoffset+le->len);
+    if (ur->len==le->len){
+      assertw(ur->uploadoffset==le->uploadoffset);
+      assertw(psync_list_isempty(rlist));
+      psync_list_add_after(&le->list, &ur->list);
+      psync_list_del(&le->list);
+      psync_free(le);
+    }
+    else if (ur->uploadoffset==le->uploadoffset){
+      psync_list_add_before(&le->list, &ur->list);
+      le->uploadoffset+=ur->len;
+      le->off+=ur->len;
+      le->len-=ur->len;
+    }
+    else if (ur->uploadoffset+ur->len==le->uploadoffset+le->len){
+      psync_list_add_after(&le->list, &ur->list);
+      le->len-=ur->len;
+    }
+    else{
+      n=psync_new(psync_upload_range_list_t);
+      n->uploadoffset=n->off=ur->uploadoffset+ur->len;
+      assertw(le->len>ur->uploadoffset-le->uploadoffset+ur->len);
+      n->len=le->len-(ur->uploadoffset-le->uploadoffset)-ur->len;
+      n->type=PSYNC_URANGE_UPLOAD;
+      le->len=ur->uploadoffset-le->uploadoffset;
+      psync_list_add_after(&le->list, &ur->list);
+      psync_list_add_after(&ur->list, &n->list);
+      le=n;
+    }
+  }
+}
+
+int psync_net_scan_file_for_blocks(psync_socket *api, psync_list *rlist, psync_fileid_t fileid, uint64_t filehash, psync_file_t fd){
+  psync_file_checksums *checksums;
+  psync_file_checksum_hash *hash;
+  psync_list *l, *lb;
+  psync_upload_range_list_t *ur, *le;
+  psync_list nr;
+  int rt;
+  debug(D_NOTICE, "scanning fileid %lu hash %lu for blocks", (unsigned long)fileid, (unsigned long)filehash);
+  rt=psync_net_get_checksums(NULL, fileid, filehash, &checksums);
+  if (unlikely_log(rt==PSYNC_NET_PERMFAIL))
+    return PSYNC_NET_OK;
+  else if (unlikely_log(rt==PSYNC_NET_TEMPFAIL))
+    return PSYNC_NET_TEMPFAIL;
+  hash=psync_net_create_hash(checksums);
+  psync_list_for_each_safe(l, lb, rlist){
+    ur=psync_list_element(l, psync_upload_range_list_t, list);
+    if (ur->len<checksums->blocksize)
+      continue;
+    psync_list_init(&nr);
+    if (check_range_for_blocks(checksums, hash, ur->off, ur->len, fd, &nr)==PSYNC_NET_TEMPFAIL){
+      psync_free(hash);
+      psync_free(checksums);
+      return PSYNC_NET_TEMPFAIL;
+    }
+    if (!psync_list_isempty(&nr)){
+      psync_list_for_each_element(le, &nr, psync_upload_range_list_t, list){
+        le->type=PSYNC_URANGE_COPY_FILE;
+        le->file.fileid=fileid;
+        le->file.hash=filehash;
+      }
+      merge_list_to_element(ur, &nr);
+    }
+  }
+  psync_free(hash);
+  psync_free(checksums);
+  return PSYNC_NET_OK;
+}
+
+int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync_uploadid_t uploadid, psync_file_t fd){
+  return PSYNC_NET_OK;
+}
+

@@ -553,7 +553,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   if (unlikely_log(fd==INVALID_HANDLE_VALUE))
     goto err0;
   
-  rt=psync_net_download_ranges(&ranges, fileid, serversize, oldfiles, oldcnt);
+  rt=psync_net_download_ranges(&ranges, fileid, hash, serversize, oldfiles, oldcnt);
   if (rt==PSYNC_NET_TEMPFAIL)
     goto err1;
   
