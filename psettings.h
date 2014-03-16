@@ -147,6 +147,7 @@
 .TemporaryItems;\
 .Trashes;\
 .fseventsd;\
+.~lock.*;\
 ehThumbs.db;\
 Thumbs.db;\
 hiberfil.sys;\

@@ -464,6 +464,18 @@ static int upload_from_file(psync_socket *api, psync_upload_range_list_t *r, psy
   }
 }
 
+static int upload_from_upload(psync_socket *api, psync_upload_range_list_t *r, psync_uploadid_t uploadid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadoffset", r->uploadoffset), P_NUM("id", r->id), P_NUM("uploadid", uploadid),
+                     P_NUM("readuploadid", r->uploadid), P_NUM("offset", r->off), P_NUM("count", r->len)};
+  if (unlikely_log(!send_command_no_res(api, "upload_writefromupload", params)))
+    return PSYNC_NET_TEMPFAIL;
+  else{
+    psync_status.bytesuploaded+=r->len;
+    psync_send_status_update();
+    return PSYNC_NET_OK;
+  }
+}
+
 static int upload_get_checksum(psync_socket *api, psync_uploadid_t uploadid, uint32_t id){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid), P_NUM("id", id)};
   if (unlikely_log(!send_command_no_res(api, "upload_info", params)))
@@ -660,6 +672,10 @@ restart:
       debug(D_NOTICE, "copying %lu bytes from fileid %lu hash %lu offset %lu", (unsigned long)le->len, (unsigned long)le->file.fileid,
                                                                                (unsigned long)le->file.hash, le->off);
       ret=upload_from_file(api, le, uploadid);
+    }
+    else if (le->type==PSYNC_URANGE_COPY_UPLOAD){
+      debug(D_NOTICE, "copying %lu bytes from uploadid %lu offset %lu", (unsigned long)le->len, (unsigned long)le->uploadid, le->off);
+      ret=upload_from_upload(api, le, uploadid);
     }
     else if (le->type==PSYNC_URANGE_LAST)
       break;
