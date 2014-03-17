@@ -728,6 +728,13 @@ void psync_socket_close(psync_socket *sock){
   psync_free(sock);
 }
 
+void psync_socket_close_bad(psync_socket *sock){
+  if (sock->ssl)
+    psync_ssl_free(sock->ssl);
+  psync_close_socket(sock->sock);
+  psync_free(sock);
+}
+
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
 #if defined(SO_RCVBUF) && defined(SOL_SOCKET)
   return setsockopt(sock->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&bufsize, sizeof(bufsize));

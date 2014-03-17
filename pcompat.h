@@ -365,6 +365,7 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
 psync_socket_t psync_create_socket(int domain, int type, int protocol);
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
+void psync_socket_close_bad(psync_socket *sock);
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;

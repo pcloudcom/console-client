@@ -135,7 +135,7 @@
 /* defaults for database settings */
 #define PSYNC_USE_SSL_DEFAULT 1
 #define PSYNC_DWL_SHAPER_DEFAULT -1
-#define PSYNC_UPL_SHAPER_DEFAULT 0
+#define PSYNC_UPL_SHAPER_DEFAULT -1
 #define PSYNC_MIN_LOCAL_FREE_SPACE (512*1024*1024)
 #define PSYNC_P2P_SYNC_DEFAULT 1
 #define PSYNC_IGNORE_PATTERNS_DEFAULT ".DS_Store;\
@@ -147,6 +147,7 @@
 .TemporaryItems;\
 .Trashes;\
 .fseventsd;\
+.~lock.*;\
 ehThumbs.db;\
 Thumbs.db;\
 hiberfil.sys;\

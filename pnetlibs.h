@@ -36,6 +36,8 @@
 #define PSYNC_NET_PERMFAIL -1
 #define PSYNC_NET_TEMPFAIL -2
 
+typedef uint64_t psync_uploadid_t;
+
 typedef struct {
   psync_socket *sock;
   void *readbuff;
@@ -54,6 +56,27 @@ typedef struct {
   const char *filename;
 } psync_range_list_t;
 
+#define PSYNC_URANGE_UPLOAD      0
+#define PSYNC_URANGE_COPY_FILE   1
+#define PSYNC_URANGE_COPY_UPLOAD 2
+#define PSYNC_URANGE_LAST        3
+
+typedef struct {
+  psync_list list;
+  uint64_t uploadoffset;
+  uint64_t off;
+  uint64_t len;
+  union {
+    uint64_t uploadid;
+    struct {
+      psync_fileid_t fileid;
+      uint64_t hash;
+    } file;
+  };
+  uint32_t type;
+  uint32_t id;
+} psync_upload_range_list_t;
+
 void psync_netlibs_init();
 
 psync_socket *psync_apipool_get();
@@ -65,8 +88,10 @@ int psync_rmdir_recursive(const char *path);
 
 void psync_set_local_full(int over);
 int psync_handle_api_result(uint64_t result);
-int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *restrict hexsum, uint64_t *restrict fsize);
+int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum, uint64_t *fsize, uint64_t *hash);
 int psync_get_local_file_checksum(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize);
+int psync_get_local_file_checksum_part(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize,
+                                       unsigned char *restrict phexsum, uint64_t pfsize);
 int psync_copy_local_file_if_checksum_matches(const char *source, const char *destination, const unsigned char *hexsum, uint64_t fsize);
 int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);
 
@@ -78,6 +103,8 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
 void psync_http_close(psync_http_socket *http);
 int psync_http_readall(psync_http_socket *http, void *buff, int num);
 
-int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filesize, char *const *files, uint32_t filecnt);
+int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filehash, uint64_t filesize, char *const *files, uint32_t filecnt);
+int psync_net_scan_file_for_blocks(psync_socket *api, psync_list *rlist, psync_fileid_t fileid, uint64_t filehash, psync_file_t fd);
+int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync_uploadid_t uploadid, psync_file_t fd);
 
 #endif

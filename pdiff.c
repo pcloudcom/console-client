@@ -932,7 +932,7 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, char ex){
     binparam diffparams[]={P_STR("id", "ignore")};
     if (!send_command_no_res(*sock, "nop", diffparams) || psync_select_in(&(*sock)->sock, 1, PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000)!=0){
       debug(D_NOTICE, "reconnecting diff");
-      psync_socket_close(*sock);
+      psync_socket_close_bad(*sock);
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
       psync_syncer_check_delayed_syncs();

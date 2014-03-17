@@ -253,14 +253,20 @@ int psync_statuses_ok_array(const uint32_t *combinedstatuses, uint32_t cnt){
 
 void psync_status_set_download_speed(uint32_t speed){
   if (psync_status.downloadspeed!=speed){
-    psync_status.downloadspeed=speed;
+    if (psync_status.filesdownloading)
+      psync_status.downloadspeed=speed;
+    else
+      psync_status.downloadspeed=0;
     psync_send_status_update();
   }
 }
 
 void psync_status_set_upload_speed(uint32_t speed){
   if (psync_status.uploadspeed!=speed){
-    psync_status.uploadspeed=speed;
+    if (psync_status.filesuploading)
+      psync_status.uploadspeed=speed;
+    else
+      psync_status.uploadspeed=0;
     psync_send_status_update();
   }
 }
