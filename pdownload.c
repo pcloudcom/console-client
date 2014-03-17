@@ -832,7 +832,7 @@ static void task_run_download_file_thread(void *ptr){
   pthread_mutex_lock(&current_downloads_mutex);
   psync_list_del(&dt->dwllist.list);
   pthread_mutex_unlock(&current_downloads_mutex);
-  psync_free(ptr);
+  psync_free(dt);
 }
 
 static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *filename){
@@ -867,9 +867,9 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     res=psync_sql_prep_statement("UPDATE task SET inprogress=0 WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
-    return -1;
   }
-  psync_run_thread1(task_run_download_file_thread, dt);
+  else
+    psync_run_thread1(task_run_download_file_thread, dt);
   return -1;
 }
 

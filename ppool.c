@@ -93,7 +93,9 @@ void *psync_pool_get(psync_pool *pl){
   pthread_mutex_lock(&pl->lock);
   while (pl->maxused && pl->inuse>=pl->maxused && !pl->curfree){
     pl->sleepers++;
+    debug(D_NOTICE, "waiting for item");
     pthread_cond_wait(&pl->cond, &pl->lock);
+    debug(D_NOTICE, "woke up");
     pl->sleepers--;
   }
   maxage=psync_timer_time()-pl->maxage;
@@ -124,7 +126,7 @@ void psync_pool_release(psync_pool *pl, void *resource){
   if (pl->curfree>=pl->maxfree && pl->maxage>0)
     psync_clean_old_locked(pl);
   if (pl->sleepers)
-    pthread_cond_broadcast(&pl->cond);
+    pthread_cond_signal(&pl->cond);
   if (pl->curfree>=pl->maxfree){
     pl->inuse--;
     pthread_mutex_unlock(&pl->lock);
@@ -144,7 +146,7 @@ void psync_pool_release_bad(psync_pool *pl, void *resource){
   pthread_mutex_lock(&pl->lock);
   pl->inuse--;
   if (pl->sleepers)
-    pthread_cond_broadcast(&pl->cond);
+    pthread_cond_signal(&pl->cond);
   pthread_mutex_unlock(&pl->lock);
   debug(D_NOTICE, "freeing item");
   pl->rd(resource);

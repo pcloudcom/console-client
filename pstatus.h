@@ -78,9 +78,7 @@ void psync_wait_statuses(uint32_t first, ...);
 int psync_statuses_ok_array(const uint32_t *combinedstatuses, uint32_t cnt);
 
 void psync_status_set_download_speed(uint32_t speed);
-void psync_status_set_upload_speed(uint32_t speed);
-void psync_status_inc_uploads_count();
-void psync_status_dec_uploads_count();
+void psync_status_set_upload_speed(uint32_t speed);;
 
 void psync_status_send_update();
 #endif

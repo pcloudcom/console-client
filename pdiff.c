@@ -716,8 +716,19 @@ static void process_modifyfile(const binresult *entry){
         psync_task_rename_local_file(psync_get_result_cell(fres1, i, 0), psync_get_result_cell(fres2, i, 0), fileid,
                                      psync_get_result_cell(fres1, i, 1), psync_get_result_cell(fres2, i, 1),
                                      name->str);
-      if (needdownload)
-        psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+      if (needdownload){
+        res=psync_sql_query("SELECT 1 FROM localfile WHERE localparentfolderid=? AND fileid=? AND hash=? AND syncid=?");
+        psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 1));
+        psync_sql_bind_uint(res, 2, fileid);
+        psync_sql_bind_uint(res, 3, hash);
+        psync_sql_bind_uint(res, 4, psync_get_result_cell(fres2, i, 0));
+        row=psync_sql_fetch_row(res);
+        psync_sql_free_result(res);
+        if (row)
+          debug(D_NOTICE, "ignoring update for file %s, has correct hash in the database", name->str);
+        else
+          psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+      }
     }
     for (/*i is already=cnt*/; i<fres2->rows; i++)
       psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
