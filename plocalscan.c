@@ -400,7 +400,8 @@ static void scan_delete_file(sync_folderlist *fl){
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, fl->localid);
   psync_sql_run_free(res);
-  psync_task_delete_remote_file(fl->syncid, fileid);
+  if (fileid)
+    psync_task_delete_remote_file(fl->syncid, fileid);
   psync_sql_commit_transaction();
 }
 

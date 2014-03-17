@@ -693,8 +693,15 @@ restart:
     uploadoffset+=le->len;
   }
   psync_list_for_each_element_call(&rlist, psync_upload_range_list_t, list, psync_free);
+  if (psync_file_size(fd)!=fsize){
+    debug(D_NOTICE, "file %s changed filesize while uploading, restarting task", localpath);
+    ret=PSYNC_NET_TEMPFAIL;
+  }
+  else
+    ret=PSYNC_NET_OK;
   psync_file_close(fd);
-  ret=upload_save(api, localfileid, uploadid, folderid, name);
+  if (ret==PSYNC_NET_OK)
+    ret=upload_save(api, localfileid, uploadid, folderid, name);
   psync_apipool_release(api);
   if (ret==PSYNC_NET_TEMPFAIL)
     return -1;
