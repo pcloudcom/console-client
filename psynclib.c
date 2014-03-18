@@ -453,6 +453,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
     psync_sql_bind_uint(res, 1, syncid);
     while ((urow=psync_sql_fetch_rowint(res)))
       psync_del_folder_from_downloadlist(urow[0]);
+    psync_sql_free_result(res);
   }  
   if (!(synctype&PSYNC_UPLOAD_ONLY) && (oldsynctype&PSYNC_UPLOAD_ONLY))
     psync_localnotify_del_sync(syncid);
