@@ -341,6 +341,8 @@ static void scan_upload_file(sync_folderlist *fl){
   psync_sql_res *res;
   psync_fileid_t localfileid;
   debug(D_NOTICE, "file created %s", fl->name);
+  /* it is possible that files that are reported as new are already uploading */
+  psync_delete_upload_tasks_for_file(fl->localid);
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfile (localparentfolderid, syncid, size, inode, mtime, mtimenative, name)"
                                                           "VALUES (?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);

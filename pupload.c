@@ -390,6 +390,7 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
       debug(D_NOTICE, "upload of %s stopped", localpath);
       goto err2;
     }
+    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     if (fsize-bw>PSYNC_COPY_BUFFER_SIZE)
       rd=PSYNC_COPY_BUFFER_SIZE;
     else
@@ -468,6 +469,7 @@ static int upload_range(psync_socket *api, psync_upload_range_list_t *r, upload_
       debug(D_NOTICE, "upload stopped");
       goto err0;
     }
+    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     if (r->len-bw>PSYNC_COPY_BUFFER_SIZE)
       rd=PSYNC_COPY_BUFFER_SIZE;
     else
@@ -818,6 +820,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   uint64_t fsize, ufsize;
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], uhashhex[PSYNC_HASH_DIGEST_HEXLEN], phashhex[PSYNC_HASH_DIGEST_HEXLEN];
   int ret;
+  psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
   res=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 1");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res)))
