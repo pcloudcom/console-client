@@ -289,7 +289,7 @@ void psync_status_dec_downloads_count(){
   }
   psync_status.status=psync_calc_status();
   psync_send_status_update();
-}*/
+}
 
 void psync_status_inc_uploads_count(){
   psync_status.filesuploading++;
@@ -305,7 +305,7 @@ void psync_status_dec_uploads_count(){
   }
   psync_status.status=psync_calc_status();
   psync_send_status_update();
-}
+}*/
 
 void psync_status_send_update(){
   psync_status.status=psync_calc_status();
