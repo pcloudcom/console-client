@@ -310,6 +310,39 @@ static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t fold
   return 1;
 }
 
+static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_fileid_t fileid;
+  uint64_t filesize, hash;
+  unsigned char shashhex[PSYNC_HASH_DIGEST_HEXLEN];
+  int ret;
+  res=psync_sql_query("SELECT id, size FROM file WHERE parentfolderid=? AND name=CAST(? AS BLOB)");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_string(res, 2, name);
+  row=psync_sql_fetch_rowint(res);
+  if (row && row[1]==fsize){
+    fileid=row[0];
+    psync_sql_free_result(res);
+    ret=psync_get_remote_file_checksum(fileid, shashhex, &filesize, &hash);
+    if (ret==PSYNC_NET_OK){
+      if (filesize==fsize && !memcmp(hashhex, shashhex, PSYNC_HASH_DIGEST_HEXLEN)){
+        debug(D_NOTICE, "file %lu/%s already exists and matches local checksum, not doing anythhing", (unsigned long)folderid, name);
+        set_local_file_remote_id(localfileid, fileid, hash);
+        return 1;
+      }
+      else
+        return 0;
+    }
+    else if (ret==PSYNC_NET_TEMPFAIL)
+      return -1;
+    else if (ret==PSYNC_NET_PERMFAIL)
+      return 0;
+  }
+  psync_sql_free_result(res);
+  return 0;
+}
+
 static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("size", fsize), P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN)};
   psync_socket *api;
@@ -881,7 +914,9 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     return 0;    
   }
   psync_sql_free_result(res);
-  ret=copy_file_if_exists(hashhex, fsize, folderid, nname, localfileid);
+  ret=check_file_if_exists(hashhex, fsize, folderid, nname, localfileid);
+  if (ret==0)
+    ret=copy_file_if_exists(hashhex, fsize, folderid, nname, localfileid);
   if (ret==-1){
     psync_free(nname);
     psync_free(localpath);
