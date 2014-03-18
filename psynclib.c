@@ -373,7 +373,29 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
   return 0;
 }
 
-int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
+int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
+  psync_sql_res *res;
+  psync_variant_row row;
+  psync_synctype_t oldsynctype;
+  if (unlikely_log(synctype<PSYNC_SYNCTYPE_MIN || synctype>PSYNC_SYNCTYPE_MAX))
+    return_isyncid(PERROR_INVALID_SYNCTYPE);
+  psync_sql_start_transaction();
+  res=psync_sql_query("SELECT folderid, localpath, synctype FROM syncfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  row=psync_sql_fetch_row(res);
+  if (unlikely_log(!row)){
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return_error(PERROR_INVALID_SYNCID);
+  }
+  oldsynctype=psync_get_number(row[2]);
+  if (oldsynctype==synctype){
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return 0;
+  }
+  
+}
 
 static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t localfolderid){
   psync_sql_res *res;

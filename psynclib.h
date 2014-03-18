@@ -167,6 +167,7 @@ typedef struct {
 #define PERROR_FOLDER_ALREADY_SYNCING   9
 #define PERROR_INVALID_SYNCTYPE        10
 #define PERROR_OFFLINE                 11
+#define PERROR_INVALID_SYNCID          12
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
