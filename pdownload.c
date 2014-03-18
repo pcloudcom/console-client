@@ -41,6 +41,7 @@
 #include "pp2p.h"
 #include "plist.h"
 #include "plocalscan.h"
+#include "pupload.h"
 
 typedef struct {
   psync_list list;
@@ -256,7 +257,21 @@ static int call_func_for_folder_name(psync_folderid_t localfolderid, psync_folde
 
 static void delete_local_folder_from_db(psync_folderid_t localfolderid){
   psync_sql_res *res;
+  psync_uint_row row;
   if (likely(localfolderid)){
+    res=psync_sql_query("SELECT id FROM localfolder WHERE localparentfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    while ((row=psync_sql_fetch_rowint(res)))
+      delete_local_folder_from_db(row[0]);
+    psync_sql_free_result(res);
+    res=psync_sql_query("SELECT id FROM localfile WHERE localparentfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    while ((row=psync_sql_fetch_rowint(res)))
+      psync_delete_upload_tasks_for_file(row[0]);
+    psync_sql_free_result(res);
+    res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    psync_sql_run_free(res);
     res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=?");
     psync_sql_bind_uint(res, 1, localfolderid);
     psync_sql_run_free(res);
@@ -943,8 +958,11 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
       break;
     case PSYNC_DELETE_LOCAL_FOLDER:
       res=call_func_for_folder_name(localitemid, itemid, name, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir, 0, "local folder deleted");
-      if (!res)
+      if (!res){
+        psync_sql_start_transaction();
         delete_local_folder_from_db(localitemid);
+        psync_sql_commit_transaction();
+      }
       break;
     case PSYNC_DELREC_LOCAL_FOLDER:
       res=task_del_folder_rec(localitemid, itemid, syncid);

@@ -373,7 +373,93 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
   return 0;
 }
 
-int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype);
+int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
+  psync_sql_res *res;
+  psync_variant_row row;
+  psync_uint_row urow;
+  psync_folderid_t folderid;
+  uint64_t perms;
+  psync_stat_t st;
+  int unsigned md;
+  psync_synctype_t oldsynctype;
+  if (unlikely_log(synctype<PSYNC_SYNCTYPE_MIN || synctype>PSYNC_SYNCTYPE_MAX))
+    return_isyncid(PERROR_INVALID_SYNCTYPE);
+  psync_sql_start_transaction();
+  res=psync_sql_query("SELECT folderid, localpath, synctype FROM syncfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  row=psync_sql_fetch_row(res);
+  if (unlikely_log(!row)){
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return_error(PERROR_INVALID_SYNCID);
+  }
+  folderid=psync_get_number(row[0]);
+  oldsynctype=psync_get_number(row[2]);
+  if (oldsynctype==synctype){
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return 0;
+  }
+  if (unlikely_log(psync_stat(psync_get_string(row[1]), &st)) || unlikely_log(!psync_stat_isfolder(&st))){
+    psync_sql_free_result(res);
+    psync_sql_rollback_transaction();
+    return_isyncid(PERROR_LOCAL_FOLDER_NOT_FOUND);
+  }
+  psync_sql_free_result(res);
+  if (synctype&PSYNC_DOWNLOAD_ONLY)
+    md=7;
+  else
+    md=5;
+  if (unlikely_log(!psync_stat_mode_ok(&st, md))){
+    psync_sql_rollback_transaction();
+    return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  }
+  if (folderid){
+    res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
+    if (unlikely_log(!res))
+      return_isyncid(PERROR_DATABASE_ERROR);
+    psync_sql_bind_uint(res, 1, folderid);
+    urow=psync_sql_fetch_rowint(res);
+    if (unlikely_log(!urow)){
+      psync_sql_free_result(res);
+      psync_sql_rollback_transaction();
+      return_isyncid(PERROR_REMOTE_FOLDER_NOT_FOUND);
+    }
+    perms=urow[0];
+    psync_sql_free_result(res);
+  }
+  else
+    perms=PSYNC_PERM_ALL;
+  if (unlikely_log((synctype&PSYNC_DOWNLOAD_ONLY && (perms&PSYNC_PERM_READ)!=PSYNC_PERM_READ) ||
+      (synctype&PSYNC_UPLOAD_ONLY && (perms&PSYNC_PERM_WRITE)!=PSYNC_PERM_WRITE))){
+    psync_sql_rollback_transaction();
+    return_isyncid(PERROR_REMOTE_FOLDER_ACC_DENIED);
+  }
+  res=psync_sql_prep_statement("UPDATE syncfolder SET synctype=?, flags=0 WHERE id=?");
+  psync_sql_bind_uint(res, 1, synctype);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE syncid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE syncid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("DELETE FROM localfolder WHERE syncid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_run_free(res);
+  if (!(synctype&PSYNC_DOWNLOAD_ONLY) && (oldsynctype&PSYNC_DOWNLOAD_ONLY)){
+    res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=?");
+    psync_sql_bind_uint(res, 1, syncid);
+    while ((urow=psync_sql_fetch_rowint(res)))
+      psync_del_folder_from_downloadlist(urow[0]);
+  }  
+  if (!(synctype&PSYNC_UPLOAD_ONLY) && (oldsynctype&PSYNC_UPLOAD_ONLY))
+    psync_localnotify_del_sync(syncid);
+  psync_sql_commit_transaction();
+  psync_syncer_new(syncid);
+  return 0;
+}
 
 static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t localfolderid){
   psync_sql_res *res;
