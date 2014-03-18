@@ -122,6 +122,7 @@ static int task_rmdir(const char *path){
     return 0;
   if (psync_fs_err()==P_BUSY || psync_fs_err()==P_ROFS)
     return -1;
+  psync_wake_localscan();
   return 0;
 //  if (psync_fs_err()==P_NOENT || psync_fs_err()==P_NOTDIR || psync_fs_err()==P_NOTEMPTY || psync_fs_err()==P_EXIST)
 //    return 0;
