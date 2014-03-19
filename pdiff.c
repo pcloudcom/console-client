@@ -552,6 +552,23 @@ static void bind_meta(psync_sql_res *res, const binresult *meta, int off){
   bind_opt_num("rotate");
 }
 
+static void insert_revision(psync_fileid_t fileid, uint64_t hash, uint64_t ctime){
+  static psync_sql_res *st=NULL;
+  if (!fileid){
+    if (st){
+      psync_sql_free_result(st);
+      st=NULL;
+    }
+    return;
+  }
+  if (!st)
+    st=psync_sql_prep_statement("REPLACE INTO filerevision (fileid, hash, ctime) VALUES (?, ?, ?)");
+  psync_sql_bind_uint(st, 1, fileid);
+  psync_sql_bind_uint(st, 2, hash);
+  psync_sql_bind_uint(st, 3, ctime);
+  psync_sql_run(st);
+}
+
 static void process_createfile(const binresult *entry){
   static psync_sql_res *st=NULL;
   const binresult *meta, *name;
@@ -567,6 +584,7 @@ static void process_createfile(const binresult *entry){
       psync_sql_free_result(st);
       st=NULL;
     }
+    insert_revision(0, 0, 0);
     return;
   }
   if (!st)
@@ -594,6 +612,7 @@ static void process_createfile(const binresult *entry){
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run(st);
+  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num);
   if (psync_is_folder_in_downloadlist(parentfolderid) && !psync_is_name_to_ignore(name->str)){
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
     psync_sql_bind_uint(res, 1, parentfolderid);
@@ -683,6 +702,7 @@ static void process_modifyfile(const binresult *entry){
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run(st);
+  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num);
   oldparentfolderid=psync_get_number(row[0]);
   oldsync=psync_is_folder_in_downloadlist(oldparentfolderid);
   if (oldparentfolderid==parentfolderid)

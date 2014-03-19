@@ -464,6 +464,12 @@ void psync_sql_bind_string(psync_sql_res *res, int n, const char *str){
     debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));}
 
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len){
+  int code=sqlite3_bind_text(res->stmt, n, str, len, SQLITE_STATIC);
+  if (unlikely(code!=SQLITE_OK))
+    debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
+}
+
+void psync_sql_bind_blob(psync_sql_res *res, int n, const char *str, size_t len){
   int code=sqlite3_bind_blob(res->stmt, n, str, len, SQLITE_STATIC);
   if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error binding value: %s", sqlite3_errmsg(psync_db));
@@ -601,13 +607,14 @@ int psync_rename_conflicted_file(const char *path){
   num=0;
   while (1){
     if (num)
-      l=sprintf(npath+dotidx, "(conflicted %"P_PRI_I")", num);
+      l=sprintf(npath+dotidx, " (conflicted %"P_PRI_I")", num);
     else{
       l=12;
-      memcpy(npath+dotidx, "(conflicted)", l);
+      memcpy(npath+dotidx, " (conflicted)", l);
     }
     memcpy(npath+dotidx+l, path+dotidx, plen-dotidx+1);
     if (psync_stat(npath, &st)){
+      debug(D_NOTICE, "renaming conflict %s to %s", path, npath);
       l=psync_file_rename(path, npath);
       psync_free(npath);
       return l;

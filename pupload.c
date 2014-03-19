@@ -317,7 +317,7 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
   uint64_t filesize, hash;
   unsigned char shashhex[PSYNC_HASH_DIGEST_HEXLEN];
   int ret;
-  res=psync_sql_query("SELECT id, size FROM file WHERE parentfolderid=? AND name=CAST(? AS BLOB)");
+  res=psync_sql_query("SELECT id, size FROM file WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_string(res, 2, name);
   row=psync_sql_fetch_rowint(res);

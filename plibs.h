@@ -174,6 +174,7 @@ void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val) PSYNC_NONNULL(1)
 void psync_sql_bind_double(psync_sql_res *res, int n, double val) PSYNC_NONNULL(1);
 void psync_sql_bind_string(psync_sql_res *res, int n, const char *str) PSYNC_NONNULL(1);
 void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t len) PSYNC_NONNULL(1);
+void psync_sql_bind_blob(psync_sql_res *res, int n, const char *str, size_t len) PSYNC_NONNULL(1);
 void psync_sql_bind_null(psync_sql_res *res, int n) PSYNC_NONNULL(1);
 void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_variant_row psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
