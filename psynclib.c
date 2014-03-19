@@ -453,8 +453,10 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
-  psync_localnotify_del_sync(syncid);
   psync_sql_commit_transaction();
+  psync_localnotify_del_sync(syncid);
+  psync_stop_sync_download(syncid);
+  psync_stop_sync_upload(syncid);
   psync_syncer_new(syncid);
   return 0;
 }
