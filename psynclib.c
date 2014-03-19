@@ -439,6 +439,11 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   psync_sql_bind_uint(res, 1, synctype);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
+  res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  while ((urow=psync_sql_fetch_rowint(res)))
+    psync_del_folder_from_downloadlist(urow[0]);
+  psync_sql_free_result(res);
   res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
@@ -448,15 +453,10 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
-  if (!(synctype&PSYNC_DOWNLOAD_ONLY) && (oldsynctype&PSYNC_DOWNLOAD_ONLY)){
-    res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=?");
-    psync_sql_bind_uint(res, 1, syncid);
-    while ((urow=psync_sql_fetch_rowint(res)))
-      psync_del_folder_from_downloadlist(urow[0]);
-  }  
-  if (!(synctype&PSYNC_UPLOAD_ONLY) && (oldsynctype&PSYNC_UPLOAD_ONLY))
-    psync_localnotify_del_sync(syncid);
   psync_sql_commit_transaction();
+  psync_localnotify_del_sync(syncid);
+  psync_stop_sync_download(syncid);
+  psync_stop_sync_upload(syncid);
   psync_syncer_new(syncid);
   return 0;
 }
