@@ -336,7 +336,34 @@ static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid
   return ret;
 }
 
-static int rename_if_notex(const char *oldname, const char *newname){
+static void create_conflicted(const char *name, psync_folderid_t localfolderid, psync_syncid_t syncid, const char *filename){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_bind_uint(res, 2, localfolderid);
+  psync_sql_bind_string(res, 3, filename);
+  psync_restart_localscan();
+  psync_rename_conflicted_file(name);
+  psync_sql_run_free(res);
+  psync_wake_localscan();
+}
+
+static int rename_if_notex(const char *oldname, const char *newname, psync_fileid_t fileid, psync_folderid_t localfolderid,
+                           psync_syncid_t syncid, const char *filename){
+  uint64_t filesize;
+  int ret, isrev;
+  unsigned char localhashhex[PSYNC_HASH_DIGEST_HEXLEN];
+  debug(D_NOTICE, "renaming %s to %s", oldname, newname);
+  if (psync_get_local_file_checksum(newname, localhashhex, &filesize)==PSYNC_NET_OK){
+    debug(D_NOTICE, "file %s already exists", newname);
+    ret=psync_is_revision_of_file(localhashhex, filesize, fileid, &isrev);
+    if (ret==PSYNC_NET_TEMPFAIL)
+      return -1;
+    if (ret==PSYNC_NET_OK && !isrev)
+      create_conflicted(newname, localfolderid, syncid, filename);
+    else if (ret==PSYNC_NET_OK && isrev)
+      debug(D_NOTICE, "file %s is found to be old revision of fileid %lu, overwriting", newname, (unsigned long)fileid);
+  }
   return psync_file_rename_overwrite(oldname, newname);
 }
 
@@ -400,6 +427,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   uint64_t result, serversize, localsize, downloadedsize, addedsize, hash;
   int64_t freespace;
   psync_uint_row row;
+  psync_file_lock_t *lock;
   psync_hash_ctx hashctx;
   unsigned char serverhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
                 localhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
@@ -418,6 +446,14 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   if (unlikely_log(!localpath))
     return 0;
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
+  lock=psync_lock_file(name);
+  if (!lock){
+    debug(D_NOTICE, "file %s is currently locked, skipping for now", name);
+    psync_free(name);
+    psync_free(localpath);
+    psync_milisleep(PSYNC_SLEEP_ON_LOCKED_FILE);
+    return -1;
+  }
   rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize, &hash);
   if (unlikely_log(rt!=PSYNC_NET_OK)){
     if (rt==PSYNC_NET_TEMPFAIL)
@@ -448,6 +484,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
         psync_set_local_full(1);
         psync_free(localpath);
         psync_free(name);
+        psync_unlock_file(lock);
         task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
         psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
         return -1;
@@ -664,7 +701,8 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   }
   psync_sql_lock();
   psync_restart_localscan();
-  if (unlikely_log(rename_if_notex(tmpname, name)) || unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
+  if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
+      unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
     psync_sql_unlock();
     goto err0;
   }
@@ -673,6 +711,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   debug(D_NOTICE, "file downloaded %s", name);
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_list_for_each_element_call(&ranges, psync_range_list_t, list, psync_free);
+  psync_unlock_file(lock);
   psync_free(name);
   if (tmpold){
     unlink(tmpold);
@@ -699,12 +738,14 @@ err0:
   }
   psync_free(tmpname);
   psync_free(localpath);
+  psync_unlock_file(lock);
   psync_free(name);
   psync_free(res);
   return -1;
 err_sl_ex:
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_free(localpath);
+  psync_unlock_file(lock);
   psync_free(name);
   psync_timer_notify_exception();
   psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
@@ -712,6 +753,7 @@ err_sl_ex:
 ret0:
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_free(localpath);
+  psync_unlock_file(lock);
   psync_free(name);
   return 0;
 }

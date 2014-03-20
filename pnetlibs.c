@@ -86,6 +86,9 @@ static psync_uint_t dyn_upload_speed=PSYNC_UPL_AUTO_SHAPER_INITIAL;
 
 static psync_pool *apipool=NULL;
 
+static psync_list file_lock_list=PSYNC_LIST_STATIC_INIT(file_lock_list);
+static pthread_mutex_t file_lock_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], upload_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
 
 static void *psync_get_api(){
@@ -1417,6 +1420,114 @@ int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync
   psync_free(hash);
   psync_free(checksums);
   return PSYNC_NET_OK;
+}
+
+static int is_revision_local(const unsigned char *localhashhex, uint64_t filesize, psync_fileid_t fileid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT f.fileid FROM filerevision f, hashchecksum h WHERE f.fileid=? AND f.hash=h.hash AND h.size=? AND h.checksum=?");
+  psync_sql_bind_uint(res, 1, fileid);
+  psync_sql_bind_uint(res, 2, filesize);
+  psync_sql_bind_lstring(res, 3, (const char *)localhashhex, PSYNC_HASH_DIGEST_HEXLEN);
+  row=psync_sql_fetch_rowint(res);
+  psync_sql_free_result(res);
+  return row?1:0;
+}
+
+static int download_file_revisions(psync_fileid_t fileid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_BOOL("showchecksums", 1), P_STR("timeformat", "timestamp")};
+  psync_socket *api;
+  binresult *res;
+  const binresult *revs, *meta;
+  psync_sql_res *fr, *hc;
+  uint64_t result, hash;
+  uint32_t i;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    return PSYNC_NET_TEMPFAIL;
+  res=send_command(api, "listrevisions", params);
+  if (res)
+    psync_apipool_release(api);
+  else
+    psync_apipool_release_bad(api);
+  if (unlikely_log(!res)){
+    psync_timer_notify_exception();
+    return PSYNC_NET_TEMPFAIL;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_ERROR, "listrevisions returned error %lu", (unsigned long)result);
+    psync_free(res);
+    return psync_handle_api_result(result);
+  }
+  revs=psync_find_result(res, "revisions", PARAM_ARRAY);
+  meta=psync_find_result(res, "metadata", PARAM_HASH);
+  psync_sql_start_transaction();
+  fr=psync_sql_prep_statement("REPLACE INTO filerevision (fileid, hash, ctime) VALUES (?, ?, ?)");
+  psync_sql_bind_uint(fr, 1, fileid);
+  hc=psync_sql_prep_statement("REPLACE INTO hashchecksum (hash, size, checksum) VALUES (?, ?, ?)");
+  for (i=0; i<revs->length; i++){
+    hash=psync_find_result(revs->array[i], "hash", PARAM_NUM)->num;
+    psync_sql_bind_uint(fr, 2, hash);
+    psync_sql_bind_uint(fr, 3, psync_find_result(revs->array[i], "created", PARAM_NUM)->num);
+    psync_sql_run(fr);
+    psync_sql_bind_uint(hc, 1, hash);
+    psync_sql_bind_uint(hc, 2, psync_find_result(revs->array[i], "size", PARAM_NUM)->num);
+    psync_sql_bind_lstring(hc, 3, psync_find_result(revs->array[i], PSYNC_CHECKSUM, PARAM_STR)->str, PSYNC_HASH_DIGEST_HEXLEN);
+    psync_sql_run(hc);
+  }
+  hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  psync_sql_bind_uint(fr, 2, hash);
+  psync_sql_bind_uint(fr, 3, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_run_free(fr);
+  psync_sql_bind_uint(hc, 1, hash);
+  psync_sql_bind_uint(hc, 2, psync_find_result(meta, "size", PARAM_NUM)->num);
+  psync_sql_bind_lstring(hc, 3, psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR)->str, PSYNC_HASH_DIGEST_HEXLEN);
+  psync_sql_run_free(hc);
+  psync_sql_commit_transaction();
+  psync_free(res);
+  return PSYNC_NET_OK;
+}
+
+int psync_is_revision_of_file(const unsigned char *localhashhex, uint64_t filesize, psync_fileid_t fileid, int *isrev){
+  int ret;
+  if (is_revision_local(localhashhex, filesize, fileid)){
+    *isrev=1;
+    return PSYNC_NET_OK;
+  }
+  ret=download_file_revisions(fileid);
+  if (ret!=PSYNC_NET_OK)
+    return ret;
+  if (is_revision_local(localhashhex, filesize, fileid))
+    *isrev=1;
+  else
+    *isrev=0;
+  return PSYNC_NET_OK;
+}
+
+psync_file_lock_t *psync_lock_file(const char *path){
+  psync_file_lock_t *lock, *l;
+  size_t len;
+  len=strlen(path)+1;
+  lock=psync_malloc(offsetof(psync_file_lock_t, filename)+len);
+  memcpy(lock->filename, path, len);
+  pthread_mutex_lock(&file_lock_mutex);
+  psync_list_for_each_element(l, &file_lock_list, psync_file_lock_t, list)
+    if (psync_filename_cmp(l->filename, path)==0){
+      pthread_mutex_unlock(&file_lock_mutex);
+      psync_free(lock);
+      return NULL;
+    }
+  psync_list_add_tail(&file_lock_list, &lock->list);
+  pthread_mutex_unlock(&file_lock_mutex);
+  return lock;
+}
+
+void psync_unlock_file(psync_file_lock_t *lock){
+  pthread_mutex_lock(&file_lock_mutex);
+  psync_list_del(&lock->list);
+  pthread_mutex_unlock(&file_lock_mutex);
+  psync_free(lock);
 }
 
 static void psync_netlibs_timer(void *ptr){
