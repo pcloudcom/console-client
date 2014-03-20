@@ -168,6 +168,7 @@ typedef struct {
 #define PERROR_INVALID_SYNCTYPE        10
 #define PERROR_OFFLINE                 11
 #define PERROR_INVALID_SYNCID          12
+#define PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING 13
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
@@ -419,6 +420,10 @@ int psync_lost_password(const char *email, char **err);
  */
 
 int psync_change_password(const char *currentpass, const char *newpass, char **err);
+
+int psync_create_remote_folder_by_path(const char *path, char **err);
+
+int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err);
 
 /* Returns auth string of the current user. Do not free the returned string (which should be obvious from
  * the const anyway).

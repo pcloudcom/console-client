@@ -296,9 +296,19 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
     return PSYNC_INVALID_SYNCID;
 }
 
+int str_is_prefix(const char *str1, const char *str2){
+  size_t len1, len2;
+  len1=strlen(str1);
+  len2=strlen(str2);
+  if (len2<len1)
+    len1=len2;
+  return !psync_filename_cmpn(str1, str2, len1);
+}
+
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
   psync_sql_res *res;
   psync_uint_row row;
+  psync_str_row srow;
   uint64_t perms;
   psync_stat_t st;
   psync_syncid_t ret;
@@ -313,6 +323,14 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
     md=5;
   if (unlikely_log(!psync_stat_mode_ok(&st, md)))
     return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  res=psync_sql_query("SELECT localpath FROM syncfolder");
+  if (unlikely_log(!res))
+    return_isyncid(PERROR_DATABASE_ERROR);
+  while ((srow=psync_sql_fetch_rowstr(res)))
+    if (str_is_prefix(srow[0], localpath)){
+      psync_sql_free_result(res);
+      return_isyncid(PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING);
+    }
   if (folderid){
     res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
     if (unlikely_log(!res))
@@ -656,6 +674,16 @@ int psync_lost_password(const char *email, char **err){
 int psync_change_password(const char *currentpass, const char *newpass, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_STR("oldpassword", currentpass), P_STR("newpassword", newpass)};
   return run_command("changepassword", params, err);
+}
+
+int psync_create_remote_folder_by_path(const char *path, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", path)};
+  return run_command("createfolder", params, err);
+}
+
+int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
+  return run_command("createfolder", params, err);
 }
 
 const char *psync_get_auth_string(){

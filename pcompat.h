@@ -196,6 +196,7 @@ typedef int psync_file_t;
 
 #define PSYNC_FILENAMES_CASESENSITIVE 1
 #define psync_filename_cmp strcmp
+#define psync_filename_cmpn memcmp
 
 #define psync_def_var_arr(name, type, size) type name[size]
 
@@ -282,6 +283,7 @@ typedef HANDLE psync_file_t;
 
 #define PSYNC_FILENAMES_CASESENSITIVE 0
 #define psync_filename_cmp _stricmp
+#define psync_filename_cmpn _memicmp
 
 #define psync_close_socket closesocket
 #define psync_read_socket(s, b, c) recv(s, (char *)(b), c, 0)
