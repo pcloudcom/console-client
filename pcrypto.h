@@ -43,6 +43,7 @@ typedef psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_text_decod
 
 #define PSYNC_CRYPTO_INVALID_ENCODER NULL
 
+psync_symmetric_key_t psync_crypto_aes256_ctr_gen_key();
 psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_ctr_encoder_decoder_create(psync_symmetric_key_t key);
 void psync_crypto_aes256_ctr_encoder_decoder_free(psync_crypto_aes256_ctr_encoder_decoder_t enc);
 void psync_crypto_aes256_ctr_encode_decode_inplace(psync_crypto_aes256_ctr_encoder_decoder_t enc, void *data, size_t datalen, uint64_t dataoffset);
