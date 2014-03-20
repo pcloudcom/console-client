@@ -676,6 +676,16 @@ int psync_change_password(const char *currentpass, const char *newpass, char **e
   return run_command("changepassword", params, err);
 }
 
+int psync_create_remote_folder_by_path(const char *path, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", path)};
+  return run_command("createfolder", params, err);
+}
+
+int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
+  return run_command("createfolder", params, err);
+}
+
 const char *psync_get_auth_string(){
   return psync_my_auth;
 }

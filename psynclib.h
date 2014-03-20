@@ -421,6 +421,10 @@ int psync_lost_password(const char *email, char **err);
 
 int psync_change_password(const char *currentpass, const char *newpass, char **err);
 
+int psync_create_remote_folder_by_path(const char *path, char **err);
+
+int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err);
+
 /* Returns auth string of the current user. Do not free the returned string (which should be obvious from
  * the const anyway).
  */
