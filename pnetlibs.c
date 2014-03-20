@@ -86,6 +86,9 @@ static psync_uint_t dyn_upload_speed=PSYNC_UPL_AUTO_SHAPER_INITIAL;
 
 static psync_pool *apipool=NULL;
 
+static psync_list file_lock_list=PSYNC_LIST_STATIC_INIT(file_lock_list);
+static pthread_mutex_t file_lock_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], upload_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
 
 static void *psync_get_api(){
@@ -1500,7 +1503,31 @@ int psync_is_revision_of_file(const unsigned char *localhashhex, uint64_t filesi
   else
     *isrev=0;
   return PSYNC_NET_OK;
-  
+}
+
+psync_file_lock_t *psync_lock_file(const char *path){
+  psync_file_lock_t *lock, *l;
+  size_t len;
+  len=strlen(path)+1;
+  lock=psync_malloc(offsetof(psync_file_lock_t, filename)+len);
+  memcpy(lock->filename, path, len);
+  pthread_mutex_lock(&file_lock_mutex);
+  psync_list_for_each_element(l, &file_lock_list, psync_file_lock_t, list)
+    if (psync_filename_cmp(l->filename, path)==0){
+      pthread_mutex_unlock(&file_lock_mutex);
+      psync_free(lock);
+      return NULL;
+    }
+  psync_list_add_tail(&file_lock_list, &lock->list);
+  pthread_mutex_unlock(&file_lock_mutex);
+  return lock;
+}
+
+void psync_unlock_file(psync_file_lock_t *lock){
+  pthread_mutex_lock(&file_lock_mutex);
+  psync_list_del(&lock->list);
+  pthread_mutex_unlock(&file_lock_mutex);
+  psync_free(lock);
 }
 
 static void psync_netlibs_timer(void *ptr){

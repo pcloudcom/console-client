@@ -77,6 +77,11 @@ typedef struct {
   uint32_t id;
 } psync_upload_range_list_t;
 
+typedef struct {
+  psync_list list;
+  char filename[];
+} psync_file_lock_t;
+
 void psync_netlibs_init();
 
 psync_socket *psync_apipool_get();
@@ -108,5 +113,8 @@ int psync_net_scan_file_for_blocks(psync_socket *api, psync_list *rlist, psync_f
 int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync_uploadid_t uploadid, psync_file_t fd);
 
 int psync_is_revision_of_file(const unsigned char *localhashhex, uint64_t filesize, psync_fileid_t fileid, int *isrev);
+
+psync_file_lock_t *psync_lock_file(const char *path);
+void psync_unlock_file(psync_file_lock_t *lock);
 
 #endif

@@ -609,7 +609,7 @@ int psync_rename_conflicted_file(const char *path){
     if (num)
       l=sprintf(npath+dotidx, " (conflicted %"P_PRI_I")", num);
     else{
-      l=12;
+      l=13;
       memcpy(npath+dotidx, " (conflicted)", l);
     }
     memcpy(npath+dotidx+l, path+dotidx, plen-dotidx+1);

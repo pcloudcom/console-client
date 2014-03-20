@@ -427,6 +427,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   uint64_t result, serversize, localsize, downloadedsize, addedsize, hash;
   int64_t freespace;
   psync_uint_row row;
+  psync_file_lock_t *lock;
   psync_hash_ctx hashctx;
   unsigned char serverhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
                 localhashhex[PSYNC_HASH_DIGEST_HEXLEN], 
@@ -445,6 +446,14 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   if (unlikely_log(!localpath))
     return 0;
   name=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
+  lock=psync_lock_file(name);
+  if (!lock){
+    debug(D_NOTICE, "file %s is currently locked, skipping for now", name);
+    psync_free(name);
+    psync_free(localpath);
+    psync_milisleep(PSYNC_SLEEP_ON_LOCKED_FILE);
+    return -1;
+  }
   rt=psync_get_remote_file_checksum(fileid, serverhashhex, &serversize, &hash);
   if (unlikely_log(rt!=PSYNC_NET_OK)){
     if (rt==PSYNC_NET_TEMPFAIL)
@@ -475,6 +484,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
         psync_set_local_full(1);
         psync_free(localpath);
         psync_free(name);
+        psync_unlock_file(lock);
         task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
         psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
         return -1;
@@ -701,6 +711,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   debug(D_NOTICE, "file downloaded %s", name);
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_list_for_each_element_call(&ranges, psync_range_list_t, list, psync_free);
+  psync_unlock_file(lock);
   psync_free(name);
   if (tmpold){
     unlink(tmpold);
@@ -727,12 +738,14 @@ err0:
   }
   psync_free(tmpname);
   psync_free(localpath);
+  psync_unlock_file(lock);
   psync_free(name);
   psync_free(res);
   return -1;
 err_sl_ex:
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_free(localpath);
+  psync_unlock_file(lock);
   psync_free(name);
   psync_timer_notify_exception();
   psync_milisleep(PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000);
@@ -740,6 +753,7 @@ err_sl_ex:
 ret0:
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_free(localpath);
+  psync_unlock_file(lock);
   psync_free(name);
   return 0;
 }
