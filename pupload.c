@@ -415,7 +415,8 @@ static void add_bytes_uploaded(uint64_t bytes){
 
 static int upload_file(const char *localpath, const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, 
                        psync_fileid_t localfileid, psync_syncid_t syncid, upload_list_t *upload, binparam pr){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name), P_BOOL("nopartial", 1), pr};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name), P_BOOL("nopartial", 1), 
+                     {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   psync_socket *api;
   void *buff;
   binresult *res;
@@ -580,7 +581,8 @@ static int upload_get_checksum(psync_socket *api, psync_uploadid_t uploadid, uin
 
 static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char *localpath, psync_uploadid_t uploadid, 
                        psync_folderid_t folderid, const char *name, binparam pr){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid), pr};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid), 
+                     {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   binresult *res;
   const binresult *meta;
   psync_fileid_t fileid;
