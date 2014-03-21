@@ -790,7 +790,7 @@ restart:
       ret=upload_from_file(api, le, uploadid, upload);
     }
     else if (le->type==PSYNC_URANGE_COPY_UPLOAD){
-      debug(D_NOTICE, "copying %lu bytes from uploadid %lu offset %lu", (unsigned long)le->len, (unsigned long)le->uploadid, le->off);
+      debug(D_NOTICE, "copying %lu bytes from uploadid %lu offset %lu", (unsigned long)le->len, (unsigned long)le->uploadid, (unsigned long)le->off);
       ret=upload_from_upload(api, le, uploadid, upload);
     }
     else if (le->type==PSYNC_URANGE_LAST)
