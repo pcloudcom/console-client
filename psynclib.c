@@ -331,6 +331,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
       psync_sql_free_result(res);
       return_isyncid(PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING);
     }
+  psync_sql_free_result(res);
   if (folderid){
     res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
     if (unlikely_log(!res))

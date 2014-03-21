@@ -535,10 +535,10 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
       if (unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize, hash)))
         rt=PSYNC_NET_TEMPFAIL;
       else
-        debug(D_NOTICE, "file %s copied from %s", tmpname, name);
+        debug(D_NOTICE, "file %s copied from %s", name, tmpname);
     }
     else
-      debug(D_WARNING, "failed to copy %s from %s", tmpname, name);
+      debug(D_WARNING, "failed to copy %s from %s", name, tmpname);
     psync_free(tmpname);
     if (likely_log(rt==PSYNC_NET_OK)){
       psync_sql_free_result(sql);

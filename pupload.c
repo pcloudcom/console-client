@@ -44,13 +44,13 @@ typedef struct {
   psync_fileid_t localfileid;
   uint64_t filesize;
   uint64_t uploaded;
+  uint64_t taskid;
   psync_syncid_t syncid;
   int stop;
   unsigned char hash[PSYNC_HASH_DIGEST_HEXLEN];
 } upload_list_t;
 
 typedef struct {
-  uint64_t taskid;
   upload_list_t upllist;
   char filename[];
 } upload_task_t;
@@ -278,15 +278,21 @@ static void set_local_file_remote_id(psync_fileid_t localfileid, psync_fileid_t 
   psync_sql_run_free(res);
 }
 
-static void set_local_file_conflicted(psync_fileid_t localfileid, psync_fileid_t fileid, uint64_t hash, const char *localpath, const char *newname){
+static void set_local_file_conflicted(psync_fileid_t localfileid, psync_fileid_t fileid, uint64_t hash, const char *localpath, const char *newname,
+                                      uint64_t taskid){
   psync_sql_res *res;
   char *newpath;
+  debug(D_NOTICE, "conflict found, renaming %s to %s", localpath, newname);
   psync_sql_start_transaction();
   res=psync_sql_prep_statement("UPDATE localfile SET fileid=?, hash=?, name=? WHERE id=?");
   psync_sql_bind_uint(res, 1, fileid);
   psync_sql_bind_uint(res, 2, hash);
   psync_sql_bind_string(res, 3, newname);
   psync_sql_bind_uint(res, 4, localfileid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("UPDATE task SET name=? WHERE id=?");
+  psync_sql_bind_string(res, 1, newname);
+  psync_sql_bind_uint(res, 2, taskid);
   psync_sql_run_free(res);
   newpath=psync_local_path_for_local_file(localfileid, NULL);
   if (unlikely_log(psync_file_rename_overwrite(localpath, newpath)))
@@ -421,11 +427,12 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
   void *buff;
   binresult *res;
   const binresult *meta;
+  const char *hashhexsrv;
+  psync_sql_res *sres;
   uint64_t bw, result, fileid, rsize, hash;
   size_t rd;
   ssize_t rrd;
   psync_file_t fd;
-  unsigned char hashhexsrv[PSYNC_HASH_DIGEST_HEXLEN];
   fd=psync_file_open(localpath, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE){
     debug(D_WARNING, "could not open local file %s", localpath);
@@ -486,14 +493,19 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
   meta=psync_find_result(res, "metadata", PARAM_ARRAY)->array[0];
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  rsize=psync_find_result(meta, "size", PARAM_NUM)->num;
+  hashhexsrv=psync_find_result(psync_find_result(res, "checksums", PARAM_ARRAY)->array[0], PSYNC_CHECKSUM, PARAM_STR)->str;
+  sres=psync_sql_prep_statement("REPLACE INTO hashchecksum (hash, size, checksum) VALUES (?, ?, ?)");
+  psync_sql_bind_uint(sres, 1, hash);
+  psync_sql_bind_uint(sres, 2, rsize);
+  psync_sql_bind_lstring(sres, 3, hashhexsrv, PSYNC_HASH_DIGEST_HEXLEN);
+  psync_sql_run_free(sres);
   if (psync_check_result(meta, "conflicted", PARAM_BOOL))
-    set_local_file_conflicted(localfileid, fileid, hash, localpath, psync_find_result(meta, "name", PARAM_STR)->str);
+    set_local_file_conflicted(localfileid, fileid, hash, localpath, psync_find_result(meta, "name", PARAM_STR)->str, upload->taskid);
   else
     set_local_file_remote_id(localfileid, fileid, hash);
   psync_diff_unlock();
   psync_free(res);
-  if (unlikely_log(psync_get_remote_file_checksum(fileid, hashhexsrv, &rsize, NULL)))
-    return -1;
   if (unlikely_log(rsize!=fsize) || unlikely_log(memcmp(hashhexsrv, hashhex, PSYNC_HASH_DIGEST_HEXLEN)))
     return -1;
   debug(D_NOTICE, "file %s uploaded to %lu/%s", localpath, (long unsigned)folderid, name);
@@ -580,7 +592,7 @@ static int upload_get_checksum(psync_socket *api, psync_uploadid_t uploadid, uin
 }
 
 static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char *localpath, psync_uploadid_t uploadid, 
-                       psync_folderid_t folderid, const char *name, binparam pr){
+                       psync_folderid_t folderid, const char *name, uint64_t taskid, binparam pr){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid), 
                      {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   binresult *res;
@@ -601,7 +613,7 @@ static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char
       fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
       hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
       if (psync_check_result(meta, "conflicted", PARAM_BOOL))
-        set_local_file_conflicted(localfileid, fileid, hash, localpath, psync_find_result(meta, "name", PARAM_STR)->str);
+        set_local_file_conflicted(localfileid, fileid, hash, localpath, psync_find_result(meta, "name", PARAM_STR)->str, taskid);
       else
         set_local_file_remote_id(localfileid, fileid, hash);
       ret=PSYNC_NET_OK;
@@ -805,7 +817,7 @@ restart:
     ret=PSYNC_NET_OK;
   psync_file_close(fd);
   if (ret==PSYNC_NET_OK)
-    ret=upload_save(api, localfileid, localpath, uploadid, folderid, name, pr);
+    ret=upload_save(api, localfileid, localpath, uploadid, folderid, name, upload->taskid, pr);
   psync_apipool_release(api);
   if (ret==PSYNC_NET_TEMPFAIL)
     return -1;
@@ -980,6 +992,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     pr.str="new";
   }
   psync_sql_free_result(res);
+  debug(D_NOTICE, "uploading file %s", localpath);
   if (fsize<=PSYNC_MIN_SIZE_FOR_CHECKSUMS)
     ret=upload_file(localpath, hashhex, fsize, folderid, nname, localfileid, syncid, upload, pr);
   else{
@@ -1007,13 +1020,13 @@ static void task_run_upload_file_thread(void *ptr){
   if (task_uploadfile(ut->upllist.syncid, ut->upllist.localfileid, ut->filename, &ut->upllist)){
     psync_milisleep(PSYNC_SLEEP_ON_FAILED_DOWNLOAD);
     res=psync_sql_prep_statement("UPDATE task SET inprogress=0 WHERE id=?");
-    psync_sql_bind_uint(res, 1, ut->taskid);
+    psync_sql_bind_uint(res, 1, ut->upllist.taskid);
     psync_sql_run_free(res);
     psync_wake_upload();
   }
   else{
     res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
-    psync_sql_bind_uint(res, 1, ut->taskid);
+    psync_sql_bind_uint(res, 1, ut->upllist.taskid);
     psync_sql_run_free(res);
   }
   pthread_mutex_lock(&current_uploads_mutex);
@@ -1055,7 +1068,7 @@ static int task_run_uploadfile(uint64_t taskid, psync_syncid_t syncid, psync_fol
   psync_sql_run_free(res);
   len=strlen(filename);
   ut=(upload_task_t *)psync_malloc(offsetof(upload_task_t, filename)+len+1);
-  ut->taskid=taskid;
+  ut->upllist.taskid=taskid;
   ut->upllist.localfileid=localfileid;
   ut->upllist.filesize=filesize;
   ut->upllist.uploaded=0;
