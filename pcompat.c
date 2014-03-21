@@ -998,7 +998,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   addr=addrs;
   while (addr){
     family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && (addr->ifa_flags&IFF_BROADCAST))
+    if ((family==AF_INET || family==AF_INET6) && (addr->ifa_flags&IFF_BROADCAST) && addr->ifa_broadaddr)
       cnt++;
     addr=addr->ifa_next;
   }
@@ -1008,18 +1008,13 @@ psync_interface_list_t *psync_list_ip_adapters(){
   cnt=0;
   while (addr){
     family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && (addr->ifa_flags&IFF_BROADCAST)){
+    if ((family==AF_INET || family==AF_INET6) && (addr->ifa_flags&IFF_BROADCAST) && addr->ifa_broadaddr){
       if (family==AF_INET)
         sz=sizeof(struct sockaddr_in);
       else
         sz=sizeof(struct sockaddr_in6);
       memcpy(&ret->interfaces[cnt].address, addr->ifa_addr, sz);
-      if (addr->ifa_broadaddr)
-        memcpy(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr, sz);
-      else{
-        memset(&ret->interfaces[cnt].broadcast, 0xff, sz);
-        ret->interfaces[cnt].broadcast.ss_family=family;
-      }
+      memcpy(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr, sz);
       memcpy(&ret->interfaces[cnt].netmask, addr->ifa_netmask, sz);
       ret->interfaces[cnt].addrsize=sz;
       cnt++;
