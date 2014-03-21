@@ -112,8 +112,14 @@ static psync_binary_rsa_key_t rsa_public_bin=PSYNC_INVALID_BIN_RSA;
 PSYNC_PURE static const char *p2p_get_peer_address(){
   if (paddr.ss_family==AF_INET)
     return inet_ntoa(((struct sockaddr_in *)&paddr)->sin_addr);
-  else
+  else{
+#if defined(P_OS_POSIX)
+    static char buff[80];
+    return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&paddr)->sin6_addr, buff, sizeof(buff));
+#else
     return "IPv6 address"; /* inet_ntop on Windows is Vista+ */
+#endif
+  }
 }
 
 static psync_fileid_t psync_p2p_has_file(const unsigned char *hashstart, const unsigned char *genhash, const unsigned char *rand, uint64_t filesize,
@@ -170,11 +176,11 @@ static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsign
   return 0;
 }
 
-static void psync_p2p_check(packet_check *packet){
+static void psync_p2p_check(const packet_check *packet){
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN];
   packet_check_resp resp;
   int rlen;
-  if (!memcpy(packet->computername, computername, PSYNC_HASH_DIGEST_HEXLEN))
+  if (!memcmp(packet->computername, computername, PSYNC_HASH_DIGEST_HEXLEN))
     return;
   if (psync_p2p_has_file(packet->hashstart, packet->genhash, packet->rand, packet->filesize, hashhex))
     resp.type=P2P_RESP_HAVEIT;
@@ -689,8 +695,9 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
       debug(D_NOTICE, "could not create a socket for addres family %u", (unsigned)il->interfaces[i].address.ss_family);
       continue;
     }
-    setsockopt(udpsock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
-    if (bind(sock, (struct sockaddr *)&il->interfaces[i].address, il->interfaces[i].addrsize)==SOCKET_ERROR){
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
+    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (const char *)&on, sizeof(on));
+    if (unlikely_log(bind(sock, (struct sockaddr *)&il->interfaces[i].address, il->interfaces[i].addrsize)==SOCKET_ERROR)){
       psync_close_socket(sock);
       continue;
     }
