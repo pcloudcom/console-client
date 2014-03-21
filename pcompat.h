@@ -170,6 +170,7 @@ typedef struct stat psync_stat_t;
 #define P_TIMEDOUT   ETIMEDOUT
 #define P_INVAL      EINVAL
 #define P_CONNRESET  ECONNRESET
+#define P_INTR       EINTR
 
 #define P_NOENT      ENOENT
 #define P_EXIST      EEXIST
@@ -256,6 +257,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define P_TIMEDOUT   WSAETIMEDOUT
 #define P_INVAL      WSAEINVAL
 #define P_CONNRESET  WSAECONNRESET
+#define P_INTR       WSAEINTR
 
 #define P_NOENT      ERROR_PATH_NOT_FOUND
 #define P_EXIST      ERROR_ALREADY_EXISTS

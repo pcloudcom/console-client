@@ -84,13 +84,15 @@ static psync_socket *get_connected_socket(){
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("username", user), 
                          P_STR("password", pass), 
-                         P_BOOL("getauth", 1)};
+                         P_BOOL("getauth", 1),
+                         P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
     else {
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("auth", auth),
-                         P_BOOL("getauth", 1)};
+                         P_BOOL("getauth", 1),
+                         P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
     if (unlikely_log(!res)){

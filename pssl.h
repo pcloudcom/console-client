@@ -65,6 +65,8 @@ typedef psync_encrypted_data_t psync_binary_rsa_key_t;
 #define PSYNC_AES256_BLOCK_SIZE 16
 #define PSYNC_AES256_KEY_SIZE 32
 
+#define psync_ssl_alloc_binary_rsa psync_ssl_alloc_encrypted_symmetric_key
+
 int psync_ssl_init();
 int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname);
 int psync_ssl_connect_finish(void *sslconn, const char *hostname);
@@ -90,6 +92,7 @@ psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bi
 void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin);
 
 psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen);
+psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len);
 void psync_ssl_free_symmetric_key(psync_symmetric_key_t key);
 
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key);

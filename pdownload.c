@@ -562,19 +562,36 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   current_counter=&started_downloads;
   psync_status_send_update();
   
-  rt=psync_p2p_check_download(fileid, serverhashhex, serversize, name);
-  if (rt==PSYNC_NET_OK && likely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize, hash)))
+  tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
+  rt=psync_p2p_check_download(fileid, serverhashhex, serversize, tmpname);
+  if (rt==PSYNC_NET_OK && likely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize, hash))){
+    psync_sql_lock();
+    psync_restart_localscan();
+    if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
+        unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
+      psync_sql_unlock();
+      psync_free(tmpname);
+      goto err_sl_ex;
+    }
+    psync_sql_unlock();
+    psync_free(tmpname);
     goto ret0;
-  else if (rt==PSYNC_NET_TEMPFAIL)
+  }
+  else if (rt==PSYNC_NET_TEMPFAIL){
+    psync_free(tmpname);
     goto err_sl_ex;
+  }
   api=psync_apipool_get();
-  if (unlikely_log(!api))
+  if (unlikely_log(!api)){
+    psync_free(tmpname);
     goto err_sl_ex;
+  }
   res=send_command(api, "getfilelink", params);
   psync_apipool_release(api);
-  if (unlikely_log(!res))
+  if (unlikely_log(!res)){
+    psync_free(tmpname);
     goto err_sl_ex;
-  tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (unlikely(result)){
     debug(D_WARNING, "got error %lu from getfilelink", (long unsigned)result);

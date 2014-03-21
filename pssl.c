@@ -42,3 +42,10 @@ void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
   memset(key->key, 0, key->keylen);
   psync_free(key);
 }
+
+psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len){
+  psync_encrypted_symmetric_key_t ret;
+  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
+  ret->datalen=len;
+  return ret;
+}

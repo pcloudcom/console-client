@@ -92,6 +92,14 @@ static void copy_iv_and_xor_with_counter(unsigned char *dest, const unsigned cha
   }
 }
 
+psync_symmetric_key_t psync_crypto_aes256_ctr_gen_key(){
+  psync_symmetric_key_t key;
+  key=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+PSYNC_AES256_KEY_SIZE+PSYNC_AES256_BLOCK_SIZE);
+  key->keylen=PSYNC_AES256_KEY_SIZE+PSYNC_AES256_BLOCK_SIZE;
+  psync_ssl_rand_strong(key->key, PSYNC_AES256_KEY_SIZE+PSYNC_AES256_BLOCK_SIZE);
+  return key;
+}
+
 psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_ctr_encoder_decoder_create(psync_symmetric_key_t key){
   psync_aes256_encoder enc;
   psync_crypto_aes256_ctr_encoder_decoder_t ret;
