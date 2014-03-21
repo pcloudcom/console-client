@@ -564,16 +564,15 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   
   tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
   rt=psync_p2p_check_download(fileid, serverhashhex, serversize, tmpname);
-  if (rt==PSYNC_NET_OK && likely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, serverhashhex, serversize, hash))){
-    psync_sql_lock();
-    psync_restart_localscan();
+  if (rt==PSYNC_NET_OK){
+    psync_stop_localscan();
     if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
         unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
-      psync_sql_unlock();
+      psync_resume_localscan();
       psync_free(tmpname);
       goto err_sl_ex;
     }
-    psync_sql_unlock();
+    psync_resume_localscan();
     psync_free(tmpname);
     goto ret0;
   }
@@ -716,14 +715,13 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     debug(D_WARNING, "got wrong file checksum for file %s", filename);
     goto err0;
   }
-  psync_sql_lock();
-  psync_restart_localscan();
+  psync_stop_localscan();
   if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
       unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
-    psync_sql_unlock();
+    psync_resume_localscan();
     goto err0;
   }
-  psync_sql_unlock();
+  psync_resume_localscan();
   psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FINISHED, syncid, name, fileid);
   debug(D_NOTICE, "file downloaded %s", name);
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
@@ -854,10 +852,9 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
   }
   newpath=psync_strcat(newfolder, PSYNC_DIRECTORY_SEPARATOR, newname, NULL);
   ret=0;
-  psync_sql_lock();
-  psync_restart_localscan();
+  psync_stop_localscan();
   if (psync_file_rename_overwrite(oldpath, newpath)){
-    psync_sql_unlock();
+    psync_resume_localscan();
     if (psync_fs_err()==P_NOENT){
       debug(D_WARNING, "renamed from %s to %s failed, downloading", oldpath, newpath);
       psync_task_download_file(newsyncid, fileid, newlocalfolderid, newname);
@@ -878,7 +875,7 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
       psync_sql_run_free(res);
       debug(D_NOTICE, "renamed %s to %s", oldpath, newpath);
     }
-    psync_sql_unlock();
+    psync_resume_localscan();
   }
   psync_free(newpath);
   psync_free(oldpath);
@@ -990,8 +987,7 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
   char *localpath;
   psync_sql_res *res;
   task_wait_no_downloads();
-  psync_sql_lock();
-  psync_restart_localscan();
+  psync_stop_localscan();
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
   if (unlikely_log(!localpath)){
     psync_sql_unlock();
@@ -1004,7 +1000,7 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
   psync_rmdir_with_trashes(localpath);
-  psync_sql_unlock();
+  psync_resume_localscan();
   return 0;
 }
   

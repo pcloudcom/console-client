@@ -31,5 +31,7 @@
 void psync_localscan_init();
 void psync_wake_localscan();
 void psync_restart_localscan();
+void psync_stop_localscan();
+void psync_resume_localscan();
 
 #endif

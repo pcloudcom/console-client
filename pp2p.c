@@ -289,6 +289,7 @@ static void psync_p2p_tcphandler(void *ptr){
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], buff[4096];
   sock=*((psync_socket_t *)ptr);
   psync_free(ptr);
+  debug(D_NOTICE, "got tcp connection");
   if (unlikely_log(socket_read_all(sock, &packet, sizeof(packet))))
     goto err0;
   if (unlikely_log(packet.keylen>PSYNC_P2P_RSA_SIZE) || unlikely_log(packet.tokenlen>512)) /* lets allow 8 times larger keys than we use */
@@ -313,18 +314,18 @@ static void psync_p2p_tcphandler(void *ptr){
   psync_free(token);
   pubrsa=psync_ssl_rsa_binary_to_public(binpubrsa);
   psync_free(binpubrsa);
-  if (pubrsa==PSYNC_INVALID_RSA)
+  if (unlikely_log(pubrsa==PSYNC_INVALID_RSA))
     goto err0;
   localpath=psync_local_path_for_local_file(localfileid, NULL);
   if (unlikely_log(!localpath))
     goto err0;
   fd=psync_file_open(localpath, P_O_RDONLY, 0);
+  debug(D_NOTICE, "sending file %s to peer", localpath);
   psync_free(localpath);
   if (fd==INVALID_HANDLE_VALUE){
     debug(D_WARNING, "could not open local file %lu", (unsigned long)localfileid);
     goto err0;
   }
-  debug(D_NOTICE, "sending file %s to peer", localpath);
   aeskey=psync_crypto_aes256_ctr_gen_key();
   encaeskey=psync_ssl_rsa_encrypt_symmetric_key(pubrsa, aeskey);
   encoder=psync_crypto_aes256_ctr_encoder_decoder_create(aeskey);
@@ -667,13 +668,13 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   size_t i, tlen;
   psync_socket_t sock, msock;
   packet_resp_t bresp;
-  unsigned char hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN];
+  unsigned char hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN], hashhex[PSYNC_HASH_DIGEST_HEXLEN];
   unsigned char *token;
   socklen_t slen;
   int sret;
   if (!psync_setting_get_bool(_PS(p2psync)))
     return PSYNC_NET_PERMFAIL;
-  debug(D_NOTICE, "sending P2P_CHECK from file with hash %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", filehashhex);
+  debug(D_NOTICE, "sending P2P_CHECK for file with hash %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", filehashhex);
   pct1.type=P2P_CHECK;
   memcpy(pct1.hashstart, filehashhex, PSYNC_P2P_HEXHASH_BYTES);
   pct1.filesize=fsize;
@@ -734,8 +735,8 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
       memcpy(hashsource, filehashhex, PSYNC_HASH_DIGEST_HEXLEN);
       memcpy(hashsource+PSYNC_HASH_DIGEST_HEXLEN, resp.rand, sizeof(resp.rand));
       psync_hash(hashsource, PSYNC_HASH_BLOCK_SIZE, hashbin);
-      psync_binhex(pct1.genhash, hashbin, PSYNC_HASH_DIGEST_LEN);
-      if (unlikely_log(memcmp(pct1.genhash, resp.genhash, PSYNC_HASH_DIGEST_HEXLEN)))
+      psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
+      if (unlikely_log(memcmp(hashhex, resp.genhash, PSYNC_HASH_DIGEST_HEXLEN)))
         continue;
       if (resp.type==P2P_RESP_HAVEIT){
         debug(D_NOTICE, "got P2P_RESP_HAVEIT");
@@ -767,11 +768,11 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   }
   if (addr.sin6_family==AF_INET6){
     sock=psync_create_socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
-    addr.sin6_port=resp.port;
+    addr.sin6_port=htons(resp.port);
   }
   else if (addr.sin6_family==AF_INET){
     sock=psync_create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    ((struct sockaddr_in *)&addr)->sin_port=resp.port;
+    ((struct sockaddr_in *)&addr)->sin_port=htons(resp.port);
   }
   else{
     debug(D_ERROR, "unknown address family %u", (unsigned)addr.sin6_family);

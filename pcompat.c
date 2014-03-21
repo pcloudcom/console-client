@@ -1229,6 +1229,8 @@ retry:
       psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
       goto retry;
     }
+    else
+      debug(D_NOTICE, "could not open file %s, error %d", path, (int)GetLastError());
     return -1;
   }
   ret=GetFileInformationByHandle(fd, st);
