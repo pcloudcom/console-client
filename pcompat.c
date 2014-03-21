@@ -1214,12 +1214,19 @@ int psync_stat(const char *path, psync_stat_t *st){
   BOOL ret;
   int flag = FILE_ATTRIBUTE_NORMAL;
   wpath=utf8_to_wchar(path);
+retry:
   if (GetFileAttributesW(wpath)&FILE_ATTRIBUTE_DIRECTORY)
     flag = FILE_FLAG_BACKUP_SEMANTICS;
   fd=CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
   psync_free(wpath);
-  if (unlikely_log(fd==INVALID_HANDLE_VALUE))
+  if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
+    if (GetLastError()==ERROR_SHARING_VIOLATION){
+      debug(D_WARNING, "file %s is locked by another process, will retry after sleep", path);
+      psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
+      goto retry;
+    }
     return -1;
+  }
   ret=GetFileInformationByHandle(fd, st);
   CloseHandle(fd);
   return psync_bool_to_zero(ret);
@@ -1451,7 +1458,13 @@ int psync_file_rename(const char *oldpath, const char *newpath){
   int ret;
   oldwpath=utf8_to_wchar(oldpath);
   newwpath=utf8_to_wchar(newpath);
+retry:
   ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
+  if (ret && GetLastError()==ERROR_SHARING_VIOLATION){
+    debug(D_WARNING, "file %s is locked by another process, will retry after sleep", oldpath);
+    psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
+    goto retry;
+  }
   psync_free(oldwpath);
   psync_free(newwpath);
   return ret;
@@ -1471,8 +1484,18 @@ int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
     int ret;
     oldwpath=utf8_to_wchar(oldpath);
     newwpath=utf8_to_wchar(newpath);
-    DeleteFileW(newwpath);
+retry:
+    if (!DeleteFileW(newwpath) && GetLastError()==ERROR_SHARING_VIOLATION){
+      debug(D_WARNING, "file %s is locked by another process, will retry after sleep", newwpath);
+      psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
+      goto retry;
+    }
     ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
+    if (ret && GetLastError()==ERROR_SHARING_VIOLATION){
+      debug(D_WARNING, "file %s is locked by another process, will retry after sleep", oldpath);
+      psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
+      goto retry;
+    }
     psync_free(oldwpath);
     psync_free(newwpath);
     return ret;
