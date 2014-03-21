@@ -257,8 +257,10 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
   st=SecKeyGeneratePair(dict, &public_key, &private_key);
   CFRelease(dict);
   CFRelease(values[1]);
-  if (unlikely_log(st!=errSecSuccess))
+  if (unlikely(st!=errSecSuccess)){
+    debug(D_ERROR, "RSA key generation failed with error %d", (int)st);
     return PSYNC_INVALID_RSA;
+  }
   ret=psync_new(psync_rsa_struct_t);
   ret->public_key=public_key;
   ret->private_key=private_key;

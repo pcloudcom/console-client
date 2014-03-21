@@ -1013,7 +1013,6 @@ psync_interface_list_t *psync_list_ip_adapters(){
         sz=sizeof(struct sockaddr_in);
       else
         sz=sizeof(struct sockaddr_in6);
-      debug(D_NOTICE, "adding interface %s", addr->ifa_name);
       memcpy(&ret->interfaces[cnt].address, addr->ifa_addr, sz);
       memcpy(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr, sz);
       memcpy(&ret->interfaces[cnt].netmask, addr->ifa_netmask, sz);

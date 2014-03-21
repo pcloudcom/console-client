@@ -179,7 +179,6 @@ static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsign
 static void psync_p2p_check(const packet_check *packet){
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN];
   packet_check_resp resp;
-  int rlen;
   if (!memcmp(packet->computername, computername, PSYNC_HASH_DIGEST_HEXLEN))
     return;
   if (psync_p2p_has_file(packet->hashstart, packet->genhash, packet->rand, packet->filesize, hashhex))
@@ -194,13 +193,12 @@ static void psync_p2p_check(const packet_check *packet){
   memcpy(hashsource+PSYNC_HASH_DIGEST_HEXLEN, resp.rand, sizeof(resp.rand));
   psync_hash(hashsource, PSYNC_HASH_BLOCK_SIZE, hashbin);
   psync_binhex(resp.genhash, hashbin, PSYNC_HASH_DIGEST_LEN);
-  rlen=sizeof(resp);
-  debug(D_NOTICE, "replying with %u to a check from %s", (unsigned int)resp.type, p2p_get_peer_address());
+  debug(D_NOTICE, "replying with %u to a check from %s, looking for %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", (unsigned int)resp.type, p2p_get_peer_address(), hashhex);
   if (files_serving)
     psync_milisleep(files_serving*10);
   if (resp.type==P2P_RESP_WAIT)
     psync_milisleep(PSYNC_P2P_INITIAL_TIMEOUT/4);
-  if (!sendto(udpsock, (const char *)&resp, rlen, 0, (const struct sockaddr *)&paddr, paddrlen))
+  if (!sendto(udpsock, (const char *)&resp, sizeof(resp), 0, (const struct sockaddr *)&paddr, paddrlen))
     debug(D_WARNING, "sendto to %s failed", p2p_get_peer_address());
 }
 
@@ -326,6 +324,7 @@ static void psync_p2p_tcphandler(void *ptr){
     debug(D_WARNING, "could not open local file %lu", (unsigned long)localfileid);
     goto err0;
   }
+  debug(D_NOTICE, "sending file %s to peer", localpath);
   aeskey=psync_crypto_aes256_ctr_gen_key();
   encaeskey=psync_ssl_rsa_encrypt_symmetric_key(pubrsa, aeskey);
   encoder=psync_crypto_aes256_ctr_encoder_decoder_create(aeskey);
@@ -706,7 +705,6 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
     else if (il->interfaces[i].broadcast.ss_family==AF_INET6)
       ((struct sockaddr_in6 *)(&il->interfaces[i].broadcast))->sin6_port=htons(PSYNC_P2P_PORT);
     if (sendto(sock, (const char *)&pct1, sizeof(pct1), 0, (struct sockaddr *)&il->interfaces[i].broadcast, il->interfaces[i].addrsize)!=SOCKET_ERROR){
-      debug(D_NOTICE, "sending udp message");
       sockets[i]=sock;
       FD_SET(sock, &rfds);
       if (sock>=msock)
@@ -729,11 +727,15 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
       sret=recvfrom(sockets[i], (char *)&resp, sizeof(resp), 0, (struct sockaddr *)&addr, &slen);
       if (unlikely_log(sret==SOCKET_ERROR) || unlikely_log(sret<sizeof(resp)))
         continue;
+      if (!memcmp(pct1.rand, resp.rand, sizeof(resp.rand))){
+        debug(D_WARNING, "clients are supposed to generate random data, not to reuse mine");
+        continue;
+      }
       memcpy(hashsource, filehashhex, PSYNC_HASH_DIGEST_HEXLEN);
       memcpy(hashsource+PSYNC_HASH_DIGEST_HEXLEN, resp.rand, sizeof(resp.rand));
       psync_hash(hashsource, PSYNC_HASH_BLOCK_SIZE, hashbin);
       psync_binhex(pct1.genhash, hashbin, PSYNC_HASH_DIGEST_LEN);
-      if (unlikely_log(!memcmp(pct1.genhash, resp.genhash, PSYNC_HASH_DIGEST_HEXLEN)))
+      if (unlikely_log(memcmp(pct1.genhash, resp.genhash, PSYNC_HASH_DIGEST_HEXLEN)))
         continue;
       if (resp.type==P2P_RESP_HAVEIT){
         debug(D_NOTICE, "got P2P_RESP_HAVEIT");
