@@ -786,7 +786,7 @@ restart:
     }
     else if (le->type==PSYNC_URANGE_COPY_FILE){
       debug(D_NOTICE, "copying %lu bytes from fileid %lu hash %lu offset %lu", (unsigned long)le->len, (unsigned long)le->file.fileid,
-                                                                               (unsigned long)le->file.hash, le->off);
+                                                                               (unsigned long)le->file.hash, (unsigned long)le->off);
       ret=upload_from_file(api, le, uploadid, upload);
     }
     else if (le->type==PSYNC_URANGE_COPY_UPLOAD){
@@ -1001,7 +1001,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     else{
       if (uploadid && memcmp(phashhex, uhashhex, PSYNC_HASH_DIGEST_HEXLEN))
         debug(D_WARNING, "restarting upload due to checksum mismatch up to offset %lu, expected: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)
-                          "s, got: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", ufsize, phashhex, uhashhex);
+                          "s, got: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", (unsigned long)ufsize, phashhex, uhashhex);
       ret=upload_big_file(localpath, hashhex, fsize, folderid, nname, localfileid, syncid, upload, 0, 0, pr);
     }
   }

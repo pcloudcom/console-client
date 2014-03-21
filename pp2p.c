@@ -326,6 +326,7 @@ static void psync_p2p_tcphandler(void *ptr){
     debug(D_WARNING, "could not open local file %lu", (unsigned long)localfileid);
     goto err0;
   }
+  debug(D_NOTICE, "sending file %s to peer", localpath);
   aeskey=psync_crypto_aes256_ctr_gen_key();
   encaeskey=psync_ssl_rsa_encrypt_symmetric_key(pubrsa, aeskey);
   encoder=psync_crypto_aes256_ctr_encoder_decoder_create(aeskey);
@@ -706,7 +707,6 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
     else if (il->interfaces[i].broadcast.ss_family==AF_INET6)
       ((struct sockaddr_in6 *)(&il->interfaces[i].broadcast))->sin6_port=htons(PSYNC_P2P_PORT);
     if (sendto(sock, (const char *)&pct1, sizeof(pct1), 0, (struct sockaddr *)&il->interfaces[i].broadcast, il->interfaces[i].addrsize)!=SOCKET_ERROR){
-      debug(D_NOTICE, "sending udp message");
       sockets[i]=sock;
       FD_SET(sock, &rfds);
       if (sock>=msock)
