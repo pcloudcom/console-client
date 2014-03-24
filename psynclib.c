@@ -47,6 +47,7 @@
 #include "plist.h"
 #include "pp2p.h"
 #include "plocalnotify.h"
+#include "pcache.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -111,6 +112,8 @@ int psync_init(){
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_SSL_INIT_FAILED);
   }
+  psync_cache_init();
+  psync_timer_init();
   psync_libs_init();
   psync_settings_init();
   psync_status_init();
@@ -138,7 +141,6 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
       psync_libstate=2;
     pthread_mutex_unlock(&psync_libstate_mutex);
   }
-  psync_timer_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
@@ -300,8 +302,15 @@ int str_is_prefix(const char *str1, const char *str2){
   size_t len1, len2;
   len1=strlen(str1);
   len2=strlen(str2);
-  if (len2<len1)
+  if (len2<len1){
+    if (str1[len2]!='/' && str1[len2]!=PSYNC_DIRECTORY_SEPARATORC)
+      return 0;
     len1=len2;
+  }
+  else{
+    if (str2[len1]!='/' && str2[len1]!=PSYNC_DIRECTORY_SEPARATORC)
+      return 0;
+  }
   return !psync_filename_cmpn(str1, str2, len1);
 }
 

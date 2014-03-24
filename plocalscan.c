@@ -66,6 +66,7 @@ static pthread_mutex_t scan_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t scan_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t scan_wakes=0;
 static uint32_t restart_scan=0;
+static uint32_t scan_stoppers=0;
 
 #define SCAN_LIST_CNT 9
 
@@ -526,6 +527,8 @@ static void scanner_scan(int first){
   starttime=psync_current_time;
 restart:
   pthread_mutex_lock(&scan_mutex);
+  while (scan_stoppers)
+    pthread_cond_wait(&scan_cond, &scan_mutex);
   restart_scan=0;
   pthread_mutex_unlock(&scan_mutex);
   for (i=0; i<SCAN_LIST_CNT; i++)
@@ -573,6 +576,14 @@ restart:
       changes=0;
     }
   } while (i);
+  pthread_mutex_lock(&scan_mutex);
+  if (unlikely(restart_scan)){
+    pthread_mutex_unlock(&scan_mutex);
+    for (i=0; i<SCAN_LIST_CNT; i++)
+      psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
+    goto restart;
+  }
+  pthread_mutex_unlock(&scan_mutex);
   psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFILES], 
                                &scan_lists[SCAN_LIST_NEWFILES], 
                                &scan_lists[SCAN_LIST_RENFILESFROM], 
@@ -645,6 +656,22 @@ void psync_restart_localscan(){
   restart_scan=1;
   pthread_mutex_unlock(&scan_mutex);
 }
+
+void psync_stop_localscan(){
+  pthread_mutex_lock(&scan_mutex);
+  restart_scan=1;
+  scan_stoppers++;
+  pthread_mutex_unlock(&scan_mutex);
+}
+
+void psync_resume_localscan(){
+  pthread_mutex_unlock(&scan_mutex);
+  scan_stoppers--;
+  if (!scan_stoppers)
+    pthread_cond_signal(&scan_cond);
+  pthread_mutex_unlock(&scan_mutex);
+}
+
 
 static void psync_wake_localscan_noscan(){
   pthread_mutex_lock(&scan_mutex);

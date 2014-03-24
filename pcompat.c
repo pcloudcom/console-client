@@ -1224,15 +1224,18 @@ retry:
   if (GetFileAttributesW(wpath)&FILE_ATTRIBUTE_DIRECTORY)
     flag = FILE_FLAG_BACKUP_SEMANTICS;
   fd=CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
-  psync_free(wpath);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
     if (GetLastError()==ERROR_SHARING_VIOLATION){
       debug(D_WARNING, "file %s is locked by another process, will retry after sleep", path);
       psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
       goto retry;
     }
+    else
+      debug(D_NOTICE, "could not open file %s, error %d", path, (int)GetLastError());
+    psync_free(wpath);
     return -1;
   }
+  psync_free(wpath);
   ret=GetFileInformationByHandle(fd, st);
   CloseHandle(fd);
   return psync_bool_to_zero(ret);
