@@ -16,7 +16,7 @@ ifeq ($(OS),Windows_NT)
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
-        CFLAGS += -DP_OS_LINUX
+        CFLAGS += -DP_OS_LINUX -D_GNU_SOURCE
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX
