@@ -1234,6 +1234,8 @@ void psync_stop_sync_upload(psync_syncid_t syncid){
   res=psync_sql_prep_statement("DELETE FROM task WHERE syncid=? AND type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_UPLOAD));
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
+  psync_status_recalc_to_upload();
+  psync_send_status_update();
   pthread_mutex_lock(&current_uploads_mutex);
   psync_list_for_each_element(upl, &uploads, upload_list_t, list)
     if (upl->syncid==syncid)
