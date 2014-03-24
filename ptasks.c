@@ -121,6 +121,10 @@ void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_send_status_update();
 }
 
+void psync_task_download_file_silent(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
+  create_task3(PSYNC_DOWNLOAD_FILE, syncid, fileid, localfolderid, name);
+}
+
 void psync_task_rename_local_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t fileid, psync_folderid_t oldlocalfolderid,
                                   psync_folderid_t newlocalfolderid, const char *newname){
   psync_sql_res *res;
