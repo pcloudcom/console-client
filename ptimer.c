@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -30,6 +30,22 @@
 #include "pcompat.h"
 #include "plibs.h"
 
+/* Maximum timeout possible is TIMER_ARRAY_SIZE^TIMER_LEVELS seconds, in the worst case
+ * TIMER_LEVELS operations will be preformed for each timer to service it
+ * (it is log TIMER_ARRAY_SIZE(timer_seconds_after_now)). So servicing a timer is
+ * generally constant time task with a maximum constant of TIMER_LEVELS and increasing
+ * TIMER_ARRAY_SIZE will trade memory for less processing for each timer.
+ * 
+ * TIMER_ARRAY_SIZE should be a power of two.
+ */
+
+#define TIMER_ARRAY_SIZE_SHIFT 6 /* 64 */
+#define TIMER_ARRAY_SIZE (1<<TIMER_ARRAY_SIZE_SHIFT)
+#define TIMER_LEVELS 3
+
+#define PTIMER_IS_RUNNING     1
+#define PTIMER_STOP_AFTER_RUN 2
+
 time_t psync_current_time;
 
 struct exception_list {
@@ -38,25 +54,49 @@ struct exception_list {
   pthread_t threadid;
 };
 
-struct timer_list {
-  struct timer_list *next;
-  psync_timer_callback func;
-  void *param;
-  time_t nextrun;
-  time_t runevery;
-};
+typedef struct {
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+} mutex_cond;
 
+static psync_list timerlists[TIMER_LEVELS][TIMER_ARRAY_SIZE];
 static struct exception_list *excepions=NULL;
-static struct timer_list *timers=NULL;
 static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
-static pthread_cond_t timer_wait_cond=PTHREAD_COND_INITIALIZER;
-static uint32_t timer_waiters=0;
 static int timer_running=0;
 
+static void timer_check_upper_levels(time_t tmdiv, psync_uint_t level, psync_uint_t sh){
+  psync_list *l1, *l2, *l;
+  time_t m;
+  m=tmdiv%TIMER_ARRAY_SIZE;
+  if (m==0 && level<TIMER_LEVELS-2)
+    timer_check_upper_levels(tmdiv/TIMER_ARRAY_SIZE, level+1, sh+TIMER_ARRAY_SIZE_SHIFT);
+  l=&timerlists[level+1][m];
+  psync_list_for_each_safe(l1, l2, l)
+    psync_list_add_tail(&timerlists[level][(psync_list_element(l1, psync_timer_structure_t, list)->runat>>sh)%TIMER_ARRAY_SIZE], l1);
+  psync_list_init(&timerlists[level+1][m]);
+}
+
+static void timer_prepare_timers(time_t from, time_t to, psync_list *list){
+  time_t i, m;
+  psync_list *l1, *l2;
+  for (i=from+1; i<=to; i++){
+    m=i%TIMER_ARRAY_SIZE;
+    if (m==0)
+      timer_check_upper_levels(i/TIMER_ARRAY_SIZE, 0, 0);
+    psync_list_for_each_safe(l1, l2, &timerlists[0][m]){
+      psync_list_element(l1, psync_timer_structure_t, list)->opts|=PTIMER_IS_RUNNING;
+      psync_list_add_tail(list, l1);
+    }
+    psync_list_init(&timerlists[0][m]);
+  }
+}
+
 static void timer_thread(){
-  struct timer_list *t;
   struct timespec tm;
+  psync_list timers;
+  psync_timer_t timer;
+  psync_list *l1, *l2;
   time_t lt;
   lt=psync_current_time;
   tm.tv_nsec=500000000;
@@ -65,12 +105,28 @@ static void timer_thread(){
      * matter how much time actual timers wasted, they get called every second sharply
      */
     tm.tv_sec=psync_current_time+1;
+    psync_list_init(&timers);
     pthread_mutex_lock(&timer_mutex);
-    if (timer_waiters)
-      pthread_cond_broadcast(&timer_wait_cond);
     pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
     psync_current_time=psync_time();
+    timer_prepare_timers(lt, psync_current_time, &timers);
     pthread_mutex_unlock(&timer_mutex);
+    if (!psync_list_isempty(&timers)){
+      psync_list_for_each_element(timer, &timers, psync_timer_structure_t, list)
+        timer->call(timer, timer->param);
+      pthread_mutex_lock(&timer_mutex);
+      psync_list_for_each_safe(l1, l2, &timers){
+        timer=psync_list_element(l1, psync_timer_structure_t, list);
+        if (!(timer->opts&PTIMER_STOP_AFTER_RUN)){
+          timer->opts=0;
+          psync_list_del(l1);
+          timer->runat=psync_current_time+timer->numsec;
+          psync_list_add_tail(&timerlists[timer->level][(timer->runat>>(timer->level*TIMER_ARRAY_SIZE_SHIFT))%TIMER_ARRAY_SIZE], &timer->list);
+        }
+      }
+      pthread_mutex_unlock(&timer_mutex);
+      psync_list_for_each_element_call(&timers, psync_timer_structure_t, list, psync_free);
+    }
     if (unlikely(psync_current_time-lt>=5)){
       debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
       debug(D_NOTICE, "was supposed to sleep until %lu, slept until %lu", (unsigned long)tm.tv_sec, (unsigned long)psync_current_time);
@@ -82,19 +138,14 @@ static void timer_thread(){
       psync_milisleep(1000);
     }
     lt=psync_current_time;
-    t=timers;
-    while (t){
-      if (t->nextrun<=psync_current_time){
-        t->nextrun=psync_current_time+t->runevery;
-//        debug(D_NOTICE, "running timer %p(%p)", t->func, t->param);
-        t->func(t->param);
-      }
-      t=t->next;
-    }
   }
 }
 
 void psync_timer_init(){
+  psync_uint_t i, j;
+  for (i=0; i<TIMER_LEVELS; i++)
+    for (j=0; j<TIMER_ARRAY_SIZE; j++)
+      psync_list_init(&timerlists[i][j]);
   psync_current_time=psync_time();
   psync_run_thread(timer_thread);
   timer_running=1;
@@ -111,18 +162,52 @@ void psync_timer_wake(){
   pthread_cond_signal(&timer_cond);
 }
 
-void psync_timer_register(psync_timer_callback func, time_t numsec, void *param){
-  struct timer_list *t;
-  t=psync_new(struct timer_list);
-  t->next=NULL; /* this is needed as in the timer there is no lock and the two operations between lock and unlock can be reordered*/
-  t->func=func;
-  t->param=param;
-  t->nextrun=0;
-  t->runevery=numsec;
+psync_timer_t psync_timer_register(psync_timer_callback func, time_t numsec, void *param){
+  psync_timer_t timer;
+  uint32_t i;
+  time_t n;
+  timer=psync_new(psync_timer_structure_t);
+  timer->call=func;
+  timer->param=param;
+  n=TIMER_ARRAY_SIZE;
+  for (i=0; i<TIMER_LEVELS; i++){
+    if (numsec<=n)
+      break;
+    else
+      n*=TIMER_ARRAY_SIZE;
+  }
+  if (unlikely(i==TIMER_LEVELS)){
+    n/=TIMER_ARRAY_SIZE;
+    debug(D_ERROR, "requested timeout %lu is larger than the maximum of %lu", (unsigned long)numsec, (unsigned long)n);
+    numsec=n;
+    i--;
+  }
+  timer->numsec=numsec;
+  timer->level=i;
+  timer->opts=0;
   pthread_mutex_lock(&timer_mutex);
-  t->next=timers;
-  timers=t;
+  timer->runat=psync_current_time+numsec;
+  psync_list_add_tail(&timerlists[i][(timer->runat>>(i*TIMER_ARRAY_SIZE_SHIFT))%TIMER_ARRAY_SIZE], &timer->list);
   pthread_mutex_unlock(&timer_mutex);
+  return timer;
+}
+
+int psync_timer_stop(psync_timer_t timer){
+  int needfree=0;
+  pthread_mutex_lock(&timer_mutex);
+  if (timer->opts&PTIMER_IS_RUNNING)
+    timer->opts|=PTIMER_STOP_AFTER_RUN;
+  else{
+    psync_list_del(&timer->list);
+    needfree=1;
+  }
+  pthread_mutex_unlock(&timer_mutex);
+  if (needfree){
+    psync_free(timer);
+    return 0;
+  }
+  else
+    return 1;
 }
 
 void psync_timer_exception_handler(psync_exception_callback func){
@@ -149,14 +234,22 @@ void psync_timer_do_notify_exception(){
   }
 }
 
+static void next_sec(psync_timer_t timer, void *ptr){
+  mutex_cond *mc;
+  psync_timer_stop(timer);
+  mc=(mutex_cond *)ptr;
+  pthread_mutex_lock(&mc->mutex);
+  pthread_cond_signal(&mc->cond);
+  pthread_mutex_unlock(&mc->mutex);
+}
+
 void psync_timer_wait_next_sec(){
-  time_t ct;
-  pthread_mutex_lock(&timer_mutex);
-  ct=psync_current_time;
-  do {
-    timer_waiters++;
-    pthread_cond_wait(&timer_wait_cond, &timer_mutex);
-    timer_waiters--;
-  } while (ct==psync_current_time);
-  pthread_mutex_unlock(&timer_mutex);
+  mutex_cond mc;
+  pthread_mutex_init(&mc.mutex, NULL);
+  pthread_cond_init(&mc.cond, NULL);
+  pthread_mutex_lock(&mc.mutex);
+  psync_timer_register(next_sec, 1, &mc);
+  pthread_mutex_unlock(&mc.mutex);
+  pthread_cond_destroy(&mc.cond);
+  pthread_mutex_destroy(&mc.mutex);
 }

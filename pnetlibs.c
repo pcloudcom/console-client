@@ -28,6 +28,7 @@
 #define __STDC_FORMAT_MACROS
 #include <stdio.h>
 #include <ctype.h>
+#include <semaphore.h>
 #include "pnetlibs.h"
 #include "pssl.h"
 #include "psettings.h"
@@ -35,7 +36,9 @@
 #include "ptimer.h"
 #include "pstatus.h"
 #include "papi.h"
-#include "ppool.h"
+#include "pcache.h"
+
+#define API_CACHE_KEY "ApiConn"
 
 struct time_bytes {
   time_t tm;
@@ -84,45 +87,50 @@ static psync_uint_t upload_bytes_off=0;
 static psync_uint_t upload_speed=0;
 static psync_uint_t dyn_upload_speed=PSYNC_UPL_AUTO_SHAPER_INITIAL;
 
-static psync_pool *apipool=NULL;
-
 static psync_list file_lock_list=PSYNC_LIST_STATIC_INIT(file_lock_list);
 static pthread_mutex_t file_lock_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], upload_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
 
-static void *psync_get_api(){
+static sem_t api_pool_sem;
+
+static psync_socket *psync_get_api(){
+  sem_wait(&api_pool_sem);
   return psync_api_connect(psync_setting_get_bool(_PS(usessl)));
 }
 
 static void psync_ret_api(void *ptr){
+  sem_post(&api_pool_sem);
   psync_socket_close((psync_socket *)ptr);
 }
 
 psync_socket *psync_apipool_get(){
   psync_socket *ret;
-  ret=(psync_socket *)psync_pool_get(apipool);
-  if (likely(ret)){
+  ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
+  if (ret){
     while (unlikely(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
-      psync_pool_release_bad(apipool, ret);
-      ret=(psync_socket *)psync_pool_get(apipool);
+      psync_ret_api(ret);
+      ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
       if (!ret)
-        break;
+        goto retnew;
     }
+    debug(D_NOTICE, "got api connection from cache");
+    return ret;
   }
-  else
+retnew:
+  ret=psync_get_api();
+  if (unlikely_log(!ret))
     psync_timer_notify_exception();
   return ret;
 }
 
 void psync_apipool_release(psync_socket *api){
-  psync_pool_release(apipool, api);
+  psync_cache_add(API_CACHE_KEY, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
 }
 
 void psync_apipool_release_bad(psync_socket *api){
-  psync_pool_release_bad(apipool, api);
+  psync_ret_api(api);
 }
-
 
 static void rm_all(void *vpath, psync_pstat *st){
   char *path;
@@ -1530,12 +1538,12 @@ void psync_unlock_file(psync_file_lock_t *lock){
   psync_free(lock);
 }
 
-static void psync_netlibs_timer(void *ptr){
+static void psync_netlibs_timer(psync_timer_t timer, void *ptr){
   account_downloaded_bytes(0);
   account_uploaded_bytes(0);
 }
 
 void psync_netlibs_init(){
-  apipool=psync_pool_create(psync_get_api, psync_ret_api, PSYNC_APIPOOL_MAXIDLE, PSYNC_APIPOOL_MAXACTIVE, PSYNC_APIPOOL_MAXIDLESEC);
   psync_timer_register(psync_netlibs_timer, 1, NULL);
+  sem_init(&api_pool_sem, 0, PSYNC_APIPOOL_MAXACTIVE);
 }

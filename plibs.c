@@ -36,7 +36,6 @@ struct run_after_ptr {
   struct run_after_ptr *next;
   psync_run_after_t run;
   void *ptr;
-  time_t runat;
 };
 
 static const uint8_t __hex_lookupl[513]={
@@ -60,10 +59,6 @@ static const uint8_t __hex_lookupl[513]={
 
 uint16_t const *__hex_lookup=(uint16_t *)__hex_lookupl;
 static char normalize_table[256];
-
-static pthread_mutex_t ptrs_to_run_mutex=PTHREAD_MUTEX_INITIALIZER;
-static struct run_after_ptr *ptrs_to_run_next_min=NULL;
-static struct run_after_ptr *ptrs_to_run_this_min=NULL;
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
@@ -623,50 +618,6 @@ int psync_rename_conflicted_file(const char *path){
   }
 }
 
-static void psync_run_pointers_timer(void *ptr){
-  struct run_after_ptr *fp, **pfp;
-  if (psync_current_time%60==0 && ptrs_to_run_next_min){
-    time_t nextmin=psync_current_time+60;
-    pthread_mutex_lock(&ptrs_to_run_mutex);
-    fp=ptrs_to_run_next_min;
-    pfp=&ptrs_to_run_next_min;
-    while (fp){
-      if (fp->runat<nextmin){
-        *pfp=fp->next;
-        fp->next=ptrs_to_run_this_min;
-        ptrs_to_run_this_min=fp;
-        fp=*pfp;
-      }
-      else{
-        pfp=&fp->next;
-        fp=fp->next;
-      }
-    }
-    pthread_mutex_unlock(&ptrs_to_run_mutex);
-  }
-  if (ptrs_to_run_this_min){
-    pthread_mutex_lock(&ptrs_to_run_mutex);
-    fp=ptrs_to_run_this_min;
-    pfp=&ptrs_to_run_this_min;
-    while (fp){
-      if (fp->runat<=psync_current_time){
-        *pfp=fp->next;
-        /* it is ok to unlock the mutex while running the callback as this function is the only place that deletes elements from the list */
-        pthread_mutex_unlock(&ptrs_to_run_mutex);
-        fp->run(fp->ptr);
-        psync_free(fp);
-        pthread_mutex_lock(&ptrs_to_run_mutex);
-        fp=*pfp;
-      }
-      else{
-        pfp=&fp->next;
-        fp=fp->next;
-      }
-    }
-    pthread_mutex_unlock(&ptrs_to_run_mutex);
-  }  
-}
-
 void psync_libs_init(){
   psync_uint_t i;
   for (i=0; i<256; i++)
@@ -674,29 +625,30 @@ void psync_libs_init(){
   normalize_table[':']='_';
   normalize_table['/']='_';
   normalize_table['\\']='_';
-  psync_timer_register(psync_run_pointers_timer, 1, NULL);
+}
+
+static void run_after_sec(psync_timer_t timer, void *ptr){
+  struct run_after_ptr *fp=(struct run_after_ptr *)ptr;
+  psync_timer_stop(timer);
+  fp->run(fp->ptr);
+  psync_free(fp);
 }
 
 void psync_run_after_sec(psync_run_after_t run, void *ptr, uint32_t seconds){
   struct run_after_ptr *fp;
-  fp=(struct run_after_ptr *)psync_malloc(sizeof(struct run_after_ptr));
+  fp=psync_new(struct run_after_ptr);
   fp->run=run;
   fp->ptr=ptr;
-  fp->runat=psync_current_time+seconds;
-  pthread_mutex_lock(&ptrs_to_run_mutex);
-  if (seconds<60){
-    fp->next=ptrs_to_run_this_min;
-    ptrs_to_run_this_min=fp;
-  }
-  else{
-    fp->next=ptrs_to_run_next_min;
-    ptrs_to_run_next_min=fp;
-  }
-  pthread_mutex_unlock(&ptrs_to_run_mutex);
+  psync_timer_register(run_after_sec, seconds, fp);
+}
+
+static void free_after_sec(psync_timer_t timer, void *ptr){
+  psync_timer_stop(timer);
+  psync_free(ptr);
 }
 
 void psync_free_after_sec(void *ptr, uint32_t seconds){
-  psync_run_after_sec(psync_free, ptr, seconds);
+  psync_timer_register(free_after_sec, seconds, ptr);
 }
 
 int psync_match_pattern(const char *name, const char *pattern, size_t plen){

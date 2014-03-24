@@ -1,7 +1,7 @@
-/* Copyright (c) 2013-2014 Anton Titov.
- * Copyright (c) 2013-2014 pCloud Ltd.
+/* Copyright (c) 2014 Anton Titov.
+ * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- *
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -25,37 +25,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_POOL_H
-#define _PSYNC_POOL_H
+#ifndef _PSYNC_CACHE_H
+#define _PSYNC_CACHE_H
 
-#include <pthread.h>
 #include <time.h>
 
-typedef void *(*resourceinit)();
-typedef void (*resourcedestroy)(void *);
+typedef void (*psync_cache_free_callback)(void *);
 
-typedef struct {
-  void *resource;
-  time_t lastuse;
-} psync_res_and_time;
-
-typedef struct {
-  resourceinit ri;
-  resourcedestroy rd;
-  pthread_mutex_t lock;
-  pthread_cond_t cond;
-  int inuse;
-  int maxfree;
-  int maxused;
-  int maxage;
-  int curfree;
-  int sleepers;
-  psync_res_and_time freeres[];
-} psync_pool;
-
-psync_pool *psync_pool_create(resourceinit ri, resourcedestroy rd, int maxfree, int maxused, int maxage);
-void *psync_pool_get(psync_pool *pl);
-void psync_pool_release(psync_pool *pl, void *resource);
-void psync_pool_release_bad(psync_pool *pl, void *resource);
+void psync_cache_init();
+void *psync_cache_get(const char *key);
+void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys);
+void psync_cache_add_free(char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys);
 
 #endif
