@@ -563,22 +563,24 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_status_send_update();
   
   tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
-  rt=psync_p2p_check_download(fileid, serverhashhex, serversize, tmpname);
-  if (rt==PSYNC_NET_OK){
-    psync_stop_localscan();
-    if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
-        unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
+  if (serversize>=PSYNC_MIN_SIZE_FOR_P2P){
+    rt=psync_p2p_check_download(fileid, serverhashhex, serversize, tmpname);
+    if (rt==PSYNC_NET_OK){
+      psync_stop_localscan();
+      if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
+          unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
+        psync_resume_localscan();
+        psync_free(tmpname);
+        goto err_sl_ex;
+      }
       psync_resume_localscan();
+      psync_free(tmpname);
+      goto ret0;
+    }
+    else if (rt==PSYNC_NET_TEMPFAIL){
       psync_free(tmpname);
       goto err_sl_ex;
     }
-    psync_resume_localscan();
-    psync_free(tmpname);
-    goto ret0;
-  }
-  else if (rt==PSYNC_NET_TEMPFAIL){
-    psync_free(tmpname);
-    goto err_sl_ex;
   }
   api=psync_apipool_get();
   if (unlikely_log(!api)){
