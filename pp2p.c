@@ -109,6 +109,19 @@ static psync_rsa_publickey_t rsa_public=PSYNC_INVALID_RSA;
 static psync_rsa_privatekey_t rsa_private=PSYNC_INVALID_RSA;
 static psync_binary_rsa_key_t rsa_public_bin=PSYNC_INVALID_BIN_RSA;
 
+PSYNC_PURE static const char *p2p_get_address(void *addr){
+  if (((struct sockaddr_in *)addr)->sin_family==AF_INET)
+    return inet_ntoa(((struct sockaddr_in *)addr)->sin_addr);
+  else{
+#if defined(P_OS_POSIX)
+    static char buff[80];
+    return inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, buff, sizeof(buff));
+#else
+    return "IPv6 address"; /* inet_ntop on Windows is Vista+ */
+#endif
+  }
+}
+
 PSYNC_PURE static const char *p2p_get_peer_address(){
   if (paddr.ss_family==AF_INET)
     return inet_ntoa(((struct sockaddr_in *)&paddr)->sin_addr);
@@ -365,15 +378,15 @@ err0:
 static void psync_p2p_thread(){
   ssize_t ret;
   char buff[2048];
-  struct sockaddr_in6 addr;
+/*  struct sockaddr_in6 addr; */
   struct sockaddr_in addr4;
   psync_socket_t tcpsock, socks[2], *inconn;
   socklen_t sl;
   int sret;
   psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
   tcpsock=INVALID_SOCKET;
-  udpsock=psync_create_socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (unlikely_log(udpsock==INVALID_SOCKET)){
+/*  udpsock=psync_create_socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+  if (unlikely_log(udpsock==INVALID_SOCKET)){*/
     udpsock=psync_create_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (unlikely_log(udpsock==INVALID_SOCKET))
       goto ex;
@@ -384,7 +397,7 @@ static void psync_p2p_thread(){
     addr4.sin_addr.s_addr=INADDR_ANY;
     if (unlikely_log(bind(udpsock, (struct sockaddr *)&addr4, sizeof(addr4))==SOCKET_ERROR))
       goto ex;
-  }
+/*  }
   else{
     setsockopt(udpsock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
     memset(&addr, 0, sizeof(addr));
@@ -395,7 +408,7 @@ static void psync_p2p_thread(){
       goto ex;
   }
   tcpsock=psync_create_socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
-  if (unlikely_log(tcpsock==INVALID_SOCKET)){
+  if (unlikely_log(tcpsock==INVALID_SOCKET)){*/
     tcpsock=psync_create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (unlikely_log(tcpsock==INVALID_SOCKET))
       goto ex;
@@ -410,7 +423,7 @@ static void psync_p2p_thread(){
     if (unlikely_log(getsockname(tcpsock, (struct sockaddr *)&addr4, &sl)==SOCKET_ERROR))
       goto ex;
     tcpport=ntohs(addr4.sin_port);    
-  }
+/*  }
   else{
     setsockopt(tcpsock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
     memset(&addr, 0, sizeof(addr));
@@ -423,7 +436,7 @@ static void psync_p2p_thread(){
     if (unlikely_log(getsockname(tcpsock, (struct sockaddr *)&addr, &sl)==SOCKET_ERROR))
       goto ex;
     tcpport=ntohs(addr.sin6_port);    
-  }
+  }*/
   if (unlikely_log(listen(tcpsock, 2)))
     goto ex;
   socks[0]=udpsock;
@@ -760,6 +773,7 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   if (psync_p2p_check_rsa())
     goto err_perm2;
   sret=psync_p2p_get_download_token(fileid, filehashhex, fsize, &token, &tlen);
+  debug(D_NOTICE, "got token");
   if (unlikely_log(sret!=PSYNC_NET_OK)){
     if (sret==PSYNC_NET_TEMPFAIL)
       goto err_temp2;
@@ -780,8 +794,11 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   }
   if (unlikely_log(sock==INVALID_SOCKET))
     goto err_perm3;
-  if (unlikely_log(connect(sock, (struct sockaddr *)&addr, slen)==SOCKET_ERROR))
-    goto err_temp3;
+  if (unlikely(connect(sock, (struct sockaddr *)&addr, slen)==SOCKET_ERROR)){
+    debug(D_WARNING, "could not connect to %s port %u", p2p_get_address(&addr), (unsigned)resp.port);
+    goto err_perm3;
+  }
+  debug(D_NOTICE, "connected to peer");
   pct2.type=P2P_GET;
   memcpy(pct2.hashstart, filehashhex, PSYNC_P2P_HEXHASH_BYTES);
   pct2.filesize=fsize;

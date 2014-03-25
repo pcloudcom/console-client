@@ -857,13 +857,13 @@ static void process_requestsharein(const binresult *entry){
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "ctime", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, psync_find_result(share, "etime", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 5, get_permissions(share));
   psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
-  br=psync_find_result(share, "name", PARAM_STR);
+  br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 8, br->str, br->length);
   br=psync_check_result(share, "message", PARAM_STR);
   if (br)
