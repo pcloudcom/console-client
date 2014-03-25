@@ -66,18 +66,22 @@ static psync_uint_t hash_func(const char *key){
   hash=0;  
   while ((c=(psync_uint_t)*key++))
     hash=c+(hash<<5)+hash;
+  hash+=hash<<3;
+  hash-=hash>>7;
   return hash%CACHE_HASH_SIZE;
 }
 
 static psync_uint_t hash_funcl(const char *key, size_t *len){
   psync_uint_t c, hash;
   size_t l;
-  hash=0;  
+  hash=0;
   l=0;
   while ((c=(psync_uint_t)*key++)){
     hash=c+(hash<<5)+hash;
     l++;
   }
+  hash+=hash<<3;
+  hash-=hash>>7;
   *len=l;
   return hash%CACHE_HASH_SIZE;
 }

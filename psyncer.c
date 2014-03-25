@@ -32,6 +32,9 @@
 #include "plocalscan.h"
 #include "plocalnotify.h"
 #include "pfolder.h"
+#include "pdownload.h"
+#include "pstatus.h"
+#include "pcallbacks.h"
 #include <string.h>
 
 static psync_folderid_t *synced_down_folders[PSYNC_DIR_HASH_SIZE];
@@ -203,7 +206,7 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
     name=psync_get_string(row[1]);
     if (psync_is_name_to_ignore(name))
       continue;
-    psync_task_download_file(syncid, psync_get_number(row[0]), lfoiderid, name);
+    psync_task_download_file_silent(syncid, psync_get_number(row[0]), lfoiderid, name);
   }
   psync_sql_free_result(res);
 }
@@ -225,8 +228,12 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   folderid=row[0];
   synctype=row[1];
   psync_sql_free_result(res);
-  if (synctype&PSYNC_DOWNLOAD_ONLY)
+  if (synctype&PSYNC_DOWNLOAD_ONLY){
     psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0);
+    psync_wake_download();
+    psync_status_recalc_to_download();
+    psync_send_status_update();
+  }
   else {
     res=psync_sql_prep_statement("INSERT INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, 0, ?)");
     psync_sql_bind_uint(res, 1, syncid);
