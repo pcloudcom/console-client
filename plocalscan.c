@@ -35,6 +35,7 @@
 #include "ptasks.h"
 #include "pupload.h"
 #include "pfolder.h"
+#include "pcallbacks.h"
 #include <string.h>
 
 typedef struct {
@@ -357,7 +358,7 @@ static void scan_upload_file(sync_folderlist *fl){
   if (unlikely_log(!psync_sql_affected_rows()))
     return;
   localfileid=psync_sql_insertid();
-  psync_task_upload_file(fl->syncid, localfileid, fl->name);
+  psync_task_upload_file_silent(fl->syncid, localfileid, fl->name);
 }
 
 static void scan_upload_modified_file(sync_folderlist *fl){
@@ -371,7 +372,7 @@ static void scan_upload_modified_file(sync_folderlist *fl){
   psync_sql_bind_uint(res, 4, fl->mtimenat);
   psync_sql_bind_uint(res, 5, fl->localid);
   psync_sql_run_free(res);
-  psync_task_upload_file(fl->syncid, fl->localid, fl->name);
+  psync_task_upload_file_silent(fl->syncid, fl->localid, fl->name);
 }
 
 static void scan_delete_file(sync_folderlist *fl){
@@ -511,7 +512,7 @@ static void scanner_scan(int first){
   psync_list slist, *l1, *l2;
   sync_folderlist *fl;
   sync_list *l;
-  psync_uint_t i;
+  psync_uint_t i, w;
   if (first)
     localsleepperfolder=0;
   else{
@@ -537,6 +538,7 @@ restart:
   changes=0;
   psync_list_for_each_element(l, &slist, sync_list, list)
     scanner_scan_folder(l->localpath, l->folderid, 0, l->syncid, l->synctype);
+  w=0;
   do {
     pthread_mutex_lock(&scan_mutex);
     if (unlikely(restart_scan)){
@@ -558,6 +560,7 @@ restart:
       l2=l2->next;
       scan_rename_folder(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
       i++;
+      w++;
     }
     psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSROM], sync_folderlist, list, psync_free);
     psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSROM]);
@@ -567,6 +570,7 @@ restart:
     psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list){
       scan_create_folder(fl);
       i++;
+      w++;
     }
     psync_sql_commit_transaction();
     psync_list_for_each_element_call(&scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list, psync_free);
@@ -594,16 +598,30 @@ restart:
   psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFILESFROM]){
     l2=l2->next;
     scan_rename_file(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
+    w++;
   }
-  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFILES], sync_folderlist, list)
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFILES], sync_folderlist, list){
     scan_upload_file(fl);
-  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_MODFILES], sync_folderlist, list)
+    w++;
+  }
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_MODFILES], sync_folderlist, list){
     scan_upload_modified_file(fl);
-  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFILES], sync_folderlist, list)
+    w++;
+  }
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFILES], sync_folderlist, list){
     scan_delete_file(fl);
-  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFOLDERS], sync_folderlist, list)
+    w++;
+  }
+  psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFOLDERS], sync_folderlist, list){
     scan_delete_folder(fl);
+    w++;
+  }
   psync_sql_commit_transaction();
+  if (w){
+    psync_wake_upload();
+    psync_status_recalc_to_upload();
+    psync_send_status_update();
+  }
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
   psync_list_for_each_element_call(&slist, sync_list, list, psync_free);

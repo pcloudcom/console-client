@@ -42,6 +42,7 @@
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
 static uint64_t used_quota=0, current_quota=0;
+static psync_uint_t needdownload;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -254,8 +255,10 @@ static void process_createfolder(const binresult *entry){
       psync_sql_bind_uint(stmt, 3, localfolderid);
       psync_sql_bind_uint(stmt, 4, row[2]);
       psync_sql_run(stmt);
-      if (psync_sql_affected_rows()==1)
+      if (psync_sql_affected_rows()==1){
         psync_task_create_local_folder(syncid, folderid, localfolderid);
+        needdownload=1;
+      }
       else{
         stmt2=psync_sql_prep_statement("UPDATE syncedfolder SET folderid=? WHERE syncid=? AND localfolderid=?");
         psync_sql_bind_uint(stmt2, 1, folderid);
@@ -408,7 +411,7 @@ static void process_modifyfolder(const binresult *entry){
       localfolderid=row[0];
       psync_sql_free_result(res);
       psync_task_rename_local_folder(psync_get_result_cell(fres2, i, 0), folderid, localfolderid, psync_get_result_cell(fres2, i, 1), name->str);
-      psync_increase_local_folder_taskcnt(localfolderid);
+      needdownload=1;
       if (psync_get_result_cell(fres2, i, 0)!=psync_get_result_cell(fres1, i, 0)){
         res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE syncid=? AND folderid=?");
         psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 0));
@@ -433,7 +436,7 @@ static void process_modifyfolder(const binresult *entry){
       psync_sql_free_result(res);
       del_synced_folder_rec(folderid, syncid);
       psync_task_delete_local_folder_recursive(syncid, folderid, localfolderid);
-      psync_increase_local_folder_taskcnt(localfolderid);
+      needdownload=1;
     }
     for (/*i is already=cnt*/; i<fres2->rows; i++){
       syncid=psync_get_result_cell(fres2, i, 0);
@@ -441,6 +444,7 @@ static void process_modifyfolder(const binresult *entry){
       localfolderid=psync_create_local_folder_in_db(syncid, folderid, psync_get_result_cell(fres2, i, 1), name->str);
       psync_task_create_local_folder(syncid, folderid, localfolderid);
       psync_add_folder_for_downloadsync(syncid, psync_get_result_cell(fres2, i, 2), folderid, localfolderid);
+      needdownload=1;
     }
     psync_free(fres1);
     psync_free(fres2);
@@ -480,7 +484,7 @@ static void process_deletefolder(const binresult *entry){
         path=psync_get_path_by_folderid(folderid, NULL);
         psync_task_delete_local_folder(row[0], folderid, row[1], path);
         psync_free(path);
-        psync_increase_local_folder_taskcnt(row[1]);
+        needdownload=1;
       }
     }
     psync_sql_free_result(res);
@@ -631,7 +635,8 @@ static void process_createfile(const binresult *entry){
       psync_sql_free_result(res2);
       if (!hasit){
         debug(D_NOTICE, "downloading file %s with hash %ld to local folder %lu", name->str, (long)hash, (unsigned long)row[1]);
-        psync_task_download_file(row[0], fileid, row[1], name->str);
+        psync_task_download_file_silent(row[0], fileid, row[1], name->str);
+        needdownload=1;
       }
       else
         debug(D_NOTICE, "file %s with hash %ld already exists in local folder %lu", name->str, (long)hash, (unsigned long)row[1]);
@@ -718,6 +723,7 @@ static void process_modifyfile(const binresult *entry){
       path=psync_get_path_by_fileid(fileid, NULL);
       psync_task_delete_local_file(fileid, path);
       psync_free(path);
+      needdownload=1;
       return;
     }
     needdownload=hash!=psync_get_number(row[3]) || size!=oldsize;
@@ -734,10 +740,12 @@ static void process_modifyfile(const binresult *entry){
     group_results_by_col(fres1, fres2, 0);
     cnt=fres2->rows>fres1->rows?fres1->rows:fres2->rows;
     for (i=0; i<cnt; i++){
-      if (needrename)
+      if (needrename){
         psync_task_rename_local_file(psync_get_result_cell(fres1, i, 0), psync_get_result_cell(fres2, i, 0), fileid,
                                      psync_get_result_cell(fres1, i, 1), psync_get_result_cell(fres2, i, 1),
                                      name->str);
+        needdownload=1;
+      }
       if (needdownload){
         res=psync_sql_query("SELECT 1 FROM localfile WHERE localparentfolderid=? AND fileid=? AND hash=? AND syncid=?");
         psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 1));
@@ -748,16 +756,21 @@ static void process_modifyfile(const binresult *entry){
         psync_sql_free_result(res);
         if (row)
           debug(D_NOTICE, "ignoring update for file %s, has correct hash in the database", name->str);
-        else
-          psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+        else{
+          psync_task_download_file_silent(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+          needdownload=1;
+        }
       }
     }
-    for (/*i is already=cnt*/; i<fres2->rows; i++)
-      psync_task_download_file(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+    for (/*i is already=cnt*/; i<fres2->rows; i++){
+      psync_task_download_file_silent(psync_get_result_cell(fres2, i, 0), fileid, psync_get_result_cell(fres2, i, 1), name->str);
+      needdownload=1;
+    }
     for (/*i is already=cnt*/; i<fres1->rows; i++){
       char *path=psync_get_path_by_fileid(fileid, NULL);
       psync_task_delete_local_file_syncid(psync_get_result_cell(fres1, i, 0), fileid, path);
       psync_free(path);
+      needdownload=1;
     }
     psync_free(fres1);
     psync_free(fres2);
@@ -788,6 +801,7 @@ static void process_deletefile(const binresult *entry){
     path=psync_get_path_by_fileid(fileid, NULL);
     psync_task_delete_local_file(fileid, path);
     psync_free(path);
+    needdownload=1;
   }
   psync_sql_bind_uint(st, 1, fileid);
   psync_sql_run(st);
@@ -892,6 +906,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   uint64_t oused_quota;
   uint32_t i, j;
   oused_quota=used_quota;
+  needdownload=0;
   psync_diff_lock();
   psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
@@ -910,6 +925,11 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_set_uint_value("usedquota", used_quota);
   psync_sql_commit_transaction();
   psync_diff_unlock();
+  if (needdownload){
+    psync_wake_download();
+    psync_status_recalc_to_download();
+    psync_send_status_update();
+  }
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   if (oused_quota!=used_quota)
     psync_send_eventid(PEVENT_USEDQUOTA_CHANGED);

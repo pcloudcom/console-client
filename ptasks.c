@@ -95,23 +95,19 @@ static void create_task6(psync_uint_t type, psync_syncid_t syncid, uint64_t entr
 
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid){
   create_task1(PSYNC_CREATE_LOCAL_FOLDER, syncid, folderid, localfolderid);
-  psync_wake_download();
 }
 
 void psync_task_delete_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, const char *remotepath){
   create_task3(PSYNC_DELETE_LOCAL_FOLDER, syncid, folderid, localfolderid, remotepath);
-  psync_wake_download();
 }
 
 void psync_task_delete_local_folder_recursive(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid){
   create_task1(PSYNC_DELREC_LOCAL_FOLDER, syncid, folderid, localfolderid);
-  psync_wake_download();
 }
 
 void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, 
                                     psync_folderid_t newlocalparentfolderid, const char *newname){
   create_task2(PSYNC_RENAME_LOCAL_FOLDER, syncid, folderid, localfolderid, newlocalparentfolderid, newname);
-  psync_wake_download();
 }
 
 void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
@@ -137,22 +133,18 @@ void psync_task_rename_local_file(psync_syncid_t oldsyncid, psync_syncid_t newsy
   psync_sql_bind_uint(res, 6, newlocalfolderid);
   psync_sql_bind_string(res, 7, newname);
   psync_sql_run_free(res);
-  psync_wake_download();
 }
 
 void psync_task_delete_local_file(psync_fileid_t fileid, const char *remotepath){
   create_task4(PSYNC_DELETE_LOCAL_FILE, fileid, remotepath);
-  psync_wake_download();
 }
 
 void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t fileid, const char *remotepath){
   create_task6(PSYNC_DELETE_LOCAL_FILE, syncid, fileid, remotepath);
-  psync_wake_download();
 }
 
 void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t localfolderid, const char *name){
   create_task3(PSYNC_CREATE_REMOTE_FOLDER, syncid, 0, localfolderid, name);
-  psync_wake_upload();
 }
 
 void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
@@ -160,6 +152,10 @@ void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, c
   psync_wake_upload();
   psync_status_recalc_to_upload();
   psync_send_status_update();
+}
+
+void psync_task_upload_file_silent(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
+  create_task3(PSYNC_UPLOAD_FILE, syncid, 0, localfileid, name);
 }
 
 void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
@@ -173,7 +169,6 @@ void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t news
   psync_sql_bind_uint(res, 5, newlocalparentfolderid);
   psync_sql_bind_string(res, 6, newname);
   psync_sql_run_free(res);
-  psync_wake_upload();
 }
 
 void psync_task_rename_remote_folder(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
@@ -187,15 +182,12 @@ void psync_task_rename_remote_folder(psync_syncid_t oldsyncid, psync_syncid_t ne
   psync_sql_bind_uint(res, 5, newlocalparentfolderid);
   psync_sql_bind_string(res, 6, newname);
   psync_sql_run_free(res);
-  psync_wake_upload();
 }
 
 void psync_task_delete_remote_file(psync_syncid_t syncid, psync_fileid_t fileid){
   create_task5(PSYNC_DELETE_REMOTE_FILE, syncid, fileid);
-  psync_wake_upload();
 }
 
 void psync_task_delete_remote_folder(psync_syncid_t syncid, psync_folderid_t folderid){
   create_task5(PSYNC_DELREC_REMOTE_FOLDER, syncid, folderid);
-  psync_wake_upload();
 }

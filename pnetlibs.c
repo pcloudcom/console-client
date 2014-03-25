@@ -1260,6 +1260,8 @@ static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_ch
         if (blen!=checksums->blocksize)
           break;
         blockidx=checksums->blocksize-(inbyteoff&blockmask);
+        if (blockidx==checksums->blocksize)
+          blockidx=0;
         skipbytes=checksums->blocksize-blockidx;
         inbyteoff+=blockidx;
         outbyteoff+=blockidx;
