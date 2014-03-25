@@ -656,7 +656,7 @@ static void process_modifyfile(const binresult *entry){
   psync_fileid_t fileid;
   psync_folderid_t parentfolderid, oldparentfolderid;
   uint64_t size, userid, hash, oldsize;
-  int oldsync, newsync, needdownload, needrename;
+  int oldsync, newsync, lneeddownload, needrename;
   uint32_t cnt, i;
   if (!entry){
     if (sq){
@@ -726,9 +726,9 @@ static void process_modifyfile(const binresult *entry){
       needdownload=1;
       return;
     }
-    needdownload=hash!=psync_get_number(row[3]) || size!=oldsize;
+    lneeddownload=hash!=psync_get_number(row[3]) || size!=oldsize;
     oldname=psync_get_lstring(row[4], &oldnamelen);
-    if (needdownload)
+    if (lneeddownload)
       psync_delete_download_tasks_for_file(fileid);
     needrename=oldparentfolderid!=parentfolderid || name->length!=oldnamelen || memcmp(name->str, oldname, oldnamelen);
     res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
@@ -746,7 +746,7 @@ static void process_modifyfile(const binresult *entry){
                                      name->str);
         needdownload=1;
       }
-      if (needdownload){
+      if (lneeddownload){
         res=psync_sql_query("SELECT 1 FROM localfile WHERE localparentfolderid=? AND fileid=? AND hash=? AND syncid=?");
         psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 1));
         psync_sql_bind_uint(res, 2, fileid);
