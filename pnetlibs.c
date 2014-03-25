@@ -674,7 +674,7 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   }
   else
     rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012\015\012", path, host);
-  if (psync_socket_writeall(sock, readbuff, rl)!=rl || (rb=psync_socket_readall_download(sock, readbuff, PSYNC_HTTP_RESP_BUFFER-1))==-1)
+  if (psync_socket_writeall(sock, readbuff, rl)!=rl || (rb=psync_socket_read(sock, readbuff, PSYNC_HTTP_RESP_BUFFER-1))<=0)
     goto err1;
   readbuff[rb]=0;
   ptr=readbuff;
@@ -695,6 +695,7 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   keepalive=0;
   clen=-1;
   key=val=ptr;
+cont:
   for (; ptr<end; ptr++){
     ch=*ptr;
     if (ch=='\015'){
@@ -727,7 +728,14 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
       *ptr=tolower(ch);
     lch=ch;
   }
-  goto err1;
+  if (rb==PSYNC_HTTP_RESP_BUFFER)
+    goto err1;
+  rl=psync_socket_read(sock, readbuff+rl, PSYNC_HTTP_RESP_BUFFER-rb);
+  if (rl<=0)
+    goto err1;
+  rb+=rl;
+  end=readbuff+rb;
+  goto cont;
 ex:
   rl=ptr-readbuff;
   if (rl==rb){
