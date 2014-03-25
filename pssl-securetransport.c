@@ -254,6 +254,8 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
   keys[1]=kSecAttrKeySizeInBits;
   values[1]=CFNumberCreate(NULL, kCFNumberIntType, &bits);
   dict=CFDictionaryCreate(NULL, keys, values, ARRAY_SIZE(keys), NULL, NULL);
+  public_key=NULL;
+  private_key=NULL;
   st=SecKeyGeneratePair(dict, &public_key, &private_key);
   CFRelease(dict);
   CFRelease(values[1]);
