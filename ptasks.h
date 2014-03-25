@@ -78,6 +78,7 @@ void psync_task_delete_local_file_syncid(psync_syncid_t syncid, psync_fileid_t f
 
 void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t localfolderid, const char *name);
 void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name);
+void psync_task_upload_file_silent(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name);
 
 /* newname should be passed here instead of reading it from localfile in time of renaming as there might be many pending 
  * renames and filename conflict is possible 
