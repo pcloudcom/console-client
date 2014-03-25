@@ -674,6 +674,20 @@ int psync_match_pattern(const char *name, const char *pattern, size_t plen){
   return name[i]==0;
 }
 
+uint64_t psync_ato64(const char *str){
+  uint64_t n=0;
+  while (*str>='0' && *str<='9')
+    n=n*10+(*str++)-'0';
+  return n;
+}
+
+uint32_t psync_ato32(const char *str){
+  uint32_t n=0;
+  while (*str>='0' && *str<='9')
+    n=n*10+(*str++)-'0';
+  return n;
+}
+
 static void time_format(time_t tm, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};

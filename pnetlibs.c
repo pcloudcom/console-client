@@ -646,23 +646,34 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
 psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to){
   psync_socket *sock;
   psync_http_socket *hsock;
-  char *readbuff, *ptr;
-  int usessl, rl, rb;
+  char *readbuff, *ptr, *end, *key, *val;
+  int64_t clen;
+  uint32_t keepalive;
+  int usessl, rl, rb, isval, cl;
+  char ch, lch;
+  char cachekey[256];
   usessl=psync_setting_get_bool(_PS(usessl));
-  sock=psync_socket_connect_download(host, usessl?443:80, usessl);
-  if (!sock)
-    goto err0;
+  cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, host)+1;
+  cachekey[sizeof(cachekey)-1]=0;
+  sock=(psync_socket *)psync_cache_get(cachekey);
+  if (!sock){
+    sock=psync_socket_connect_download(host, usessl?443:80, usessl);
+    if (!sock)
+      goto err0;
+  }
+  else
+    debug(D_NOTICE, "got connection to %s from cache", host);
   readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);
   if (from || to){
     if (to)
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64"\015\012Connection: close\015\012\015\012",
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64"\015\012Connection: Keep-Alive\015\012\015\012",
                   path, host, from, to);
     else
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-\015\012Connection: close\015\012\015\012",
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-\015\012Connection: Keep-Alive\015\012\015\012",
                   path, host, from);
   }
   else
-    rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.0\015\012Host: %s\015\012Connection: close\015\012\015\012", path, host);
+    rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012\015\012", path, host);
   if (psync_socket_writeall(sock, readbuff, rl)!=rl || (rb=psync_socket_readall_download(sock, readbuff, PSYNC_HTTP_RESP_BUFFER-1))==-1)
     goto err1;
   readbuff[rb]=0;
@@ -673,22 +684,65 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
     ptr++;
   if (!isdigit(*ptr) || atoi(ptr)/10!=20)
     goto err1;
-  if ((ptr=strstr(readbuff, "\015\012\015\012")))
-    ptr+=4;
-  else if ((ptr=strstr(readbuff, "\012\012")))
-    ptr+=2;
-  else
+  while (*ptr && *ptr!='\012')
+    ptr++;
+  if (!*ptr)
     goto err1;
+  ptr++;
+  end=readbuff+rb;
+  lch=0;
+  isval=0;
+  keepalive=0;
+  clen=-1;
+  key=val=ptr;
+  for (; ptr<end; ptr++){
+    ch=*ptr;
+    if (ch=='\015'){
+      *ptr=0;
+      continue;
+    }
+    else if (ch=='\012'){
+      if (lch=='\012'){
+        ptr++;
+        goto ex;
+      }
+      *ptr=0;
+/*      debug(D_NOTICE, "key=%s, value=%s", key, val);*/
+      if (!memcmp(key, "content-length", 14))
+        clen=psync_ato64(val);
+      else if (!memcmp(key, "keep-alive", 10) && !memcmp(val, "timeout=", 8))
+        keepalive=psync_ato32(val+8);
+      key=ptr+1;
+      isval=0;
+    }
+    else if (ch==':' && !isval){
+      *ptr++=0;
+      while (isspace(*ptr))
+        ptr++;
+      val=ptr;
+      *ptr=tolower(*ptr);
+      isval=1;
+    }
+    else
+      *ptr=tolower(ch);
+    lch=ch;
+  }
+  goto err1;
+ex:
   rl=ptr-readbuff;
   if (rl==rb){
     psync_free(readbuff);
     readbuff=NULL;
   }
-  hsock=psync_new(psync_http_socket);
+  hsock=(psync_http_socket *)psync_malloc(offsetof(psync_http_socket, cachekey)+cl);
   hsock->sock=sock;
   hsock->readbuff=readbuff;
+  hsock->contentlength=clen;
+  hsock->readbytes=0;
+  hsock->keepalive=keepalive;
   hsock->readbuffoff=rl;
   hsock->readbuffsize=rb;
+  memcpy(hsock->cachekey, cachekey, cl);
   return hsock;
 err1:
   psync_free(readbuff);
@@ -698,13 +752,22 @@ err0:
 }
 
 void psync_http_close(psync_http_socket *http){
-  psync_socket_close_download(http->sock);
+  if (http->keepalive>5 && http->readbytes==http->contentlength)
+    psync_cache_add(http->cachekey, http->sock, http->keepalive-5, (psync_cache_free_callback)psync_socket_close_download, PSYNC_MAX_IDLE_HTTP_CONNS);
+  else
+    psync_socket_close_download(http->sock);
   if (http->readbuff)
     psync_free(http->readbuff);
   psync_free(http);
 }
 
 int psync_http_readall(psync_http_socket *http, void *buff, int num){
+  if (http->contentlength!=-1){
+    if ((uint64_t)num>(uint64_t)http->contentlength-http->readbytes)
+      num=http->contentlength-http->readbytes;
+    if (!num)
+      return num;
+  }
   if (http->readbuff){
     int cp;
     if (num<http->readbuffsize-http->readbuffoff)
@@ -713,6 +776,7 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
       cp=http->readbuffsize-http->readbuffoff;
     memcpy(buff, (unsigned char*)http->readbuff+http->readbuffoff, cp);
     http->readbuffoff+=cp;
+    http->readbytes+=cp;
     if (http->readbuffoff>=http->readbuffsize){
       psync_free(http->readbuff);
       http->readbuff=NULL;
@@ -722,11 +786,17 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
     num=psync_socket_readall_download(http->sock, (unsigned char*)buff+cp, num-cp);
     if (num<=0)
       return cp;
-    else
+    else{
+      http->readbytes+=num;
       return cp+num;
+    }
   }
-  else
-    return psync_socket_readall_download(http->sock, buff, num);
+  else{
+    num=psync_socket_readall_download(http->sock, buff, num);
+    if (num>0)
+      http->readbytes+=num;
+    return num;
+  }
 }
 
 static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uint64_t hash, psync_file_checksums **checksums){
