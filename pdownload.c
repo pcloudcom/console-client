@@ -563,22 +563,24 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_status_send_update();
   
   tmpname=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, filename, PSYNC_APPEND_PARTIAL_FILES, NULL);
-  rt=psync_p2p_check_download(fileid, serverhashhex, serversize, tmpname);
-  if (rt==PSYNC_NET_OK){
-    psync_stop_localscan();
-    if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
-        unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
+  if (serversize>=PSYNC_MIN_SIZE_FOR_P2P){
+    rt=psync_p2p_check_download(fileid, serverhashhex, serversize, tmpname);
+    if (rt==PSYNC_NET_OK){
+      psync_stop_localscan();
+      if (unlikely_log(rename_if_notex(tmpname, name, fileid, localfolderid, syncid, filename)) || 
+          unlikely_log(stat_and_create_local(syncid, fileid, localfolderid, filename, name, localhashhex, serversize, hash))){
+        psync_resume_localscan();
+        psync_free(tmpname);
+        goto err_sl_ex;
+      }
       psync_resume_localscan();
+      psync_free(tmpname);
+      goto ret0;
+    }
+    else if (rt==PSYNC_NET_TEMPFAIL){
       psync_free(tmpname);
       goto err_sl_ex;
     }
-    psync_resume_localscan();
-    psync_free(tmpname);
-    goto ret0;
-  }
-  else if (rt==PSYNC_NET_TEMPFAIL){
-    psync_free(tmpname);
-    goto err_sl_ex;
   }
   api=psync_apipool_get();
   if (unlikely_log(!api)){
@@ -895,9 +897,11 @@ static void task_run_download_file_thread(void *ptr){
     psync_wake_download();
   }
   else{
+    psync_sql_sync_off();
     res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
     psync_sql_bind_uint(res, 1, dt->taskid);
     psync_sql_run_free(res);
+    psync_sql_sync_on();
     psync_status_recalc_to_download();
     psync_send_status_update();
   }
@@ -911,9 +915,11 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   psync_sql_res *res;
   download_task_t *dt;
   size_t len;
+  psync_sql_sync_off();
   res=psync_sql_prep_statement("UPDATE task SET inprogress=1 WHERE id=?");
   psync_sql_bind_uint(res, 1, taskid);
   psync_sql_run_free(res);
+  psync_sql_sync_on();
   len=strlen(filename);
   dt=(download_task_t *)psync_malloc(offsetof(download_task_t, filename)+len+1);
   dt->taskid=taskid;
@@ -994,11 +1000,13 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
     return 0;
   }
   debug(D_NOTICE, "got recursive delete for localfolder %lu %s", (unsigned long)localfolderid, localpath);
+  psync_sql_start_transaction();
   task_del_folder_rec_do(localpath, localfolderid, syncid);
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
+  psync_sql_commit_transaction();
   psync_rmdir_with_trashes(localpath);
   psync_resume_localscan();
   return 0;
@@ -1063,9 +1071,11 @@ static void download_thread(){
                          psync_get_number_or_null(row[5]),                          
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
+        psync_sql_sync_off();
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, taskid);
         psync_sql_run_free(res);
+        psync_sql_sync_on();
       }
       else if (type!=PSYNC_DOWNLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_DOWNLOAD);

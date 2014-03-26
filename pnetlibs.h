@@ -41,8 +41,12 @@ typedef uint64_t psync_uploadid_t;
 typedef struct {
   psync_socket *sock;
   void *readbuff;
+  int64_t contentlength;
+  uint64_t readbytes;
+  uint32_t keepalive;
   uint32_t readbuffoff;
   uint32_t readbuffsize;
+  char cachekey[];
 } psync_http_socket;
 
 #define PSYNC_RANGE_TRANSFER 0

@@ -646,6 +646,7 @@ static int scanner_wait(){
 }
 
 static void scanner_thread(){
+  time_t lastscan;
   int w;
   psync_milisleep(25);
   psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
@@ -653,10 +654,19 @@ static void scanner_thread(){
   psync_set_status(PSTATUS_TYPE_LOCALSCAN, PSTATUS_LOCALSCAN_READY);
   scanner_wait();
   w=0;
+  lastscan=0;
   while (psync_do_run){
     psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
+    if (lastscan+2>=psync_current_time){
+      psync_milisleep(600);
+      pthread_mutex_lock(&scan_mutex);
+      scan_wakes=0;
+      pthread_mutex_unlock(&scan_mutex);
+    }
+    lastscan=psync_current_time;
     scanner_scan(w);
     w=scanner_wait();
+
   }
 }
 

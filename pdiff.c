@@ -38,6 +38,7 @@
 #include "psyncer.h"
 #include "pdownload.h"
 #include "pcallbacks.h"
+#include <ctype.h>
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
@@ -46,6 +47,53 @@ static psync_uint_t needdownload;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
+
+static const binparam empty_params[]={};
+
+static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen){
+  binparam params[]={P_STR("timeformat", "timestamp"), 
+                      P_LSTR("username", username, userlen),
+                      P_LSTR("digest", digest, diglen),
+                      P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
+                      P_BOOL("getauth", 1),
+                      P_NUM("os", P_OS_ID)};
+  return send_command(sock, "userinfo", params);
+}
+
+static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password){
+  psync_sha1_ctx ctx;
+  binresult *res, *ret;
+  const binresult *dig;
+  unsigned char *uc;
+  size_t ul, i;
+  unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
+  char sha1hex[PSYNC_SHA1_DIGEST_HEXLEN];
+  res=send_command(sock, "getdigest", empty_params);
+  if (!res)
+    return res;
+  if (psync_find_result(res, "result", PARAM_NUM)->num!=0){
+    psync_free(res);
+    return NULL;
+  }
+  dig=psync_find_result(res, "digest", PARAM_STR);
+  debug(D_NOTICE, "got digest %s", dig->str);
+  ul=strlen(username);
+  uc=psync_new_cnt(unsigned char, ul);
+  for (i=0; i<ul; i++)
+    uc[i]=tolower(username[i]);
+  psync_sha1(uc, ul, sha1bin);
+  psync_free(uc);
+  psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
+  psync_sha1_init(&ctx);
+  psync_sha1_update(&ctx, password, strlen(password));
+  psync_sha1_update(&ctx, sha1hex, PSYNC_SHA1_DIGEST_HEXLEN);
+  psync_sha1_update(&ctx, dig->str, dig->length);
+  psync_sha1_final(sha1bin, &ctx);
+  psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
+  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length);
+  psync_free(res);
+  return ret;
+}
 
 static psync_socket *get_connected_socket(){
   char *auth, *user, *pass;
@@ -81,14 +129,8 @@ static psync_socket *get_connected_socket(){
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
-    if (user && pass){
-      binparam params[]={P_STR("timeformat", "timestamp"), 
-                         P_STR("username", user), 
-                         P_STR("password", pass), 
-                         P_BOOL("getauth", 1),
-                         P_NUM("os", P_OS_ID)};
-      res=send_command(sock, "userinfo", params);
-    }
+    if (user && pass)
+      res=get_userinfo_user_pass(sock, user, pass);
     else {
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("auth", auth),
@@ -656,7 +698,7 @@ static void process_modifyfile(const binresult *entry){
   psync_fileid_t fileid;
   psync_folderid_t parentfolderid, oldparentfolderid;
   uint64_t size, userid, hash, oldsize;
-  int oldsync, newsync, needdownload, needrename;
+  int oldsync, newsync, lneeddownload, needrename;
   uint32_t cnt, i;
   if (!entry){
     if (sq){
@@ -726,9 +768,9 @@ static void process_modifyfile(const binresult *entry){
       needdownload=1;
       return;
     }
-    needdownload=hash!=psync_get_number(row[3]) || size!=oldsize;
+    lneeddownload=hash!=psync_get_number(row[3]) || size!=oldsize;
     oldname=psync_get_lstring(row[4], &oldnamelen);
-    if (needdownload)
+    if (lneeddownload)
       psync_delete_download_tasks_for_file(fileid);
     needrename=oldparentfolderid!=parentfolderid || name->length!=oldnamelen || memcmp(name->str, oldname, oldnamelen);
     res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
@@ -746,7 +788,7 @@ static void process_modifyfile(const binresult *entry){
                                      name->str);
         needdownload=1;
       }
-      if (needdownload){
+      if (lneeddownload){
         res=psync_sql_query("SELECT 1 FROM localfile WHERE localparentfolderid=? AND fileid=? AND hash=? AND syncid=?");
         psync_sql_bind_uint(res, 1, psync_get_result_cell(fres2, i, 1));
         psync_sql_bind_uint(res, 2, fileid);
@@ -857,13 +899,13 @@ static void process_requestsharein(const binresult *entry){
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "ctime", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, psync_find_result(share, "etime", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 5, get_permissions(share));
   psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
-  br=psync_find_result(share, "name", PARAM_STR);
+  br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 8, br->str, br->length);
   br=psync_check_result(share, "message", PARAM_STR);
   if (br)
