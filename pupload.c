@@ -699,7 +699,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     }
     else
       psync_sql_free_result(sql);
-    sql=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid LIMIT 5");
+    sql=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 5");
     psync_sql_bind_uint(sql, 1, localfileid);
     fr=psync_sql_fetchall_int(sql);
     for (id=0; id<fr->rows; id++)
@@ -753,6 +753,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
               debug(D_WARNING, "range of type %u failed with error %lu, restarting as upload range", (unsigned)le2->type, (unsigned long)result);
               le2->type=PSYNC_URANGE_UPLOAD;
               uploadoffset=le2->uploadoffset;
+              le2->off=le2->uploadoffset;
               le=le2;
               goto restart;
             }

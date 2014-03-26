@@ -384,7 +384,7 @@ static void memcpy_const(unsigned char *dst, const unsigned char *src, uint32_t 
 
 static int memcmp_const(const unsigned char *s1, const unsigned char *s2, size_t cnt){
   size_t i;
-  unsigned int r;
+  uint32_t r;
   r=0;
   for (i=0; i<cnt; i++)
     r|=s1[i]^s2[i];
