@@ -151,21 +151,21 @@ void psync_sql_close(){
 }
 
 void psync_sql_lock(){
-  if (IS_DEBUG){
-    if (pthread_mutex_trylock(&psync_db_mutex)){
-//      debug(D_NOTICE, "psync_db_mutex contended");
-      pthread_mutex_lock(&psync_db_mutex);
-//      debug(D_NOTICE, "got psync_db_mutex after contention");
-    }
-    else
-      return;
-  }
-  else
-    pthread_mutex_lock(&psync_db_mutex);
+  pthread_mutex_lock(&psync_db_mutex);
 }
 
 void psync_sql_unlock(){
   pthread_mutex_unlock(&psync_db_mutex);
+}
+
+void psync_sql_sync_off(){
+  psync_sql_lock();
+  sqlite3_exec(psync_db, "PRAGMA synchronous=0", NULL, NULL, NULL);
+}
+
+void psync_sql_sync_on(){
+  sqlite3_exec(psync_db, "PRAGMA synchronous=2", NULL, NULL, NULL);
+  psync_sql_unlock();
 }
 
 int psync_sql_statement(const char *sql){
