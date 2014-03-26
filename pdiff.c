@@ -38,6 +38,7 @@
 #include "psyncer.h"
 #include "pdownload.h"
 #include "pcallbacks.h"
+#include <ctype.h>
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
@@ -46,6 +47,53 @@ static psync_uint_t needdownload;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
+
+static const binparam empty_params[]={};
+
+static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen){
+  binparam params[]={P_STR("timeformat", "timestamp"), 
+                      P_LSTR("username", username, userlen),
+                      P_LSTR("digest", digest, diglen),
+                      P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
+                      P_BOOL("getauth", 1),
+                      P_NUM("os", P_OS_ID)};
+  return send_command(sock, "userinfo", params);
+}
+
+static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password){
+  psync_sha1_ctx ctx;
+  binresult *res, *ret;
+  const binresult *dig;
+  unsigned char *uc;
+  size_t ul, i;
+  unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
+  char sha1hex[PSYNC_SHA1_DIGEST_HEXLEN];
+  res=send_command(sock, "getdigest", empty_params);
+  if (!res)
+    return res;
+  if (psync_find_result(res, "result", PARAM_NUM)->num!=0){
+    psync_free(res);
+    return NULL;
+  }
+  dig=psync_find_result(res, "digest", PARAM_STR);
+  debug(D_NOTICE, "got digest %s", dig->str);
+  ul=strlen(username);
+  uc=psync_new_cnt(unsigned char, ul);
+  for (i=0; i<ul; i++)
+    uc[i]=tolower(username[i]);
+  psync_sha1(uc, ul, sha1bin);
+  psync_free(uc);
+  psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
+  psync_sha1_init(&ctx);
+  psync_sha1_update(&ctx, password, strlen(password));
+  psync_sha1_update(&ctx, sha1hex, PSYNC_SHA1_DIGEST_HEXLEN);
+  psync_sha1_update(&ctx, dig->str, dig->length);
+  psync_sha1_final(sha1bin, &ctx);
+  psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
+  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length);
+  psync_free(res);
+  return ret;
+}
 
 static psync_socket *get_connected_socket(){
   char *auth, *user, *pass;
@@ -81,14 +129,8 @@ static psync_socket *get_connected_socket(){
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
-    if (user && pass){
-      binparam params[]={P_STR("timeformat", "timestamp"), 
-                         P_STR("username", user), 
-                         P_STR("password", pass), 
-                         P_BOOL("getauth", 1),
-                         P_NUM("os", P_OS_ID)};
-      res=send_command(sock, "userinfo", params);
-    }
+    if (user && pass)
+      res=get_userinfo_user_pass(sock, user, pass);
     else {
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("auth", auth),
