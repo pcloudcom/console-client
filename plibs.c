@@ -688,6 +688,178 @@ uint32_t psync_ato32(const char *str){
   return n;
 }
 
+typedef struct {
+  psync_list list;
+  psync_uint_t used;
+  char elements[];
+} psync_list_element_list;
+
+typedef struct {
+  psync_list list;
+  char *next;
+  char *end;
+} psync_list_string_list;
+
+typedef struct {
+  psync_list list;
+  psync_uint_t used;
+  uint32_t numbers[1000];
+} psync_list_num_list;
+
+struct psync_list_builder_t_{
+  size_t element_size;
+  size_t elements_offset;
+  size_t elements_per_list;
+  size_t stringalloc;
+  uint64_t cnt;
+  psync_list element_list;
+  psync_list_element_list *last_elements;
+  psync_list string_list;
+  psync_list_string_list *last_strings;
+  psync_list number_list;
+  psync_list_num_list *last_numbers;
+  psync_uint_t popoff;
+  char *current_element;
+  uint32_t *cstrcnt;
+};
+
+psync_list_builder_t *psync_list_builder_create(size_t element_size, size_t offset){
+  psync_list_builder_t *builder;
+  builder=psync_new(psync_list_builder_t);
+  builder->element_size=element_size;
+  builder->elements_offset=offset;
+  if (element_size<=200)
+    builder->elements_per_list=40;
+  else
+    builder->elements_per_list=12;
+  builder->cnt=0;
+  builder->stringalloc=0;
+  psync_list_init(&builder->element_list);
+  builder->last_elements=NULL;
+  psync_list_init(&builder->string_list);
+  builder->last_strings=NULL;
+  psync_list_init(&builder->number_list);
+  builder->last_numbers=NULL;
+  return builder;
+}
+
+static uint32_t *psync_list_bulder_push_num(psync_list_builder_t *builder){
+  if (!builder->last_numbers || builder->last_numbers->used>=sizeof(builder->last_numbers->numbers)/sizeof(uint32_t)){
+    psync_list_num_list *l=psync_new(psync_list_num_list);
+    l->used=0;
+    builder->last_numbers=l;
+    psync_list_add_tail(&builder->number_list, &l->list);
+  }
+  return &builder->last_numbers->numbers[builder->last_numbers->used++];
+}
+
+static uint32_t psync_list_bulder_pop_num(psync_list_builder_t *builder){
+  uint32_t ret;
+  ret=builder->last_numbers->numbers[builder->popoff++];
+  if (builder->popoff>=builder->last_numbers->used){
+    builder->last_numbers=psync_list_element(builder->last_numbers->list.next, psync_list_num_list, list);
+    builder->popoff=0;
+  }
+  return ret;
+}
+
+void psync_list_bulder_add_sql(psync_list_builder_t *builder, psync_sql_res *res, psync_list_builder_sql_callback callback){
+  psync_variant_row row;
+  while ((row=psync_sql_fetch_row(res))){
+    if (!builder->last_elements || builder->last_elements->used>=builder->elements_per_list){
+      builder->last_elements=(psync_list_element_list *)psync_malloc(offsetof(psync_list_element_list, elements)+builder->element_size*builder->elements_per_list);
+      psync_list_add_tail(&builder->element_list, &builder->last_elements->list);
+      builder->last_elements->used=0;
+    }
+    builder->current_element=builder->last_elements->elements+builder->last_elements->used*builder->element_size;
+    builder->cstrcnt=psync_list_bulder_push_num(builder);
+    *builder->cstrcnt=0;
+    while (callback(builder, builder->current_element, row)){
+      row=psync_sql_fetch_row(res);
+      if (!row)
+        break;
+      *builder->cstrcnt=0;
+    }
+    builder->last_elements->used++;
+    builder->cnt++;
+  }
+  psync_sql_free_result(res);
+}
+
+void psync_list_add_lstring_offset(psync_list_builder_t *builder, size_t offset, size_t length){
+  char **str, *s;
+  psync_list_string_list *l;
+  length++;
+  str=(char **)(builder->current_element+offset);
+  builder->stringalloc+=length;
+  if (unlikely(length>2000)){
+    l=(psync_list_string_list *)psync_malloc(sizeof(psync_list_string_list)+length);
+    s=(char *)(l+1);
+    psync_list_add_tail(&builder->string_list, &l->list);
+  }
+  else if (!builder->last_strings || builder->last_strings->next+length>builder->last_strings->end){
+    l=(psync_list_string_list *)psync_malloc(sizeof(psync_list_string_list)+4000);
+    s=(char *)(l+1);
+    l->next=s+length;
+    l->end=s+4000;
+    psync_list_add_tail(&builder->string_list, &l->list);
+    builder->last_strings=l;
+  }
+  else {
+    s=builder->last_strings->next;
+    builder->last_strings->next+=length;
+  }
+  memcpy(s, *str, length);
+  *str=s;
+  *(psync_list_bulder_push_num(builder))=offset;
+  *(psync_list_bulder_push_num(builder))=length;
+  (*builder->cstrcnt)++;
+}
+
+void psync_list_add_string_offset(psync_list_builder_t *builder, size_t offset){
+  psync_list_add_lstring_offset(builder, offset, strlen(*((char **)(builder->current_element+offset))));
+}
+
+void *psync_list_builder_finalize(psync_list_builder_t *builder){
+  char *ret, *elem, *str;
+  char **pstr;
+  psync_list_element_list *el;
+  psync_uint_t i;
+  uint32_t j, scnt, offset, length;
+  size_t sz;
+  sz=builder->elements_offset+builder->element_size*builder->cnt+builder->stringalloc;
+  debug(D_NOTICE, "allocating %lu bytes, %lu of which for strings", (unsigned long)sz, (unsigned long)builder->stringalloc);
+  ret=psync_new_cnt(char, sz);
+  memcpy(ret, &builder->cnt, builder->elements_offset);
+  elem=ret+builder->elements_offset;
+  str=elem+builder->element_size*builder->cnt;
+  
+  builder->last_numbers=psync_list_element(builder->number_list.next, psync_list_num_list, list);
+  builder->popoff=0;
+  
+  psync_list_for_each_element(el, &builder->element_list, psync_list_element_list, list){
+    for (i=0; i<el->used; i++){
+      memcpy(elem, el->elements+(i*builder->element_size), builder->element_size);
+      scnt=psync_list_bulder_pop_num(builder);
+      for (j=0; j<scnt; j++){
+        offset=psync_list_bulder_pop_num(builder);
+        length=psync_list_bulder_pop_num(builder);
+        pstr=(char **)(elem+offset);
+        memcpy(str, *pstr, length);
+        *pstr=str;
+        str+=length;
+      }
+      elem+=builder->element_size;
+    }
+  }
+  
+  psync_list_for_each_element_call(&builder->element_list, psync_list_element_list, list, psync_free);
+  psync_list_for_each_element_call(&builder->string_list, psync_list_string_list, list, psync_free);
+  psync_list_for_each_element_call(&builder->number_list, psync_list_num_list, list, psync_free);
+  psync_free(builder);
+  return ret;
+}
+
 static void time_format(time_t tm, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};

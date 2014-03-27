@@ -245,6 +245,43 @@ typedef union {
   void *ptr;
 } psync_eventdata_t;
 
+typedef struct {
+  psync_sharerequestid_t sharerequestid;
+  psync_folderid_t folderid;
+  time_t created;
+  psync_userid_t userid;
+  const char *email;
+  const char *sharename;
+  const char *message;
+  unsigned char canread;
+  unsigned char cancreate;
+  unsigned char canmodify;
+  unsigned char candelete;
+} psync_sharerequest_t;
+
+typedef struct {
+  size_t sharerequestcnt;
+  psync_sharerequest_t sharerequests[];
+} psync_sharerequest_list_t;
+
+typedef struct {
+  psync_shareid_t shareid;
+  psync_folderid_t folderid;
+  time_t created;
+  psync_userid_t userid;
+  const char *email;
+  const char *sharename;
+  unsigned char canread;
+  unsigned char cancreate;
+  unsigned char canmodify;
+  unsigned char candelete;
+} psync_share_t;
+
+typedef struct {
+  size_t sharecnt;
+  psync_share_t shares[];
+} psync_share_list_t;
+
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
 #ifdef __cplusplus
@@ -565,6 +602,20 @@ void psync_set_string_value(const char *valuename, const char *value);
  */
 
 void psync_network_exception();
+
+/* The following functions return lists of pending sharerequests in psync_list_sharerequests and
+ * list of shared folders in case of psync_list_shares. Memory is to be freed with a single free().
+ * 
+ * These functions do not return errors. However, if no user is logged in, they will return empty lists.
+ * 
+ * Pass 1 as parameter to list incoming sharerequests/shares and 0 for outgoing.
+ * 
+ * Listing shares/sharerequests do not require active network connection.
+ * 
+ */
+
+psync_sharerequest_list_t *psync_list_sharerequests(int incoming);
+psync_share_list_t *psync_list_shares(int incoming);
 
 
 #ifdef __cplusplus

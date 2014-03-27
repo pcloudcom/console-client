@@ -77,6 +77,7 @@
 #define psync_get_string_or_null(v) (((v).type==PSYNC_TSTRING)?(v).str:(likely((v).type==PSYNC_TNULL)?NULL:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_dup_string(v) (likely((v).type==PSYNC_TSTRING)?psync_strndup((v).str, (v).length):psync_strdup(psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_get_lstring(v, l) psync_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l)
+#define psync_get_lstring_or_null(v, l) ((v).type==PSYNC_TNULL?NULL:psync_lstring_expected(__FILE__, __FUNCTION__, __LINE__, &(v), l))
 #define psync_get_real(v) (likely((v).type==PSYNC_TREAL)?(v).real:psync_err_real_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 
 #if D_WARNING<=DEBUG_LEVEL
@@ -132,11 +133,17 @@ typedef struct {
   uint64_t data[];
 } psync_full_result_int;
 
-typedef void (*psync_run_after_t)(void *);
+struct psync_list_builder_t_;
+
+typedef struct psync_list_builder_t_ psync_list_builder_t;
+
 
 typedef const uint64_t* psync_uint_row;
 typedef const char* const* psync_str_row;
 typedef const psync_variant* psync_variant_row;
+
+typedef void (*psync_run_after_t)(void *);
+typedef int (*psync_list_builder_sql_callback)(psync_list_builder_t *, void *, psync_variant_row);
 
 extern int psync_do_run;
 extern pstatus_t psync_status;
@@ -196,6 +203,12 @@ int psync_match_pattern(const char *name, const char *pattern, size_t plen);
 
 uint64_t psync_ato64(const char *str);
 uint32_t psync_ato32(const char *str);
+
+psync_list_builder_t *psync_list_builder_create(size_t element_size, size_t offset);
+void psync_list_bulder_add_sql(psync_list_builder_t *builder, psync_sql_res *res, psync_list_builder_sql_callback callback);
+void psync_list_add_string_offset(psync_list_builder_t *builder, size_t offset);
+void psync_list_add_lstring_offset(psync_list_builder_t *builder, size_t offset, size_t length);
+void *psync_list_builder_finalize(psync_list_builder_t *builder);
 
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 

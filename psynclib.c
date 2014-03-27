@@ -812,3 +812,81 @@ void psync_set_string_value(const char *valuename, const char *value){
 void psync_network_exception(){
   psync_timer_notify_exception();
 }
+
+static int create_request(psync_list_builder_t *builder, void *element, psync_variant_row row){
+  psync_sharerequest_t *request;
+  const char *str;
+  uint32_t perms;
+  size_t len;
+  request=(psync_sharerequest_t *)element;
+  request->sharerequestid=psync_get_number(row[0]);
+  request->folderid=psync_get_number(row[1]);
+  request->created=psync_get_number(row[2]);
+  perms=psync_get_number(row[3]);
+  request->userid=psync_get_number_or_null(row[4]);
+  str=psync_get_lstring(row[5], &len);
+  request->email=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_sharerequest_t, email), len);
+  str=psync_get_lstring(row[6], &len);
+  request->sharename=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_sharerequest_t, sharename), len);
+  str=psync_get_lstring_or_null(row[7], &len);
+  if (str){
+    request->message=str;
+    psync_list_add_lstring_offset(builder, offsetof(psync_sharerequest_t, message), len);
+  }
+  else{
+    request->message="";
+  }
+  request->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
+  request->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
+  request->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
+  request->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
+  return 0;
+}
+
+psync_sharerequest_list_t *psync_list_sharerequests(int incoming){
+  psync_list_builder_t *builder;
+  psync_sql_res *res;
+  builder=psync_list_builder_create(sizeof(psync_sharerequest_t), offsetof(psync_sharerequest_list_t, sharerequests));
+  incoming=!!incoming;
+  res=psync_sql_query("SELECT id, folderid, ctime, permissions, userid, mail, name, message FROM sharerequest WHERE isincoming=? ORDER BY name");
+  psync_sql_bind_uint(res, 1, incoming);
+  psync_list_bulder_add_sql(builder, res, create_request);
+  return (psync_sharerequest_list_t *)psync_list_builder_finalize(builder);
+}
+
+static int create_share(psync_list_builder_t *builder, void *element, psync_variant_row row){
+  psync_share_t *share;
+  const char *str;
+  uint32_t perms;
+  size_t len;
+  share=(psync_share_t *)element;
+  share->shareid=psync_get_number(row[0]);
+  share->folderid=psync_get_number(row[1]);
+  share->created=psync_get_number(row[2]);
+  perms=psync_get_number(row[3]);
+  share->userid=psync_get_number(row[4]);
+  str=psync_get_lstring(row[5], &len);
+  share->email=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, email), len);
+  str=psync_get_lstring(row[6], &len);
+  share->sharename=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
+  share->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
+  share->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
+  share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
+  share->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
+  return 0;
+}
+
+psync_share_list_t *psync_list_shares(int incoming){
+  psync_list_builder_t *builder;
+  psync_sql_res *res;
+  builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
+  incoming=!!incoming;
+  res=psync_sql_query("SELECT id, folderid, ctime, permissions, userid, mail, name FROM sharedfolder WHERE isincoming=? ORDER BY name");
+  psync_sql_bind_uint(res, 1, incoming);
+  psync_list_bulder_add_sql(builder, res, create_share);
+  return (psync_share_list_t *)psync_list_builder_finalize(builder);
+}
