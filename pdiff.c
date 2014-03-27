@@ -48,7 +48,7 @@ static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 
-static const binparam empty_params[]={};
+static const binparam empty_params[0];
 
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen){
   binparam params[]={P_STR("timeformat", "timestamp"), 
