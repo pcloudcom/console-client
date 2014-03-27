@@ -249,6 +249,7 @@ void psync_timer_wait_next_sec(){
   pthread_cond_init(&mc.cond, NULL);
   pthread_mutex_lock(&mc.mutex);
   psync_timer_register(next_sec, 1, &mc);
+  pthread_cond_wait(&mc.cond, &mc.mutex);
   pthread_mutex_unlock(&mc.mutex);
   pthread_cond_destroy(&mc.cond);
   pthread_mutex_destroy(&mc.mutex);

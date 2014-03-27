@@ -29,23 +29,52 @@
 #include "pcrypto.h"
 #include <string.h>
 
+typedef struct {
+  psync_sha1_ctx sha1ctx;
+  unsigned char final[PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN];
+} psync_hmac_sha1_ctx;
+
+static void psync_hmac_sha1_init(psync_hmac_sha1_ctx *ctx, const unsigned char *key, size_t keylen){
+  unsigned char keyxor[PSYNC_SHA1_BLOCK_LEN];
+  size_t i;
+  if (keylen>PSYNC_SHA1_BLOCK_LEN)
+    keylen=PSYNC_SHA1_BLOCK_LEN;
+  memset(keyxor, 0x36, PSYNC_SHA1_BLOCK_LEN);
+  memset(ctx->final, 0x5c, PSYNC_SHA1_BLOCK_LEN);
+  for (i=0; i<keylen; i++){
+    keyxor[i]^=key[i];
+    ctx->final[i]^=key[i];
+  }
+  psync_sha1_init(&ctx->sha1ctx);
+  psync_sha1_update(&ctx->sha1ctx, keyxor, PSYNC_SHA1_BLOCK_LEN);
+}
+
+static void psync_hmac_sha1_update(psync_hmac_sha1_ctx *ctx, const void *data, size_t len){
+  psync_sha1_update(&ctx->sha1ctx, data, len);
+}
+
+static void psync_hmac_sha1_final(unsigned char *result, psync_hmac_sha1_ctx *ctx){
+  psync_sha1_final(ctx->final+PSYNC_SHA1_BLOCK_LEN, &ctx->sha1ctx);
+  psync_sha1(ctx->final, PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN, result);
+}
+
 static void psync_hmac_sha1(const unsigned char *msg, size_t msglen, const unsigned char *key, size_t keylen, unsigned char *result){
   psync_sha1_ctx sha1ctx;
-  unsigned char keyxor[64], final[84];
+  unsigned char keyxor[PSYNC_SHA1_BLOCK_LEN], final[PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN];
   size_t i;
-  if (keylen>64)
-    keylen=64;
-  memset(keyxor, 0x36, 64);
-  memset(final, 0x5c, 64);
+  if (keylen>PSYNC_SHA1_BLOCK_LEN)
+    keylen=PSYNC_SHA1_BLOCK_LEN;
+  memset(keyxor, 0x36, PSYNC_SHA1_BLOCK_LEN);
+  memset(final, 0x5c, PSYNC_SHA1_BLOCK_LEN);
   for (i=0; i<keylen; i++){
     keyxor[i]^=key[i];
     final[i]^=key[i];
   }
   psync_sha1_init(&sha1ctx);
-  psync_sha1_update(&sha1ctx, keyxor, 64);
+  psync_sha1_update(&sha1ctx, keyxor, PSYNC_SHA1_BLOCK_LEN);
   psync_sha1_update(&sha1ctx, msg, msglen);
-  psync_sha1_final(final+64, &sha1ctx);
-  psync_sha1(final, 84, result);
+  psync_sha1_final(final+PSYNC_SHA1_BLOCK_LEN, &sha1ctx);
+  psync_sha1(final, PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN, result);
 }
 
 #define ALIGN_A256_BS(n) ((((n)+PSYNC_AES256_BLOCK_SIZE-1)/PSYNC_AES256_BLOCK_SIZE)*PSYNC_AES256_BLOCK_SIZE)
@@ -164,110 +193,6 @@ void psync_crypto_aes256_ctr_encode_decode_inplace(psync_crypto_aes256_ctr_encod
     psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
     xor_cnt_inplace(data, aesdst, datalen);
   }
-}
-
-/*
- * public domain SipHash implementation from:
- * https://131002.net/siphash/siphash24.c
- * 
- * Written in 2012 by 
- * Jean-Philippe Aumasson <jeanphilippe.aumasson@gmail.com>
- * Daniel J. Bernstein <djb@cr.yp.to>
- * 
- */
-
-#define SIP_HASH_DIGEST_LEN 8
-
-typedef uint64_t u64;
-typedef uint32_t u32;
-typedef uint8_t u8;
-
-#define ROTL(x,b) (u64)( ((x) << (b)) | ( (x) >> (64 - (b))) )
-
-#define U32TO8_LE(p, v)         \
-    (p)[0] = (u8)((v)      ); (p)[1] = (u8)((v) >>  8); \
-    (p)[2] = (u8)((v) >> 16); (p)[3] = (u8)((v) >> 24);
-
-#define U64TO8_LE(p, v)         \
-  U32TO8_LE((p),     (u32)((v)      ));   \
-  U32TO8_LE((p) + 4, (u32)((v) >> 32));
-
-#define U8TO64_LE(p) \
-  (((u64)((p)[0])      ) | \
-   ((u64)((p)[1]) <<  8) | \
-   ((u64)((p)[2]) << 16) | \
-   ((u64)((p)[3]) << 24) | \
-   ((u64)((p)[4]) << 32) | \
-   ((u64)((p)[5]) << 40) | \
-   ((u64)((p)[6]) << 48) | \
-   ((u64)((p)[7]) << 56))
-
-#define SIPROUND            \
-  do {              \
-    v0 += v1; v1=ROTL(v1,13); v1 ^= v0; v0=ROTL(v0,32); \
-    v2 += v3; v3=ROTL(v3,16); v3 ^= v2;     \
-    v0 += v3; v3=ROTL(v3,21); v3 ^= v0;     \
-    v2 += v1; v1=ROTL(v1,17); v1 ^= v2; v2=ROTL(v2,32); \
-  } while(0)
-
-int siphash(unsigned char *out, const unsigned char *in, unsigned long inlen, const unsigned char *k)
-{
-  /* "somepseudorandomlygeneratedbytes" */
-  u64 v0 = 0x736f6d6570736575ULL;
-  u64 v1 = 0x646f72616e646f6dULL;
-  u64 v2 = 0x6c7967656e657261ULL;
-  u64 v3 = 0x7465646279746573ULL;
-  u64 b;
-  u64 k0 = U8TO64_LE( k );
-  u64 k1 = U8TO64_LE( k + 8 );
-  u64 m;
-  const u8 *end = in + inlen - ( inlen % sizeof( u64 ) );
-  const int left = inlen & 7;
-  b = ( ( u64 )inlen ) << 56;
-  v3 ^= k1;
-  v2 ^= k0;
-  v1 ^= k1;
-  v0 ^= k0;
-
-  for ( ; in != end; in += 8 )
-  {
-    m = U8TO64_LE( in );
-    v3 ^= m;
-    SIPROUND;
-    SIPROUND;
-    v0 ^= m;
-  }
-
-  switch( left )
-  {
-  case 7: b |= ( ( u64 )in[ 6] )  << 48;
-
-  case 6: b |= ( ( u64 )in[ 5] )  << 40;
-
-  case 5: b |= ( ( u64 )in[ 4] )  << 32;
-
-  case 4: b |= ( ( u64 )in[ 3] )  << 24;
-
-  case 3: b |= ( ( u64 )in[ 2] )  << 16;
-
-  case 2: b |= ( ( u64 )in[ 1] )  <<  8;
-
-  case 1: b |= ( ( u64 )in[ 0] ); break;
-
-  case 0: break;
-  }
-  v3 ^= b;
-  SIPROUND;
-  SIPROUND;
-  v0 ^= b;
-  v2 ^= 0xff;
-  SIPROUND;
-  SIPROUND;
-  SIPROUND;
-  SIPROUND;
-  b = v0 ^ v1 ^ v2  ^ v3;
-  U64TO8_LE( out, b );
-  return 0;
 }
 
 static void copy_unaligned(unsigned char *dst, const unsigned char *src){
@@ -446,4 +371,178 @@ psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync
 void psync_crypto_aes256_text_decoder_free(psync_crypto_aes256_text_decoder_t enc){
   psync_ssl_aes256_free_decoder(enc->encoder);
   memset(enc->iv, 0, PSYNC_AES256_BLOCK_SIZE);
+}
+
+static void memcpy_const(unsigned char *dst, const unsigned char *src, uint32_t copycnt, uint32_t constcnt){
+  uint32_t i, b;
+  copycnt--;
+  for (i=0; i<constcnt; i++){
+    b=(copycnt-i)>>31;
+    dst[i]=dst[i]*b+(src[i]&(b-1));
+  }
+}
+
+static int memcmp_const(const unsigned char *s1, const unsigned char *s2, size_t cnt){
+  size_t i;
+  uint32_t r;
+  r=0;
+  for (i=0; i<cnt; i++)
+    r|=s1[i]^s2[i];
+  return (((r-1)>>8)&1)^1;
+}
+
+void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
+                                       unsigned char *out, uint64_t sectorid, uint32_t revisionid){
+  psync_hmac_sha1_ctx ctx;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
+  unsigned char *aessrc, *aesdst, *hmac;
+  uint64_t i;
+  uint32_t revsize, b, last;
+  revisionid&=0xffffff;
+  if (datalen)
+    last=1;
+  else{
+    last=0;
+    datalen=PSYNC_AES256_SECTOR_SIZE;
+  }
+  psync_hmac_sha1_init(&ctx, enc->iv, PSYNC_AES256_BLOCK_SIZE);
+  psync_hmac_sha1_update(&ctx, data, datalen);
+  psync_hmac_sha1_update(&ctx, &sectorid, sizeof(sectorid));
+  psync_hmac_sha1_update(&ctx, &revisionid, sizeof(revisionid));
+  psync_hmac_sha1_final(hmacsha1bin, &ctx);
+  if (last)
+    hmacsha1bin[0]=(hmacsha1bin[0]&0xf8)|0x1;
+  else
+    hmacsha1bin[0]&=0xf8;
+  revsize=0;
+  for (i=0; i<3; i++){
+    b=!!((revisionid>>(i*8))&0xff);
+    revsize=(revsize&(b-1))+b*(i+1);
+  }
+  hmacsha1bin[0]|=(unsigned char)(revsize<<1);
+  memcpy_const(hmacsha1bin+1, (unsigned char *)&revisionid, revsize, 3);
+  aessrc=ALIGN_PTR_A256_BS(buff);
+  aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE;
+  hmac=aessrc+PSYNC_AES256_BLOCK_SIZE*2;
+  memcpy(hmac, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE);
+  copy_iv_and_xor_with_counter(aessrc, enc->iv, sectorid);
+  memcpy(aessrc+sizeof(uint64_t), enc->iv+sizeof(uint64_t), PSYNC_AES256_BLOCK_SIZE-sizeof(uint64_t));
+  psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+  xor16_aligned_inplace(aesdst, hmac);
+  i=0;
+  memcpy(aessrc+sizeof(uint64_t), hmac+sizeof(uint64_t), PSYNC_AES256_BLOCK_SIZE-sizeof(uint64_t));
+  if (IS_WORD_ALIGNED(data) && IS_WORD_ALIGNED(out)){
+    copy_aligned(out, aesdst);
+    out+=PSYNC_AES256_BLOCK_SIZE;
+    while (datalen>=PSYNC_AES256_BLOCK_SIZE){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i++);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor16_aligned_inplace(aesdst, data);
+      data+=PSYNC_AES256_BLOCK_SIZE;
+      datalen-=PSYNC_AES256_BLOCK_SIZE;
+      copy_aligned(out, aesdst);
+      out+=PSYNC_AES256_BLOCK_SIZE;
+    }
+    if (datalen){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor_cnt_inplace(aesdst, data, datalen);
+      memcpy(out, aesdst, datalen);
+    }
+  }
+  else{
+    copy_unaligned(out, aesdst);
+    out+=PSYNC_AES256_BLOCK_SIZE;
+    while (datalen>=PSYNC_AES256_BLOCK_SIZE){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i++);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor16_unaligned_inplace(aesdst, data);
+      data+=PSYNC_AES256_BLOCK_SIZE;
+      datalen-=PSYNC_AES256_BLOCK_SIZE;
+      copy_unaligned(out, aesdst);
+      out+=PSYNC_AES256_BLOCK_SIZE;
+    }
+    if (datalen){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor_cnt_inplace(aesdst, data, datalen);
+      memcpy(out, aesdst, datalen);
+    }
+  }
+}
+
+int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
+                                       unsigned char *out, uint64_t sectorid, uint32_t *revisionid){
+  psync_hmac_sha1_ctx ctx;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
+  unsigned char *aessrc, *aesdst, *hmac, *oout;
+  uint64_t i;
+  size_t odatalen;
+  uint32_t revsize, last;
+  aessrc=ALIGN_PTR_A256_BS(buff);
+  aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE;
+  hmac=aessrc+PSYNC_AES256_BLOCK_SIZE*2;
+  memcpy(hmac, data, PSYNC_AES256_BLOCK_SIZE);
+  data+=PSYNC_AES256_BLOCK_SIZE;
+  copy_iv_and_xor_with_counter(aessrc, enc->iv, sectorid);
+  memcpy(aessrc+sizeof(uint64_t), enc->iv+sizeof(uint64_t), PSYNC_AES256_BLOCK_SIZE-sizeof(uint64_t));
+  psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+  xor16_aligned_inplace(hmac, aesdst);
+  if (datalen){
+    last=1;
+    datalen-=PSYNC_AES256_BLOCK_SIZE;
+  }
+  else{
+    last=0;
+    datalen=PSYNC_AES256_SECTOR_SIZE;
+  }
+  *revisionid=0;
+  revsize=(hmac[0]>>1)&3;
+  memcpy_const((unsigned char *)revisionid, hmac+1, revsize, 3);
+  i=0;
+  oout=out;
+  odatalen=datalen;
+  memcpy(aessrc+sizeof(uint64_t), hmac+sizeof(uint64_t), PSYNC_AES256_BLOCK_SIZE-sizeof(uint64_t));
+  if (IS_WORD_ALIGNED(data) && IS_WORD_ALIGNED(out)){
+    while (datalen>=PSYNC_AES256_BLOCK_SIZE){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i++);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor16_aligned_inplace(aesdst, data);
+      data+=PSYNC_AES256_BLOCK_SIZE;
+      datalen-=PSYNC_AES256_BLOCK_SIZE;
+      copy_aligned(out, aesdst);
+      out+=PSYNC_AES256_BLOCK_SIZE;
+    }
+    if (datalen){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor_cnt_inplace(aesdst, data, datalen);
+      memcpy(out, aesdst, datalen);
+    }
+  }
+  else{
+    while (datalen>=PSYNC_AES256_BLOCK_SIZE){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i++);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor16_unaligned_inplace(aesdst, data);
+      data+=PSYNC_AES256_BLOCK_SIZE;
+      datalen-=PSYNC_AES256_BLOCK_SIZE;
+      copy_unaligned(out, aesdst);
+      out+=PSYNC_AES256_BLOCK_SIZE;
+    }
+    if (datalen){
+      copy_iv_and_xor_with_counter(aessrc, hmac, i);
+      psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+      xor_cnt_inplace(aesdst, data, datalen);
+      memcpy(out, aesdst, datalen);
+    }
+  }
+  psync_hmac_sha1_init(&ctx, enc->iv, PSYNC_AES256_BLOCK_SIZE);
+  psync_hmac_sha1_update(&ctx, oout, odatalen);
+  psync_hmac_sha1_update(&ctx, &sectorid, sizeof(sectorid));
+  psync_hmac_sha1_update(&ctx, revisionid, sizeof(*revisionid));
+  psync_hmac_sha1_final(hmacsha1bin, &ctx);
+  hmacsha1bin[0]=(hmacsha1bin[0]&0xf8)|last|(revsize<<1);
+  memcpy_const(hmacsha1bin+1, (unsigned char *)revisionid, revsize, 3);
+  return -memcmp_const(hmacsha1bin, hmac, PSYNC_AES256_BLOCK_SIZE);
 }

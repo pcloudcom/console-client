@@ -50,6 +50,7 @@ typedef AES_KEY *psync_aes256_decoder;
 #define PSYNC_INVALID_RSA NULL
 #define PSYNC_INVALID_SYM_KEY NULL
 
+#define PSYNC_SHA1_BLOCK_LEN 64
 #define PSYNC_SHA1_DIGEST_LEN 20
 #define PSYNC_SHA1_DIGEST_HEXLEN 40
 #define psync_sha1_ctx SHA_CTX

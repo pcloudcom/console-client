@@ -1290,6 +1290,7 @@ static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_ch
   unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
   if (unlikely_log(psync_file_seek(fd, off, P_SEEK_SET)==-1))
     return PSYNC_NET_TEMPFAIL;
+  debug(D_NOTICE, "scanning in range starting %lu, length %lu", (unsigned long)off, (unsigned long)len);
   if (checksums->blocksize*2>PSYNC_COPY_BUFFER_SIZE || len<PSYNC_COPY_BUFFER_SIZE)
     buffersize=checksums->blocksize*2;
   else
@@ -1322,6 +1323,7 @@ static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_ch
       }
       blockidx=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
       if (blockidx){
+//        debug(D_NOTICE, "got block, buffoff=%lu, outbyteoff=%lu, off=%lu", buffoff, outbyteoff, off);
         if (buffoff+outbyteoff+checksums->blocksize<=len)
           blen=checksums->blocksize;
         else
@@ -1404,6 +1406,9 @@ static void merge_list_to_element(psync_upload_range_list_t *le, psync_list *rli
     assertw(ur->len<=le->len);
     assertw(ur->uploadoffset>=le->uploadoffset);
     assertw(ur->uploadoffset+ur->len<=le->uploadoffset+le->len);
+    if (IS_DEBUG && (!(ur->len<=le->len) || !(ur->uploadoffset>=le->uploadoffset) || !(ur->uploadoffset+ur->len<=le->uploadoffset+le->len)))
+      debug(D_ERROR, "ur->len=%lu, le->len=%lu, ur->uploadoffset=%lu, le->uploadoffset=%lu", (unsigned long)ur->len, 
+            (unsigned long)le->len, (unsigned long)ur->uploadoffset, (unsigned long)le->uploadoffset);
     if (ur->len==le->len){
       assertw(ur->uploadoffset==le->uploadoffset);
       assertw(psync_list_isempty(rlist));
@@ -1451,7 +1456,7 @@ int psync_net_scan_file_for_blocks(psync_socket *api, psync_list *rlist, psync_f
   hash=psync_net_create_hash(checksums);
   psync_list_for_each_safe(l, lb, rlist){
     ur=psync_list_element(l, psync_upload_range_list_t, list);
-    if (ur->len<checksums->blocksize)
+    if (ur->len<checksums->blocksize || ur->type!=PSYNC_URANGE_UPLOAD)
       continue;
     psync_list_init(&nr);
     if (check_range_for_blocks(checksums, hash, ur->off, ur->len, fd, &nr)==PSYNC_NET_TEMPFAIL){
@@ -1489,7 +1494,7 @@ int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync
   hash=psync_net_create_hash(checksums);
   psync_list_for_each_safe(l, lb, rlist){
     ur=psync_list_element(l, psync_upload_range_list_t, list);
-    if (ur->len<checksums->blocksize)
+    if (ur->len<checksums->blocksize || ur->type!=PSYNC_URANGE_UPLOAD)
       continue;
     psync_list_init(&nr);
     if (check_range_for_blocks(checksums, hash, ur->off, ur->len, fd, &nr)==PSYNC_NET_TEMPFAIL){

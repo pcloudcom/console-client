@@ -94,10 +94,15 @@ static void scanner_set_syncs_to_list(psync_list *lst){
   const char *lp;
   sync_list *l;
   size_t lplen;
+  psync_stat_t st;
   psync_list_init(lst);
   res=psync_sql_query("SELECT id, folderid, localpath, synctype FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   while ((row=psync_sql_fetch_row(res))){
     lp=psync_get_lstring(row[2], &lplen);
+    if (unlikely(psync_stat(lp, &st))){
+      debug(D_WARNING, "could not stat local folder %s, ignoring sync", lp);
+      continue;
+    }
     l=(sync_list *)psync_malloc(offsetof(sync_list, localpath)+lplen+1);
     l->folderid=psync_get_number(row[1]);
     l->syncid=psync_get_number(row[0]);
