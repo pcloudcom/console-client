@@ -48,6 +48,7 @@
 #include "pp2p.h"
 #include "plocalnotify.h"
 #include "pcache.h"
+#include "pfileops.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -666,6 +667,39 @@ neterr:
   return -1;
 }
 
+#define run_command_get_res(cmd, params, err, res) do_run_command_get_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err, res)
+
+static int do_run_command_get_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err, binresult **pres){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    goto neterr;
+  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+  if (likely(res))
+    psync_apipool_release(api);
+  else{
+    psync_apipool_release_bad(api);
+    goto neterr;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+  }
+  if (result)
+    psync_free(res);
+  else
+    *pres=res;
+  return (int)result;
+neterr:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
+}
+
 int psync_register(const char *email, const char *password, int termsaccepted, char **err){
   binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
   return run_command("register", params, err);
@@ -688,12 +722,26 @@ int psync_change_password(const char *currentpass, const char *newpass, char **e
 
 int psync_create_remote_folder_by_path(const char *path, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", path)};
-  return run_command("createfolder", params, err);
+  binresult *res;
+  int ret;
+  ret=run_command_get_res("createfolder", params, err, &res);
+  if (ret)
+    return ret;
+  psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
+  psync_free(res);
+  return 0;
 }
 
 int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
-  return run_command("createfolder", params, err);
+  binresult *res;
+  int ret;
+  ret=run_command_get_res("createfolder", params, err, &res);
+  if (ret)
+    return ret;
+  psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
+  psync_free(res);
+  return 0;
 }
 
 const char *psync_get_auth_string(){

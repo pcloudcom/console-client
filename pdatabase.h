@@ -49,7 +49,7 @@ PRAGMA page_size=4096;\
 PRAGMA cache_size=8000;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
-  name VARCHAR(1024), ctime INTEGER, mtime INTEGER);\
+  name VARCHAR(1024), ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0);\
 CREATE INDEX IF NOT EXISTS kfolderfolderid ON folder(parentfolderid);\
 CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, size INTEGER, hash INTEGER,\
   name VARCHAR(1024), ctime INTEGER, mtime INTEGER, category INTEGER, thumb INTEGER, icon VARCHAR(32),\

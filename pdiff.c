@@ -38,6 +38,7 @@
 #include "psyncer.h"
 #include "pdownload.h"
 #include "pcallbacks.h"
+#include "pfileops.h"
 #include <ctype.h>
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -233,14 +234,6 @@ static psync_socket *get_connected_socket(){
   }
 }
 
-static uint64_t get_permissions(const binresult *meta){
-  return 
-    (psync_find_result(meta, "canread", PARAM_BOOL)->num?PSYNC_PERM_READ:0)+
-    (psync_find_result(meta, "canmodify", PARAM_BOOL)->num?PSYNC_PERM_MODIFY:0)+
-    (psync_find_result(meta, "candelete", PARAM_BOOL)->num?PSYNC_PERM_DELETE:0)+
-    (psync_find_result(meta, "cancreate", PARAM_BOOL)->num?PSYNC_PERM_CREATE:0);
-}
-
 static void process_createfolder(const binresult *entry){
   static psync_sql_res *st=NULL;
   psync_sql_res *res, *stmt, *stmt2;
@@ -269,7 +262,7 @@ static void process_createfolder(const binresult *entry){
   }
   else{
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=get_permissions(meta);
+    perms=psync_get_permissions(meta);
   }
   name=psync_find_result(meta, "name", PARAM_STR);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
@@ -384,7 +377,7 @@ static void process_modifyfolder(const binresult *entry){
   }
   else{
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=get_permissions(meta);
+    perms=psync_get_permissions(meta);
   }
   name=psync_find_result(meta, "name", PARAM_STR);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
@@ -1000,7 +993,7 @@ static void process_requestsharein(const binresult *entry){
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 5, get_permissions(share));
+  psync_sql_bind_uint(q, 5, psync_get_permissions(share));
   psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
@@ -1027,7 +1020,7 @@ static void process_requestshareout(const binresult *entry){
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 5, get_permissions(share));
+  psync_sql_bind_uint(q, 5, psync_get_permissions(share));
   psync_sql_bind_null(q, 6);
   br=psync_find_result(share, "tomail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
@@ -1056,7 +1049,7 @@ static void process_acceptedsharein(const binresult *entry){
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, get_permissions(share));
+  psync_sql_bind_uint(q, 4, psync_get_permissions(share));
   psync_sql_bind_uint(q, 5, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
@@ -1080,7 +1073,7 @@ static void process_acceptedshareout(const binresult *entry){
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, get_permissions(share));
+  psync_sql_bind_uint(q, 4, psync_get_permissions(share));
   psync_sql_bind_uint(q, 5, psync_find_result(share, "touserid", PARAM_NUM)->num);
   br=psync_find_result(share, "tomail", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
@@ -1160,7 +1153,7 @@ static void process_removedshareout(const binresult *entry){
 static void modify_shared_folder(const binresult *share){
   psync_sql_res *q;
   q=psync_sql_prep_statement("UPDATE sharedfolder SET permissions=? WHERE id=?");
-  psync_sql_bind_uint(q, 1, get_permissions(share));
+  psync_sql_bind_uint(q, 1, psync_get_permissions(share));
   psync_sql_bind_uint(q, 2, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_run_free(q);
 }
