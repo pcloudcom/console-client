@@ -59,7 +59,7 @@ static binresult *get_userinfo_user_digest(psync_socket *sock, const char *usern
 }
 
 static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password){
-  binparam empty_params[]={};
+  binparam empty_params[]={P_STR("MS", "sucks")};
   psync_sha1_ctx ctx;
   binresult *res, *ret;
   const binresult *dig;
