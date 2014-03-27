@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,10 +35,14 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 typedef uint64_t psync_folderid_t;
 typedef uint64_t psync_fileid_t;
 typedef uint64_t psync_fileorfolderid_t;
+typedef uint64_t psync_userid_t;
+typedef uint64_t psync_shareid_t;
+typedef uint64_t psync_sharerequestid_t;
 typedef uint32_t psync_syncid_t;
 typedef uint32_t psync_eventtype_t;
 typedef uint32_t psync_synctype_t;
@@ -132,6 +136,7 @@ typedef struct {
 #define PEVENT_TYPE_FAIL             (1<<6)
 
 #define PEVENT_FIRST_USER_EVENT      (1<<30)
+#define PEVENT_FIRST_SHARE_EVENT     (PEVENT_FIRST_USER_EVENT+200)
 
 #define PEVENT_LOCAL_FOLDER_CREATED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
 #define PEVENT_REMOTE_FOLDER_CREATED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
@@ -149,6 +154,19 @@ typedef struct {
 
 #define PEVENT_USERINFO_CHANGED PEVENT_FIRST_USER_EVENT
 #define PEVENT_USEDQUOTA_CHANGED (PEVENT_FIRST_USER_EVENT+1)
+
+#define PEVENT_SHARE_REQUESTIN   PEVENT_FIRST_SHARE_EVENT
+#define PEVENT_SHARE_REQUESTOUT  (PEVENT_FIRST_SHARE_EVENT+1)
+#define PEVENT_SHARE_ACCEPTIN    (PEVENT_FIRST_SHARE_EVENT+2)
+#define PEVENT_SHARE_ACCEPTOUT   (PEVENT_FIRST_SHARE_EVENT+3)
+#define PEVENT_SHARE_DECLINEIN   (PEVENT_FIRST_SHARE_EVENT+4)
+#define PEVENT_SHARE_DECLINEOUT  (PEVENT_FIRST_SHARE_EVENT+5)
+#define PEVENT_SHARE_CANCELIN    (PEVENT_FIRST_SHARE_EVENT+6)
+#define PEVENT_SHARE_CANCELOUT   (PEVENT_FIRST_SHARE_EVENT+7)
+#define PEVENT_SHARE_REMOVEIN    (PEVENT_FIRST_SHARE_EVENT+8)
+#define PEVENT_SHARE_REMOVEOUT   (PEVENT_FIRST_SHARE_EVENT+9)
+#define PEVENT_SHARE_MODIFYIN    (PEVENT_FIRST_SHARE_EVENT+10)
+#define PEVENT_SHARE_MODIFYOUT   (PEVENT_FIRST_SHARE_EVENT+11)
 
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
@@ -189,6 +207,44 @@ typedef struct {
   psync_folder_t folders[];
 } psync_folder_list_t;
 
+typedef struct {
+  psync_fileid_t fileid;
+  const char *name;
+  const char *localpath;
+  const char *remotepath;
+  psync_syncid_t syncid;                                  
+} psync_file_event_t;
+
+typedef struct {
+  psync_fileid_t folderid;
+  const char *name;
+  const char *localpath;
+  const char *remotepath;
+  psync_syncid_t syncid;                                  
+} psync_folder_event_t;
+
+typedef struct {
+  psync_folderid_t folderid;
+  const char *sharename;
+  const char *email;
+  const char *message;
+  psync_userid_t userid;
+  psync_shareid_t shareid;
+  psync_sharerequestid_t sharerequestid;
+  time_t created;
+  unsigned char canread;
+  unsigned char cancreate;
+  unsigned char canmodify;
+  unsigned char candelete;
+} psync_share_event_t;
+
+typedef union {
+  psync_file_event_t *file;
+  psync_folder_event_t *folder;
+  psync_share_event_t *share;
+  void *ptr;
+} psync_eventdata_t;
+
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
 #ifdef __cplusplus
@@ -211,26 +267,27 @@ extern psync_free_t psync_free;
 typedef void (*pstatus_change_callback_t)(pstatus_t *status);
 
 
-/* Event callback is called every time a download/upload is started/finished.
- * It is unsafe to use pointers to strings that are passed as parameters after
- * the callback return, if you need to use them this way, strdup() will do the
- * job. Event callbacks will not overlap.
- *
- * If event&PEVENT_TYPE_FOLDER==PEVENT_TYPE_FOLDER is true, remoteid is folderid,
- * otherwise it is fileid.
+/* Event callback is called every time a download/upload is started/finished,
+ * quota is changed, folder is shared or similar. Look at the PEVENT_ constants
+ * for a list of possible events.
+ * 
+ * The type of data parameter is specific to eventtype. That is for PEVENT_FILE_* or
+ * PEVENT_*_FILE_* events the type is psync_folder_event_t, for PEVENT_*_FOLDER_*
+ * events it is psync_file_event_t, for PEVENT_SHARE_* events is psync_share_event_t.
+ * For PEVENT_USERINFO_CHANGED and PEVENT_USEDQUOTA_CHANGED data is NULL. Observe
+ * the changes by calling psync_get_*_value() functions.
+ * 
+ * It is unsafe to use pointers to strings that are passed in the data structure, 
+ * if you need to use them this way, strdup() will do the job. Event callbacks will 
+ * not overlap.
  *
  * Do not expect localpath to exist after receiving PEVENT_FILE_DOWNLOAD_STARTED
  * as the file will be created with alternative name first and renamed when download
  * is finished.
- * 
- * PEVENT_USERINFO_CHANGED and PEVENT_USEDQUOTA_CHANGED do not set any meaningful
- * values to syncid, remoteid, name, localpath and remotepath. Observe the changes
- * by calling psync_get_*_value() functions.
- * 
+s * 
  */
 
-typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_syncid_t syncid, psync_fileorfolderid_t remoteid,
-                                  const char *name, const char *localpath, const char *remotepath);
+typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t data);
 
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,

@@ -44,12 +44,9 @@ static int eventthreadrunning=0;
 
 typedef struct {
   psync_list list;
-  char *localpath;
-  char *remotepath;
-  char *name;
-  psync_fileorfolderid_t remoteid;
+  psync_eventdata_t data;
   psync_eventtype_t event;
-  psync_syncid_t syncid;
+  int freedata;
 } event_list_t;
 
 static void status_change_thread(void *ptr){
@@ -94,9 +91,9 @@ static void event_thread(void *ptr){
     pthread_mutex_unlock(&eventmutex);
     if (!psync_do_run)
       break;
-    callback(event->event, event->syncid, event->remoteid, event->name, event->localpath, event->remotepath);
-    psync_free(event->localpath);
-    psync_free(event->remotepath);
+    callback(event->event, event->data);
+    if (event->freedata)
+      psync_free(event->data.ptr);
     psync_free(event);
   }
 }
@@ -111,7 +108,6 @@ void psync_set_event_callback(pevent_callback_t callback){
 
 void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid){
   if (eventthreadrunning){
-    event_list_t *event;
     char *remotepath;
     if (eventid&PEVENT_TYPE_FOLDER)
       remotepath=psync_get_path_by_folderid(remoteid, NULL);
@@ -119,30 +115,48 @@ void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, co
       remotepath=psync_get_path_by_fileid(remoteid, NULL);
     if (unlikely_log(!remotepath))
       return;
-    event=psync_new(event_list_t);
-    event->localpath=psync_strdup(localpath);
-    event->remotepath=remotepath;
-    event->name=strrchr(remotepath, '/')+1;
-    event->remoteid=remoteid;
-    event->event=eventid;
-    event->syncid=syncid;
-    pthread_mutex_lock(&eventmutex);
-    psync_list_add_tail(&eventlist, &event->list);
-    pthread_mutex_unlock(&eventmutex);
-    pthread_cond_signal(&eventcond);
+    psync_send_event_by_path(eventid, syncid, localpath, remoteid, remotepath);
   }
 }
 
 void psync_send_event_by_path(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid, const char *remotepath){
   if (eventthreadrunning){
     event_list_t *event;
-    event=psync_new(event_list_t);
-    event->localpath=psync_strdup(localpath);
-    event->remotepath=psync_strdup(remotepath);
-    event->name=strrchr(remotepath, '/')+1;
-    event->remoteid=remoteid;
+    size_t llen, rlen, slen;
+    char *lcopy, *rcopy, *strct, *name;
+    llen=strlen(localpath)+1;
+    rlen=strlen(remotepath)+1;
+    if (eventid&PEVENT_TYPE_FOLDER)
+      slen=sizeof(psync_file_event_t);
+    else
+      slen=sizeof(psync_folder_event_t);
+    event=(event_list_t *)psync_malloc(sizeof(event_list_t)+slen+llen+rlen);
+    strct=(char *)(event+1);
+    lcopy=strct+slen;
+    rcopy=lcopy+llen;
+    memcpy(lcopy, localpath, llen);
+    memcpy(rcopy, remotepath, rlen);
+    name=strrchr(rcopy, '/')+1;
+    if (eventid&PEVENT_TYPE_FOLDER){
+      psync_folder_event_t *f=(psync_folder_event_t *)strct;
+      f->folderid=remoteid;
+      f->name=name;
+      f->localpath=lcopy;
+      f->remotepath=rcopy;
+      f->syncid=syncid;
+      event->data.folder=f;
+    }
+    else{
+      psync_file_event_t *f=(psync_file_event_t *)strct;
+      f->fileid=remoteid;
+      f->name=name;
+      f->localpath=lcopy;
+      f->remotepath=rcopy;
+      f->syncid=syncid;
+      event->data.file=f;
+    }
     event->event=eventid;
-    event->syncid=syncid;
+    event->freedata=0;
     pthread_mutex_lock(&eventmutex);
     psync_list_add_tail(&eventlist, &event->list);
     pthread_mutex_unlock(&eventmutex);
@@ -154,15 +168,28 @@ void psync_send_eventid(psync_eventtype_t eventid){
   if (eventthreadrunning){
     event_list_t *event;
     event=psync_new(event_list_t);
-    event->localpath=NULL;
-    event->remotepath=NULL;
-    event->name=NULL;
-    event->remoteid=0;
+    event->data.ptr=NULL;
     event->event=eventid;
-    event->syncid=0;
+    event->freedata=0;    
     pthread_mutex_lock(&eventmutex);
     psync_list_add_tail(&eventlist, &event->list);
     pthread_mutex_unlock(&eventmutex);
     pthread_cond_signal(&eventcond);
   }
+}
+
+void psync_send_eventdata(psync_eventtype_t eventid, void *eventdata){
+  if (eventthreadrunning){
+    event_list_t *event;
+    event=psync_new(event_list_t);
+    event->data.ptr=eventdata;
+    event->event=eventid;
+    event->freedata=1;
+    pthread_mutex_lock(&eventmutex);
+    psync_list_add_tail(&eventlist, &event->list);
+    pthread_mutex_unlock(&eventmutex);
+    pthread_cond_signal(&eventcond);
+  }
+  else
+    psync_free(eventdata);
 }
