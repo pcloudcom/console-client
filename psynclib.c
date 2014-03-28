@@ -287,6 +287,7 @@ void psync_unlink(){
   psync_my_userid=0;
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
+  psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
 }
