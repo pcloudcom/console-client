@@ -48,6 +48,7 @@
 #include "pp2p.h"
 #include "plocalnotify.h"
 #include "pcache.h"
+#include "pfileops.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -286,6 +287,8 @@ void psync_unlink(){
   psync_my_userid=0;
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
+  psync_settings_reset();
+  psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
 }
@@ -666,6 +669,39 @@ neterr:
   return -1;
 }
 
+#define run_command_get_res(cmd, params, err, res) do_run_command_get_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err, res)
+
+static int do_run_command_get_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err, binresult **pres){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    goto neterr;
+  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+  if (likely(res))
+    psync_apipool_release(api);
+  else{
+    psync_apipool_release_bad(api);
+    goto neterr;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+  }
+  if (result)
+    psync_free(res);
+  else
+    *pres=res;
+  return (int)result;
+neterr:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
+}
+
 int psync_register(const char *email, const char *password, int termsaccepted, char **err){
   binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
   return run_command("register", params, err);
@@ -688,12 +724,26 @@ int psync_change_password(const char *currentpass, const char *newpass, char **e
 
 int psync_create_remote_folder_by_path(const char *path, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", path)};
-  return run_command("createfolder", params, err);
+  binresult *res;
+  int ret;
+  ret=run_command_get_res("createfolder", params, err, &res);
+  if (ret)
+    return ret;
+  psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
+  psync_free(res);
+  return 0;
 }
 
 int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
-  return run_command("createfolder", params, err);
+  binresult *res;
+  int ret;
+  ret=run_command_get_res("createfolder", params, err, &res);
+  if (ret)
+    return ret;
+  psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
+  psync_free(res);
+  return 0;
 }
 
 const char *psync_get_auth_string(){
@@ -811,4 +861,82 @@ void psync_set_string_value(const char *valuename, const char *value){
 
 void psync_network_exception(){
   psync_timer_notify_exception();
+}
+
+static int create_request(psync_list_builder_t *builder, void *element, psync_variant_row row){
+  psync_sharerequest_t *request;
+  const char *str;
+  uint32_t perms;
+  size_t len;
+  request=(psync_sharerequest_t *)element;
+  request->sharerequestid=psync_get_number(row[0]);
+  request->folderid=psync_get_number(row[1]);
+  request->created=psync_get_number(row[2]);
+  perms=psync_get_number(row[3]);
+  request->userid=psync_get_number_or_null(row[4]);
+  str=psync_get_lstring(row[5], &len);
+  request->email=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_sharerequest_t, email), len);
+  str=psync_get_lstring(row[6], &len);
+  request->sharename=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_sharerequest_t, sharename), len);
+  str=psync_get_lstring_or_null(row[7], &len);
+  if (str){
+    request->message=str;
+    psync_list_add_lstring_offset(builder, offsetof(psync_sharerequest_t, message), len);
+  }
+  else{
+    request->message="";
+  }
+  request->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
+  request->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
+  request->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
+  request->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
+  return 0;
+}
+
+psync_sharerequest_list_t *psync_list_sharerequests(int incoming){
+  psync_list_builder_t *builder;
+  psync_sql_res *res;
+  builder=psync_list_builder_create(sizeof(psync_sharerequest_t), offsetof(psync_sharerequest_list_t, sharerequests));
+  incoming=!!incoming;
+  res=psync_sql_query("SELECT id, folderid, ctime, permissions, userid, mail, name, message FROM sharerequest WHERE isincoming=? ORDER BY name");
+  psync_sql_bind_uint(res, 1, incoming);
+  psync_list_bulder_add_sql(builder, res, create_request);
+  return (psync_sharerequest_list_t *)psync_list_builder_finalize(builder);
+}
+
+static int create_share(psync_list_builder_t *builder, void *element, psync_variant_row row){
+  psync_share_t *share;
+  const char *str;
+  uint32_t perms;
+  size_t len;
+  share=(psync_share_t *)element;
+  share->shareid=psync_get_number(row[0]);
+  share->folderid=psync_get_number(row[1]);
+  share->created=psync_get_number(row[2]);
+  perms=psync_get_number(row[3]);
+  share->userid=psync_get_number(row[4]);
+  str=psync_get_lstring(row[5], &len);
+  share->email=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, email), len);
+  str=psync_get_lstring(row[6], &len);
+  share->sharename=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
+  share->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
+  share->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
+  share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
+  share->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
+  return 0;
+}
+
+psync_share_list_t *psync_list_shares(int incoming){
+  psync_list_builder_t *builder;
+  psync_sql_res *res;
+  builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
+  incoming=!!incoming;
+  res=psync_sql_query("SELECT id, folderid, ctime, permissions, userid, mail, name FROM sharedfolder WHERE isincoming=? ORDER BY name");
+  psync_sql_bind_uint(res, 1, incoming);
+  psync_list_bulder_add_sql(builder, res, create_share);
+  return (psync_share_list_t *)psync_list_builder_finalize(builder);
 }

@@ -38,6 +38,7 @@
 #include "psyncer.h"
 #include "pdownload.h"
 #include "pcallbacks.h"
+#include "pfileops.h"
 #include <ctype.h>
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -45,8 +46,8 @@
 static uint64_t used_quota=0, current_quota=0;
 static psync_uint_t needdownload;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
-
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
+static int initialdownload=0;
 
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen){
   binparam params[]={P_STR("timeformat", "timestamp"), 
@@ -233,14 +234,6 @@ static psync_socket *get_connected_socket(){
   }
 }
 
-static uint64_t get_permissions(const binresult *meta){
-  return 
-    (psync_find_result(meta, "canread", PARAM_BOOL)->num?PSYNC_PERM_READ:0)+
-    (psync_find_result(meta, "canmodify", PARAM_BOOL)->num?PSYNC_PERM_MODIFY:0)+
-    (psync_find_result(meta, "candelete", PARAM_BOOL)->num?PSYNC_PERM_DELETE:0)+
-    (psync_find_result(meta, "cancreate", PARAM_BOOL)->num?PSYNC_PERM_CREATE:0);
-}
-
 static void process_createfolder(const binresult *entry){
   static psync_sql_res *st=NULL;
   psync_sql_res *res, *stmt, *stmt2;
@@ -269,7 +262,7 @@ static void process_createfolder(const binresult *entry){
   }
   else{
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=get_permissions(meta);
+    perms=psync_get_permissions(meta);
   }
   name=psync_find_result(meta, "name", PARAM_STR);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
@@ -384,7 +377,7 @@ static void process_modifyfolder(const binresult *entry){
   }
   else{
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=get_permissions(meta);
+    perms=psync_get_permissions(meta);
   }
   name=psync_find_result(meta, "name", PARAM_STR);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
@@ -888,19 +881,119 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
 }
 
+#define fill_str(f, s, sl)\
+  do {\
+    if (s && sl) {\
+      memcpy(str, s, sl);\
+      f=str;\
+      str+=sl;\
+    }\
+    else\
+      f="";\
+  } while (0);
+
+static void send_share_notify(psync_eventtype_t eventid, const binresult *share){
+  psync_share_event_t *e;
+  char *str, *sharename;
+  const char *email, *message;
+  const binresult *br;
+  uint64_t ctime;
+  size_t stringslen, sharenamelen, emaillen, messagelen;
+  int freesharename;
+  if (initialdownload)
+    return;
+  stringslen=0;
+  ctime=0;
+  if (!(br=psync_check_result(share, "frommail", PARAM_STR)) && !(br=psync_check_result(share, "tomail", PARAM_STR))){
+    debug(D_WARNING, "Neigher frommail or tomail found for eventtype %u", (unsigned)eventid);
+    return;
+  }
+  email=br->str;
+  emaillen=br->length+1;
+  stringslen+=br->length+1;
+  if ((br=psync_check_result(share, "message", PARAM_STR))){
+    message=br->str;
+    messagelen=br->length+1;
+    stringslen+=br->length+1;
+  }
+  else{
+    message=NULL;
+    messagelen=0;
+  }
+  if ((br=psync_check_result(share, "sharename", PARAM_STR))){
+    sharename=(char *)br->str;
+    sharenamelen=br->length+1;
+    stringslen+=br->length+1;
+    freesharename=0;
+  }
+  else{
+    psync_sql_res *res;
+    psync_variant_row row;
+    const char *cstr;
+    if ((br=psync_check_result(share, "shareid", PARAM_NUM)))
+      res=psync_sql_query("SELECT name, ctime FROM sharedfolder WHERE id=?");
+    else if ((br=psync_check_result(share, "sharerequestid", PARAM_NUM)))
+      res=psync_sql_query("SELECT name, ctime FROM sharerequest WHERE id=?");
+    else {
+      debug(D_WARNING, "Neither sharename, shareid or sharerequestid found for eventtype %u", (unsigned)eventid);
+      return;
+    }
+    psync_sql_bind_uint(res, 1, br->num);
+    if ((row=psync_sql_fetch_row(res))){
+      cstr=psync_get_lstring(row[0], &sharenamelen);
+      stringslen+=++sharenamelen;
+      sharename=(char *)psync_malloc(sharenamelen);
+      memcpy(sharename, cstr, sharenamelen);
+      freesharename=1;
+      ctime=psync_get_number(row[1]);
+    }
+    else
+      sharename=NULL;
+    psync_sql_free_result(res);
+    if (!sharename){
+      debug(D_WARNING, "Could not find sharedfolder or sharerequest in the database.");
+      return;
+    }
+  }
+  e=(psync_share_event_t *)psync_malloc(sizeof(psync_share_event_t)+stringslen);
+  str=(char *)(e+1);
+  memset(e, 0, sizeof(psync_share_event_t));
+  e->folderid=psync_find_result(share, "folderid", PARAM_NUM)->num;
+  fill_str(e->sharename, sharename, sharenamelen);
+  if (freesharename)
+    psync_free(sharename);
+  fill_str(e->email, email, emaillen);
+  fill_str(e->message, message, messagelen);
+  if ((br=psync_check_result(share, "userid", PARAM_NUM)))
+    e->userid=br->num;
+  if ((br=psync_check_result(share, "shareid", PARAM_NUM)))
+    e->shareid=br->num;
+  if ((br=psync_check_result(share, "sharerequestid", PARAM_NUM)))
+    e->sharerequestid=br->num;
+  if ((br=psync_check_result(share, "created", PARAM_NUM)))
+    ctime=br->num;
+  e->created=ctime;
+  e->canread=psync_find_result(share, "canread", PARAM_BOOL)->num;
+  e->cancreate=psync_find_result(share, "cancreate", PARAM_BOOL)->num;
+  e->canmodify=psync_find_result(share, "canmodify", PARAM_BOOL)->num;
+  e->candelete=psync_find_result(share, "candelete", PARAM_BOOL)->num;
+  psync_send_eventdata(eventid, e);
+}
+
 static void process_requestsharein(const binresult *entry){
   psync_sql_res *q;
   const binresult *share, *br;
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_REQUESTIN, share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, isincoming, folderid, ctime, etime, permissions, userid, mail, name, message) "
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 5, get_permissions(share));
+  psync_sql_bind_uint(q, 5, psync_get_permissions(share));
   psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
@@ -920,13 +1013,14 @@ static void process_requestshareout(const binresult *entry){
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_REQUESTOUT, share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, isincoming, folderid, ctime, etime, permissions, userid, mail, name, message) "
                                                 "VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 5, get_permissions(share));
+  psync_sql_bind_uint(q, 5, psync_get_permissions(share));
   psync_sql_bind_null(q, 6);
   br=psync_find_result(share, "tomail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
@@ -946,6 +1040,7 @@ static void process_acceptedsharein(const binresult *entry){
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_ACCEPTIN, share);
   q=psync_sql_prep_statement("DELETE FROM sharerequest WHERE id=?");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_run_free(q);
@@ -954,7 +1049,7 @@ static void process_acceptedsharein(const binresult *entry){
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, get_permissions(share));
+  psync_sql_bind_uint(q, 4, psync_get_permissions(share));
   psync_sql_bind_uint(q, 5, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
@@ -969,6 +1064,7 @@ static void process_acceptedshareout(const binresult *entry){
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
   q=psync_sql_prep_statement("DELETE FROM sharerequest WHERE id=?");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_run_free(q);
@@ -977,7 +1073,7 @@ static void process_acceptedshareout(const binresult *entry){
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, get_permissions(share));
+  psync_sql_bind_uint(q, 4, psync_get_permissions(share));
   psync_sql_bind_uint(q, 5, psync_find_result(share, "touserid", PARAM_NUM)->num);
   br=psync_find_result(share, "tomail", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
@@ -986,59 +1082,98 @@ static void process_acceptedshareout(const binresult *entry){
   psync_sql_run_free(q);
 }
 
-
-static void process_declinedsharein(const binresult *entry){
+static void delete_share_request(const binresult *share){
   psync_sql_res *q;
-  const binresult *share;
-  if (!entry)
-    return;
-  share=psync_find_result(entry, "share", PARAM_HASH);
   q=psync_sql_prep_statement("DELETE FROM sharerequest WHERE id=?");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_run_free(q);
 }
 
-static void process_declinedshareout(const binresult *entry){
-  process_declinedsharein(entry);
-}
-
-static void process_cancelledsharein(const binresult *entry){
-  process_declinedsharein(entry);
-}
-
-static void process_cancelledshareout(const binresult *entry){
-  process_declinedsharein(entry);
-}
-
-static void process_removedsharein(const binresult *entry){
-  psync_sql_res *q;
+static void process_declinedsharein(const binresult *entry){
   const binresult *share;
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_DECLINEIN, share);
+  delete_share_request(share);
+}
+
+static void process_declinedshareout(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_DECLINEOUT, share);
+  delete_share_request(share);
+}
+
+static void process_cancelledsharein(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_CANCELIN, share);
+  delete_share_request(share);
+}
+
+static void process_cancelledshareout(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_CANCELOUT, share);
+  delete_share_request(share);
+}
+
+static void delete_shared_folder(const binresult *share){
+  psync_sql_res *q;
   q=psync_sql_prep_statement("DELETE FROM sharedfolder WHERE id=?");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_run_free(q);
 }
 
-static void process_removedshareout(const binresult *entry){
-  process_removedsharein(entry);
-}
-
-static void process_modifiedsharein(const binresult *entry){
-  psync_sql_res *q;
+static void process_removedsharein(const binresult *entry){
   const binresult *share;
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_REMOVEIN, share);
+  delete_shared_folder(share);
+}
+
+static void process_removedshareout(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_REMOVEOUT, share);
+  delete_shared_folder(share);
+}
+
+static void modify_shared_folder(const binresult *share){
+  psync_sql_res *q;
   q=psync_sql_prep_statement("UPDATE sharedfolder SET permissions=? WHERE id=?");
-  psync_sql_bind_uint(q, 1, get_permissions(share));
+  psync_sql_bind_uint(q, 1, psync_get_permissions(share));
   psync_sql_bind_uint(q, 2, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_run_free(q);
 }
 
+static void process_modifiedsharein(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_MODIFYIN, share);
+  modify_shared_folder(share);
+}
+
 static void process_modifiedshareout(const binresult *entry){
-  process_modifiedsharein(entry);
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_MODIFYOUT, share);
+  modify_shared_folder(share);
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
@@ -1188,9 +1323,12 @@ static void psync_diff_thread(){
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
 restart:
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   sock=get_connected_socket();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
   diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+  if (diffid==0)
+    initialdownload=1;
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};
@@ -1219,6 +1357,7 @@ restart:
   } while (result);
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  initialdownload=0;
   psync_syncer_check_delayed_syncs();
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){

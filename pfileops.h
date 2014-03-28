@@ -25,17 +25,24 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_CALLBACKS_H
-#define _PSYNC_CALLBACKS_H
+#ifndef _PSYNC_FILEOPS_H
+#define _PSYNC_FILEOPS_H
 
-#include "psynclib.h"
+#include "pcompiler.h"
+#include "papi.h"
+#include "psettings.h"
 
-void psync_set_status_callback(pstatus_change_callback_t callback);
-void psync_send_status_update();
-void psync_set_event_callback(pevent_callback_t callback);
-void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid);
-void psync_send_event_by_path(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid, const char *remotepath);
-void psync_send_eventid(psync_eventtype_t eventid);
-void psync_send_eventdata(psync_eventtype_t eventid, void *eventdata);
+#define PSYNC_INVALID_FOLDERID ((psync_folderid_t)-1)
+#define PSYNC_INVALID_PATH NULL
+
+static inline uint64_t psync_get_permissions(const binresult *meta){
+  return 
+    (psync_find_result(meta, "canread", PARAM_BOOL)->num?PSYNC_PERM_READ:0)+
+    (psync_find_result(meta, "canmodify", PARAM_BOOL)->num?PSYNC_PERM_MODIFY:0)+
+    (psync_find_result(meta, "candelete", PARAM_BOOL)->num?PSYNC_PERM_DELETE:0)+
+    (psync_find_result(meta, "cancreate", PARAM_BOOL)->num?PSYNC_PERM_CREATE:0);
+}
+
+void psync_ops_create_folder_in_db(const binresult *meta);
 
 #endif
