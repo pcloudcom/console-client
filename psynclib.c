@@ -519,8 +519,9 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
 
 int psync_delete_sync(psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_uint_row row;
   psync_sql_start_transaction();
+/* this is slow and unneeded:
+  psync_uint_row row;
   res=psync_sql_query("SELECT type, itemid, localitemid FROM task WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   while ((row=psync_sql_fetch_rowint(res)))
@@ -529,6 +530,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     else if (row[0]==PSYNC_UPLOAD_FILE)
       psync_delete_upload_tasks_for_file(row[2]);
   psync_sql_free_result(res);
+  */
   psync_delete_local_recursive(syncid, 0);
   res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);

@@ -348,8 +348,10 @@ static void scan_upload_file(sync_folderlist *fl){
   psync_sql_res *res;
   psync_fileid_t localfileid;
   debug(D_NOTICE, "file created %s", fl->name);
-  /* it is possible that files that are reported as new are already uploading */
+  /* it is possible that files that are reported as new are already uploading
+   * -- is it? when? how? and with what localid?
   psync_delete_upload_tasks_for_file(fl->localid);
+  */
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfile (localparentfolderid, syncid, size, inode, mtime, mtimenative, name)"
                                                           "VALUES (?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);
@@ -560,6 +562,7 @@ restart:
                                 &scan_lists[SCAN_LIST_RENFOLDERSROM], 
                                 &scan_lists[SCAN_LIST_RENFOLDERSTO],
                                 compare_inode);
+    psync_sql_start_transaction();
     l2=&scan_lists[SCAN_LIST_RENFOLDERSTO];
     psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFOLDERSROM]){
       l2=l2->next;
@@ -571,7 +574,6 @@ restart:
     psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSROM]);
     psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSTO], sync_folderlist, list, psync_free);
     psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSTO]);
-    psync_sql_start_transaction();
     psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list){
       scan_create_folder(fl);
       i++;
