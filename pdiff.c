@@ -1320,9 +1320,10 @@ static void psync_diff_thread(){
   psync_socket_t exceptionsock, socks[2];
   int sel;
   char ex;
-restart:
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
+restart:
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   sock=get_connected_socket();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
   diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
