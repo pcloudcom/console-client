@@ -180,6 +180,8 @@ typedef int psync_settingid_t;
 
 void psync_settings_init();
 
+void psync_settings_reset();
+
 psync_settingid_t psync_setting_getid(const char *name) PSYNC_CONST PSYNC_NONNULL(1);
 
 int psync_setting_get_bool(psync_settingid_t settingid) PSYNC_PURE;

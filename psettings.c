@@ -60,6 +60,33 @@ static psync_setting_t settings[]={
   {"p2psync", psync_p2p_change, NULL, {PSYNC_P2P_SYNC_DEFAULT}, PSYNC_TBOOL}
 };
 
+void psync_settings_reset(){
+  psync_settingid_t i;
+  for (i=0; i<ARRAY_SIZE(settings); i++)
+    if (settings[i].type==PSYNC_TSTRING)
+      psync_free_after_sec(settings[i].str, 60);
+  settings[_PS(usessl)].boolean=PSYNC_USE_SSL_DEFAULT;
+  settings[_PS(saveauth)].boolean=1;
+  settings[_PS(maxdownloadspeed)].snum=PSYNC_DWL_SHAPER_DEFAULT;
+  settings[_PS(maxuploadspeed)].snum=PSYNC_UPL_SHAPER_DEFAULT;
+  settings[_PS(ignorepatterns)].str=PSYNC_IGNORE_PATTERNS_DEFAULT;
+  settings[_PS(minlocalfreespace)].num=PSYNC_MIN_LOCAL_FREE_SPACE;
+  settings[_PS(p2psync)].boolean=PSYNC_P2P_SYNC_DEFAULT;
+  for (i=0; i<ARRAY_SIZE(settings); i++){
+    if (settings[i].type==PSYNC_TSTRING){
+      settings[i].str=psync_strdup(settings[i].str);
+      if (settings[i].fix_callback)
+        settings[i].fix_callback(&settings[i].str);
+    }
+    else if (settings[i].fix_callback){
+      if (settings[i].type==PSYNC_TNUMBER)
+        settings[i].fix_callback(&settings[i].num);
+      else if (settings[i].type==PSYNC_TBOOL)
+        settings[i].fix_callback(&settings[i].boolean);
+    }
+  }
+}
+
 void psync_settings_init(){
   psync_sql_res *res;
   psync_str_row row;
