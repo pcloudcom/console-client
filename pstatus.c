@@ -105,9 +105,6 @@ static uint32_t psync_calc_status(){
     }
   }
   
-  /* This will work quite as well probably:
-   * return (!!psync_status.filesdownloading)+(!!psync_status.filesuploading)<<1;
-   */
   if ((psync_status.filesdownloading || psync_status.filestodownload) && (psync_status.filesuploading || psync_status.filestoupload))
     return PSTATUS_DOWNLOADINGANDUPLOADING;
   else if (psync_status.filesdownloading || psync_status.filestodownload)

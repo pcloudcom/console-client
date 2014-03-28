@@ -228,6 +228,7 @@ void psync_logout(){
   psync_free(psync_my_pass);
   psync_my_pass=NULL;
   pthread_mutex_unlock(&psync_my_auth_mutex);
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_stop_all_download();
   psync_stop_all_upload();
@@ -288,6 +289,7 @@ void psync_unlink(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
   psync_settings_reset();
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
