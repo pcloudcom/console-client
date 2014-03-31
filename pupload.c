@@ -436,7 +436,7 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
   fd=psync_file_open(localpath, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE){
     debug(D_WARNING, "could not open local file %s", localpath);
-    return 0;
+    return -1;
   } 
   api=psync_apipool_get();
   if (unlikely(!api))
@@ -694,7 +694,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     debug(D_WARNING, "could not open local file %s", localpath);
     psync_apipool_release(api);
     psync_list_for_each_element_call(&rlist, psync_upload_range_list_t, list, psync_free);
-    return 0;
+    return -1;
   }
   if (likely(uploadoffset<fsize)){
     sql=psync_sql_query("SELECT fileid, hash FROM localfile WHERE id=?");
@@ -945,7 +945,10 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   else
     ret=psync_get_local_file_checksum(localpath, hashhex, &fsize);
   if (ret){
-    debug(D_WARNING, "could not open local file %s", localpath);
+    debug(D_WARNING, "could not open local file %s, deleting it from localfile", localpath);
+    res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
+    psync_sql_bind_uint(res, 1, localfileid);
+    psync_sql_run_free(res);
     psync_unlock_file(lock);
     psync_free(nname);
     psync_free(localpath);

@@ -49,7 +49,7 @@ PRAGMA page_size=4096;\
 PRAGMA cache_size=8000;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
-  name VARCHAR(1024), ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0);\
+  name VARCHAR(1024), ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0, subdircnt INTEGER DEFAULT 0);\
 CREATE INDEX IF NOT EXISTS kfolderfolderid ON folder(parentfolderid);\
 CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, size INTEGER, hash INTEGER,\
   name VARCHAR(1024), ctime INTEGER, mtime INTEGER, category INTEGER, thumb INTEGER, icon VARCHAR(32),\
@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS sharerequest (id INTEGER PRIMARY KEY, isincoming INTE
   userid INTEGER, mail TEXT, name VARCHAR(1024), message TEXT);\
 CREATE TABLE IF NOT EXISTS sharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, permissions INTEGER,\
   userid INTEGER, mail TEXT, name VARCHAR(1024));\
+INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\
 COMMIT;\
