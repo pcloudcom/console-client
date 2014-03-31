@@ -116,6 +116,7 @@ void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, co
     if (unlikely_log(!remotepath))
       return;
     psync_send_event_by_path(eventid, syncid, localpath, remoteid, remotepath);
+    psync_free(remotepath);
   }
 }
 
