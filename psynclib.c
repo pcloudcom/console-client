@@ -228,6 +228,7 @@ void psync_logout(){
   psync_free(psync_my_pass);
   psync_my_pass=NULL;
   pthread_mutex_unlock(&psync_my_auth_mutex);
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_stop_all_download();
   psync_stop_all_upload();
@@ -288,6 +289,7 @@ void psync_unlink(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
   psync_settings_reset();
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
@@ -517,8 +519,9 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
 
 int psync_delete_sync(psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_uint_row row;
   psync_sql_start_transaction();
+/* this is slow and unneeded:
+  psync_uint_row row;
   res=psync_sql_query("SELECT type, itemid, localitemid FROM task WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   while ((row=psync_sql_fetch_rowint(res)))
@@ -527,6 +530,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     else if (row[0]==PSYNC_UPLOAD_FILE)
       psync_delete_upload_tasks_for_file(row[2]);
   psync_sql_free_result(res);
+  */
   psync_delete_local_recursive(syncid, 0);
   res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);

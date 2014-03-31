@@ -371,6 +371,7 @@ static void psync_p2p_tcphandler(void *ptr){
   }
   psync_crypto_aes256_ctr_encoder_decoder_free(encoder);
   psync_file_close(fd);
+  debug(D_NOTICE, "file sent successfuly");
 err0:
   psync_close_socket(sock);
 }
