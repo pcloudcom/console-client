@@ -19,8 +19,8 @@ else
         CFLAGS += -DP_OS_LINUX -D_GNU_SOURCE
     endif
     ifeq ($(UNAME_S),Darwin)
-        CFLAGS += -DP_OS_MACOSX
-        USESSL=securetransport
+        CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
+        #USESSL=securetransport
     endif
 endif
 
