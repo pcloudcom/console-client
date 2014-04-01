@@ -624,7 +624,7 @@ psync_share_list_t *psync_list_shares(int incoming);
  */
 
 int psync_fs_start();
-int psync_fs_stop();
+void psync_fs_stop();
 
 #ifdef __cplusplus
 }
