@@ -1413,7 +1413,7 @@ int64_t psync_get_free_space_by_path(const char *path){
   if (unlikely_log(statvfs(path, &buf)))
     return -1;
   else
-    return (int64_t)buf.f_bavail*(int64_t)buf.f_bsize;
+    return (int64_t)buf.f_bavail*(int64_t)buf.f_frsize;
 #elif defined(P_OS_WINDOWS)
   ULARGE_INTEGER free;
   wchar_t *wpath;
