@@ -235,10 +235,10 @@ static psync_socket *get_connected_socket(){
 }
 
 static void process_createfolder(const binresult *entry){
-  static psync_sql_res *st=NULL;
+  static psync_sql_res *st=NULL, *st2=NULL;
   psync_sql_res *res, *stmt, *stmt2;
   const binresult *meta, *name;
-  uint64_t userid, perms;
+  uint64_t userid, perms, mtime;
   psync_uint_row row;
   psync_folderid_t parentfolderid, folderid, localfolderid;
 //  char *localname;
@@ -248,11 +248,18 @@ static void process_createfolder(const binresult *entry){
       psync_sql_free_result(st);
       st=NULL;
     }
+    if (st2){
+      psync_sql_free_result(st2);
+      st2=NULL;
+    }
     return;
   }
   if (!st){
-    st=psync_sql_prep_statement("REPLACE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    st=psync_sql_prep_statement("REPLACE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime, subdircnt) VALUES (?, ?, ?, ?, ?, ?, ?, 0)");
     if (!st)
+      return;
+    st2=psync_sql_prep_statement("UPDATE folder SET subdircnt=subdircnt+1, mtime=? WHERE id=?");
+    if (!st2)
       return;
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
@@ -267,14 +274,18 @@ static void process_createfolder(const binresult *entry){
   name=psync_find_result(meta, "name", PARAM_STR);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
   parentfolderid=psync_find_result(meta, "parentfolderid", PARAM_NUM)->num;
+  mtime=psync_find_result(meta, "modified", PARAM_NUM)->num;
   psync_sql_bind_uint(st, 1, folderid);
   psync_sql_bind_uint(st, 2, parentfolderid);
   psync_sql_bind_uint(st, 3, userid);
   psync_sql_bind_uint(st, 4, perms);
   psync_sql_bind_lstring(st, 5, name->str, name->length);
   psync_sql_bind_uint(st, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 7, mtime);
   psync_sql_run(st);
+  psync_sql_bind_uint(st2, 1, mtime);
+  psync_sql_bind_uint(st2, 2, parentfolderid);
+  psync_sql_run(st2);
   if (psync_is_folder_in_downloadlist(parentfolderid) && !psync_is_name_to_ignore(name->str)){
     psync_add_folder_to_downloadlist(folderid);
     res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
@@ -349,7 +360,7 @@ static void process_modifyfolder(const binresult *entry){
   psync_sql_res *res;
   psync_full_result_int *fres1, *fres2;
   const binresult *meta, *name;
-  uint64_t userid, perms;
+  uint64_t userid, perms, mtime;
   psync_variant_row vrow;
   psync_uint_row row;
   psync_folderid_t parentfolderid, folderid, oldparentfolderid, localfolderid;
@@ -396,14 +407,25 @@ static void process_modifyfolder(const binresult *entry){
     return;
   }
   psync_sql_free_result(res);
+  mtime=psync_find_result(meta, "modified", PARAM_NUM)->num;
   psync_sql_bind_uint(st, 1, folderid);
   psync_sql_bind_uint(st, 2, parentfolderid);
   psync_sql_bind_uint(st, 3, userid);
   psync_sql_bind_uint(st, 4, perms);
   psync_sql_bind_lstring(st, 5, name->str, name->length);
   psync_sql_bind_uint(st, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 7, mtime);
   psync_sql_run(st);
+  if (oldparentfolderid!=parentfolderid){
+    res=psync_sql_prep_statement("UPDATE folder SET subdircnt=subdircnt-1, mtime=? WHERE id=?");
+    psync_sql_bind_uint(res, 1, mtime);
+    psync_sql_bind_uint(res, 2, oldparentfolderid);
+    psync_sql_run_free(res);
+    res=psync_sql_prep_statement("UPDATE folder SET subdircnt=subdircnt+1, mtime=? WHERE id=?");
+    psync_sql_bind_uint(res, 1, mtime);
+    psync_sql_bind_uint(res, 2, parentfolderid);
+    psync_sql_run_free(res);
+  }
   /* We should check if oldparentfolderid is in downloadlist, not folderid. If parentfolderid is not in and
    * folderid is in, it means that folder that is a "root" of a syncid is modified, we do not care about that.
    */
@@ -487,7 +509,8 @@ static void process_modifyfolder(const binresult *entry){
 }
 
 static void process_deletefolder(const binresult *entry){
-  static psync_sql_res *st=NULL;
+  static psync_sql_res *st=NULL, *st2=NULL;
+  const binresult *meta;
   psync_sql_res *res, *stmt;
   char *path;
   psync_folderid_t folderid;
@@ -497,14 +520,22 @@ static void process_deletefolder(const binresult *entry){
       psync_sql_free_result(st);
       st=NULL;
     }
+    if (st2){
+      psync_sql_free_result(st2);
+      st2=NULL;
+    }
     return;
   }
   if (!st){
     st=psync_sql_prep_statement("DELETE FROM folder WHERE id=?");
     if (!st)
       return;
+    st2=psync_sql_prep_statement("UPDATE folder SET subdircnt=subdircnt+1, mtime=? WHERE id=?");
+    if (!st2)
+      return;
   }
-  folderid=psync_find_result(psync_find_result(entry, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
+  meta=psync_find_result(entry, "metadata", PARAM_HASH);
+  folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
   if (psync_is_folder_in_downloadlist(folderid)){
     psync_del_folder_from_downloadlist(folderid);
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=?");
@@ -523,6 +554,9 @@ static void process_deletefolder(const binresult *entry){
     }
     psync_sql_free_result(res);
   }
+  psync_sql_bind_uint(st2, 1, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_bind_uint(st2, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  psync_sql_run(st2);
   psync_sql_bind_uint(st, 1, folderid);
   psync_sql_run(st);
 }

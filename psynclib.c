@@ -364,12 +364,14 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (unlikely_log((synctype&PSYNC_DOWNLOAD_ONLY && (perms&PSYNC_PERM_READ)!=PSYNC_PERM_READ) ||
       (synctype&PSYNC_UPLOAD_ONLY && (perms&PSYNC_PERM_WRITE)!=PSYNC_PERM_WRITE)))
     return_isyncid(PERROR_REMOTE_FOLDER_ACC_DENIED);
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags) VALUES (?, ?, ?, 0)");
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags, inode, deviceid) VALUES (?, ?, ?, 0, ?, ?)");
   if (unlikely_log(!res))
     return_isyncid(PERROR_DATABASE_ERROR);
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_string(res, 2, localpath);
   psync_sql_bind_uint(res, 3, synctype);
+  psync_sql_bind_uint(res, 4, psync_stat_inode(&st));
+  psync_sql_bind_uint(res, 5, psync_stat_device(&st));
   psync_sql_run(res);
   if (likely_log(psync_sql_affected_rows()))
     ret=psync_sql_insertid();

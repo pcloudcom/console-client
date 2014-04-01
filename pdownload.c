@@ -201,11 +201,12 @@ static void update_local_folder_mtime(const char *localpath, psync_folderid_t lo
     debug(D_ERROR, "stat failed for %s", localpath);
     return;
   }
-  res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, mtime=?, mtimenative=? WHERE id=?");
+  res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, deviceid=?, mtime=?, mtimenative=? WHERE id=?");
   psync_sql_bind_uint(res, 1, psync_stat_inode(&st));
-  psync_sql_bind_uint(res, 2, psync_stat_mtime(&st));
-  psync_sql_bind_uint(res, 3, psync_stat_mtime_native(&st));
-  psync_sql_bind_uint(res, 4, localfolderid);
+  psync_sql_bind_uint(res, 2, psync_stat_device(&st));
+  psync_sql_bind_uint(res, 3, psync_stat_mtime(&st));
+  psync_sql_bind_uint(res, 4, psync_stat_mtime_native(&st));
+  psync_sql_bind_uint(res, 5, localfolderid);
   psync_sql_run_free(res);
 }
 
