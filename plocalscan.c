@@ -53,6 +53,7 @@ typedef struct {
   psync_folderid_t localparentfolderid;
   psync_folderid_t parentfolderid;
   psync_inode_t inode;
+  psync_deviceid_t deviceid;
   uint64_t mtimenat;
   uint64_t size;
   psync_syncid_t syncid;
@@ -96,11 +97,15 @@ static void scanner_set_syncs_to_list(psync_list *lst){
   size_t lplen;
   psync_stat_t st;
   psync_list_init(lst);
-  res=psync_sql_query("SELECT id, folderid, localpath, synctype FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
+  res=psync_sql_query("SELECT id, folderid, localpath, synctype, deviceid FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   while ((row=psync_sql_fetch_row(res))){
     lp=psync_get_lstring(row[2], &lplen);
     if (unlikely(psync_stat(lp, &st))){
       debug(D_WARNING, "could not stat local folder %s, ignoring sync", lp);
+      continue;
+    }
+    if (unlikely(psync_get_number(row[4])!=psync_stat_device(&st))){
+      debug(D_WARNING, "folder %s deviceid is different, ignoring", lp);
       continue;
     }
     l=(sync_list *)psync_malloc(offsetof(sync_list, localpath)+lplen+1);
@@ -123,6 +128,7 @@ static void scanner_local_entry_to_list(void *ptr, psync_pstat *st){
   e->localid=0;
   e->remoteid=0;
   e->inode=psync_stat_inode(&st->stat);
+  e->deviceid=psync_stat_device(&st->stat);
   e->mtimenat=psync_stat_mtime_native(&st->stat);
   e->size=psync_stat_size(&st->stat);
   e->isfolder=psync_stat_isfolder(&st->stat);
@@ -142,17 +148,18 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
   const char *name;
   size_t namelen;
   psync_list_init(lst);
-  res=psync_sql_query("SELECT id, folderid, inode, mtimenative, name FROM localfolder WHERE localparentfolderid=? AND syncid=? AND mtimenative IS NOT NULL");
+  res=psync_sql_query("SELECT id, folderid, inode, deviceid, mtimenative, name FROM localfolder WHERE localparentfolderid=? AND syncid=? AND mtimenative IS NOT NULL");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
-    name=psync_get_lstring(row[4], &namelen);
+    name=psync_get_lstring(row[5], &namelen);
     namelen++;
     e=(sync_folderlist *)psync_malloc(offsetof(sync_folderlist, name)+namelen);
     e->localid=psync_get_number(row[0]);
     e->remoteid=psync_get_number_or_null(row[1]);
     e->inode=psync_get_number(row[2]);
-    e->mtimenat=psync_get_number(row[3]);
+    e->deviceid=psync_get_number(row[3]);
+    e->mtimenat=psync_get_number(row[4]);
     e->size=0;
     e->isfolder=1;
     memcpy(e->name, name, namelen);
@@ -169,6 +176,7 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
     e->localid=psync_get_number(row[0]);
     e->remoteid=psync_get_number_or_null(row[1]);
     e->inode=psync_get_number(row[2]);
+    e->deviceid=0;
     e->mtimenat=psync_get_number(row[3]);
     e->size=psync_get_number(row[4]);
     e->isfolder=0;
@@ -250,6 +258,10 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
         fdisk->remoteid=fdb->remoteid;
         if (!fdisk->isfolder && (fdisk->mtimenat!=fdb->mtimenat || fdisk->size!=fdb->size || fdisk->inode!=fdb->inode))
           add_modified_file(fdisk, folderid, localfolderid, syncid, synctype);
+        if (fdisk->isfolder && fdisk->deviceid!=fdb->deviceid){
+          debug(D_NOTICE, "deviceid of localfolder %s %lu is different, skipping", fdisk->name, (unsigned long)fdisk->localid);
+          fdisk->localid=0;
+        }
       }
       else{
         add_deleted_element(fdb, folderid, localfolderid, syncid, synctype);
@@ -410,13 +422,15 @@ static void scan_create_folder(sync_folderlist *fl){
   psync_folderid_t localfolderid;
   char *localpath;
   debug(D_NOTICE, "folder created %s", fl->name);
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, mtime, mtimenative, flags, taskcnt, name) VALUES (?, ?, ?, ?, ?, 0, 0, ?)");
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, deviceid, mtime, mtimenative, flags, taskcnt, name) "
+                               "VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);
   psync_sql_bind_uint(res, 2, fl->syncid);
   psync_sql_bind_uint(res, 3, fl->inode);
-  psync_sql_bind_uint(res, 4, psync_mtime_native_to_mtime(fl->mtimenat));
-  psync_sql_bind_uint(res, 5, fl->mtimenat);
-  psync_sql_bind_string(res, 6, fl->name);
+  psync_sql_bind_uint(res, 4, fl->deviceid);
+  psync_sql_bind_uint(res, 5, psync_mtime_native_to_mtime(fl->mtimenat));
+  psync_sql_bind_uint(res, 6, fl->mtimenat);
+  psync_sql_bind_string(res, 7, fl->name);
   psync_sql_run_free(res);
   if (unlikely_log(!psync_sql_affected_rows()))
     return;

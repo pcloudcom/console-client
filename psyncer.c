@@ -313,10 +313,12 @@ void psync_syncer_check_delayed_syncs(){
       continue;        
     }
     psync_sql_start_transaction();
-    stmt=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags) VALUES (?, ?, ?, 0)");
+    stmt=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags, inode, deviceid) VALUES (?, ?, ?, 0, ?, ?)");
     psync_sql_bind_uint(stmt, 1, folderid);
     psync_sql_bind_string(stmt, 2, localpath);
     psync_sql_bind_uint(stmt, 3, synctype);
+    psync_sql_bind_uint(stmt, 4, psync_stat_inode(&st));
+    psync_sql_bind_uint(stmt, 5, psync_stat_device(&st));
     psync_sql_run(stmt);
     if (likely_log(psync_sql_affected_rows()))
       syncid=psync_sql_insertid();

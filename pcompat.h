@@ -302,6 +302,7 @@ typedef struct {
 } psync_socket;
 
 typedef uint64_t psync_inode_t;
+typedef uint64_t psync_deviceid_t;
 
 typedef struct {
   const char *name;
