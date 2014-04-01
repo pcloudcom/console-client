@@ -28,6 +28,8 @@ OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o 
      psyncer.o ptasks.o psettings.o pnetlibs.o pcache.o pscanner.o plist.o plocalscan.o plocalnotify.o pp2p.o\
      pcrypto.o pssl.o pfileops.o
 
+OBJFS=pfs.o
+
 ifeq ($(USESSL),openssl)
   OBJ += pssl-openssl.o
   CFLAGS += -DP_SSL_OPENSSL
@@ -42,6 +44,10 @@ all: $(LIB_A)
 $(LIB_A): $(OBJ)
 	$(AR) $@ $(OBJ)
 	$(RANLIB) $@
+
+fs: $(OBJ) $(OBJFS)
+	$(AR) $(LIB_A) $(OBJ) $(OBJFS)
+	$(RANLIB) $(LIB_A)
 
 clean:
 	rm -f *~ *.o $(LIB_A)
