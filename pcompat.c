@@ -334,6 +334,7 @@ static void psync_get_random_seed_from_query(psync_hash_ctx *hctx, psync_sql_res
 static void psync_get_random_seed_from_db(psync_hash_ctx *hctx){
   psync_sql_res *res;
   struct timespec tm;
+  unsigned char rnd[PSYNC_HASH_DIGEST_LEN];
   res=psync_sql_query("SELECT * FROM setting ORDER BY RANDOM()");
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM file ORDER BY RANDOM() LIMIT 10");
@@ -349,6 +350,8 @@ static void psync_get_random_seed_from_db(psync_hash_ctx *hctx){
   psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('random', RANDOM())");
   psync_nanotime(&tm);
   psync_hash_update(hctx, &tm, sizeof(&tm));
+  sqlite3_randomness(sizeof(rnd), rnd);
+  psync_hash_update(hctx, rnd, sizeof(rnd));
 }
 
 static void psync_store_seed_in_db(const unsigned char *seed){
