@@ -173,6 +173,7 @@ pcloud.db*"
 #define PSYNC_SETTING_ignorepatterns    4
 #define PSYNC_SETTING_minlocalfreespace 5
 #define PSYNC_SETTING_p2psync           6
+#define PSYNC_SETTING_fsroot            7
 
 typedef int psync_settingid_t;
 

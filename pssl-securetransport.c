@@ -440,11 +440,11 @@ static void PKCS5_PBKDF2_HMAC_SHA1(const char *pass, size_t passlen, const unsig
   }
 }
 
-psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen){
+psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen, const char *salt, size_t saltlen){
   psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
   key->keylen=keylen;
-  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), (const unsigned char *)PSYNC_CRYPTO_PASS_TO_KEY_SALT, 
-                                sizeof(PSYNC_CRYPTO_PASS_TO_KEY_SALT)-1, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS, keylen, key->key);
+  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), (const unsigned char *)salt, 
+                                saltlen, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS, keylen, key->key);
   return key;
 /*  CFDictionaryRef dict;
   CFTypeRef keys[4], values[4];

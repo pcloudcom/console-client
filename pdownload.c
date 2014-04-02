@@ -478,6 +478,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   result=psync_setting_get_uint(_PS(minlocalfreespace));
   if (result){
     freespace=psync_get_free_space_by_path(localpath);
+    debug(D_NOTICE, "free space is %lu, needed %lu+%lu", (unsigned long)freespace, (unsigned long)result, (unsigned long)serversize);
     if (likely_log(freespace!=-1)){
       if (freespace>=result+serversize)
         psync_set_local_full(0);

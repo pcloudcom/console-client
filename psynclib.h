@@ -534,6 +534,7 @@ const char *psync_get_auth_string();
  * ignorepatterns (string) - patterns of files and folders to be ignored when syncing, separated by ";" supported widcards are
  *                          * - matches any number of characters (even zero)
  *                          ? - matches exactly one character
+ * p2psync (bool) - use or not peer to peer downloads
  *
  * The following functions operate on settings. The value of psync_get_string_setting does not have to be freed, however if you are
  * going to store it rather than use it right away, you should strdup() it.
@@ -617,6 +618,13 @@ void psync_network_exception();
 psync_sharerequest_list_t *psync_list_sharerequests(int incoming);
 psync_share_list_t *psync_list_shares(int incoming);
 
+
+/* Filesystem functions.
+ * 
+ */
+
+int psync_fs_start();
+void psync_fs_stop();
 
 #ifdef __cplusplus
 }
