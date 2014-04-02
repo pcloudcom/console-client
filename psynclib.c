@@ -303,22 +303,6 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
     return PSYNC_INVALID_SYNCID;
 }
 
-int str_is_prefix(const char *str1, const char *str2){
-  size_t len1, len2;
-  len1=strlen(str1);
-  len2=strlen(str2);
-  if (len2<len1){
-    if (str1[len2]!='/' && str1[len2]!=PSYNC_DIRECTORY_SEPARATORC)
-      return 0;
-    len1=len2;
-  }
-  else{
-    if (str2[len1]!='/' && str2[len1]!=PSYNC_DIRECTORY_SEPARATORC)
-      return 0;
-  }
-  return !psync_filename_cmpn(str1, str2, len1);
-}
-
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
   psync_sql_res *res;
   psync_uint_row row;
@@ -341,9 +325,13 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (unlikely_log(!res))
     return_isyncid(PERROR_DATABASE_ERROR);
   while ((srow=psync_sql_fetch_rowstr(res)))
-    if (str_is_prefix(srow[0], localpath)){
+    if (psync_str_is_prefix(srow[0], localpath)){
       psync_sql_free_result(res);
       return_isyncid(PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING);
+    }
+    else if (psync_filename_cmp(srow[0], localpath)){
+      psync_sql_free_result(res);
+      return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
     }
   psync_sql_free_result(res);
   if (folderid){
