@@ -328,13 +328,16 @@ void psync_syncer_check_delayed_syncs(){
     if (unlikely_log(!res2))
       continue;
     while ((srow=psync_sql_fetch_rowstr(res2)))
-      if (psync_str_is_prefix(srow[0], localpath))
+      if (psync_str_is_prefix(srow[0], localpath)){
+        debug(D_WARNING, "skipping localfolder %s, remote %s, because of same dir to %s", localpath, remotepath, srow[0]);
         md=1;
-      else if (psync_filename_cmp(srow[0], localpath))
+      }
+      else if (psync_filename_cmp(srow[0], localpath)){
+        debug(D_WARNING, "skipping localfolder %s, remote %s, because of same parent dir to %s", localpath, remotepath, srow[0]);
         md=1;
+      }
     psync_sql_free_result(res2);
     if (md){
-      debug(D_WARNING, "skipping localfolder %s, remote %s, because of same dir/parent dir", localpath, remotepath);
       delete_delayed_sync(id);
       continue;
     }
