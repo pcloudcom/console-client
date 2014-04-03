@@ -282,10 +282,27 @@ static void delete_delayed_sync(uint64_t id){
   psync_sql_run_free(res);
 }
 
+int psync_str_is_prefix(const char *str1, const char *str2){
+  size_t len1, len2;
+  len1=strlen(str1);
+  len2=strlen(str2);
+  if (len2<len1){
+    if (str1[len2]!='/' && str1[len2]!=PSYNC_DIRECTORY_SEPARATORC)
+      return 0;
+    len1=len2;
+  }
+  else{
+    if (str2[len1]!='/' && str2[len1]!=PSYNC_DIRECTORY_SEPARATORC)
+      return 0;
+  }
+  return !psync_filename_cmpn(str1, str2, len1);
+}
+
 void psync_syncer_check_delayed_syncs(){
   psync_stat_t st;
-  psync_sql_res *res, *stmt;
+  psync_sql_res *res, *res2, *stmt;
   psync_variant_row row;
+  psync_str_row srow;
   const char *localpath, *remotepath;
   uint64_t id, synctype;
   int64_t syncid;
@@ -306,6 +323,21 @@ void psync_syncer_check_delayed_syncs(){
       delete_delayed_sync(id);
       continue;
     }
+    md=0;
+    res2=psync_sql_query("SELECT localpath FROM syncfolder");
+    if (unlikely_log(!res2))
+      continue;
+    while ((srow=psync_sql_fetch_rowstr(res)))
+      if (psync_str_is_prefix(srow[0], localpath))
+        md=1;
+      else if (psync_filename_cmp(srow[0], localpath))
+        md=1;
+    psync_sql_free_result(res2);
+    if (md){
+      debug(D_WARNING, "skipping localfolder %s, remote %s, because of same dir/parent dir", localpath, remotepath);
+      continue;
+    }
+
     folderid=psync_get_folderid_by_path_or_create(remotepath);
     if (unlikely_log(folderid==PSYNC_INVALID_FOLDERID)){
       if (psync_error!=PERROR_OFFLINE)

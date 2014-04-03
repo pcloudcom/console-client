@@ -93,22 +93,25 @@ static void timer_prepare_timers(time_t from, time_t to, psync_list *list){
 }
 
 static void timer_thread(){
-  struct timespec tm;
+//  struct timespec tm;
   psync_list timers;
   psync_timer_t timer;
   psync_list *l1, *l2;
   time_t lt;
   lt=psync_current_time;
-  tm.tv_nsec=500000000;
+//  tm.tv_nsec=500000000;
   while (psync_do_run){
     /* pthread_cond_timedwait is better than sleep as it waits for absolute time and therefore no
-     * matter how much time actual timers wasted, they get called every second sharply
+     * matter how much time actual timers wasted, they get called every second sharply.
+     * 
+     * but this is not reliable on Mac OS X
      */
-    tm.tv_sec=psync_current_time+1;
+//    tm.tv_sec=psync_current_time+1;
     psync_list_init(&timers);
-    pthread_mutex_lock(&timer_mutex);
-    pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
+    psync_milisleep(1000);
     psync_current_time=psync_time();
+    pthread_mutex_lock(&timer_mutex);
+//    pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
     timer_prepare_timers(lt, psync_current_time, &timers);
     pthread_mutex_unlock(&timer_mutex);
     if (!psync_list_isempty(&timers)){
@@ -129,7 +132,6 @@ static void timer_thread(){
     }
     if (unlikely(psync_current_time-lt>=5)){
       debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
-      debug(D_NOTICE, "was supposed to sleep until %lu, slept until %lu", (unsigned long)tm.tv_sec, (unsigned long)psync_current_time);
       psync_timer_notify_exception();
     }
     else if (unlikely_log(psync_current_time==lt)){
