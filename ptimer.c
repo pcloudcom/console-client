@@ -130,7 +130,7 @@ static void timer_thread(){
       pthread_mutex_unlock(&timer_mutex);
       psync_list_for_each_element_call(&timers, psync_timer_structure_t, list, psync_free);
     }
-    if (unlikely(psync_current_time-lt>=5)){
+    if (unlikely(psync_current_time-lt>=15)){
       debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
       psync_timer_notify_exception();
     }
