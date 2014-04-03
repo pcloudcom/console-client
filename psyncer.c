@@ -327,7 +327,7 @@ void psync_syncer_check_delayed_syncs(){
     res2=psync_sql_query("SELECT localpath FROM syncfolder");
     if (unlikely_log(!res2))
       continue;
-    while ((srow=psync_sql_fetch_rowstr(res)))
+    while ((srow=psync_sql_fetch_rowstr(res2)))
       if (psync_str_is_prefix(srow[0], localpath))
         md=1;
       else if (psync_filename_cmp(srow[0], localpath))
