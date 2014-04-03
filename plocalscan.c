@@ -140,9 +140,9 @@ static void scanner_local_entry_to_list(void *ptr, psync_pstat *st){
   psync_list_add_tail(lst, &e->list);
 }
 
-static void scanner_local_folder_to_list(const char *localpath, psync_list *lst){
+static int scanner_local_folder_to_list(const char *localpath, psync_list *lst){
   psync_list_init(lst);
-  psync_list_dir(localpath, scanner_local_entry_to_list, lst);
+  return psync_list_dir(localpath, scanner_local_entry_to_list, lst);
 }
 
 static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t localfolderid, psync_list *lst){
@@ -247,7 +247,8 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   char *subpath;
   int cmp;
 //  debug(D_NOTICE, "scanning folder %s", localpath);
-  scanner_local_folder_to_list(localpath, &disklist);
+  if (unlikely_log(scanner_local_folder_to_list(localpath, &disklist)))
+    return;
   scanner_db_folder_to_list(syncid, localfolderid, &dblist);
   psync_list_sort(&dblist, folderlist_cmp);
   psync_list_sort(&disklist, folderlist_cmp);
@@ -437,8 +438,8 @@ static void scan_create_folder(sync_folderlist *fl){
   psync_folderid_t localfolderid;
   char *localpath;
   debug(D_NOTICE, "folder created %s", fl->name);
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, deviceid, mtime, mtimenative, flags, taskcnt, name) "
-                               "VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)");
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, deviceid, mtime, mtimenative, flags, name) "
+                               "VALUES (?, ?, ?, ?, ?, ?, 0, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);
   psync_sql_bind_uint(res, 2, fl->syncid);
   psync_sql_bind_uint(res, 3, fl->inode);
@@ -447,8 +448,19 @@ static void scan_create_folder(sync_folderlist *fl){
   psync_sql_bind_uint(res, 6, fl->mtimenat);
   psync_sql_bind_string(res, 7, fl->name);
   psync_sql_run_free(res);
-  if (unlikely_log(!psync_sql_affected_rows()))
+  /* it is OK to use affected rows after run_free as we are in transaction */
+  if (unlikely_log(!psync_sql_affected_rows())){
+    res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, deviceid=?, mtime=?, mtimenative=?, flags=0 WHERE syncid=? AND localparentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fl->inode);
+    psync_sql_bind_uint(res, 2, fl->deviceid);
+    psync_sql_bind_uint(res, 3, psync_mtime_native_to_mtime(fl->mtimenat));
+    psync_sql_bind_uint(res, 4, fl->mtimenat);
+    psync_sql_bind_uint(res, 5, fl->syncid);
+    psync_sql_bind_uint(res, 6, fl->localparentfolderid);
+    psync_sql_bind_string(res, 7, fl->name);
+    psync_sql_run_free(res);
     return;
+  }
   localfolderid=psync_sql_insertid();
   res=psync_sql_prep_statement("REPLACE INTO syncedfolder (syncid, localfolderid, synctype) VALUES (?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->syncid);

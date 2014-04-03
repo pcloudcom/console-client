@@ -47,6 +47,7 @@
 #include <sys/ioctl.h>
 #include <sys/statvfs.h>
 #include <sys/utsname.h>
+#include <sys/resource.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
 #include <unistd.h>
@@ -83,6 +84,10 @@ static int psync_gids_cnt;
 
 void psync_compat_init(){
 #if defined(P_OS_POSIX)
+  struct rlimit limit;
+  limit.rlim_cur=limit.rlim_max=2048;
+  if (setrlimit(RLIMIT_NOFILE, &limit))
+    debug(D_ERROR, "setrlimit failed");
   signal(SIGPIPE, SIG_IGN);
   psync_uid=getuid();
   psync_gid=getgid();
@@ -180,7 +185,6 @@ void psync_yield_cpu(){
 }
 
 static void thread_started(){
-  psync_yield_cpu();
 }
 
 static void thread_exited(){
@@ -1253,8 +1257,10 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   long namelen;
   struct dirent *entry, *de;
   dh=opendir(path);
-  if (unlikely_log(!dh))
+  if (unlikely(!dh)){
+    debug(D_WARNING, "could not open directory %s", path);
     goto err1;
+  }
   pl=strlen(path);
   namelen=pathconf(path, _PC_NAME_MAX);
   if (namelen==-1)

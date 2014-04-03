@@ -102,13 +102,14 @@ static psync_socket *psync_get_api(){
 static void psync_ret_api(void *ptr){
   sem_post(&api_pool_sem);
   psync_socket_close((psync_socket *)ptr);
+  debug(D_NOTICE, "closing connection to api");
 }
 
 psync_socket *psync_apipool_get(){
   psync_socket *ret;
   ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
   if (ret){
-    while (unlikely(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
+    while (unlikely_log(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
       psync_ret_api(ret);
       ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
       if (!ret)
