@@ -335,6 +335,7 @@ void psync_syncer_check_delayed_syncs(){
     psync_sql_free_result(res2);
     if (md){
       debug(D_WARNING, "skipping localfolder %s, remote %s, because of same dir/parent dir", localpath, remotepath);
+      delete_delayed_sync(id);
       continue;
     }
 
