@@ -340,7 +340,8 @@ void psync_syncer_check_delayed_syncs(){
     }
 
     folderid=psync_get_folderid_by_path_or_create(remotepath);
-    if (unlikely_log(folderid==PSYNC_INVALID_FOLDERID)){
+    if (unlikely(folderid==PSYNC_INVALID_FOLDERID)){
+      debug(D_WARNING, "could not get folderid/create folder %s", remotepath);
       if (psync_error!=PERROR_OFFLINE)
         delete_delayed_sync(id);
       continue;        
