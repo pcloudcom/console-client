@@ -329,7 +329,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
       psync_sql_free_result(res);
       return_isyncid(PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING);
     }
-    else if (psync_filename_cmp(srow[0], localpath)){
+    else if (!psync_filename_cmp(srow[0], localpath)){
       psync_sql_free_result(res);
       return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
     }

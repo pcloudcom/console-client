@@ -912,8 +912,10 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   int ret;
   psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
   localpath=psync_local_path_for_local_file(localfileid, NULL);
-  if (unlikely_log(!localpath))
+  if (unlikely(!localpath)){
+    debug(D_WARNING, "could not find local file %s (id %lu)", name, (unsigned long)localfileid);
     return 0;
+  }
   lock=psync_lock_file(localpath);
   if (!lock){
     debug(D_NOTICE, "file %s is currently locked, skipping for now", localpath);
@@ -1069,12 +1071,13 @@ static int task_run_uploadfile(uint64_t taskid, psync_syncid_t syncid, psync_fol
   res=psync_sql_query("SELECT size FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   row=psync_sql_fetch_rowint(res);
-  if (likely_log(row)){
+  if (likely(row)){
     filesize=row[0];
     psync_sql_free_result(res);
   }
   else{
     psync_sql_free_result(res);
+    debug(D_WARNING, "could not get size for local file %s (localfileid %lu)", filename, (unsigned long)localfileid);
     return 0;
   }
   res=psync_sql_prep_statement("UPDATE task SET inprogress=1 WHERE id=?");
@@ -1193,9 +1196,11 @@ static void upload_thread(){
                          psync_get_number_or_null(row[5]),                          
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
+        psync_sql_sync_off();
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, taskid);
         psync_sql_run_free(res);
+        psync_sql_sync_on();
       }
       else if (type!=PSYNC_UPLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);

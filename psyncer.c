@@ -125,7 +125,7 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t lfolderid, dbfolderid;
-  debug(D_NOTICE, "creating local folder int db as %lu/%s for folderid %lu", (unsigned long)localparentfolderid, name, (unsigned long)folderid);
+  debug(D_NOTICE, "creating local folder in db as %lu/%s for folderid %lu", (unsigned long)localparentfolderid, name, (unsigned long)folderid);
   res=psync_sql_query("SELECT id FROM localfolder WHERE syncid=? AND folderid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, folderid);
@@ -327,19 +327,24 @@ void psync_syncer_check_delayed_syncs(){
     res2=psync_sql_query("SELECT localpath FROM syncfolder");
     if (unlikely_log(!res2))
       continue;
-    while ((srow=psync_sql_fetch_rowstr(res)))
-      if (psync_str_is_prefix(srow[0], localpath))
+    while ((srow=psync_sql_fetch_rowstr(res2)))
+      if (psync_str_is_prefix(srow[0], localpath)){
+        debug(D_WARNING, "skipping localfolder %s, remote %s, because of same parent to %s", localpath, remotepath, srow[0]);
         md=1;
-      else if (psync_filename_cmp(srow[0], localpath))
+      }
+      else if (!psync_filename_cmp(srow[0], localpath)){
+        debug(D_WARNING, "skipping localfolder %s, remote %s, because of same dir to %s", localpath, remotepath, srow[0]);
         md=1;
+      }
     psync_sql_free_result(res2);
     if (md){
-      debug(D_WARNING, "skipping localfolder %s, remote %s, because of same dir/parent dir", localpath, remotepath);
+      delete_delayed_sync(id);
       continue;
     }
 
     folderid=psync_get_folderid_by_path_or_create(remotepath);
-    if (unlikely_log(folderid==PSYNC_INVALID_FOLDERID)){
+    if (unlikely(folderid==PSYNC_INVALID_FOLDERID)){
+      debug(D_WARNING, "could not get folderid/create folder %s", remotepath);
       if (psync_error!=PERROR_OFFLINE)
         delete_delayed_sync(id);
       continue;        

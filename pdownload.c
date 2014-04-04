@@ -372,21 +372,51 @@ static int stat_and_create_local(psync_syncid_t syncid, psync_fileid_t fileid, p
                                  const char *name, unsigned char *checksum, uint64_t serversize, uint64_t hash){
   psync_sql_res *sql;
   psync_stat_t st;
+  psync_uint_row row;
+  psync_fileid_t localfileid;
   if (unlikely_log(psync_stat(name, &st)) || unlikely_log(psync_stat_size(&st)!=serversize))
     return -1;
-  sql=psync_sql_prep_statement("REPLACE INTO localfile (localparentfolderid, fileid, hash, syncid, size, inode, mtime, mtimenative, name, checksum)"
-                                              " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-  psync_sql_bind_uint(sql, 1, localfolderid);
-  psync_sql_bind_uint(sql, 2, fileid);
-  psync_sql_bind_uint(sql, 3, hash);
-  psync_sql_bind_uint(sql, 4, syncid);
-  psync_sql_bind_uint(sql, 5, psync_stat_size(&st));
-  psync_sql_bind_uint(sql, 6, psync_stat_inode(&st));
-  psync_sql_bind_uint(sql, 7, psync_stat_mtime(&st));
-  psync_sql_bind_uint(sql, 8, psync_stat_mtime_native(&st));
-  psync_sql_bind_string(sql, 9, filename);
-  psync_sql_bind_lstring(sql, 10, (char *)checksum, PSYNC_HASH_DIGEST_HEXLEN);
-  psync_sql_run_free(sql);
+  localfileid=0;
+  psync_sql_start_transaction();
+  sql=psync_sql_query("SELECT id FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
+  psync_sql_bind_uint(sql, 1, syncid);
+  psync_sql_bind_uint(sql, 2, localfolderid);
+  psync_sql_bind_string(sql, 3, filename);
+  if ((row=psync_sql_fetch_rowint(sql)))
+    localfileid=row[0];
+  psync_sql_free_result(sql);
+  if (localfileid){
+    sql=psync_sql_prep_statement("UPDATE localfile SET localparentfolderid=?, fileid=?, hash=?, syncid=?, size=?, inode=?, mtime=?, mtimenative=?, "
+                                                       "name=?, checksum=? WHERE id=?");
+    psync_sql_bind_uint(sql, 1, localfolderid);
+    psync_sql_bind_uint(sql, 2, fileid);
+    psync_sql_bind_uint(sql, 3, hash);
+    psync_sql_bind_uint(sql, 4, syncid);
+    psync_sql_bind_uint(sql, 5, psync_stat_size(&st));
+    psync_sql_bind_uint(sql, 6, psync_stat_inode(&st));
+    psync_sql_bind_uint(sql, 7, psync_stat_mtime(&st));
+    psync_sql_bind_uint(sql, 8, psync_stat_mtime_native(&st));
+    psync_sql_bind_string(sql, 9, filename);
+    psync_sql_bind_lstring(sql, 10, (char *)checksum, PSYNC_HASH_DIGEST_HEXLEN);
+    psync_sql_bind_uint(sql, 11, localfileid);
+    psync_sql_run_free(sql);
+  }
+  else{
+    sql=psync_sql_prep_statement("REPLACE INTO localfile (localparentfolderid, fileid, hash, syncid, size, inode, mtime, mtimenative, name, checksum)"
+                                                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    psync_sql_bind_uint(sql, 1, localfolderid);
+    psync_sql_bind_uint(sql, 2, fileid);
+    psync_sql_bind_uint(sql, 3, hash);
+    psync_sql_bind_uint(sql, 4, syncid);
+    psync_sql_bind_uint(sql, 5, psync_stat_size(&st));
+    psync_sql_bind_uint(sql, 6, psync_stat_inode(&st));
+    psync_sql_bind_uint(sql, 7, psync_stat_mtime(&st));
+    psync_sql_bind_uint(sql, 8, psync_stat_mtime_native(&st));
+    psync_sql_bind_string(sql, 9, filename);
+    psync_sql_bind_lstring(sql, 10, (char *)checksum, PSYNC_HASH_DIGEST_HEXLEN);
+    psync_sql_run_free(sql);
+  }
+  psync_sql_commit_transaction();
   return 0;
 }
 
