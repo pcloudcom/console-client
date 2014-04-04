@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY, type INTEGER, syncid IN
   newsyncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, itemid INTEGER, localitemid INTEGER, newitemid INTEGER, \
   inprogress INTEGER NOT NULL DEFAULT 0,\
   name VARCHAR(4096));\
+CREATE INDEX IF NOT EXISTS ktaskitemid ON task(itemid);\
+CREATE INDEX IF NOT EXISTS ktasklocalitemid ON task(localitemid);\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS sharerequest (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, etime INTEGER, permissions INTEGER,\
   userid INTEGER, mail TEXT, name VARCHAR(1024), message TEXT);\
