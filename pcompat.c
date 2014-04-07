@@ -1223,12 +1223,16 @@ int psync_stat(const char *path, psync_stat_t *st){
   wchar_t *wpath;
   HANDLE fd;
   BOOL ret;
-  int flag = FILE_ATTRIBUTE_NORMAL;
+  DWORD flag = FILE_ATTRIBUTE_NORMAL, attr;
   wpath=utf8_to_wchar(path);
 retry:
-  if (GetFileAttributesW(wpath)&FILE_ATTRIBUTE_DIRECTORY)
+  attr = GetFileAttributesW(wpath);
+  if (attr != INVALID_FILE_ATTRIBUTES && attr & FILE_ATTRIBUTE_DIRECTORY)
     flag = FILE_FLAG_BACKUP_SEMANTICS;
-  fd=CreateFileW(wpath, GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
+  if (attr == INVALID_FILE_ATTRIBUTES)
+      return -1;
+
+  fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
     if (GetLastError()==ERROR_SHARING_VIOLATION){
       debug(D_WARNING, "file %s is locked by another process, will retry after sleep", path);
