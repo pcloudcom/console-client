@@ -911,6 +911,8 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   binparam pr;
   int ret;
   psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
+  if (upload->stop)
+    return -1;
   localpath=psync_local_path_for_local_file(localfileid, NULL);
   if (unlikely(!localpath)){
     debug(D_WARNING, "could not find local file %s (id %lu)", name, (unsigned long)localfileid);

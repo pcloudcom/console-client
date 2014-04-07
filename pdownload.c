@@ -985,14 +985,14 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
 
 static void task_del_folder_rec_do(const char *localpath, psync_folderid_t localfolderid, psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_str_row row;
   psync_variant_row vrow;
   char *nm;
-  res=psync_sql_query("SELECT name FROM localfile WHERE localparentfolderid=? AND syncid=?");
+  res=psync_sql_query("SELECT id, name FROM localfile WHERE localparentfolderid=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
-  while ((row=psync_sql_fetch_rowstr(res))){
-    nm=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, row[0], NULL);
+  while ((vrow=psync_sql_fetch_row(res))){
+    psync_delete_upload_tasks_for_file(psync_get_number(vrow[0]));
+    nm=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, psync_get_string(vrow[1]), NULL);
     debug(D_NOTICE, "deleting %s", nm);
     psync_file_delete(nm);
     psync_free(nm);
