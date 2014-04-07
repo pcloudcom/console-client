@@ -246,7 +246,7 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   sync_folderlist *l, *fdisk, *fdb;
   char *subpath;
   int cmp;
-//  debug(D_NOTICE, "scanning folder %s", localpath);
+  debug(D_NOTICE, "scanning folder %s", localpath);
   if (unlikely_log(scanner_local_folder_to_list(localpath, &disklist)))
     return;
   scanner_db_folder_to_list(syncid, localfolderid, &dblist);
@@ -458,9 +458,10 @@ static void scan_create_folder(sync_folderlist *fl){
     psync_sql_bind_uint(res, 6, fl->localparentfolderid);
     psync_sql_bind_string(res, 7, fl->name);
     psync_sql_run_free(res);
-    return;
+    goto hasfolder;
   }
   localfolderid=psync_sql_insertid();
+  fl->localid=localfolderid;
   res=psync_sql_prep_statement("REPLACE INTO syncedfolder (syncid, localfolderid, synctype) VALUES (?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->syncid);
   psync_sql_bind_uint(res, 2, localfolderid);
@@ -469,7 +470,6 @@ static void scan_create_folder(sync_folderlist *fl){
   if (unlikely_log(!psync_sql_affected_rows()))
     return;
   psync_task_create_remote_folder(fl->syncid, localfolderid, fl->name);
-  fl->localid=localfolderid;
 /* this should not be here, as we are in transaction:
  *
  *  localpath=psync_local_path_for_local_folder(localfolderid, fl->syncid, NULL);
@@ -477,12 +477,22 @@ static void scan_create_folder(sync_folderlist *fl){
     scanner_scan_folder(localpath, 0, localfolderid, fl->syncid, fl->synctype, fl->deviceid);
     psync_free(localpath);
   }*/
+  return;
+hasfolder:
+//  psync_list_del(&fl->list);
+///  psync_free(fl);
+  return;
 }
 
 static void scan_created_folder(sync_folderlist *fl){
   char *localpath;
+  if (fl->localid==0){
+    debug(D_BUG, "local folder %s does not have localid", fl->name);
+    return;
+  }
   localpath=psync_local_path_for_local_folder(fl->localid, fl->syncid, NULL);
   if (likely_log(localpath)){
+    debug(D_NOTICE, "scanning just created folder %s localid %lu name %s", localpath, (unsigned long)fl->localid, fl->name);
     scanner_scan_folder(localpath, 0, fl->localid, fl->syncid, fl->synctype, fl->deviceid);
     psync_free(localpath);
   }
@@ -570,7 +580,7 @@ retry:
 }
 
 static void scanner_scan(int first){
-  psync_list slist, *l1, *l2;
+  psync_list slist, newtmp, *l1, *l2;
   sync_folderlist *fl;
   sync_list *l;
   psync_uint_t i, w;
@@ -599,6 +609,7 @@ restart:
   changes=0;
   psync_list_for_each_element(l, &slist, sync_list, list)
     scanner_scan_folder(l->localpath, l->folderid, 0, l->syncid, l->synctype, l->deviceid);
+  psync_list_for_each_element_call(&slist, sync_list, list, psync_free);
   w=0;
   do {
     pthread_mutex_lock(&scan_mutex);
@@ -634,9 +645,13 @@ restart:
       w++;
     }
     psync_sql_commit_transaction();
-    psync_list_for_each_element_call(&scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list, scan_created_folder);
-    psync_list_for_each_element_call(&scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list, psync_free);
-    psync_list_init(&scan_lists[SCAN_LIST_NEWFOLDERS]);
+    psync_list_init(&newtmp);
+    psync_list_for_each_safe(l1, l2, &scan_lists[SCAN_LIST_NEWFOLDERS]){
+      psync_list_del(l1);
+      psync_list_add_tail(&newtmp, l1);
+    }
+    psync_list_for_each_element_call(&newtmp, sync_folderlist, list, scan_created_folder);
+    psync_list_for_each_element_call(&newtmp, sync_folderlist, list, psync_free);
     if (changes){
       i++;
       changes=0;
@@ -686,7 +701,6 @@ restart:
   }
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
-  psync_list_for_each_element_call(&slist, sync_list, list, psync_free);
 }
 
 static int scanner_wait(){
