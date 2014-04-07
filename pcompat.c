@@ -1308,7 +1308,9 @@ err1:
   }
   do {
     if (st.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
-        continue;
+      continue;
+    if (st.dwFileAttributes & (FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_TEMPORARY|FILE_ATTRIBUTE_DEVICE))
+      continue;
     name=wchar_to_utf8(st.cFileName);
     spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
     pst.name=name;
