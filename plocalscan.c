@@ -398,7 +398,7 @@ static void scan_upload_file(sync_folderlist *fl){
 
 static void scan_upload_modified_file(sync_folderlist *fl){
   psync_sql_res *res;
-  debug(D_NOTICE, "file modified %s", fl->name);
+  debug(D_NOTICE, "file modified %s (%lu)", fl->name, (unsigned long)fl->localid);
   psync_delete_upload_tasks_for_file(fl->localid);
   res=psync_sql_prep_statement("UPDATE localfile SET size=?, inode=?, mtime=?, mtimenative=? WHERE id=?");
   psync_sql_bind_uint(res, 1, fl->size);
@@ -436,7 +436,6 @@ static void scan_delete_file(sync_folderlist *fl){
 static void scan_create_folder(sync_folderlist *fl){
   psync_sql_res *res;
   psync_folderid_t localfolderid;
-  char *localpath;
   debug(D_NOTICE, "folder created %s", fl->name);
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, deviceid, mtime, mtimenative, flags, name) "
                                "VALUES (?, ?, ?, ?, ?, ?, 0, ?)");
@@ -470,9 +469,21 @@ static void scan_create_folder(sync_folderlist *fl){
   if (unlikely_log(!psync_sql_affected_rows()))
     return;
   psync_task_create_remote_folder(fl->syncid, localfolderid, fl->name);
-  localpath=psync_local_path_for_local_folder(localfolderid, fl->syncid, NULL);
+  fl->localid=localfolderid;
+/* this should not be here, as we are in transaction:
+ *
+ *  localpath=psync_local_path_for_local_folder(localfolderid, fl->syncid, NULL);
   if (likely_log(localpath)){
     scanner_scan_folder(localpath, 0, localfolderid, fl->syncid, fl->synctype, fl->deviceid);
+    psync_free(localpath);
+  }*/
+}
+
+static void scan_created_folder(sync_folderlist *fl){
+  char *localpath;
+  localpath=psync_local_path_for_local_folder(fl->localid, fl->syncid, NULL);
+  if (likely_log(localpath)){
+    scanner_scan_folder(localpath, 0, fl->localid, fl->syncid, fl->synctype, fl->deviceid);
     psync_free(localpath);
   }
 }
@@ -496,6 +507,7 @@ static void scan_rename_folder(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_task_rename_remote_folder(rnfr->syncid, rnto->syncid, rnfr->localid, rnto->localparentfolderid, rnto->name);
   localpath=psync_local_path_for_local_folder(rnfr->localid, rnto->syncid, NULL);
   if (likely_log(localpath)){
+    //TODO: this is probably run in transaction, so it may make sense not to run scan_folder here
     scanner_scan_folder(localpath, rnfr->remoteid, rnfr->localid, rnto->syncid, rnto->synctype, rnto->deviceid);
     psync_free(localpath);
   }
@@ -622,6 +634,7 @@ restart:
       w++;
     }
     psync_sql_commit_transaction();
+    psync_list_for_each_element_call(&scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list, scan_created_folder);
     psync_list_for_each_element_call(&scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list, psync_free);
     psync_list_init(&scan_lists[SCAN_LIST_NEWFOLDERS]);
     if (changes){
