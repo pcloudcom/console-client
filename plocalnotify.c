@@ -418,6 +418,7 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
   msg.syncid=syncid;
   if (!WriteFile(pipe_write, &msg, sizeof(msg), &bw, NULL) || bw!=sizeof(msg))
     debug(D_ERROR, "write to pipe failed");
+  SetEvent(handles[0]);
 }
 
 #elif defined(P_OS_MACOSX)

@@ -534,6 +534,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_stop_sync_download(syncid);
     psync_stop_sync_upload(syncid);
     psync_localnotify_del_sync(syncid);
+    psync_restart_localscan();
     return 0;
   }
 }
