@@ -59,6 +59,15 @@ typedef AES_KEY *psync_aes256_decoder;
 #define psync_sha1_update(pctx, data, datalen) SHA1_Update(pctx, data, datalen)
 #define psync_sha1_final(checksum, pctx) SHA1_Final(checksum, pctx)
 
+#define PSYNC_SHA512_BLOCK_LEN 128
+#define PSYNC_SHA512_DIGEST_LEN 64
+#define PSYNC_SHA512_DIGEST_HEXLEN 128
+#define psync_sha512_ctx SHA512_CTX
+#define psync_sha512(data, datalen, checksum) SHA512(data, datalen, checksum)
+#define psync_sha512_init(pctx) SHA512_Init(pctx)
+#define psync_sha512_update(pctx, data, datalen) SHA512_Update(pctx, data, datalen)
+#define psync_sha512_final(checksum, pctx) SHA512_Final(checksum, pctx)
+
 static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
   AES_encrypt(src, dst, enc);
 }

@@ -979,7 +979,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     psync_sql_run_free(res);
   }
   else
-    psync_run_thread1(task_run_download_file_thread, dt);
+    psync_run_thread1("download file", task_run_download_file_thread, dt);
   return -1;
 }
 
@@ -1132,7 +1132,7 @@ void psync_wake_download(){
 
 void psync_download_init(){
   psync_timer_exception_handler(psync_wake_download);
-  psync_run_thread(download_thread);
+  psync_run_thread("download main", download_thread);
 }
 
 void psync_delete_download_tasks_for_file(psync_fileid_t fileid){

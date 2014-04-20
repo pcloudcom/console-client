@@ -1455,5 +1455,5 @@ restart:
 }
 
 void psync_diff_init(){
-  psync_run_thread(psync_diff_thread);
+  psync_run_thread("diff", psync_diff_thread);
 }

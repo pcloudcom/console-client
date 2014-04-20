@@ -31,6 +31,7 @@
 #include "pcompiler.h"
 #include "papi.h"
 #include "psettings.h"
+#include "psynclib.h"
 
 #define PSYNC_INVALID_FOLDERID ((psync_folderid_t)-1)
 #define PSYNC_INVALID_PATH NULL
@@ -44,5 +45,6 @@ static inline uint64_t psync_get_permissions(const binresult *meta){
 }
 
 void psync_ops_create_folder_in_db(const binresult *meta);
+void psync_ops_delete_folder_from_db(psync_folderid_t folderid);
 
 #endif

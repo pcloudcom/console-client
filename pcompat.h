@@ -133,6 +133,11 @@ typedef unsigned long psync_uint_t;
 #define psync_fstat fstat
 #define psync_stat_isfolder(s) S_ISDIR((s)->st_mode)
 #define psync_stat_size(s) ((s)->st_size)
+#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#define psync_stat_ctime(s) ((s)->st_birthtime)
+#else
+#define psync_stat_ctime(s) ((s)->st_ctime)
+#endif
 #define psync_stat_mtime(s) ((s)->st_mtime)
 
 #if defined(st_mtime)
@@ -150,7 +155,11 @@ typedef unsigned long psync_uint_t;
 #endif
 
 #define psync_stat_inode(s) ((s)->st_ino)
+#if defined(P_OS_MACOSX)
+#define psync_stat_device(s) ((s)->st_dev>>24)
+#else
 #define psync_stat_device(s) ((s)->st_dev)
+#endif
 
 typedef struct stat psync_stat_t;
 
@@ -235,6 +244,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_fstat(fd, st) psync_bool_to_zero(GetFileInformationByHandle(fd, st))
 #define psync_stat_isfolder(s) (((s)->dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)==FILE_ATTRIBUTE_DIRECTORY)
 #define psync_stat_size(s) psync_32to64((s)->nFileSizeHigh, (s)->nFileSizeLow)
+#define psync_stat_ctime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
 #define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
 #define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
 #define psync_mtime_native_to_mtime(n) psync_filetime64_to_timet(n)
@@ -354,12 +364,15 @@ typedef void (*psync_list_dir_callback_fast)(void *, psync_pstat_fast *);
 typedef void (*psync_thread_start0)();
 typedef void (*psync_thread_start1)(void *);
 
+extern PSYNC_THREAD const char *psync_thread_name;
+
 void psync_compat_init();
 int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits) PSYNC_PURE;
+char *psync_get_pcloud_path();
 char *psync_get_default_database_path();
 char *psync_get_home_dir();
-void psync_run_thread(psync_thread_start0 run);
-void psync_run_thread1(psync_thread_start1 run, void *ptr);
+void psync_run_thread(const char *name, psync_thread_start0 run);
+void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t milisec);
 time_t psync_time();
 void psync_nanotime(struct timespec *tm);
@@ -409,7 +422,9 @@ psync_file_t psync_file_open(const char *path, int access, int flags);
 int psync_file_close(psync_file_t fd);
 int psync_file_sync(psync_file_t fd);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
+ssize_t psync_file_pread(psync_file_t fd, void *buf, size_t count, uint64_t offset);
 ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count);
+ssize_t psync_file_pwrite(psync_file_t fd, const void *buf, size_t count, uint64_t offset);
 int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence);
 int psync_file_truncate(psync_file_t fd);
 int64_t psync_file_size(psync_file_t fd) PSYNC_PURE;

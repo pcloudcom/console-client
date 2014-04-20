@@ -237,8 +237,11 @@ static void process_notification(localnotify_dir *dir){
 static void psync_localnotify_thread(){
   struct epoll_event ev;
   while (psync_do_run){
-    if (unlikely_log(epoll_wait(epoll_fd, &ev, 1, -1)!=1))
+    if (epoll_wait(epoll_fd, &ev, 1, -1)!=1){
+      if (errno!=EINTR)
+        debug(D_WARNING, "epoll_wait failed errno %d", errno);
       continue;
+    }
     if (ev.data.ptr)
       process_notification((localnotify_dir *)ev.data.ptr);
     else
@@ -260,7 +263,7 @@ int psync_localnotify_init(){
   e.data.ptr=NULL;
   if (unlikely_log(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, pipe_read, &e)))
     goto err2;
-  psync_run_thread(psync_localnotify_thread);
+  psync_run_thread("localnotify", psync_localnotify_thread);
   return 0;
 err2:
   close(epoll_fd);
@@ -394,7 +397,7 @@ int psync_localnotify_init(){
   handles=psync_new(HANDLE);
   handlecnt = 1;
   handles[0] = CreateEvent(NULL, TRUE, FALSE, NULL);
-  psync_run_thread(psync_localnotify_thread);
+  psync_run_thread("localnotify", psync_localnotify_thread);
   return 0;
 }
 
@@ -493,7 +496,7 @@ static void psync_localnotify_thread(){
 }
 
 int psync_localnotify_init(){
-  psync_run_thread(psync_localnotify_thread);
+  psync_run_thread("localnotify", psync_localnotify_thread);
   return 0;
 }
 
@@ -782,7 +785,7 @@ int psync_localnotify_init(){
   memset(&ts, 0, sizeof(ts));
   if (unlikely_log(kevent(kevent_fd, &ke, 1, NULL, 0, &ts)==-1))
     goto err2;
-  psync_run_thread(psync_localnotify_thread);
+  psync_run_thread("localnotify", psync_localnotify_thread);
   /* return -1 so we still run frequent rescans */
   return -1;
 err2:

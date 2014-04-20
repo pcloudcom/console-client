@@ -68,6 +68,7 @@ typedef psync_encrypted_data_t psync_binary_rsa_key_t;
 #define psync_ssl_alloc_binary_rsa psync_ssl_alloc_encrypted_symmetric_key
 
 int psync_ssl_init();
+void psync_ssl_memclean(void *ptr, size_t len);
 int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname);
 int psync_ssl_connect_finish(void *sslconn, const char *hostname);
 void psync_ssl_free(void *sslconn);

@@ -1121,7 +1121,7 @@ static int task_run_uploadfile(uint64_t taskid, psync_syncid_t syncid, psync_fol
   }
   else{
     psync_status_send_update();
-    psync_run_thread1(task_run_upload_file_thread, ut);
+    psync_run_thread1("upload file", task_run_upload_file_thread, ut);
   }
   return -1;
 }
@@ -1227,7 +1227,7 @@ void psync_wake_upload(){
 
 void psync_upload_init(){
   psync_timer_exception_handler(psync_wake_upload);
-  psync_run_thread(upload_thread);
+  psync_run_thread("upload main", upload_thread);
 }
 
 void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid){

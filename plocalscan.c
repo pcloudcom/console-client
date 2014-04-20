@@ -246,7 +246,7 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   sync_folderlist *l, *fdisk, *fdb;
   char *subpath;
   int cmp;
-  debug(D_NOTICE, "scanning folder %s", localpath);
+//  debug(D_NOTICE, "scanning folder %s", localpath);
   if (unlikely_log(scanner_local_folder_to_list(localpath, &disklist)))
     return;
   scanner_db_folder_to_list(syncid, localfolderid, &dblist);
@@ -487,7 +487,7 @@ hasfolder:
 static void scan_created_folder(sync_folderlist *fl){
   char *localpath;
   if (fl->localid==0){
-    debug(D_BUG, "local folder %s does not have localid", fl->name);
+    debug(D_WARNING, "local folder %s does not have localid", fl->name);
     return;
   }
   localpath=psync_local_path_for_local_folder(fl->localid, fl->syncid, NULL);
@@ -788,7 +788,7 @@ void psync_localscan_init(){
   psync_full_result_int *result;
   uint32_t i;
   psync_timer_exception_handler(psync_wake_localscan_noscan);
-  psync_run_thread(scanner_thread);
+  psync_run_thread("localscan", scanner_thread);
   localnotify=psync_localnotify_init();
   res=psync_sql_query("SELECT id FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   result=psync_sql_fetchall_int(res);

@@ -262,7 +262,7 @@ static void psync_do_sync_thread(void *ptr){
 void psync_syncer_new(psync_syncid_t syncid){
   psync_syncid_t *psid=psync_new(psync_syncid_t);
   *psid=syncid;
-  psync_run_thread1(psync_do_sync_thread, psid);
+  psync_run_thread1("syncer", psync_do_sync_thread, psid);
 }
 
 static void psync_syncer_thread(){
@@ -378,5 +378,5 @@ void psync_syncer_init(){
   while ((row=psync_sql_fetch_rowint(res)))
     psync_add_folder_to_downloadlist(row[0]);
   psync_sql_free_result(res);
-  psync_run_thread(psync_syncer_thread);
+  psync_run_thread("syncer", psync_syncer_thread);
 }

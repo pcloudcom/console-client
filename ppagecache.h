@@ -25,36 +25,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "pfileops.h"
-#include "plibs.h"
+#ifndef _PSYNC_PAGECACHE_H
+#define _PSYNC_PAGECACHE_H
 
-void psync_ops_create_folder_in_db(const binresult *meta){
-  psync_sql_res *res;
-  const binresult *name;
-  uint64_t userid, perms;
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
-  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
-    userid=psync_my_userid;
-    perms=PSYNC_PERM_ALL;
-  }
-  else{
-    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=psync_get_permissions(meta);
-  }
-  name=psync_find_result(meta, "name", PARAM_STR);
-  psync_sql_bind_uint(res, 1, psync_find_result(meta, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 3, userid);
-  psync_sql_bind_uint(res, 4, perms);
-  psync_sql_bind_lstring(res, 5, name->str, name->length);
-  psync_sql_bind_uint(res, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
-  psync_sql_run_free(res);
-}
+#include "pfs.h"
 
-void psync_ops_delete_folder_from_db(psync_folderid_t folderid){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("DELETE FROM folder WHERE id=?");
-  psync_sql_bind_uint(res, 1, folderid);
-  psync_sql_run_free(res);
-}
+void psync_pagecache_init();
+int psync_pagecache_flush();
+int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
+int psync_pagecache_read_unmodified(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
+
+#endif

@@ -31,6 +31,7 @@
 #include "pcompat.h"
 #include "psynclib.h"
 #include "plist.h"
+#include "papi.h"
 
 #define PSYNC_NET_OK        0
 #define PSYNC_NET_PERMFAIL -1
@@ -40,7 +41,7 @@ typedef uint64_t psync_uploadid_t;
 
 typedef struct {
   psync_socket *sock;
-  void *readbuff;
+  char *readbuff;
   int64_t contentlength;
   uint64_t readbytes;
   uint32_t keepalive;
@@ -111,6 +112,10 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
 psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);
 void psync_http_close(psync_http_socket *http);
 int psync_http_readall(psync_http_socket *http, void *buff, int num);
+psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const char **host);
+int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to);
+int psync_http_next_request(psync_http_socket *sock);
+int psync_http_request_readall(psync_http_socket *http, void *buff, int num);
 
 int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filehash, uint64_t filesize, char *const *files, uint32_t filecnt);
 int psync_net_scan_file_for_blocks(psync_socket *api, psync_list *rlist, psync_fileid_t fileid, uint64_t filehash, psync_file_t fd);

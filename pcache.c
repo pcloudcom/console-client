@@ -90,6 +90,11 @@ void *psync_cache_get(const char *key){
   psync_uint_t h;
   hash_element *he;
   void *val;
+  if (IS_DEBUG && !strcmp(psync_thread_name, "timer"))
+    debug(D_ERROR, "trying get key %s from the timer thread, this may (and eventually will) lead to a deadlock, "
+                   "please start a worker thread to do the job or don't use cache (if you are looking up sql "
+                   "query/statement, you can use _nocache version)", key);
+
   h=hash_func(key);
   pthread_mutex_lock(&cache_mutexes[h%CACHE_LOCKS]);
   psync_list_for_each_element (he, &cache_hash[h], hash_element, list)

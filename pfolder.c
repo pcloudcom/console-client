@@ -729,6 +729,8 @@ psync_folder_list_t *psync_list_get_list(){
     memcpy(str, folders[i].remotepath, l);
     psync_free(folders[i].remotepath);
     ret->folders[i].remotepath=str;
+    if (l)
+      l--;
     while (l && str[l]!='/')
       l--;
     if (str[l]=='/')

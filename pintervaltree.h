@@ -25,36 +25,45 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "pfileops.h"
-#include "plibs.h"
+#ifndef _PSYNC_INTERVALTREE_H
+#define _PSYNC_INTERVALTREE_H
 
-void psync_ops_create_folder_in_db(const binresult *meta){
-  psync_sql_res *res;
-  const binresult *name;
-  uint64_t userid, perms;
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
-  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
-    userid=psync_my_userid;
-    perms=PSYNC_PERM_ALL;
-  }
-  else{
-    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=psync_get_permissions(meta);
-  }
-  name=psync_find_result(meta, "name", PARAM_STR);
-  psync_sql_bind_uint(res, 1, psync_find_result(meta, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 3, userid);
-  psync_sql_bind_uint(res, 4, perms);
-  psync_sql_bind_lstring(res, 5, name->str, name->length);
-  psync_sql_bind_uint(res, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
-  psync_sql_run_free(res);
+#include "ptree.h"
+#include <stdint.h>
+
+typedef struct {
+  psync_tree tree;
+  uint64_t from;
+  uint64_t to;
+} psync_interval_tree_t;
+
+#define psync_interval_tree_element(a) psync_tree_element(a, psync_interval_tree_t, tree)
+
+static inline psync_interval_tree_t *psync_interval_tree_get_first(psync_interval_tree_t *tree){
+  return psync_interval_tree_element(psync_tree_get_first(&tree->tree));
 }
 
-void psync_ops_delete_folder_from_db(psync_folderid_t folderid){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("DELETE FROM folder WHERE id=?");
-  psync_sql_bind_uint(res, 1, folderid);
-  psync_sql_run_free(res);
+static inline psync_interval_tree_t *psync_interval_tree_get_next(psync_interval_tree_t *tree){
+  return psync_interval_tree_element(psync_tree_get_next(&tree->tree));
 }
+
+static inline void psync_interval_tree_del(psync_interval_tree_t **tree, psync_interval_tree_t *node){
+  *tree=psync_interval_tree_element(psync_tree_get_del(&(*tree)->tree, &node->tree));
+}
+
+static inline psync_interval_tree_t *psync_interval_tree_first_interval_after(psync_interval_tree_t *tree, uint64_t point){
+  while (tree){
+    if (point>=tree->to && point>tree->from)
+      tree=psync_interval_tree_element(tree->tree.right);
+    else if (point>=tree->from || !tree->tree.left)
+      break;
+    else
+      tree=psync_interval_tree_element(tree->tree.left);
+  }
+  return tree;
+}
+
+void psync_interval_tree_add(psync_interval_tree_t **tree, uint64_t from, uint64_t to);
+void psync_interval_tree_free(psync_interval_tree_t *tree);
+
+#endif

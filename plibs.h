@@ -72,7 +72,9 @@
 #define PSYNC_TBOOL   5
 
 #define psync_get_number(v) (likely((v).type==PSYNC_TNUMBER)?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
+#define psync_get_snumber(v) (likely((v).type==PSYNC_TNUMBER)?(int64_t)((v).num):(int64_t)psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_number_or_null(v) (((v).type==PSYNC_TNUMBER)?(v).num:(likely((v).type==PSYNC_TNULL)?0:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
+#define psync_get_snumber_or_null(v) (((v).type==PSYNC_TNUMBER)?(int64_t)(v).num:(likely((v).type==PSYNC_TNULL)?0:(int64_t)psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_get_string(v) (likely((v).type==PSYNC_TSTRING)?(v).str:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_string_or_null(v) (((v).type==PSYNC_TSTRING)?(v).str:(likely((v).type==PSYNC_TNULL)?NULL:psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
 #define psync_dup_string(v) (likely((v).type==PSYNC_TSTRING)?psync_strndup((v).str, (v).length):psync_strdup(psync_err_string_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
@@ -118,11 +120,7 @@ typedef struct {
 
 typedef struct {
   sqlite3_stmt *stmt;
-#if D_ERROR<=DEBUG_LEVEL
   const char *sql;
-#else
-  char sql[0];
-#endif
   int column_count;
   psync_variant row[];
 } psync_sql_res;
@@ -174,10 +172,13 @@ int64_t psync_sql_cellint(const char *sql, int64_t dflt) PSYNC_NONNULL(1);
 char **psync_sql_rowstr(const char *sql) PSYNC_NONNULL(1);
 psync_variant *psync_sql_row(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_nocache(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_prep_statement_nocache(const char *sql) PSYNC_NONNULL(1);
 void psync_sql_reset(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run_free(psync_sql_res *res) PSYNC_NONNULL(1);
+void psync_sql_run_free_nocache(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_bind_uint(psync_sql_res *res, int n, uint64_t val) PSYNC_NONNULL(1);
 void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val) PSYNC_NONNULL(1);
 void psync_sql_bind_double(psync_sql_res *res, int n, double val) PSYNC_NONNULL(1);
@@ -186,6 +187,7 @@ void psync_sql_bind_lstring(psync_sql_res *res, int n, const char *str, size_t l
 void psync_sql_bind_blob(psync_sql_res *res, int n, const char *str, size_t len) PSYNC_NONNULL(1);
 void psync_sql_bind_null(psync_sql_res *res, int n) PSYNC_NONNULL(1);
 void psync_sql_free_result(psync_sql_res *res) PSYNC_NONNULL(1);
+void psync_sql_free_result_nocache(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_variant_row psync_sql_fetch_row(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_str_row psync_sql_fetch_rowstr(psync_sql_res *res) PSYNC_NONNULL(1);
 psync_uint_row psync_sql_fetch_rowint(psync_sql_res *res) PSYNC_NONNULL(1);

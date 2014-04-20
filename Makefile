@@ -28,7 +28,9 @@ OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o 
      psyncer.o ptasks.o psettings.o pnetlibs.o pcache.o pscanner.o plist.o plocalscan.o plocalnotify.o pp2p.o\
      pcrypto.o pssl.o pfileops.o
 
-OBJFS=pfs.o ppagecache.o
+OBJFS=pfs.o ppagecache.o pfsfolder.o pfstasks.o pfsupload.o ptree.o pintervaltree.o
+
+OBJNOFS=pfsfake.o
 
 ifeq ($(USESSL),openssl)
   OBJ += pssl-openssl.o
@@ -41,8 +43,8 @@ endif
 
 all: $(LIB_A)
 
-$(LIB_A): $(OBJ)
-	$(AR) $@ $(OBJ)
+$(LIB_A): $(OBJ) $(OBJNOFS)
+	$(AR) $@ $(OBJ) $(OBJNOFS)
 	$(RANLIB) $@
 
 fs: $(OBJ) $(OBJFS)

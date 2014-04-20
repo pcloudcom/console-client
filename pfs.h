@@ -1,5 +1,5 @@
-/* Copyright (c) 2014 Anton Titov.
- * Copyright (c) 2014 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,36 +25,52 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "pfileops.h"
-#include "plibs.h"
+#ifndef _PSYNC_FS_H
+#define _PSYNC_FS_H
 
-void psync_ops_create_folder_in_db(const binresult *meta){
-  psync_sql_res *res;
-  const binresult *name;
-  uint64_t userid, perms;
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
-  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
-    userid=psync_my_userid;
-    perms=PSYNC_PERM_ALL;
-  }
-  else{
-    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-    perms=psync_get_permissions(meta);
-  }
-  name=psync_find_result(meta, "name", PARAM_STR);
-  psync_sql_bind_uint(res, 1, psync_find_result(meta, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 3, userid);
-  psync_sql_bind_uint(res, 4, perms);
-  psync_sql_bind_lstring(res, 5, name->str, name->length);
-  psync_sql_bind_uint(res, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(res, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
-  psync_sql_run_free(res);
-}
+#include "psynclib.h"
+#include "ptree.h"
+#include "pintervaltree.h"
+#include "papi.h"
+#include "psettings.h"
+#include "pfsfolder.h"
+#include <pthread.h>
 
-void psync_ops_delete_folder_from_db(psync_folderid_t folderid){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("DELETE FROM folder WHERE id=?");
-  psync_sql_bind_uint(res, 1, folderid);
-  psync_sql_run_free(res);
-}
+typedef struct {
+  uint64_t frompage;
+  uint64_t topage;
+  uint64_t length;
+  uint64_t requestedto;
+  uint64_t id;
+} psync_file_stream_t;
+
+typedef struct {
+  psync_tree tree;
+  psync_file_stream_t streams[PSYNC_FS_FILESTREAMS_CNT];
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  binresult *urls;
+  psync_interval_tree_t *writeintervals;
+  psync_fsfileid_t fileid;
+  uint64_t hash;
+  uint64_t initialsize;
+  uint64_t currentsize;
+  uint64_t laststreamid;
+  uint64_t indexoff;
+  psync_file_t datafile;
+  psync_file_t indexfile;
+  uint32_t refcnt;
+  uint32_t condwaiters;
+  uint32_t runningreads;
+  unsigned char modified;
+  unsigned char urlsstatus;
+  unsigned char newfile;
+} psync_openfile_t;
+
+int psync_fs_remount();
+void psync_fs_inc_of_refcnt(psync_openfile_t *of);
+void psync_fs_dec_of_refcnt(psync_openfile_t *of);
+void psync_fs_inc_of_refcnt_and_readers(psync_openfile_t *of);
+void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of);
+
+#endif
