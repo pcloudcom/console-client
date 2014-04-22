@@ -174,7 +174,7 @@ static char *psync_get_pcloud_path_nc(){
 #elif defined(P_OS_WINDOWS)
   char path[MAX_PATH];
   const char *dir;
-  if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA|CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, szPath)==S_OK)
+  if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA|CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, path)==S_OK)
     dir=path;
   else{
     dir=getenv("LOCALAPPDATA");
