@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS sharedfolder (id INTEGER PRIMARY KEY, isincoming INTE
 CREATE TABLE IF NOT EXISTS pagecache (id INTEGER PRIMARY KEY, hash INTEGER, pageid INTEGER, type INTEGER, flags INTEGER,\
   lastuse INTEGER, usecnt INTEGER, size INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS kpagecachehashpageid ON pagecache(hash, pageid);\
+CREATE INDEX IF NOT EXISTS kpagecachetype ON pagecache(type);\
 CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, depend INTEGER, folderid INTEGER, fileid INTEGER,\
   text1 TEXT, text2 TEXT, int1 INTEGER, int2 INTEGER);\
 CREATE INDEX IF NOT EXISTS kfstaskfolderid ON fstask(folderid);\

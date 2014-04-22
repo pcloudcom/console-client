@@ -58,3 +58,10 @@ void psync_ops_delete_folder_from_db(psync_folderid_t folderid){
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_run_free(res);
 }
+
+void psync_ops_delete_file_from_db(psync_fileid_t fileid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("DELETE FROM file WHERE id=?");
+  psync_sql_bind_uint(res, 1, fileid);
+  psync_sql_run_free(res);
+}

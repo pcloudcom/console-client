@@ -59,6 +59,10 @@ typedef struct {
   uint64_t length;
 } index_record;
 
+typedef struct {
+  uint64_t copyfromoriginal;
+} index_header;
+
 static struct fuse_chan *psync_fuse_channel=0;
 static struct fuse *psync_fuse=0;
 static char *psync_current_mountpoint=0;
@@ -152,19 +156,36 @@ static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf
 static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
   psync_stat_t st;
   psync_fsfileid_t fileid;
-  uint64_t size;
+  uint64_t size, osize;
+  const char *cachepath;
   char *filename;
+  psync_file_t fd;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int stret;
   fileid=cr->taskid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
   fileidhex[sizeof(psync_fsfileid_t)]='d';
   fileidhex[sizeof(psync_fsfileid_t)+1]=0;
-  filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
   stret=psync_stat(filename, &st);
   psync_free(filename);
   if (stret)
-    return -1; 
+    return -1;
+  if (cr->newfile)
+    osize=0;
+  else{
+    fileidhex[sizeof(psync_fsfileid_t)]='i';
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    fd=psync_file_open(filename, P_O_RDONLY, 0);
+    psync_free(filename);
+    if (fd==INVALID_HANDLE_VALUE)
+      return -EIO;
+    stret=psync_file_pread(fd, &osize, sizeof(osize), offsetof(index_header, copyfromoriginal));
+    psync_file_close(fd);
+    if (stret!=sizeof(osize))
+      return -EIO;
+  }
   memset(stbuf, 0, sizeof(struct stat));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=st->st_birthtime;
@@ -177,8 +198,8 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   size=psync_stat_size(&st);
-  if (cr->origsize>size)
-    size=cr->origsize;
+  if (osize>size)
+    size=osize;
   stbuf->st_size=size;
 #if defined(P_OS_POSIX)
   stbuf->st_blocks=(stbuf->st_size+511)/512;
@@ -256,7 +277,8 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
     psync_row_to_file_stat(row, stbuf);
   psync_sql_free_result(res);
   if (folder){
-    //TODO: if (find unlink) row=NULL;
+    if (psync_fstask_find_unlink(folder, fpath->name))
+      row=NULL;
     if (!row && (cr=psync_fstask_find_creat(folder, fpath->name)))
       crr=psync_creat_to_file_stat(cr, stbuf);
     else
@@ -305,8 +327,11 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     res=psync_sql_query("SELECT name, size, ctime, mtime FROM file WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
+      name=psync_get_string(row[0]);
+      if (folder && psync_fstask_find_unlink(folder, name))
+        continue;
       psync_row_to_file_stat(row, &st);
-      filler(buf, psync_get_string(row[0]), &st, 0);
+      filler(buf, name, &st, 0);
     }
     psync_sql_free_result(res);
   }
@@ -530,7 +555,6 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
   psync_sql_unlock();
   of->newfile=1;
   of->modified=1;
-  of->readonly=0;
   ret=open_write_files(of, 1);
   pthread_mutex_unlock(&of->mutex);
   if (unlikely_log(ret)){
@@ -620,7 +644,16 @@ static int psync_fs_release(const char *path, struct fuse_file_info *fi){
 }
 
 static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
+  psync_openfile_t *of;
   debug(D_NOTICE, "flush %s", path);
+  of=fh_to_openfile(fi->fh);
+  if (of->newfile){
+    psync_sql_res *res;
+    debug(D_NOTICE, "releasing new file %s for upload", path);
+    res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=?");
+    psync_sql_bind_uint(res, 1, -of->fileid);
+    psync_sql_run_free(res);
+  }
   return 0;
 }
 
@@ -691,7 +724,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
       return -EIO;
     rec.offset=offset;
     rec.length=bw;
-    if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff)!=sizeof(rec)))
+    if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(index_header))!=sizeof(rec)))
       return -EIO;
     pthread_mutex_lock(&of->mutex);
     psync_interval_tree_add(&of->writeintervals, offset, offset+bw);
@@ -739,6 +772,28 @@ static int psync_fs_rmdir(const char *path){
     return -EACCES;
   }
   ret=psync_fstask_rmdir(fpath->folderid, fpath->name);
+  psync_sql_unlock();
+  psync_free(fpath);
+  return ret;
+}
+
+static int psync_fs_unlink(const char *path){
+  psync_fspath_t *fpath;
+  int ret;
+  debug(D_NOTICE, "unlink %s", path);
+  psync_sql_lock();
+  fpath=psync_fsfolder_resolve_path(path);
+  if (!fpath){
+    psync_sql_unlock();
+    debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
+    return -ENOENT;
+  }
+  if (!(fpath->permissions&PSYNC_PERM_DELETE)){
+    psync_sql_unlock();
+    psync_free(fpath);
+    return -EACCES;
+  }
+  ret=psync_fstask_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
   psync_free(fpath);
   return ret;
@@ -792,7 +847,7 @@ static struct fuse_operations psync_oper = {
   .getattr  = psync_fs_getattr,
   .readdir  = psync_fs_readdir,
   .open     = psync_fs_open,
-  .create    = psync_fs_creat,
+  .create   = psync_fs_creat,
   .release  = psync_fs_release,
   .flush    = psync_fs_flush,
   .fsync    = psync_fs_fsync,
@@ -800,6 +855,7 @@ static struct fuse_operations psync_oper = {
   .write    = psync_fs_write,
   .mkdir    = psync_fs_mkdir,
   .rmdir    = psync_fs_rmdir,
+  .unlink   = psync_fs_unlink,
   .statfs   = psync_fs_statfs,
   .chmod    = psync_fs_chmod,
   .utimens  = psync_fs_utimens
@@ -827,9 +883,9 @@ static void psync_fs_do_stop(){
     debug(D_NOTICE, "fuse_destroy existed");
     psync_free(psync_current_mountpoint);
     started=0;
+    psync_pagecache_flush();
   }
   pthread_mutex_unlock(&start_mutex);
-  psync_pagecache_flush();
 }
 
 void psync_fs_stop(){

@@ -1391,6 +1391,7 @@ restart:
   } while (result);
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  psync_sql_statement("ANALYZE");
   initialdownload=0;
   psync_syncer_check_delayed_syncs();
   exceptionsock=setup_exeptions();
