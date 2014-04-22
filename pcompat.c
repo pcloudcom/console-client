@@ -67,6 +67,7 @@ extern char **environ;
 #include <wincrypt.h>
 #include <tlhelp32.h>
 #include <iphlpapi.h>
+#include <shlobj.h>
 
 #endif
 
