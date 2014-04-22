@@ -842,24 +842,7 @@ void *psync_fs_init(struct fuse_conn_info *conn){
 }
 
 
-static struct fuse_operations psync_oper = {
-  .init     = psync_fs_init,
-  .getattr  = psync_fs_getattr,
-  .readdir  = psync_fs_readdir,
-  .open     = psync_fs_open,
-  .create   = psync_fs_creat,
-  .release  = psync_fs_release,
-  .flush    = psync_fs_flush,
-  .fsync    = psync_fs_fsync,
-  .read     = psync_fs_read,
-  .write    = psync_fs_write,
-  .mkdir    = psync_fs_mkdir,
-  .rmdir    = psync_fs_rmdir,
-  .unlink   = psync_fs_unlink,
-  .statfs   = psync_fs_statfs,
-  .chmod    = psync_fs_chmod,
-  .utimens  = psync_fs_utimens
-};
+static struct fuse_operations psync_oper;
 
 static char *psync_fuse_get_mountpoint(){
   psync_stat_t st;
@@ -872,7 +855,7 @@ static char *psync_fuse_get_mountpoint(){
   return mp;
 }
 
-static void psync_fs_do_stop(){
+static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
   if (started){
@@ -947,6 +930,24 @@ static void psync_fuse_thread(){
 int psync_fs_start(){
   char *mp;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
+
+  psync_oper.init     = psync_fs_init;
+  psync_oper.getattr  = psync_fs_getattr;
+  psync_oper.readdir  = psync_fs_readdir;
+  psync_oper.open     = psync_fs_open;
+  psync_oper.create   = psync_fs_creat;
+  psync_oper.release  = psync_fs_release;
+  psync_oper.flush    = psync_fs_flush;
+  psync_oper.fsync    = psync_fs_fsync;
+  psync_oper.read     = psync_fs_read;
+  psync_oper.write    = psync_fs_write;
+  psync_oper.mkdir    = psync_fs_mkdir;
+  psync_oper.rmdir    = psync_fs_rmdir;
+  psync_oper.unlink   = psync_fs_unlink;
+  psync_oper.statfs   = psync_fs_statfs;
+  psync_oper.chmod    = psync_fs_chmod;
+  psync_oper.utimens  = psync_fs_utimens;
+
 #if defined(P_OS_POSIX)
   myuid=getuid();
   mygid=getgid();
