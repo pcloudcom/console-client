@@ -202,18 +202,18 @@ static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){
   if (api){
     if (size>PSYNC_FS_DIRECT_UPLOAD_LIMIT){
       psync_file_close(fd);
-      debug(D_NOTICE, "defering upload of %lu/%s due to size of %lu", (unsigned long)task->folderid, task->text, (unsigned long)size);
+      debug(D_NOTICE, "defering upload of %lu/%s due to size of %lu", (unsigned long)task->folderid, task->text1, (unsigned long)size);
       return -2;
     }
     else{
-      debug(D_NOTICE, "uploading file %lu/%s pipelined due to size of %lu", (unsigned long)task->folderid, task->text, (unsigned long)size);
+      debug(D_NOTICE, "uploading file %lu/%s pipelined due to size of %lu", (unsigned long)task->folderid, task->text1, (unsigned long)size);
       ret=psync_sent_task_creat_upload_small(api, task, fd, size);
       psync_file_close(fd);
       return ret;
     }
   }
   else{
-    debug(D_NOTICE, "uploading file %lu/%s separately due to size of %lu", (unsigned long)task->folderid, task->text, (unsigned long)size);
+    debug(D_NOTICE, "uploading file %lu/%s separately due to size of %lu", (unsigned long)task->folderid, task->text1, (unsigned long)size);
     return -1;
   }
 }
