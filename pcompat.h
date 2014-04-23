@@ -110,6 +110,11 @@ typedef unsigned long psync_uint_t;
 #define P_PRI_I "ld"
 #define P_PRI_U "lu"
 
+#ifndef PRIu64
+#define PRIu64 "%I64u"
+#endif
+
+
 #define psync_32to64(hi, lo) ((((uint64_t)(hi))<<32)+(lo))
 #define psync_bool_to_zero(x) ((!!(x))-1)
 

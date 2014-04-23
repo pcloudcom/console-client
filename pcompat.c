@@ -72,7 +72,7 @@ extern char **environ;
 #endif
 
 typedef struct {
-  psync_thread_start1 run;
+  psync_thread_start0 run;
   const char *name;
 } psync_run_data0;
 
