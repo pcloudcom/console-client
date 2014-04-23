@@ -436,6 +436,21 @@ void psync_fstask_folder_deleted(psync_folderid_t parentfolderid, uint64_t taski
   }
 }
 
+void psync_fstask_file_created(psync_folderid_t parentfolderid, uint64_t taskid, const char *name){
+  psync_fstask_folder_t *folder;
+  psync_fstask_creat_t *cr;
+  folder=psync_fstask_get_folder_tasks_locked(parentfolderid);
+  if (folder){
+    cr=psync_fstask_find_creat(folder, name);
+    if (cr && cr->taskid==taskid){
+      psync_tree_del(&folder->creats, &cr->tree);
+      psync_free(cr);
+      folder->taskscnt--;
+    }
+    psync_fstask_release_folder_tasks_locked(folder);
+  }
+}
+
 void psync_fstask_file_deleted(psync_folderid_t parentfolderid, uint64_t taskid, const char *name){
   psync_fstask_folder_t *folder;
   psync_fstask_unlink_t *un;

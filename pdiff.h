@@ -28,8 +28,11 @@
 #ifndef _PSYNC_DIFF_H
 #define _PSYNC_DIFF_H
 
+#include "papi.h"
+
 void psync_diff_init();
 void psync_diff_lock();
 void psync_diff_unlock();
+void psync_diff_create_file(const binresult *meta);
 
 #endif

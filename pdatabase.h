@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status 
 CREATE INDEX IF NOT EXISTS kfstaskfolderid ON fstask(folderid);\
 CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
 CREATE INDEX IF NOT EXISTS kfstaskdepend ON fstask(depend);\
+CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
+CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\
