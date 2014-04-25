@@ -164,3 +164,21 @@ void psync_cache_add_free(char *key, void *ptr, time_t freeafter, psync_cache_fr
   psync_cache_add(key, ptr, freeafter, freefunc, maxkeys);
   psync_free(key);
 }
+
+void psync_cache_clean_all(){
+  psync_list *l1, *l2;
+  hash_element *he;
+  psync_uint_t h;
+  for (h=0; h<CACHE_HASH_SIZE; h++){
+    pthread_mutex_lock(&cache_mutexes[h%CACHE_LOCKS]);
+    psync_list_for_each_safe(l1, l2, &cache_hash[h]){
+      he=psync_list_element(l1, hash_element, list);
+      if (!psync_timer_stop(he->timer)){
+        psync_list_del(l1);
+        he->free(he->value);
+        psync_free(he);
+      }
+    }
+    pthread_mutex_unlock(&cache_mutexes[h%CACHE_LOCKS]);
+  }
+}
