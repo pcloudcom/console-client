@@ -44,7 +44,11 @@
 #endif
 
 #define PSYNC_DATABASE_STRUCTURE \
-"BEGIN;\
+"\
+PRAGMA journal_mode=WAL;\
+PRAGMA synchronous=1;\
+PRAGMA locking_mode=EXCLUSIVE;\
+BEGIN;\
 PRAGMA page_size=4096;\
 PRAGMA cache_size=8000;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\

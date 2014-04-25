@@ -294,18 +294,22 @@ static void clean_cache(){
   cnt=psync_sql_cellint("SELECT COUNT(*) FROM pagecache", 0);
   entries=(pagecache_entry *)psync_malloc(cnt*sizeof(pagecache_entry));
   i=0;
-  res=psync_sql_query("SELECT id, lastuse, usecnt, type FROM pagecache");
-  while ((row=psync_sql_fetch_rowint(res))){
-    if (i>=cnt)
-      break;
-    if (row[3]!=PAGE_TYPE_READ)
-      continue;
-    entries[i].lastuse=row[1];
-    entries[i].id=row[0];
-    entries[i].usecnt=row[2];
-    i++;
+  while (i<cnt){
+    res=psync_sql_query("SELECT id, lastuse, usecnt, type FROM pagecache WHERE id>? ORDER BY id LIMIT 50000");
+    psync_sql_bind_uint(res, 1, i);
+    while ((row=psync_sql_fetch_rowint(res))){
+      if (i>=cnt)
+        break;
+      if (row[3]!=PAGE_TYPE_READ)
+        continue;
+      entries[i].lastuse=row[1];
+      entries[i].id=row[0];
+      entries[i].usecnt=row[2];
+      i++;
+    }
+    psync_sql_free_result(res);
+    psync_milisleep(10);
   }
-  psync_sql_free_result(res);
   ocnt=cnt=i;
   debug(D_NOTICE, "read %lu entries", (unsigned long)cnt);
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_lastuse);
@@ -323,10 +327,10 @@ static void clean_cache(){
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse16);
   cnt-=PSYNC_FS_CACHE_LRU16_PERCENT*ocnt/100;
   debug(D_NOTICE, "sorted entries by more than 16 uses and lastuse, deleting %lu entries", (unsigned long)cnt);
-  ocnt=(cnt+999)/1000;
+  ocnt=(cnt+1023)/1024;
   for (j=0; j<ocnt; j++){
-    i=j*1000;
-    e=i+1000;
+    i=j*1024;
+    e=i+1024;
     if (e>cnt)
       e=cnt;
     psync_sql_start_transaction();
@@ -338,10 +342,11 @@ static void clean_cache(){
     }
     psync_sql_free_result(res);
     psync_sql_commit_transaction();
-    psync_milisleep(20);
+    psync_milisleep(10);
   }
   pthread_mutex_unlock(&clean_cache_mutex);
   psync_free(entries);
+  psync_sql_sync();
   debug(D_NOTICE, "finished cleaning cache, free cache pages %u", (unsigned)free_db_pages);
 }
 

@@ -671,7 +671,17 @@ static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info 
     return -EIO;
   if (unlikely_log(!of->newfile && psync_file_sync(of->indexfile)))
     return -EIO;
+  if (unlikely_log(psync_sql_sync()))
+    return -EIO;
   return 0;
+}
+
+static int psync_fs_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi){
+  debug(D_NOTICE, "fsyncdir %s", path);
+  if (unlikely_log(psync_sql_sync()))
+    return -EIO;
+  else
+    return 0;
 }
 
 static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
@@ -943,6 +953,7 @@ int psync_fs_start(){
   psync_oper.release  = psync_fs_release;
   psync_oper.flush    = psync_fs_flush;
   psync_oper.fsync    = psync_fs_fsync;
+  psync_oper.fsyncdir = psync_fs_fsyncdir;
   psync_oper.read     = psync_fs_read;
   psync_oper.write    = psync_fs_write;
   psync_oper.mkdir    = psync_fs_mkdir;

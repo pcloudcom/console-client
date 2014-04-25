@@ -35,6 +35,7 @@
 #include "pfstasks.h"
 #include "pfileops.h"
 #include "ppagecache.h"
+#include "pssl.h"
 #include <string.h>
 
 typedef struct {
@@ -181,8 +182,72 @@ static int psync_sent_task_creat_upload_small(psync_socket *api, fsupload_task_t
     return -1;
 }
 
+static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const char *name, const char *filename, psync_uploadid_t uploadid){
+  psync_sql_res *sql;
+  psync_socket *api;
+  binresult *res;
+  uint64_t usize, fsize, result;
+  int ret;
+  unsigned char uploadhash[PSYNC_HASH_DIGEST_HEXLEN], filehash[PSYNC_HASH_DIGEST_HEXLEN], fileparthash[PSYNC_HASH_DIGEST_HEXLEN];
+  debug(D_NOTICE, "uploading %s as %lu/%s", filename, (unsigned long)folderid, name);
+  if (uploadid){
+    ret=psync_get_upload_checksum(uploadid, uploadhash, &usize);
+    if (ret!=PSYNC_NET_OK){
+      if (ret==PSYNC_NET_TEMPFAIL)
+        return -1;
+      else
+        uploadid=0;
+    }
+  }
+  if (uploadid)
+    ret=psync_get_local_file_checksum_part(filename, filehash, &fsize, fileparthash, usize);
+  else
+    ret=psync_get_local_file_checksum(filename, filehash, &fsize);
+  if (ret){
+    debug(D_WARNING, "could not open local file %s, skipping task", filename);
+    return 0;
+  }
+  if (uploadid && memcmp(fileparthash, uploadhash, PSYNC_HASH_DIGEST_HEXLEN))
+    uploadid=0;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    return -1;
+  if (!uploadid){
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("filesize", fsize)};
+    usize=0;
+    res=send_command(api, "upload_create", params);
+    if (!res)
+      goto err0;
+    result=psync_find_result(res, "result", PARAM_NUM)->num;
+    if (unlikely(result)){
+      psync_free(res);
+      psync_apipool_release(api);
+      debug(D_WARNING, "upload_create returned %lu", (unsigned long)result);
+      if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
+        return -1;
+      else
+        return 0;
+    }
+    uploadid=psync_find_result(res, "uploadid", PARAM_NUM)->num;
+    psync_free(res);
+    sql=psync_sql_prep_statement("INSERT INTO fstaskupload (fstaskid, uploadid) VALUES (?, ?)");
+    psync_sql_bind_uint(sql, 1, taskid);
+    psync_sql_bind_uint(sql, 2, uploadid);
+    psync_sql_run_free(sql);
+  }
+  if (usize)
+    debug(D_NOTICE, "resuming from offset %lu", (unsigned long)usize);
+  
+  psync_apipool_release(api);
+  return 0;
+err0:
+  psync_apipool_release(api);
+  return -1;
+}
+
 static void large_upload(){
-  uint64_t taskid, type, uploadid;
+  uint64_t taskid, type;
+  psync_uploadid_t uploadid;
   psync_folderid_t folderid;
   const char *cname;
   char *name, *filename;
@@ -190,8 +255,10 @@ static void large_upload(){
   psync_sql_res *res;
   psync_variant_row row;
   psync_uint_row urow;
+  int ret;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   while (1){
+    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     res=psync_sql_query("SELECT id, type, folderid, text1 FROM fstask WHERE status=2 AND type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)") ORDER BY id LIMIT 1");
     row=psync_sql_fetch_row(res);
     if (!row){
@@ -217,10 +284,20 @@ static void large_upload(){
     else
       uploadid=0;
     psync_sql_free_result(res);
-    if (type==PSYNC_FS_TASK_CREAT);
+    if (type==PSYNC_FS_TASK_CREAT)
+      ret=large_upload_creat(taskid, folderid, name, filename, uploadid);
+    else{
+      ret=0;
+      debug(D_BUG, "wrong type %lu for task %lu", (unsigned long)type, (unsigned long)taskid);
+    }
+    if (ret)
+      goto err;
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
+err:
+    if (ret)
+      psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
     psync_free(filename);
     psync_free(name);
   }

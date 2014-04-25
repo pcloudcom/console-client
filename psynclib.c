@@ -371,6 +371,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   psync_sql_free_result(res);
   if (ret==PSYNC_INVALID_SYNCID)
     return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
+  psync_sql_sync();
   psync_syncer_new(ret);
   return ret;
 }
@@ -483,6 +484,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   psync_localnotify_del_sync(syncid);
   psync_stop_sync_download(syncid);
   psync_stop_sync_upload(syncid);
+  psync_sql_sync();
   psync_syncer_new(syncid);
   return 0;
 }
@@ -535,6 +537,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_stop_sync_upload(syncid);
     psync_localnotify_del_sync(syncid);
     psync_restart_localscan();
+    psync_sql_sync();
     return 0;
   }
 }

@@ -1177,11 +1177,9 @@ static void upload_thread(){
                          psync_get_number_or_null(row[5]),                          
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
-        psync_sql_sync_off();
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, taskid);
         psync_sql_run_free(res);
-        psync_sql_sync_on();
       }
       else if (type!=PSYNC_UPLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
