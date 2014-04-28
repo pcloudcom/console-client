@@ -43,6 +43,7 @@
 #include "ppagecache.h"
 #include "ptimer.h"
 #include "pfstasks.h"
+#include "pfsupload.h"
 
 #if defined(P_OS_POSIX)
 #include <signal.h>
@@ -412,14 +413,16 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, uint64_t 
 
 static int open_write_files(psync_openfile_t *of, int trunc){
   psync_fsfileid_t fileid;
+  const char *cachepath;
   char *filename;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   fileid=-of->fileid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
   fileidhex[sizeof(psync_fsfileid_t)]='d';
   fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
   if (of->datafile==INVALID_HANDLE_VALUE){
-    filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
     of->datafile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|(trunc?P_O_TRUNC:0));
     psync_free(filename);
     if (of->datafile==INVALID_HANDLE_VALUE){
@@ -429,7 +432,7 @@ static int open_write_files(psync_openfile_t *of, int trunc){
   }
   if (!of->newfile && of->indexfile==INVALID_HANDLE_VALUE){
     fileidhex[sizeof(psync_fsfileid_t)]='i';
-    filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
     of->indexfile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|(trunc?P_O_TRUNC:0));
     psync_free(filename);
     if (of->indexfile==INVALID_HANDLE_VALUE){
@@ -650,9 +653,10 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
   if (of->newfile){
     psync_sql_res *res;
     debug(D_NOTICE, "releasing new file %s for upload", path);
-    res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=?");
+    res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=? AND status=1");
     psync_sql_bind_uint(res, 1, -of->fileid);
     psync_sql_run_free(res);
+    psync_fsupload_wake();
   }
   return 0;
 }
@@ -667,7 +671,17 @@ static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info 
     return -EIO;
   if (unlikely_log(!of->newfile && psync_file_sync(of->indexfile)))
     return -EIO;
+  if (unlikely_log(psync_sql_sync()))
+    return -EIO;
   return 0;
+}
+
+static int psync_fs_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi){
+  debug(D_NOTICE, "fsyncdir %s", path);
+  if (unlikely_log(psync_sql_sync()))
+    return -EIO;
+  else
+    return 0;
 }
 
 static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
@@ -900,9 +914,9 @@ static void psync_fs_do_stop(void){
   if (started){
     debug(D_NOTICE, "running fuse_unmount");
     fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
-    debug(D_NOTICE, "fuse_unmount existed, running fuse_destroy");
+    debug(D_NOTICE, "fuse_unmount exited, running fuse_destroy");
     fuse_destroy(psync_fuse);
-    debug(D_NOTICE, "fuse_destroy existed");
+    debug(D_NOTICE, "fuse_destroy exited");
     psync_free(psync_current_mountpoint);
     started=0;
     psync_pagecache_flush();
@@ -963,7 +977,7 @@ static void psync_fuse_thread(){
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
   fuse_loop_mt(psync_fuse);
-  debug(D_NOTICE, "fuse_loop_mt existed");
+  debug(D_NOTICE, "fuse_loop_mt exited");
 }
 
 int psync_fs_start(){
@@ -978,6 +992,7 @@ int psync_fs_start(){
   psync_oper.release  = psync_fs_release;
   psync_oper.flush    = psync_fs_flush;
   psync_oper.fsync    = psync_fs_fsync;
+  psync_oper.fsyncdir = psync_fs_fsyncdir;
   psync_oper.read     = psync_fs_read;
   psync_oper.write    = psync_fs_write;
   psync_oper.mkdir    = psync_fs_mkdir;

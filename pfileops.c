@@ -27,6 +27,7 @@
 
 #include "pfileops.h"
 #include "plibs.h"
+#include "pdiff.h"
 
 void psync_ops_create_folder_in_db(const binresult *meta){
   psync_sql_res *res;
@@ -57,6 +58,10 @@ void psync_ops_delete_folder_from_db(psync_folderid_t folderid){
   res=psync_sql_prep_statement("DELETE FROM folder WHERE id=?");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_run_free(res);
+}
+
+void psync_ops_create_file_in_db(const binresult *meta){
+  psync_diff_create_file(meta);
 }
 
 void psync_ops_delete_file_from_db(psync_fileid_t fileid){

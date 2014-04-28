@@ -166,14 +166,17 @@ void psync_sql_unlock(){
   pthread_mutex_unlock(&psync_db_mutex);
 }
 
-void psync_sql_sync_off(){
+int psync_sql_sync(){
+  int code;
   psync_sql_lock();
-  sqlite3_exec(psync_db, "PRAGMA synchronous=0", NULL, NULL, NULL);
-}
-
-void psync_sql_sync_on(){
-  sqlite3_exec(psync_db, "PRAGMA synchronous=2", NULL, NULL, NULL);
+  code=sqlite3_wal_checkpoint(psync_db, NULL);
   psync_sql_unlock();
+  if (unlikely(code!=SQLITE_OK)){
+    debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
+    return -1;
+  }
+  else
+    return 0;
 }
 
 int psync_sql_statement(const char *sql){

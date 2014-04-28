@@ -46,6 +46,7 @@ static inline uint64_t psync_get_permissions(const binresult *meta){
 
 void psync_ops_create_folder_in_db(const binresult *meta);
 void psync_ops_delete_folder_from_db(psync_folderid_t folderid);
+void psync_ops_create_file_in_db(const binresult *meta);
 void psync_ops_delete_file_from_db(psync_fileid_t fileid);
 
 #endif

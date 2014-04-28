@@ -643,6 +643,29 @@ static void insert_revision(psync_fileid_t fileid, uint64_t hash, uint64_t ctime
   psync_sql_run(st);
 }
 
+void psync_diff_create_file(const binresult *meta){
+  psync_sql_res *st;
+  const binresult *name;
+  uint64_t userid;
+  st=psync_sql_prep_statement("INSERT OR IGNORE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+                                "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
+                                "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  name=psync_find_result(meta, "name", PARAM_STR);
+  check_for_deletedfileid(meta);
+  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num)
+    userid=psync_my_userid;
+  else
+    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 3, userid);
+  psync_sql_bind_uint(st, 4, psync_find_result(meta, "size", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_lstring(st, 6, name->str, name->length);
+  bind_meta(st, meta, 7);
+  psync_sql_run_free(st);
+}
+
 static void process_createfile(const binresult *entry){
   static psync_sql_res *st=NULL;
   const binresult *meta, *name;

@@ -126,4 +126,6 @@ int psync_is_revision_of_file(const unsigned char *localhashhex, uint64_t filesi
 psync_file_lock_t *psync_lock_file(const char *path);
 void psync_unlock_file(psync_file_lock_t *lock);
 
+int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, uint64_t *usize);
+
 #endif

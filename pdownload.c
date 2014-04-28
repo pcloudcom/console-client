@@ -929,11 +929,9 @@ static void task_run_download_file_thread(void *ptr){
     psync_wake_download();
   }
   else{
-    psync_sql_sync_off();
     res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
     psync_sql_bind_uint(res, 1, dt->taskid);
     psync_sql_run_free(res);
-    psync_sql_sync_on();
     psync_status_recalc_to_download();
     psync_send_status_update();
   }
@@ -947,11 +945,9 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   psync_sql_res *res;
   download_task_t *dt;
   size_t len;
-  psync_sql_sync_off();
   res=psync_sql_prep_statement("UPDATE task SET inprogress=1 WHERE id=?");
   psync_sql_bind_uint(res, 1, taskid);
   psync_sql_run_free(res);
-  psync_sql_sync_on();
   len=strlen(filename);
   dt=(download_task_t *)psync_malloc(offsetof(download_task_t, filename)+len+1);
   dt->taskid=taskid;
@@ -1103,11 +1099,9 @@ static void download_thread(){
                          psync_get_number_or_null(row[5]),                          
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
-        psync_sql_sync_off();
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, taskid);
         psync_sql_run_free(res);
-        psync_sql_sync_on();
       }
       else if (type!=PSYNC_DOWNLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_DOWNLOAD);
