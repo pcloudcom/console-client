@@ -367,6 +367,7 @@ static int flush_pages(){
   psync_list_init(&pages_to_flush);
   pthread_mutex_lock(&cache_mutex);
   if (cache_pages_in_hash){
+    debug(D_NOTICE, "flushing cache");
     res=psync_sql_query("SELECT id FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE)" ORDER BY id");
     for (i=0; i<CACHE_HASH; i++)
       psync_list_for_each_element(page, &cache_hash[i], psync_cache_page_t, list)
@@ -386,11 +387,21 @@ break2:
         return -1;
       }
     }
+    i=0;
+    debug(D_NOTICE, "cache data written");
+    pthread_mutex_lock(&cache_mutex);
+    while (cache_pages_free>=CACHE_PAGES*5/100 && i++<200){
+      pthread_mutex_unlock(&cache_mutex);
+      psync_milisleep(10);
+      pthread_mutex_lock(&cache_mutex);
+    }
+    pthread_mutex_unlock(&cache_mutex);
     if (psync_file_sync(readcache)){
       debug(D_ERROR, "flush of cache file failed");
       pthread_mutex_unlock(&flush_cache_mutex);
       return -1;
     }
+    debug(D_NOTICE, "cache data synced");
     pthread_mutex_lock(&cache_mutex);
   }  
   psync_sql_start_transaction();
