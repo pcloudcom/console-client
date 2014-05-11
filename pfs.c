@@ -879,7 +879,7 @@ static char *psync_fuse_get_mountpoint(){
   char *mp = (char*)psync_malloc(3);
   mp[0] = 'P';
   mp[1] = ':';
-  mp[2] = '0';
+  mp[2] = '\0';
   stored = psync_setting_get_string(_PS(fsroot));
   if (stored[0] && stored[1] && is_mountable(stored[0])){
       mp[0] = stored[0];
