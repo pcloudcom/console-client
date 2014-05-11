@@ -29,6 +29,7 @@
 #include "plibs.h"
 #include "ptimer.h"
 #include "pcache.h"
+#include "ptree.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -73,6 +74,9 @@ sqlite3 *psync_db;
 pstatus_t psync_status;
 int psync_do_run=1;
 PSYNC_THREAD uint32_t psync_error=0;
+
+static pthread_mutex_t psync_db_checpoint_mutex=PTHREAD_MUTEX_INITIALIZER;
+
 
 char *psync_strdup(const char *str){
   size_t len;
@@ -134,6 +138,25 @@ void psync_sql_err_callback(void *ptr, int code, const char *msg){
   debug(D_WARNING, "dabase warning %d: %s", code, msg);
 }
 
+static void psync_sql_wal_checkpoint(){
+  int code;
+  if (pthread_mutex_trylock(&psync_db_checpoint_mutex)){
+    debug(D_NOTICE, "skipping checkpoint");
+    return;
+  }
+  debug(D_NOTICE, "checkpointing database");
+  code=sqlite3_wal_checkpoint(psync_db, NULL);
+  pthread_mutex_unlock(&psync_db_checpoint_mutex);
+  if (unlikely(code!=SQLITE_OK))
+    debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
+}
+
+static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int numpages){
+  if (numpages>=PSYNC_DB_CHECKPOINT_AT_PAGES)
+    psync_run_thread("checkpoint", psync_sql_wal_checkpoint);
+  return SQLITE_OK;
+}
+
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
   int code=sqlite3_open(db, &psync_db);
@@ -144,6 +167,7 @@ int psync_sql_connect(const char *db){
     pthread_mutexattr_destroy(&mattr);
     if (IS_DEBUG)
       sqlite3_config(SQLITE_CONFIG_LOG, psync_sql_err_callback, NULL);
+    sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
     return 0;
   }
   else{
@@ -168,9 +192,9 @@ void psync_sql_unlock(){
 
 int psync_sql_sync(){
   int code;
-  psync_sql_lock();
+  pthread_mutex_lock(&psync_db_checpoint_mutex);
   code=sqlite3_wal_checkpoint(psync_db, NULL);
-  psync_sql_unlock();
+  pthread_mutex_unlock(&psync_db_checpoint_mutex);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
     return -1;
@@ -216,9 +240,90 @@ int psync_sql_rollback_transaction(){
   return code;
 }
 
+#if IS_DEBUG && 0
+
+typedef struct {
+  psync_tree tree;
+  const char *sql;
+} psync_sql_tree_t;
+
+static psync_tree *sql_tree=PSYNC_TREE_EMPTY;
+
+static void psync_sql_do_check_query_plan(const char *sql){
+  sqlite3_stmt *stmt;
+  char *exsql;
+  const char *detail;
+  int code;
+  exsql=psync_strcat("EXPLAIN QUERY PLAN ", sql, NULL);
+  code=sqlite3_prepare_v2(psync_db, exsql, -1, &stmt, 0);
+  psync_free(exsql);
+  if (code!=SQLITE_OK){
+    debug(D_ERROR, "EXPLAIN QUERY PLAN %s returned error: %d", sql, code);
+    return;
+  }
+  while (sqlite3_step(stmt)==SQLITE_ROW){
+    detail=(const char *)sqlite3_column_text(stmt, 3);
+    if (!strncmp(detail, "SCAN TABLE", strlen("SCAN TABLE")))
+      debug(D_WARNING, "doing %s on sql %s", detail, sql);
+  }
+  sqlite3_finalize(stmt);
+}
+
+static psync_tree *psync_sql_new_tree_node(const char *sql){
+  psync_sql_tree_t *node;
+  node=psync_new(psync_sql_tree_t);
+  node->sql=sql;
+  return &node->tree;
+}
+
+static void psync_sql_check_query_plan_locked(const char *sql){
+  psync_tree *node;
+  int cmp;
+  if (!sql_tree){
+    psync_tree_add_after(&sql_tree, NULL, psync_sql_new_tree_node(sql));
+    return;
+  }
+  node=sql_tree;
+  while (1){
+    cmp=strcmp(sql, psync_tree_element(node, psync_sql_tree_t, tree)->sql);
+    if (cmp<0){
+      if (node->left)
+        node=node->left;
+      else{
+        psync_tree_add_before(&sql_tree, node, psync_sql_new_tree_node(sql));
+        break;
+      }
+    }
+    else if (cmp>0){
+      if (node->right)
+        node=node->right;
+      else{
+        psync_tree_add_after(&sql_tree, node, psync_sql_new_tree_node(sql));
+        break;
+      }
+    }
+    else
+      return;
+  }
+  psync_sql_do_check_query_plan(sql);
+}
+
+static void psync_sql_check_query_plan(const char *sql){
+  psync_sql_lock();
+  psync_sql_check_query_plan_locked(sql);
+  psync_sql_unlock();
+}
+
+#else
+
+#define psync_sql_check_query_plan(s) ((void)0)
+
+#endif
+
 char *psync_sql_cellstr(const char *sql){
   sqlite3_stmt *stmt;
   int code;
+  psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
@@ -247,6 +352,7 @@ char *psync_sql_cellstr(const char *sql){
 int64_t psync_sql_cellint(const char *sql, int64_t dflt){
   sqlite3_stmt *stmt;
   int code;
+  psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   psync_sql_lock();
   if (unlikely(code!=SQLITE_OK))
@@ -266,6 +372,7 @@ int64_t psync_sql_cellint(const char *sql, int64_t dflt){
 char **psync_sql_rowstr(const char *sql){
   sqlite3_stmt *stmt;
   int code, cnt;
+  psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
@@ -316,6 +423,7 @@ char **psync_sql_rowstr(const char *sql){
 psync_variant *psync_sql_row(const char *sql){
   sqlite3_stmt *stmt;
   int code, cnt;
+  psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
@@ -383,6 +491,7 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
   sqlite3_stmt *stmt;
   psync_sql_res *res;
   int code, cnt;
+  psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
@@ -434,6 +543,7 @@ psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
   sqlite3_stmt *stmt;
   psync_sql_res *res;
   int code;
+  psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));

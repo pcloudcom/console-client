@@ -56,7 +56,7 @@
 #if defined(__GNUC__) || __has_builtin(__builtin_prefetch)
 #define psync_prefetch(expr) __builtin_prefetch(expr)
 #else
-#define psync_prefetch(expr) (void)0
+#define psync_prefetch(expr) ((void)0)
 #endif
 
 #if defined(_MSC_VER)

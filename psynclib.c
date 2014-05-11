@@ -169,6 +169,7 @@ void psync_destroy(){
   psync_timer_notify_exception();
   psync_milisleep(20);
   psync_sql_lock();
+  psync_cache_clean_all();
   psync_sql_close();
 }
 
