@@ -553,6 +553,11 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
   //TODO: check if file exists
   cr=psync_fstask_add_creat(folder, fpath->name);
+  if (unlikely_log(!cr)){
+    psync_fstask_release_folder_tasks_locked(folder);
+    psync_sql_unlock();
+    return -EIO;
+  }
   of=psync_fs_create_file(cr->fileid, 0, 0, 1);
   psync_fstask_release_folder_tasks_locked(folder);
   psync_sql_unlock();
@@ -813,6 +818,145 @@ static int psync_fs_unlink(const char *path){
   return ret;
 }
 
+static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t src_permissions,
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
+  return -ENOSYS;
+}
+
+static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t src_permissions,
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
+  if (parentfolderid==to_folderid){
+    assertw(targetperms==src_permissions);
+    if (!(src_permissions&PSYNC_PERM_MODIFY))
+      return -EACCES;
+  }
+  else{
+    if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
+      return -EACCES;
+  }
+  return psync_fstask_rename_file(fileid, parentfolderid, name, to_folderid, new_name);
+}
+
+static int psync_fs_rename(const char *old_path, const char *new_path){
+  psync_fspath_t *fold_path, *fnew_path;
+  psync_sql_res *res;
+  psync_fstask_folder_t *folder;
+  psync_fstask_mkdir_t *mkdir;
+  psync_fstask_creat_t *creat;
+  psync_fsfolderid_t to_folderid;
+  psync_uint_row row;
+  const char *new_name;
+  psync_fileorfolderid_t fid;
+  uint32_t targetperms;
+  int ret;
+  debug(D_NOTICE, "rename %s to %s", old_path, new_path);
+  folder=NULL;
+  psync_sql_lock();
+  fold_path=psync_fsfolder_resolve_path(old_path);
+  fnew_path=psync_fsfolder_resolve_path(new_path);
+  if (!fold_path || !fnew_path){
+    if (fold_path && new_path[1]==0 && new_path[0]=='/'){
+      to_folderid=0;
+      targetperms=PSYNC_PERM_ALL;
+      new_name=NULL;
+      goto move_to_root;
+    }
+    goto err_enoent;
+  }
+  folder=psync_fstask_get_folder_tasks_locked(fnew_path->folderid);
+  if (folder && (mkdir=psync_fstask_find_mkdir(folder, fnew_path->name))){
+    to_folderid=mkdir->folderid;
+    if (mkdir->folderid>0){
+      res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
+      psync_sql_bind_uint(res, 1, mkdir->folderid);
+      if ((row=psync_sql_fetch_rowint(res)))
+        targetperms=row[0]&fnew_path->permissions;
+      psync_sql_free_result(res);
+      if (!row)
+        goto err_enoent;
+    }
+    else
+      targetperms=fnew_path->permissions;
+    new_name=NULL;
+  }
+  else if (fnew_path->folderid>=0){
+    res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fnew_path->folderid);
+    psync_sql_bind_string(res, 2, fnew_path->name);
+    row=psync_sql_fetch_rowint(res);
+    if (row && (!folder || !psync_fstask_find_rmdir(folder, fnew_path->name))){
+      to_folderid=row[0];
+      targetperms=row[1]&fnew_path->permissions;
+      new_name=NULL;
+    }
+    else{
+      to_folderid=fnew_path->folderid;
+      targetperms=fnew_path->permissions;
+      new_name=fnew_path->name;
+    }
+    psync_sql_free_result(res);
+  }
+  else{
+    to_folderid=fnew_path->folderid;
+    targetperms=fnew_path->permissions;
+    new_name=fnew_path->name;
+  }
+  psync_fstask_release_folder_tasks_locked(folder);
+move_to_root:
+  folder=psync_fstask_get_folder_tasks_locked(fold_path->folderid);
+  if (folder){
+    if ((mkdir=psync_fstask_find_mkdir(folder, fold_path->name))){
+      ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      goto finish;
+    }
+    else if ((creat=psync_fstask_find_creat(folder, fold_path->name))){
+      ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      goto finish;
+    }
+  }
+  if (!folder || !psync_fstask_find_rmdir(folder, fold_path->name)){
+    // even if we don't use permissions, it is probably better to use same query as above
+    res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fold_path->folderid);
+    psync_sql_bind_string(res, 2, fold_path->name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      fid=row[0];
+      psync_sql_free_result(res);
+      ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      goto finish;
+    }
+    psync_sql_free_result(res);
+  }
+  if (!folder || !psync_fstask_find_unlink(folder, fold_path->name)){
+    res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fold_path->folderid);
+    psync_sql_bind_string(res, 2, fold_path->name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      fid=row[0];
+      psync_sql_free_result(res);
+      ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      goto finish;
+    }
+    psync_sql_free_result(res);
+  }
+  goto err_enoent;
+finish:
+  if (folder)
+    psync_fstask_release_folder_tasks_locked(folder);
+  psync_sql_unlock();
+  psync_free(fold_path);
+  psync_free(fnew_path);
+  return ret;
+err_enoent:
+  if (folder)
+    psync_fstask_release_folder_tasks_locked(folder);
+  psync_sql_unlock();
+  psync_free(fold_path);
+  psync_free(fnew_path);
+  debug(D_NOTICE, "returning ENOENT, folder not found");
+  return -ENOENT;
+}
+
 static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
   uint64_t q, uq;
   debug(D_NOTICE, "statfs %s", path);
@@ -959,6 +1103,7 @@ int psync_fs_start(){
   psync_oper.mkdir    = psync_fs_mkdir;
   psync_oper.rmdir    = psync_fs_rmdir;
   psync_oper.unlink   = psync_fs_unlink;
+  psync_oper.rename   = psync_fs_rename;
   psync_oper.statfs   = psync_fs_statfs;
   psync_oper.chmod    = psync_fs_chmod;
   psync_oper.utimens  = psync_fs_utimens;

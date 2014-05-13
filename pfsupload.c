@@ -293,7 +293,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   psync_ops_create_file_in_db(meta);
   psync_pagecache_creat_to_pagecache(taskid, psync_find_result(meta, "hash", PARAM_NUM)->num);
   psync_fstask_file_created(folderid, taskid, name);
-  sql=psync_sql_prep_statement("UPDATE fstask SET depend=0 WHERE depend=?");
+  sql=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_run_free(sql);
   sql=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
@@ -338,8 +338,11 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
     debug(D_WARNING, "could not open local file %s, skipping task", filename);
     return 0;
   }
+  //TODO: check if file exists on the remote
   if (uploadid && memcmp(fileparthash, uploadhash, PSYNC_HASH_DIGEST_HEXLEN))
     uploadid=0;
+  else if (usize)
+    debug(D_NOTICE, "resuming from position %lu", usize);
   api=psync_apipool_get();
   if (unlikely(!api))
     return -1;
@@ -607,7 +610,7 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
   psync_sql_res *del, *dep, *fol, *fil;
   psync_sql_start_transaction();
   del=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
-  dep=psync_sql_prep_statement("UPDATE fstask SET depend=0 WHERE depend=?");
+  dep=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
   fol=psync_sql_prep_statement("UPDATE fstask SET folderid=? WHERE folderid=?");
   fil=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_list_for_each_element (task, tasks, fsupload_task_t, list)
@@ -695,7 +698,8 @@ static void psync_fsupload_check_tasks(){
   psync_list tasks;
   size_t size;
   psync_list_init(&tasks);
-  res=psync_sql_query("SELECT id, type, folderid, fileid, text1, text2, int1, int2 FROM fstask WHERE depend=0 AND status=0 ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
+  res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2 FROM fstask f LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
+                      " WHERE d.fstaskid IS NULL AND status=0 ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   while ((row=psync_sql_fetch_row(res))){
     size=sizeof(fsupload_task_t);
     if (row[4].type==PSYNC_TSTRING)

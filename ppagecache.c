@@ -350,7 +350,7 @@ static void clean_cache(){
   debug(D_NOTICE, "finished cleaning cache, free cache pages %u", (unsigned)free_db_pages);
 }
 
-static int flush_pages(){
+static int flush_pages(int nosleep){
   static time_t lastflush=0;
   psync_sql_res *res;
   psync_uint_row row;
@@ -389,13 +389,16 @@ break2:
     }
     i=0;
     debug(D_NOTICE, "cache data written");
-    pthread_mutex_lock(&cache_mutex);
-    while (cache_pages_free>=CACHE_PAGES*5/100 && i++<200){
-      pthread_mutex_unlock(&cache_mutex);
-      psync_milisleep(10);
+    /* if we can afford it, wait a while before calling fsync() as at least on Linux this blocks reads from the same file until it returns */
+    if (!nosleep){
       pthread_mutex_lock(&cache_mutex);
+      while (cache_pages_free>=CACHE_PAGES*5/100 && i++<200){
+        pthread_mutex_unlock(&cache_mutex);
+        psync_milisleep(10);
+        pthread_mutex_lock(&cache_mutex);
+      }
+      pthread_mutex_unlock(&cache_mutex);
     }
-    pthread_mutex_unlock(&cache_mutex);
     if (psync_file_sync(readcache)){
       debug(D_ERROR, "flush of cache file failed");
       pthread_mutex_unlock(&flush_cache_mutex);
@@ -474,14 +477,14 @@ break2:
 }
 
 int psync_pagecache_flush(){
-  if (flush_pages())
+  if (flush_pages(1))
     return -EIO;
   else
     return 0;
 }
 
 static void flush_pages_noret(){
-  flush_pages();
+  flush_pages(0);
 }
 
 static void psync_pagecache_flush_timer(psync_timer_t timer, void *ptr){
@@ -496,7 +499,7 @@ static void mark_pagecache_used(uint64_t pagecacheid){
   h=pagecacheid%DB_CACHE_UPDATE_HASH;
   tm=psync_timer_time();
   if (cachepages_to_update_cnt>DB_CACHE_UPDATE_HASH/2)
-    flush_pages();
+    flush_pages(1);
   pthread_mutex_lock(&cache_mutex);
   while (1){
     if (cachepages_to_update[h].pagecacheid==0){
@@ -698,14 +701,14 @@ static psync_cache_page_t *psync_pagecache_get_free_page(){
   else{
     debug(D_NOTICE, "no free pages, flushing cache");
     pthread_mutex_unlock(&cache_mutex);
-    flush_pages();
+    flush_pages(1);
     pthread_mutex_lock(&cache_mutex);
     while (unlikely(psync_list_isempty(&free_pages))){
       pthread_mutex_unlock(&cache_mutex);
       debug(D_NOTICE, "no free pages after flush, sleeping");
       psync_milisleep(200);
+      flush_pages(1);
       pthread_mutex_lock(&cache_mutex);
-      flush_pages();
     }
     page=psync_list_remove_head_element(&free_pages, psync_cache_page_t, list);
   }

@@ -75,7 +75,7 @@ pstatus_t psync_status;
 int psync_do_run=1;
 PSYNC_THREAD uint32_t psync_error=0;
 
-static pthread_mutex_t psync_db_checpoint_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t psync_db_checkpoint_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 
 char *psync_strdup(const char *str){
@@ -140,20 +140,24 @@ void psync_sql_err_callback(void *ptr, int code, const char *msg){
 
 static void psync_sql_wal_checkpoint(){
   int code;
-  if (pthread_mutex_trylock(&psync_db_checpoint_mutex)){
+  if (pthread_mutex_trylock(&psync_db_checkpoint_mutex)){
     debug(D_NOTICE, "skipping checkpoint");
     return;
   }
   debug(D_NOTICE, "checkpointing database");
   code=sqlite3_wal_checkpoint(psync_db, NULL);
-  pthread_mutex_unlock(&psync_db_checpoint_mutex);
+  while (code==SQLITE_LOCKED){
+    psync_milisleep(2);
+    code=sqlite3_wal_checkpoint(psync_db, NULL);
+  }
+  pthread_mutex_unlock(&psync_db_checkpoint_mutex);
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
 }
 
 static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int numpages){
   if (numpages>=PSYNC_DB_CHECKPOINT_AT_PAGES)
-    psync_run_thread("checkpoint", psync_sql_wal_checkpoint);
+    psync_run_thread("checkpoint charlie", psync_sql_wal_checkpoint);
   return SQLITE_OK;
 }
 
@@ -192,9 +196,9 @@ void psync_sql_unlock(){
 
 int psync_sql_sync(){
   int code;
-  pthread_mutex_lock(&psync_db_checpoint_mutex);
+  pthread_mutex_lock(&psync_db_checkpoint_mutex);
   code=sqlite3_wal_checkpoint(psync_db, NULL);
-  pthread_mutex_unlock(&psync_db_checpoint_mutex);
+  pthread_mutex_unlock(&psync_db_checkpoint_mutex);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
     return -1;

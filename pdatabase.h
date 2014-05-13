@@ -100,11 +100,12 @@ CREATE TABLE IF NOT EXISTS pagecache (id INTEGER PRIMARY KEY, hash INTEGER, page
   lastuse INTEGER, usecnt INTEGER, size INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS kpagecachehashpageid ON pagecache(hash, pageid);\
 CREATE INDEX IF NOT EXISTS kpagecachetype ON pagecache(type);\
-CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, depend INTEGER, folderid INTEGER, fileid INTEGER,\
+CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, folderid INTEGER, fileid INTEGER,\
   text1 TEXT, text2 TEXT, int1 INTEGER, int2 INTEGER);\
 CREATE INDEX IF NOT EXISTS kfstaskfolderid ON fstask(folderid);\
 CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
-CREATE INDEX IF NOT EXISTS kfstaskdepend ON fstask(depend);\
+CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER, dependfstaskid INTEGER, PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
+CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
