@@ -1002,6 +1002,43 @@ void *psync_fs_init(struct fuse_conn_info *conn){
 
 static struct fuse_operations psync_oper;
 
+#ifdef P_OS_WINDOWS
+
+static int is_mountable(char where){
+    DWORD drives = GetLogicalDrives();
+    where = tolower(where) - 'a';
+    return !(drives & (1<<where));
+}
+
+static int get_first_free_drive(){
+    DWORD drives = GetLogicalDrives();
+    int pos = 3;
+    while (pos < 26 && drives & (1<<pos))
+        pos ++;
+    return pos < 26;
+}
+
+static char *psync_fuse_get_mountpoint(){
+  const char *stored;
+  char *mp = (char*)psync_malloc(3);
+  mp[0] = 'P';
+  mp[1] = ':';
+  mp[2] = '\0';
+  stored = psync_setting_get_string(_PS(fsroot));
+  if (stored[0] && stored[1] && is_mountable(stored[0])){
+      mp[0] = stored[0];
+      goto ready;
+  }
+  if (is_mountable('P')){
+      goto ready;
+  }
+  mp[0] = 'A' + get_first_free_drive();
+ready:
+  return mp;
+}
+
+#else
+
 static char *psync_fuse_get_mountpoint(){
   psync_stat_t st;
   char *mp;
@@ -1012,6 +1049,8 @@ static char *psync_fuse_get_mountpoint(){
   }
   return mp;
 }
+
+#endif
 
 static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");

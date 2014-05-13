@@ -115,7 +115,7 @@
 #define PSYNC_PACKED_STRUCT struct
 #endif 
 
-#if _MSC_VER >= 1500 && _MSC_VER < 1700
+#if _MSC_VER >= 1500 && _MSC_VER < 1600
 #define inline __inline
 #define restrict __restrict
 #elif __GNUC__ >= 3
