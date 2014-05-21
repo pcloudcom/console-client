@@ -150,7 +150,11 @@ typedef unsigned long psync_uint_t;
 #endif
 
 #define psync_stat_inode(s) ((s)->st_ino)
+#if defined(P_OS_MACOSX)
+#define psync_stat_device(s) ((s)->st_dev>>24)
+#else
 #define psync_stat_device(s) ((s)->st_dev)
+#endif
 
 typedef struct stat psync_stat_t;
 
