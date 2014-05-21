@@ -145,7 +145,8 @@ psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_ctr_encoder_decode
 
 void psync_crypto_aes256_ctr_encoder_decoder_free(psync_crypto_aes256_ctr_encoder_decoder_t enc){
   psync_ssl_aes256_free_encoder(enc->encoder);
-  memset(enc->iv, 0, PSYNC_AES256_BLOCK_SIZE);
+  psync_ssl_memclean(enc->iv, PSYNC_AES256_BLOCK_SIZE);
+  psync_free(enc);
 }
 
 void psync_crypto_aes256_ctr_encode_decode_inplace(psync_crypto_aes256_ctr_encoder_decoder_t enc, void *data, size_t datalen, uint64_t dataoffset){
@@ -351,7 +352,8 @@ psync_crypto_aes256_text_encoder_t psync_crypto_aes256_text_encoder_create(psync
 
 void psync_crypto_aes256_text_encoder_free(psync_crypto_aes256_text_encoder_t enc){
   psync_ssl_aes256_free_encoder(enc->encoder);
-  memset(enc->iv, 0, PSYNC_AES256_BLOCK_SIZE);
+  psync_ssl_memclean(enc->iv, PSYNC_AES256_BLOCK_SIZE);
+  psync_free(enc);
 }
 
 psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync_symmetric_key_t key){
@@ -370,7 +372,8 @@ psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync
 
 void psync_crypto_aes256_text_decoder_free(psync_crypto_aes256_text_decoder_t enc){
   psync_ssl_aes256_free_decoder(enc->encoder);
-  memset(enc->iv, 0, PSYNC_AES256_BLOCK_SIZE);
+  psync_ssl_memclean(enc->iv, PSYNC_AES256_BLOCK_SIZE);
+  psync_free(enc);
 }
 
 static void memcpy_const(unsigned char *dst, const unsigned char *src, uint32_t copycnt, uint32_t constcnt){

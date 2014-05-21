@@ -68,7 +68,7 @@ typedef struct _binresult{
   uint32_t length;
   union {
     uint64_t num;
-    const char *str;
+    const char str[8];
     struct _binresult **array;
     struct _hashpair *hash;
   };
