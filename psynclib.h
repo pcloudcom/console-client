@@ -36,6 +36,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+#include <lua5.2/llimits.h>
 
 typedef uint64_t psync_folderid_t;
 typedef uint64_t psync_fileid_t;
@@ -281,6 +282,13 @@ typedef struct {
   size_t sharecnt;
   psync_share_t shares[];
 } psync_share_list_t;
+
+typedef struct {
+  const char *url;
+  const char *notes;
+  const char *versionstr;
+  unsigned long version;
+} psync_new_version_t;
 
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
@@ -535,6 +543,11 @@ const char *psync_get_auth_string();
  *                          * - matches any number of characters (even zero)
  *                          ? - matches exactly one character
  * p2psync (bool) - use or not peer to peer downloads
+ * 
+ * fscachesize (uint) - size of filesystem cache, in bytes, sane minimum of few tens of Mb or even hundreds is advised
+ * fsroot (string) - where to mount the filesystem
+ * autostartfs (bool) - if set starts the fs on app startup
+ * 
  *
  * The following functions operate on settings. The value of psync_get_string_setting does not have to be freed, however if you are
  * going to store it rather than use it right away, you should strdup() it.
@@ -618,12 +631,31 @@ void psync_network_exception();
 psync_sharerequest_list_t *psync_list_sharerequests(int incoming);
 psync_share_list_t *psync_list_shares(int incoming);
 
+/* The following function check for new version of the application. Return NULL if there is no new
+ * version or psync_new_version_t structure if a new version is available. Returned value is to be
+ * freed with a single free(). The os parameter is one of the following:
+ * WIN
+ * WIN_XP
+ * MAC
+ * LINUX
+ * 
+ * String versions are in format "a.b.c", equivalen numeric version is a*10000+b*100+c
+ * 
+ */
+
+psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion);
+psync_new_version_t *psync_check_new_version(const char *os, unsigned long currentversion);
 
 /* Filesystem functions.
+ * 
+ * psync_fs_start() - starts the filesystem
+ * psync_fs_isstarted() - returns 1 if the filesystem is started and 0 otherwise
+ * psync_fs_stop() - stops the filesystem
  * 
  */
 
 int psync_fs_start();
+int psync_fs_isstarted();
 void psync_fs_stop();
 
 #ifdef __cplusplus
