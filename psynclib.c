@@ -167,6 +167,7 @@ void psync_destroy(){
   psync_send_status_update();
   psync_timer_wake();
   psync_timer_notify_exception();
+  psync_sql_sync();
   psync_milisleep(20);
   psync_sql_lock();
   psync_cache_clean_all();
@@ -396,6 +397,7 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
   psync_sql_bind_string(res, 2, remotepath);
   psync_sql_bind_uint(res, 3, synctype);
   psync_sql_run_free(res);
+  psync_sql_sync();
   if (psync_status_get(PSTATUS_TYPE_ONLINE)==PSTATUS_ONLINE_ONLINE)
     psync_run_thread("check delayed syncs", psync_syncer_check_delayed_syncs);
   return 0;
@@ -942,3 +944,64 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_list_bulder_add_sql(builder, res, create_share);
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
 }
+
+psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion){
+  unsigned long cv, cm;
+  cv=cm=0;
+  while (1){
+    if (*currentversion=='.'){
+      cv=(cv+cm)*100;
+      cm=0;
+    }
+    else if (*currentversion==0)
+      return psync_check_new_version(os, cv+cm);
+    else if (*currentversion>='0' && *currentversion<='9')
+      cm=cm*10+*currentversion-'0';
+    else
+      debug(D_WARNING, "invalid characters in version string: %s", currentversion);
+    currentversion++;
+  }
+}
+
+psync_new_version_t *psync_check_new_version(const char *os, unsigned long currentversion){
+  binparam params[]={P_STR("os", os), P_NUM("version", currentversion)};
+  psync_new_version_t *ver;
+  const char *url, *notes, *versionstr;
+  size_t lurl, lnotes, lversion;
+  const binresult *cres;
+  binresult *res;
+  char *ptr;
+  int ret;
+  ret=run_command_get_res("getlastversion", params, NULL, &res);
+  if (ret){
+    debug(D_WARNING, "getlastversion returned %d", ret);
+    return NULL;
+  }
+  if (!psync_find_result(res, "newversion", PARAM_BOOL)->num){
+    psync_free(res);
+    return NULL;
+  }
+  cres=psync_find_result(res, "url", PARAM_STR);
+  url=cres->str;
+  lurl=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  cres=psync_find_result(res, "notes", PARAM_STR);
+  notes=cres->str;
+  lnotes=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  cres=psync_find_result(res, "versionstr", PARAM_STR);
+  versionstr=cres->str;
+  lversion=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  ver=(psync_new_version_t *)psync_malloc(sizeof(psync_new_version_t)+lurl+lnotes+lversion);
+  ptr=(char *)(ver+1);
+  memcpy(ptr, url, lurl);
+  ver->url=ptr;
+  ptr+=lurl;
+  memcpy(ptr, notes, lnotes);
+  ver->notes=ptr;
+  ptr+=lnotes;
+  memcpy(ptr, versionstr, lversion);
+  ver->versionstr=ptr;
+  ver->version=psync_find_result(res, "version", PARAM_NUM)->num;
+  psync_free(res);
+  return ver;
+}
+
