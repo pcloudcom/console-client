@@ -495,8 +495,8 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   int64_t i64;
   pthread_t threadid;
   unsigned char lsc[100][PSYNC_LHASH_DIGEST_LEN];
-  debug(D_NOTICE, "in");
 #if defined(P_OS_POSIX)
+  debug(D_NOTICE, "in");
   struct utsname un;
   struct statvfs stfs;
   char **env;
@@ -534,6 +534,7 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   DWORD ibc;
   HCRYPTPROV cprov;
   HANDLE pr;
+  debug(D_NOTICE, "in");
   psync_nanotime(&tm);
   psync_lhash_init(&hctx);
   psync_lhash_update(&hctx, &tm, sizeof(tm));
