@@ -63,6 +63,12 @@ int psync_ssl_init(){
   return 0;
 }
 
+void psync_ssl_memclean(void *ptr, size_t len){
+  volatile unsigned char *c=(volatile unsigned char *)ptr;
+  while (len--)
+    *c++=0;
+}
+
 static OSStatus psync_myread(SSLConnectionRef conn, void *data, size_t *len){
   psync_socket_t sock=(psync_socket_t)conn;
   size_t llen=*len;

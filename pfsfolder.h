@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2014 Anton Titov.
+ * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,14 +25,25 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_DIFF_H
-#define _PSYNC_DIFF_H
+#ifndef _PSYNC_FSFOLDER_H
+#define _PSYNC_FSFOLDER_H
 
-#include "papi.h"
+#include <stdint.h>
+#include <time.h>
 
-void psync_diff_init();
-void psync_diff_lock();
-void psync_diff_unlock();
-void psync_diff_create_file(const binresult *meta);
+typedef int64_t psync_fsfolderid_t;
+typedef int64_t psync_fsfileid_t;
+
+#define PSYNC_INVALID_FSFOLDERID INT64_MIN
+
+typedef struct {
+  psync_fsfolderid_t folderid;
+  const char *name;
+  uint32_t permissions;
+} psync_fspath_t;
+
+psync_fspath_t *psync_fsfolder_resolve_path(const char *path);
+psync_fsfolderid_t psync_fsfolderid_by_path(const char *path);
+
 
 #endif

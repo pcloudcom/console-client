@@ -46,7 +46,7 @@
 
 #define PSYNC_P2P_RSA_SIZE 4096
 
-#define PSYNC_DIFF_LIMIT   25000
+#define PSYNC_DIFF_LIMIT   50000
 
 #define PSYNC_SOCK_CONNECT_TIMEOUT 20
 #define PSYNC_SOCK_READ_TIMEOUT    60
@@ -56,8 +56,12 @@
 
 #define PSYNC_STACK_SIZE 64*1024
 
+#define PSYNC_QUERY_CACHE_SEC 600
+#define PSYNC_QUERY_MAX_CNT 4
+
 #define PSYNC_MAX_PARALLEL_DOWNLOADS 32
 #define PSYNC_MAX_PARALLEL_UPLOADS 32
+#define PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN 128
 #define PSYNC_START_NEW_DOWNLOADS_TRESHOLD (512*1024)
 #define PSYNC_START_NEW_UPLOADS_TRESHOLD (256*1024)
 #define PSYNC_MIN_SIZE_FOR_CHECKSUMS (64*1024)
@@ -83,12 +87,24 @@
 
 #define PSYNC_APIPOOL_MAXIDLE    8
 #define PSYNC_APIPOOL_MAXACTIVE  32
-#define PSYNC_APIPOOL_MAXIDLESEC 120
+#define PSYNC_APIPOOL_MAXIDLESEC 600
 
-#define PSYNC_MAX_IDLE_HTTP_CONNS 3
+#define PSYNC_MAX_IDLE_HTTP_CONNS 16
 
 #define PSYNC_DEFAULT_POSIX_DBNAME ".pclouddb"
 #define PSYNC_DEFAULT_WINDOWS_DBNAME "pcloud.db"
+
+#define PSYNC_DEFAULT_DB_NAME "data.db"
+#define PSYNC_DEFAULT_POSIX_DIR ".pcloud"
+#define PSYNC_DEFAULT_WINDOWS_DIR "pCloud"
+
+#define PSYNC_DB_CHECKPOINT_AT_PAGES 2000
+
+#define PSYNC_DEFAULT_CACHE_FOLDER "Cache"
+#define PSYNC_DEFAULT_READ_CACHE_FILE "cached"
+#define PSYNC_DEFAULT_WRITE_CACHE_FOLDER "ToUpload"
+
+#define PSYNC_DEFAULT_FS_FOLDER "pCloudDrive"
 
 #define PSYNC_DEFAULT_POSIX_FOLDER_MODE 0755
 #define PSYNC_DEFAULT_POSIX_FILE_MODE 0644
@@ -122,7 +138,7 @@
 
 #define PSYNC_CHECKSUM "sha1"
 
-#define PSYNC_HASH_BLOCK_SIZE    64
+#define PSYNC_HASH_BLOCK_SIZE    PSYNC_SHA1_BLOCK_LEN
 #define PSYNC_HASH_DIGEST_LEN    PSYNC_SHA1_DIGEST_LEN
 #define PSYNC_HASH_DIGEST_HEXLEN PSYNC_SHA1_DIGEST_HEXLEN
 #define psync_hash_ctx           psync_sha1_ctx
@@ -130,6 +146,16 @@
 #define psync_hash_init          psync_sha1_init
 #define psync_hash_update        psync_sha1_update
 #define psync_hash_final         psync_sha1_final
+
+#define PSYNC_LHASH_BLOCK_SIZE    PSYNC_SHA512_BLOCK_LEN
+#define PSYNC_LHASH_DIGEST_LEN    PSYNC_SHA512_DIGEST_LEN
+#define PSYNC_LHASH_DIGEST_HEXLEN PSYNC_SHA512_DIGEST_HEXLEN
+#define psync_lhash_ctx           psync_sha512_ctx
+#define psync_lhash               psync_sha512
+#define psync_lhash_init          psync_sha512_init
+#define psync_lhash_update        psync_sha512_update
+#define psync_lhash_final         psync_sha512_final
+
 
 #define PSYNC_UPL_AUTO_SHAPER_INITIAL (100*1024)
 #define PSYNC_UPL_AUTO_SHAPER_MIN     (10*1024)
@@ -139,12 +165,23 @@
 
 #define PSYNC_DEFAULT_SEND_BUFF (512*1024)
 
+#define PSYNC_FS_PAGE_SIZE 4096
+#define PSYNC_FS_MEMORY_CACHE (16*1024*1024)
+#define PSYNC_FS_DISK_FLUSH_SEC 15
+#define PSYNC_FS_FILESTREAMS_CNT 12
+#define PSYNC_FS_MIN_READAHEAD_START (128*1024)
+#define PSYNC_FS_MIN_READAHEAD_RAND (16*1024)
+#define PSYNC_FS_MAX_READAHEAD (16*1024*1024)
+#define PSYNC_FS_DEFAULT_CACHE_SIZE ((uint64_t)5*1024*1024*1024)
+#define PSYNC_FS_DIRECT_UPLOAD_LIMIT (256*1024)
+
 /* defaults for database settings */
 #define PSYNC_USE_SSL_DEFAULT 1
 #define PSYNC_DWL_SHAPER_DEFAULT -1
 #define PSYNC_UPL_SHAPER_DEFAULT -1
 #define PSYNC_MIN_LOCAL_FREE_SPACE (512*1024*1024)
 #define PSYNC_P2P_SYNC_DEFAULT 1
+#define PSYNC_AUTOSTARTFS_DEFAULT 1
 #define PSYNC_IGNORE_PATTERNS_DEFAULT ".DS_Store;\
 .DS_Store?;\
 .AppleDouble;\
@@ -161,8 +198,7 @@ hiberfil.sys;\
 pagefile.sys;\
 $RECYCLE.BIN;\
 *.part;\
-.pclouddb*;\
-pcloud.db*"
+.pcloud"
 
 #define _PS(s) PSYNC_SETTING_##s
 
@@ -174,6 +210,9 @@ pcloud.db*"
 #define PSYNC_SETTING_minlocalfreespace 5
 #define PSYNC_SETTING_p2psync           6
 #define PSYNC_SETTING_fsroot            7
+#define PSYNC_SETTING_autostartfs       8
+#define PSYNC_SETTING_fscachesize       9
+#define PSYNC_SETTING_fscachepath      10
 
 typedef int psync_settingid_t;
 

@@ -877,27 +877,6 @@ static void delete_uploadids(psync_fileid_t localfileid){
     psync_sql_run_free(res);
   }
 }
-
-static int get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, uint64_t *usize){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid)};
-  psync_socket *api;
-  binresult *res;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    return PSYNC_NET_TEMPFAIL;
-  res=send_command(api, "upload_info", params);
-  psync_apipool_release(api);
-  if (unlikely(!res))
-    return PSYNC_NET_TEMPFAIL;
-  if (psync_find_result(res, "result", PARAM_NUM)->num){
-    psync_free(res);
-    return PSYNC_NET_PERMFAIL;
-  }
-  *usize=psync_find_result(res, "size", PARAM_NUM)->num;
-  memcpy(uhash, psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR)->str, PSYNC_HASH_DIGEST_HEXLEN);
-  psync_free(res);
-  return PSYNC_NET_OK;
-}
   
 static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, const char *name, upload_list_t *upload){
   psync_sql_res *res;
@@ -934,7 +913,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   psync_sql_free_result(res);
   ufsize=0;
   if (uploadid){
-    ret=get_upload_checksum(uploadid, uhashhex, &ufsize);
+    ret=psync_get_upload_checksum(uploadid, uhashhex, &ufsize);
     if (ret==PSYNC_NET_TEMPFAIL){
       psync_unlock_file(lock);
       psync_free(localpath);
@@ -1121,7 +1100,7 @@ static int task_run_uploadfile(uint64_t taskid, psync_syncid_t syncid, psync_fol
   }
   else{
     psync_status_send_update();
-    psync_run_thread1(task_run_upload_file_thread, ut);
+    psync_run_thread1("upload file", task_run_upload_file_thread, ut);
   }
   return -1;
 }
@@ -1198,11 +1177,9 @@ static void upload_thread(){
                          psync_get_number_or_null(row[5]),                          
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
-        psync_sql_sync_off();
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, taskid);
         psync_sql_run_free(res);
-        psync_sql_sync_on();
       }
       else if (type!=PSYNC_UPLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
@@ -1227,7 +1204,7 @@ void psync_wake_upload(){
 
 void psync_upload_init(){
   psync_timer_exception_handler(psync_wake_upload);
-  psync_run_thread(upload_thread);
+  psync_run_thread("upload main", upload_thread);
 }
 
 void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid){

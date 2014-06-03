@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2014 Anton Titov.
+ * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,14 +25,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_DIFF_H
-#define _PSYNC_DIFF_H
+#ifndef _PSYNC_PAGECACHE_H
+#define _PSYNC_PAGECACHE_H
 
-#include "papi.h"
+#include "pfs.h"
 
-void psync_diff_init();
-void psync_diff_lock();
-void psync_diff_unlock();
-void psync_diff_create_file(const binresult *meta);
+void psync_pagecache_init();
+int psync_pagecache_flush();
+int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
+int psync_pagecache_read_unmodified(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
+void psync_pagecache_creat_to_pagecache(uint64_t taskid, uint64_t hash);
 
 #endif

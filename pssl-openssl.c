@@ -67,7 +67,7 @@ int psync_ssl_init(){
   BIO *bio;
   X509 *cert;
   psync_uint_t i;
-  unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+  unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
   SSL_library_init();
   OpenSSL_add_all_algorithms();
   OpenSSL_add_all_ciphers();
@@ -87,12 +87,16 @@ int psync_ssl_init(){
     }
     do {
       psync_get_random_seed(seed, NULL, 0);
-      RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+      RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
     } while (!RAND_status());
     return 0;
   }
   else
     return -1;
+}
+
+void psync_ssl_memclean(void *ptr, size_t len){
+  OPENSSL_cleanse(ptr, len);
 }
 
 static void psync_set_ssl_error(int err){
@@ -223,19 +227,19 @@ void psync_ssl_rand_strong(unsigned char *buf, int num){
   static int seeds=0;
   int ret;
   if (seeds<5){
-    unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+    unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
     psync_get_random_seed(seed, NULL, 0);
-    RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+    RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
     seeds++;
   }
   ret=RAND_bytes(buf, num);
   if (unlikely(ret==0)){
-    unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+    unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
     psync_uint_t cnt;
     cnt=0;
     while (ret==0 && cnt++<20){
       psync_get_random_seed(seed, NULL, 0);
-      RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+      RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
       ret=RAND_bytes(buf, num);
     }
   }
@@ -259,9 +263,9 @@ void psync_ssl_rand_weak(unsigned char *buf, int num){
 psync_rsa_t psync_ssl_gen_rsa(int bits){
   RSA *rsa;
   BIGNUM *bn;
-  unsigned char seed[PSYNC_HASH_DIGEST_LEN];
+  unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
   psync_get_random_seed(seed, seed, sizeof(seed));
-  RAND_seed(seed, PSYNC_HASH_DIGEST_LEN);
+  RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
   rsa=RSA_new();
   if (unlikely_log(!rsa))
     goto err0;
@@ -389,7 +393,7 @@ psync_aes256_encoder psync_ssl_aes256_create_encoder(psync_symmetric_key_t key){
 }
 
 void psync_ssl_aes256_free_encoder(psync_aes256_encoder aes){
-  memset(aes, 0, sizeof(AES_KEY));
+  psync_ssl_memclean(aes, sizeof(AES_KEY));
   psync_free(aes);
 }
 
@@ -402,6 +406,6 @@ psync_aes256_encoder psync_ssl_aes256_create_decoder(psync_symmetric_key_t key){
 }
 
 void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
-  memset(aes, 0, sizeof(AES_KEY));
+  psync_ssl_memclean(aes, sizeof(AES_KEY));
   psync_free(aes);
 }

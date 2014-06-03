@@ -93,6 +93,8 @@ int psync_init(){
       return 0;
     }
   }
+  psync_cache_init();
+  psync_timer_init();
   psync_compat_init();
   if (!psync_database){
     psync_database=psync_get_default_database_path();
@@ -113,8 +115,6 @@ int psync_init(){
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_SSL_INIT_FAILED);
   }
-  psync_cache_init();
-  psync_timer_init();
   psync_libs_init();
   psync_settings_init();
   psync_status_init();
@@ -153,6 +153,8 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_netlibs_init();
   psync_localscan_init();
   psync_p2p_init();
+  if (psync_setting_get_bool(_PS(autostartfs)))
+    psync_fs_start();
 }
 
 uint32_t psync_download_state(){
@@ -161,11 +163,14 @@ uint32_t psync_download_state(){
 
 void psync_destroy(){
   psync_do_run=0;
+  psync_fs_stop();
   psync_send_status_update();
   psync_timer_wake();
   psync_timer_notify_exception();
+  psync_sql_sync();
   psync_milisleep(20);
   psync_sql_lock();
+  psync_cache_clean_all();
   psync_sql_close();
 }
 
@@ -368,6 +373,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   psync_sql_free_result(res);
   if (ret==PSYNC_INVALID_SYNCID)
     return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
+  psync_sql_sync();
   psync_syncer_new(ret);
   return ret;
 }
@@ -391,8 +397,9 @@ int psync_add_sync_by_path_delayed(const char *localpath, const char *remotepath
   psync_sql_bind_string(res, 2, remotepath);
   psync_sql_bind_uint(res, 3, synctype);
   psync_sql_run_free(res);
+  psync_sql_sync();
   if (psync_status_get(PSTATUS_TYPE_ONLINE)==PSTATUS_ONLINE_ONLINE)
-    psync_run_thread(psync_syncer_check_delayed_syncs);
+    psync_run_thread("check delayed syncs", psync_syncer_check_delayed_syncs);
   return 0;
 }
 
@@ -480,6 +487,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   psync_localnotify_del_sync(syncid);
   psync_stop_sync_download(syncid);
   psync_stop_sync_upload(syncid);
+  psync_sql_sync();
   psync_syncer_new(syncid);
   return 0;
 }
@@ -532,6 +540,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_stop_sync_upload(syncid);
     psync_localnotify_del_sync(syncid);
     psync_restart_localscan();
+    psync_sql_sync();
     return 0;
   }
 }
@@ -718,7 +727,7 @@ int psync_change_password(const char *currentpass, const char *newpass, char **e
 }
 
 int psync_create_remote_folder_by_path(const char *path, char **err){
-  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", path)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", path), P_STR("timeformat", "timestamp")};
   binresult *res;
   int ret;
   ret=run_command_get_res("createfolder", params, err, &res);
@@ -730,7 +739,7 @@ int psync_create_remote_folder_by_path(const char *path, char **err){
 }
 
 int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name, char **err){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name), P_STR("timeformat", "timestamp")};
   binresult *res;
   int ret;
   ret=run_command_get_res("createfolder", params, err, &res);
@@ -935,3 +944,64 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_list_bulder_add_sql(builder, res, create_share);
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
 }
+
+psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion){
+  unsigned long cv, cm;
+  cv=cm=0;
+  while (1){
+    if (*currentversion=='.'){
+      cv=(cv+cm)*100;
+      cm=0;
+    }
+    else if (*currentversion==0)
+      return psync_check_new_version(os, cv+cm);
+    else if (*currentversion>='0' && *currentversion<='9')
+      cm=cm*10+*currentversion-'0';
+    else
+      debug(D_WARNING, "invalid characters in version string: %s", currentversion);
+    currentversion++;
+  }
+}
+
+psync_new_version_t *psync_check_new_version(const char *os, unsigned long currentversion){
+  binparam params[]={P_STR("os", os), P_NUM("version", currentversion)};
+  psync_new_version_t *ver;
+  const char *url, *notes, *versionstr;
+  size_t lurl, lnotes, lversion;
+  const binresult *cres;
+  binresult *res;
+  char *ptr;
+  int ret;
+  ret=run_command_get_res("getlastversion", params, NULL, &res);
+  if (ret){
+    debug(D_WARNING, "getlastversion returned %d", ret);
+    return NULL;
+  }
+  if (!psync_find_result(res, "newversion", PARAM_BOOL)->num){
+    psync_free(res);
+    return NULL;
+  }
+  cres=psync_find_result(res, "url", PARAM_STR);
+  url=cres->str;
+  lurl=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  cres=psync_find_result(res, "notes", PARAM_STR);
+  notes=cres->str;
+  lnotes=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  cres=psync_find_result(res, "versionstr", PARAM_STR);
+  versionstr=cres->str;
+  lversion=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  ver=(psync_new_version_t *)psync_malloc(sizeof(psync_new_version_t)+lurl+lnotes+lversion);
+  ptr=(char *)(ver+1);
+  memcpy(ptr, url, lurl);
+  ver->url=ptr;
+  ptr+=lurl;
+  memcpy(ptr, notes, lnotes);
+  ver->notes=ptr;
+  ptr+=lnotes;
+  memcpy(ptr, versionstr, lversion);
+  ver->versionstr=ptr;
+  ver->version=psync_find_result(res, "version", PARAM_NUM)->num;
+  psync_free(res);
+  return ver;
+}
+

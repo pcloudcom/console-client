@@ -56,7 +56,7 @@
 #if defined(__GNUC__) || __has_builtin(__builtin_prefetch)
 #define psync_prefetch(expr) __builtin_prefetch(expr)
 #else
-#define psync_prefetch(expr) (void)0
+#define psync_prefetch(expr) ((void)0)
 #endif
 
 #if defined(_MSC_VER)
@@ -115,7 +115,7 @@
 #define PSYNC_PACKED_STRUCT struct
 #endif 
 
-#if _MSC_VER >= 1500 && _MSC_VER < 1700
+#if _MSC_VER >= 1500 && _MSC_VER < 1600
 #define inline __inline
 #define restrict __restrict
 #elif __GNUC__ >= 3

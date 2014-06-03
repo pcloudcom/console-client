@@ -90,6 +90,11 @@ void *psync_cache_get(const char *key){
   psync_uint_t h;
   hash_element *he;
   void *val;
+  if (IS_DEBUG && !strcmp(psync_thread_name, "timer"))
+    debug(D_ERROR, "trying get key %s from the timer thread, this may (and eventually will) lead to a deadlock, "
+                   "please start a worker thread to do the job or don't use cache (if you are looking up sql "
+                   "query/statement, you can use _nocache version)", key);
+
   h=hash_func(key);
   pthread_mutex_lock(&cache_mutexes[h%CACHE_LOCKS]);
   psync_list_for_each_element (he, &cache_hash[h], hash_element, list)
@@ -158,4 +163,22 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
 void psync_cache_add_free(char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys){
   psync_cache_add(key, ptr, freeafter, freefunc, maxkeys);
   psync_free(key);
+}
+
+void psync_cache_clean_all(){
+  psync_list *l1, *l2;
+  hash_element *he;
+  psync_uint_t h;
+  for (h=0; h<CACHE_HASH_SIZE; h++){
+    pthread_mutex_lock(&cache_mutexes[h%CACHE_LOCKS]);
+    psync_list_for_each_safe(l1, l2, &cache_hash[h]){
+      he=psync_list_element(l1, hash_element, list);
+      if (!psync_timer_stop(he->timer)){
+        psync_list_del(l1);
+        he->free(he->value);
+        psync_free(he);
+      }
+    }
+    pthread_mutex_unlock(&cache_mutexes[h%CACHE_LOCKS]);
+  }
 }

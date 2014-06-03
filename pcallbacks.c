@@ -68,7 +68,7 @@ void psync_set_status_callback(pstatus_change_callback_t callback){
   pthread_mutex_lock(&statusmutex);
   statusthreadrunning=1;
   pthread_mutex_unlock(&statusmutex);
-  psync_run_thread1(status_change_thread, callback);
+  psync_run_thread1("status change", status_change_thread, callback);
 }
 
 void psync_send_status_update(){
@@ -103,7 +103,7 @@ void psync_set_event_callback(pevent_callback_t callback){
   eventthreadrunning=1;
   pthread_mutex_unlock(&statusmutex);
   psync_list_init(&eventlist);
-  psync_run_thread1(event_thread, callback);
+  psync_run_thread1("event", event_thread, callback);
 }
 
 void psync_send_event_by_id(psync_eventtype_t eventid, psync_syncid_t syncid, const char *localpath, psync_fileorfolderid_t remoteid){

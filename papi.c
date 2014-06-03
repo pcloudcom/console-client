@@ -76,6 +76,29 @@ static const binresult DATA_EMPTY={PARAM_DATA, 0, {0}};
 static const binresult *empty_types[]={&STR_EMPTY, &NUM_ZERO, &BOOL_FALSE, &ARRAY_EMPTY, &HASH_EMPTY, &DATA_EMPTY};
 static const char *type_names[]={"string", "number", "boolean", "array", "hash", "data"};
 
+static const binresult NUM_SMALL[VSMALL_NUMBER_NUM]={
+  {PARAM_NUM, 0, {0}},
+  {PARAM_NUM, 0, {1}},
+  {PARAM_NUM, 0, {2}},
+  {PARAM_NUM, 0, {3}},
+  {PARAM_NUM, 0, {4}},
+  {PARAM_NUM, 0, {5}},
+  {PARAM_NUM, 0, {6}},
+  {PARAM_NUM, 0, {7}},
+  {PARAM_NUM, 0, {8}},
+  {PARAM_NUM, 0, {9}},
+  {PARAM_NUM, 0, {10}},
+  {PARAM_NUM, 0, {11}},
+  {PARAM_NUM, 0, {12}},
+  {PARAM_NUM, 0, {13}},
+  {PARAM_NUM, 0, {14}},
+  {PARAM_NUM, 0, {15}},
+  {PARAM_NUM, 0, {16}},
+  {PARAM_NUM, 0, {17}},
+  {PARAM_NUM, 0, {18}},
+  {PARAM_NUM, 0, {19}}
+};
+
 static uint32_t connfailures=0;
 
 psync_socket *psync_api_connect(int usessl){
@@ -122,7 +145,7 @@ static ssize_t calc_ret_len(unsigned char **restrict data, size_t *restrict data
     *datalen-=len;
     len=((len+ALIGN_BYTES)/ALIGN_BYTES)*ALIGN_BYTES;
     (*strcnt)++;
-    return sizeof(binresult)+len;
+    return offsetof(binresult, str)+len;
   }
   else if ((cond=(type>=RPARAM_RSTR1 && type<=RPARAM_RSTR4)) || (type>=RPARAM_SHORT_RSTR_BASE && type<RPARAM_SHORT_RSTR_BASE+VSHORT_RSTR_CNT)){
     if (cond){
@@ -140,15 +163,15 @@ static ssize_t calc_ret_len(unsigned char **restrict data, size_t *restrict data
     else
       return -1;
   }
-  else if ((cond=(type>=RPARAM_NUM1 && type<=RPARAM_NUM8)) || (type>=RPARAM_SMALL_NUM_BASE && type<RPARAM_SMALL_NUM_BASE+VSMALL_NUMBER_NUM)){
-    if (cond){
-      len=type-RPARAM_NUM1+1;
-      _NEED_DATA(len);
-      *data+=len;
-      *datalen-=len;
-    }
+  else if (type>=RPARAM_NUM1 && type<=RPARAM_NUM8){
+    len=type-RPARAM_NUM1+1;
+    _NEED_DATA(len);
+    *data+=len;
+    *datalen-=len;
     return sizeof(binresult);
   }
+  else if (type>=RPARAM_SMALL_NUM_BASE && type<RPARAM_SMALL_NUM_BASE+VSMALL_NUMBER_NUM)
+    return 0;
   else if (type==RPARAM_BFALSE || type==RPARAM_BTRUE)
     return 0;
   else if (type==RPARAM_ARRAY){
@@ -217,14 +240,13 @@ static binresult *do_parse_result(unsigned char **restrict indata, unsigned char
       *indata+=l;
     }
     ret=(binresult *)(*odata);
-    *odata+=sizeof(binresult);
+    *odata+=offsetof(binresult, str);
     ret->type=PARAM_STR;
     strings[*nextstrid]=ret;
     (*nextstrid)++;
     ret->length=len;
     memcpy(*odata, *indata, len);
     (*odata)[len]=0;
-    ret->str=(char *)*odata;
     *odata+=((len+ALIGN_BYTES)/ALIGN_BYTES)*ALIGN_BYTES;
     *indata+=len;
     return ret;
@@ -241,20 +263,18 @@ static binresult *do_parse_result(unsigned char **restrict indata, unsigned char
       id=type-RPARAM_SHORT_RSTR_BASE;
     return strings[id];
   }
-  else if ((cond=(type>=RPARAM_NUM1 && type<=RPARAM_NUM8)) || (type>=RPARAM_SMALL_NUM_BASE && type<RPARAM_SMALL_NUM_BASE+VSMALL_NUMBER_NUM)){
+  else if (type>=RPARAM_NUM1 && type<=RPARAM_NUM8){
     ret=(binresult *)(*odata);
     *odata+=sizeof(binresult);
     ret->type=PARAM_NUM;
-    if (cond){
-      len=type-RPARAM_NUM1+1;
-      ret->num=0;
-      memcpy(&ret->num, *indata, len);
-      *indata+=len;
-    }
-    else
-      ret->num=type-RPARAM_SMALL_NUM_BASE;
+    len=type-RPARAM_NUM1+1;
+    ret->num=0;
+    memcpy(&ret->num, *indata, len);
+    *indata+=len;
     return ret;
   }
+  else if (type>=RPARAM_SMALL_NUM_BASE && type<RPARAM_SMALL_NUM_BASE+VSMALL_NUMBER_NUM)
+    return (binresult *)&NUM_SMALL[type-RPARAM_SMALL_NUM_BASE];
   else if (type==RPARAM_BTRUE)
     return (binresult *)&BOOL_TRUE;
   else if (type==RPARAM_BFALSE)

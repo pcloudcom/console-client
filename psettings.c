@@ -29,6 +29,7 @@
 #include "plibs.h"
 #include "ptimer.h"
 #include "pp2p.h"
+#include "pfs.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -50,6 +51,10 @@ typedef struct {
 
 static void lower_patterns(void *ptr);
 
+static void fsroot_change(){
+  psync_fs_remount();
+}
+
 static psync_setting_t settings[]={
   {"usessl", psync_timer_do_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
   {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
@@ -57,11 +62,22 @@ static psync_setting_t settings[]={
   {"maxuploadspeed", NULL, NULL, {PSYNC_UPL_SHAPER_DEFAULT}, PSYNC_TNUMBER},
   {"ignorepatterns", NULL, lower_patterns, {0}, PSYNC_TSTRING},
   {"minlocalfreespace", NULL, NULL, {PSYNC_MIN_LOCAL_FREE_SPACE}, PSYNC_TNUMBER},
-  {"p2psync", psync_p2p_change, NULL, {PSYNC_P2P_SYNC_DEFAULT}, PSYNC_TBOOL}
+  {"p2psync", psync_p2p_change, NULL, {PSYNC_P2P_SYNC_DEFAULT}, PSYNC_TBOOL},
+  {"fsroot", fsroot_change, NULL, {0}, PSYNC_TSTRING},
+  {"autostartfs", NULL, NULL, {PSYNC_AUTOSTARTFS_DEFAULT}, PSYNC_TBOOL},
+  {"fscachesize", NULL, NULL, {PSYNC_FS_DEFAULT_CACHE_SIZE}, PSYNC_TNUMBER},
+  {"fscachepath", NULL, NULL, {0}, PSYNC_TSTRING}
 };
 
 void psync_settings_reset(){
+  char *home, *defaultfs, *defaultcache;
   psync_settingid_t i;
+  home=psync_get_home_dir();
+  defaultfs=psync_strcat(home, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_FS_FOLDER, NULL);
+  psync_free(home);
+  home=psync_get_pcloud_path();
+  defaultcache=psync_strcat(home, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_CACHE_FOLDER, NULL);
+  psync_free(home);
   for (i=0; i<ARRAY_SIZE(settings); i++)
     if (settings[i].type==PSYNC_TSTRING)
       psync_free_after_sec(settings[i].str, 60);
@@ -72,6 +88,8 @@ void psync_settings_reset(){
   settings[_PS(ignorepatterns)].str=PSYNC_IGNORE_PATTERNS_DEFAULT;
   settings[_PS(minlocalfreespace)].num=PSYNC_MIN_LOCAL_FREE_SPACE;
   settings[_PS(p2psync)].boolean=PSYNC_P2P_SYNC_DEFAULT;
+  settings[_PS(fsroot)].str=defaultfs;
+  settings[_PS(fscachepath)].str=defaultcache;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);
@@ -85,14 +103,25 @@ void psync_settings_reset(){
         settings[i].fix_callback(&settings[i].boolean);
     }
   }
+  psync_free(defaultfs);
+  psync_free(defaultcache);
 }
 
 void psync_settings_init(){
   psync_sql_res *res;
   psync_str_row row;
   const char *name;
+  char *home, *defaultfs, *defaultcache;
   psync_settingid_t i;
+  home=psync_get_home_dir();
+  defaultfs=psync_strcat(home, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_FS_FOLDER, NULL);
+  psync_free(home);
+  home=psync_get_pcloud_path();
+  defaultcache=psync_strcat(home, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_CACHE_FOLDER, NULL);
+  psync_free(home);
   settings[_PS(ignorepatterns)].str=PSYNC_IGNORE_PATTERNS_DEFAULT;
+  settings[_PS(fsroot)].str=defaultfs;
+  settings[_PS(fscachepath)].str=defaultcache;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);
@@ -106,6 +135,8 @@ void psync_settings_init(){
         settings[i].fix_callback(&settings[i].boolean);
     }
   }
+  psync_free(defaultfs);
+  psync_free(defaultcache);
   res=psync_sql_query("SELECT id, value FROM setting");
   while ((row=psync_sql_fetch_rowstr(res))){
     name=row[0];

@@ -1,5 +1,5 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/* Copyright (c) 2013-2014 Anton Titov.
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,14 +25,52 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_DIFF_H
-#define _PSYNC_DIFF_H
+#ifndef _PSYNC_FS_H
+#define _PSYNC_FS_H
 
+#include "psynclib.h"
+#include "ptree.h"
+#include "pintervaltree.h"
 #include "papi.h"
+#include "psettings.h"
+#include "pfsfolder.h"
+#include <pthread.h>
 
-void psync_diff_init();
-void psync_diff_lock();
-void psync_diff_unlock();
-void psync_diff_create_file(const binresult *meta);
+typedef struct {
+  uint64_t frompage;
+  uint64_t topage;
+  uint64_t length;
+  uint64_t requestedto;
+  uint64_t id;
+} psync_file_stream_t;
+
+typedef struct {
+  psync_tree tree;
+  psync_file_stream_t streams[PSYNC_FS_FILESTREAMS_CNT];
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  binresult *urls;
+  psync_interval_tree_t *writeintervals;
+  psync_fsfileid_t fileid;
+  uint64_t hash;
+  uint64_t initialsize;
+  uint64_t currentsize;
+  uint64_t laststreamid;
+  uint64_t indexoff;
+  psync_file_t datafile;
+  psync_file_t indexfile;
+  uint32_t refcnt;
+  uint32_t condwaiters;
+  uint32_t runningreads;
+  unsigned char modified;
+  unsigned char urlsstatus;
+  unsigned char newfile;
+} psync_openfile_t;
+
+int psync_fs_remount();
+void psync_fs_inc_of_refcnt(psync_openfile_t *of);
+void psync_fs_dec_of_refcnt(psync_openfile_t *of);
+void psync_fs_inc_of_refcnt_and_readers(psync_openfile_t *of);
+void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of);
 
 #endif

@@ -667,10 +667,12 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);
   if (from || to){
     if (to)
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64"\015\012Connection: Keep-Alive\015\012\015\012",
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"
+                  P_PRI_U64"\015\012Connection: Keep-Alive\015\012\015\012",
                   path, host, from, to);
     else
-      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-\015\012Connection: Keep-Alive\015\012\015\012",
+      rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64
+                  "-\015\012Connection: Keep-Alive\015\012\015\012",
                   path, host, from);
   }
   else
@@ -731,7 +733,7 @@ cont:
   }
   if (rb==PSYNC_HTTP_RESP_BUFFER)
     goto err1;
-  rl=psync_socket_read(sock, readbuff+rl, PSYNC_HTTP_RESP_BUFFER-rb);
+  rl=psync_socket_read(sock, readbuff+rb, PSYNC_HTTP_RESP_BUFFER-rb);
   if (rl<=0)
     goto err1;
   rb+=rl;
@@ -763,8 +765,11 @@ err0:
 void psync_http_close(psync_http_socket *http){
   if (http->keepalive>5 && http->readbytes==http->contentlength)
     psync_cache_add(http->cachekey, http->sock, http->keepalive-5, (psync_cache_free_callback)psync_socket_close_download, PSYNC_MAX_IDLE_HTTP_CONNS);
-  else
+  else{
+    debug(D_NOTICE, "closing socket %s keepalive=%u, readbytes=%lu, contentlength=%lu", http->cachekey, (unsigned)http->keepalive,
+                    (unsigned long)http->readbytes, (unsigned long)http->contentlength);
     psync_socket_close_download(http->sock);
+  }
   if (http->readbuff)
     psync_free(http->readbuff);
   psync_free(http);
@@ -805,6 +810,188 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
     if (num>0)
       http->readbytes+=num;
     return num;
+  }
+}
+
+psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const char **host){
+  psync_socket *sock;
+  psync_http_socket *hsock;
+  uint32_t i;
+  int usessl, cl;
+  char cachekey[256];
+  usessl=psync_setting_get_bool(_PS(usessl));
+  sock=NULL;
+  for (i=0; i<hosts->length; i++){
+    cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+    cachekey[sizeof(cachekey)-1]=0;
+    sock=(psync_socket *)psync_cache_get(cachekey);
+    if (sock){
+//      debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
+      *host=hosts->array[i]->str;
+      break;
+    }
+  }
+  if (!sock){
+    for (i=0; i<hosts->length; i++){
+      cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+      cachekey[sizeof(cachekey)-1]=0;
+      sock=psync_socket_connect(hosts->array[i]->str, usessl?443:80, usessl);
+      if (sock){
+        *host=hosts->array[i]->str;
+        break;
+      }
+    }
+    if (!sock)
+      return NULL;
+  }
+  hsock=(psync_http_socket *)psync_malloc(offsetof(psync_http_socket, cachekey)+cl);
+  hsock->sock=sock;
+  hsock->readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);;
+  hsock->contentlength=-1;
+  hsock->readbytes=0;
+  hsock->keepalive=0;
+  hsock->readbuffoff=0;
+  hsock->readbuffsize=0;
+  memcpy(hsock->cachekey, cachekey, cl);
+  return hsock;
+}
+
+int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to){
+  int rl;
+  if (from || to){
+    if (to)
+      rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64
+                  "\015\012Connection: Keep-Alive\015\012\015\012",
+                  path, host, from, to);
+    else
+      rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64
+                  "-\015\012Connection: Keep-Alive\015\012\015\012",
+                  path, host, from);
+  }
+  else
+    rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012\015\012", path, host);
+  return psync_socket_writeall(sock->sock, sock->readbuff, rl)==rl?0:-1;
+}
+
+int psync_http_next_request(psync_http_socket *sock){
+  char *ptr, *end, *key, *val;
+  int64_t clen;
+  uint32_t keepalive;
+  int rl, rb, isval;
+  char ch, lch;
+  if (unlikely_log((rb=psync_socket_read(sock->sock, sock->readbuff, PSYNC_HTTP_RESP_BUFFER-1))<=0))
+    goto err0;
+  sock->readbuff[rb]=0;
+  ptr=sock->readbuff;
+  while (*ptr && !isspace(*ptr))
+    ptr++;
+  while (*ptr && isspace(*ptr))
+    ptr++;
+  if (unlikely_log(!isdigit(*ptr)) || unlikely_log(atoi(ptr)/10!=20))
+    goto err0;
+  while (*ptr && *ptr!='\012')
+    ptr++;
+  if (unlikely_log(!*ptr))
+    goto err0;
+  ptr++;
+  end=sock->readbuff+rb;
+  lch=0;
+  isval=0;
+  keepalive=0;
+  clen=-1;
+  key=val=ptr;
+cont:
+  for (; ptr<end; ptr++){
+    ch=*ptr;
+    if (ch=='\015'){
+      *ptr=0;
+      continue;
+    }
+    else if (ch=='\012'){
+      if (lch=='\012'){
+        ptr++;
+        goto ex;
+      }
+      *ptr=0;
+/*      debug(D_NOTICE, "key=%s, value=%s", key, val);*/
+      if (!memcmp(key, "content-length", 14))
+        clen=psync_ato64(val);
+      else if (!memcmp(key, "keep-alive", 10) && !memcmp(val, "timeout=", 8))
+        keepalive=psync_ato32(val+8);
+      key=ptr+1;
+      isval=0;
+    }
+    else if (ch==':' && !isval){
+      *ptr++=0;
+      while (isspace(*ptr))
+        ptr++;
+      val=ptr;
+      *ptr=tolower(*ptr);
+      isval=1;
+    }
+    else
+      *ptr=tolower(ch);
+    lch=ch;
+  }
+  if (unlikely_log(rb==PSYNC_HTTP_RESP_BUFFER))
+    goto err0;
+  rl=psync_socket_read(sock->sock, sock->readbuff+rb, PSYNC_HTTP_RESP_BUFFER-rb);
+  if (unlikely_log(rl<=0))
+    goto err0;
+  rb+=rl;
+  end=sock->readbuff+rb;
+  goto cont;
+ex:
+  rl=ptr-sock->readbuff;
+  sock->contentlength=clen;
+  sock->readbytes=0;
+  sock->keepalive=keepalive;
+  sock->readbuffoff=rl;
+  sock->readbuffsize=rb;
+  return 0;
+err0:
+  return -1;
+
+}
+
+int psync_http_request_readall(psync_http_socket *http, void *buff, int num){
+  int rb;
+  if (http->contentlength!=-1){
+    if ((uint64_t)num>(uint64_t)http->contentlength-http->readbytes)
+      num=http->contentlength-http->readbytes;
+    if (!num)
+      return num;
+  }
+  if (http->readbuff){
+    int cp;
+    if (num<http->readbuffsize-http->readbuffoff)
+      cp=num;
+    else
+      cp=http->readbuffsize-http->readbuffoff;
+    memcpy(buff, (unsigned char*)http->readbuff+http->readbuffoff, cp);
+    http->readbuffoff+=cp;
+    http->readbytes+=cp;
+    if (cp==num)
+      return cp;
+    rb=psync_socket_readall(http->sock, (unsigned char*)buff+cp, num-cp);
+    if (rb<=0)
+      return -1;
+    else{
+      http->readbytes+=rb;
+      if (rb!=num-cp && http->contentlength!=-1)
+        return -1;
+      else
+        return cp+rb;
+    }
+  }
+  else{
+    rb=psync_socket_readall(http->sock, buff, num);
+    if (rb>0)
+      http->readbytes+=num;
+    if (rb!=num && http->contentlength!=-1)
+      return -1;
+    else
+      return rb;
   }
 }
 
@@ -1622,6 +1809,27 @@ void psync_unlock_file(psync_file_lock_t *lock){
   psync_list_del(&lock->list);
   pthread_mutex_unlock(&file_lock_mutex);
   psync_free(lock);
+}
+
+int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, uint64_t *usize){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid)};
+  psync_socket *api;
+  binresult *res;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    return PSYNC_NET_TEMPFAIL;
+  res=send_command(api, "upload_info", params);
+  psync_apipool_release(api);
+  if (unlikely(!res))
+    return PSYNC_NET_TEMPFAIL;
+  if (psync_find_result(res, "result", PARAM_NUM)->num){
+    psync_free(res);
+    return PSYNC_NET_PERMFAIL;
+  }
+  *usize=psync_find_result(res, "size", PARAM_NUM)->num;
+  memcpy(uhash, psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR)->str, PSYNC_HASH_DIGEST_HEXLEN);
+  psync_free(res);
+  return PSYNC_NET_OK;
 }
 
 static void psync_netlibs_timer(psync_timer_t timer, void *ptr){
