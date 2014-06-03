@@ -163,6 +163,10 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
+  if (!sqlite3_threadsafe()){
+    debug(D_CRITICAL, "sqlite is compiled without thread support");
+    return -1;
+  }
   int code=sqlite3_open(db, &psync_db);
   if (likely(code==SQLITE_OK)){
     pthread_mutexattr_init(&mattr);

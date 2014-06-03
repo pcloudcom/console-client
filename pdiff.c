@@ -181,6 +181,7 @@ static psync_socket *get_connected_socket(){
     else{
       used_quota=0;
       q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+      psync_sql_start_transaction();
       psync_sql_bind_string(q, 1, "userid");
       psync_sql_bind_uint(q, 2, userid);
       psync_sql_run(q);
@@ -201,9 +202,11 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_string(q, 1, "premiumexpires");
       psync_sql_bind_uint(q, 2, result);
       psync_sql_run(q);
-      result=psync_find_result(res, "emailverified", PARAM_BOOL)->num;
       psync_sql_bind_string(q, 1, "emailverified");
-      psync_sql_bind_uint(q, 2, result);
+      psync_sql_bind_uint(q, 2, psync_find_result(res, "emailverified", PARAM_BOOL)->num);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "registered");
+      psync_sql_bind_uint(q, 2, psync_find_result(res, "registered", PARAM_BOOL)->num);
       psync_sql_run(q);
       psync_sql_bind_string(q, 1, "username");
       psync_sql_bind_string(q, 2, psync_find_result(res, "email", PARAM_STR)->str);
@@ -216,16 +219,24 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_string(q, 2, psync_my_auth);
         psync_sql_run(q);
       }
+      psync_sql_commit_transaction();
       psync_sql_free_result(q);
     }
     pthread_mutex_lock(&psync_my_auth_mutex);
-    psync_free(psync_my_pass);
-    psync_my_pass=NULL;
+    if (psync_my_pass){
+      memset(psync_my_pass, 'X', strlen(psync_my_pass));
+      q=psync_sql_prep_statement("UPDATE setting SET value=? WHERE id='pass'");
+      psync_sql_bind_string(q, 1, psync_my_pass);
+      psync_sql_run_free(q);
+      psync_free(psync_my_pass);
+      psync_my_pass=NULL;
+    }
     pthread_mutex_unlock(&psync_my_auth_mutex);
     if (saveauth)
       psync_sql_statement("DELETE FROM setting WHERE id='pass'");
     else
       psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
+    psync_sql_sync();
     psync_free(res);
     psync_free(auth);
     psync_free(user);
@@ -648,6 +659,29 @@ void psync_diff_create_file(const binresult *meta){
   const binresult *name;
   uint64_t userid;
   st=psync_sql_prep_statement("INSERT OR IGNORE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+                                "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
+                                "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  name=psync_find_result(meta, "name", PARAM_STR);
+  check_for_deletedfileid(meta);
+  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num)
+    userid=psync_my_userid;
+  else
+    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 3, userid);
+  psync_sql_bind_uint(st, 4, psync_find_result(meta, "size", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_lstring(st, 6, name->str, name->length);
+  bind_meta(st, meta, 7);
+  psync_sql_run_free(st);
+}
+
+void psync_diff_update_file(const binresult *meta){
+  psync_sql_res *st;
+  const binresult *name;
+  uint64_t userid;
+  st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
                                 "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
                                 "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   name=psync_find_result(meta, "name", PARAM_STR);

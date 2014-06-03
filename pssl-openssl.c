@@ -34,9 +34,15 @@
 #include "plibs.h"
 #include "psslcerts.h"
 #include "psettings.h"
+#include "pcache.h"
+#include "ptimer.h"
+
+typedef struct {
+  SSL *ssl;
+  char cachekey[];
+} ssl_connection_t;
 
 static SSL_CTX *globalctx=NULL;
-
 static pthread_mutex_t *olocks;
 
 PSYNC_THREAD int psync_ssl_errno;
@@ -75,6 +81,7 @@ int psync_ssl_init(){
   openssl_thread_setup();
   globalctx=SSL_CTX_new(SSLv23_method());
   if (globalctx){
+    SSL_CTX_set_session_cache_mode(globalctx, SSL_SESS_CACHE_CLIENT|SSL_SESS_CACHE_NO_INTERNAL);
     for (i=0; i<ARRAY_SIZE(psync_ssl_trusted_certs); i++){
       bio=BIO_new(BIO_s_mem());
       BIO_puts(bio, psync_ssl_trusted_certs[i]);
@@ -130,95 +137,133 @@ static int psync_ssl_verify_cert(SSL *ssl, const char *hostname){
   return 0;
 }
 
+static ssl_connection_t *psync_ssl_alloc_conn(SSL *ssl, const char *hostname){
+  ssl_connection_t *conn;
+  size_t len;
+  len=strlen(hostname)+5;
+  conn=(ssl_connection_t *)psync_malloc(offsetof(ssl_connection_t, cachekey)+len);
+  conn->ssl=ssl;
+  memcpy(conn->cachekey, "SSLS", 4);
+  memcpy(conn->cachekey+4, hostname, len);
+  return conn;
+}
+
 int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname){
+  ssl_connection_t *conn;
   SSL *ssl;
+  SSL_SESSION *sess;
   int res, err;
   ssl=SSL_new(globalctx);
   if (!ssl)
     return PSYNC_SSL_FAIL;
   SSL_set_fd(ssl, sock);
+  conn=psync_ssl_alloc_conn(ssl, hostname);
+  if ((sess=(SSL_SESSION *)psync_cache_get(conn->cachekey))){
+    debug(D_NOTICE, "reusing cached session for %s", hostname);
+    SSL_set_session(ssl, sess);
+    SSL_SESSION_free(sess);
+  }
   res=SSL_connect(ssl);
   if (res==1){
     if (unlikely(psync_ssl_verify_cert(ssl, hostname)))
       goto fail;
-    *sslconn=ssl;
+    *sslconn=conn;
+    if (IS_DEBUG && SSL_session_reused(ssl))
+      debug(D_NOTICE, "succefully reused session");
     return PSYNC_SSL_SUCCESS;
   }
   err=SSL_get_error(ssl, res);
   psync_set_ssl_error(err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE)){
-    *sslconn=ssl;
+    *sslconn=conn;
     return PSYNC_SSL_NEED_FINISH;
   }
 fail:
   SSL_free(ssl);
+  psync_free(conn);
   return PSYNC_SSL_FAIL;
 }
 
 int psync_ssl_connect_finish(void *sslconn, const char *hostname){
-  SSL *ssl;
+  ssl_connection_t *conn;
   int res, err;
-  ssl=(SSL *)sslconn;
-  res=SSL_connect(ssl);
+  conn=(ssl_connection_t *)sslconn;
+  res=SSL_connect(conn->ssl);
   if (res==1){
-    if (unlikely(psync_ssl_verify_cert(ssl, hostname)))
+    if (unlikely(psync_ssl_verify_cert(conn->ssl, hostname)))
       goto fail;
+    if (IS_DEBUG && SSL_session_reused(conn->ssl))
+      debug(D_NOTICE, "succefully reused session");
     return PSYNC_SSL_SUCCESS;
   }
-  err=SSL_get_error(ssl, res);
+  err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE))
     return PSYNC_SSL_NEED_FINISH;
 fail:
-  SSL_free(ssl);
+  SSL_free(conn->ssl);
+  psync_free(conn);
   return PSYNC_SSL_FAIL;
 }
 
+static void psync_ssl_free_session(void *ptr){
+  SSL_SESSION_free((SSL_SESSION *)ptr);
+}
+
 int psync_ssl_shutdown(void *sslconn){
-  SSL *ssl;
+  ssl_connection_t *conn;
+  SSL_SESSION *sess;
   int res, err;
-  ssl=(SSL *)sslconn;
-  res=SSL_shutdown(ssl);
+  conn=(ssl_connection_t *)sslconn;
+  sess=SSL_get1_session(conn->ssl);
+  if (sess)
+    psync_cache_add(conn->cachekey, sess, PSYNC_SSL_SESSION_CACHE_TIMEOUT, psync_ssl_free_session, PSYNC_MAX_SSL_SESSIONS_PER_DOMAIN);
+  res=SSL_shutdown(conn->ssl);
   if (res!=-1){
-    SSL_free(ssl);
+    SSL_free(conn->ssl);
+    psync_free(conn);
     return PSYNC_SSL_SUCCESS;
   }
-  err=SSL_get_error(ssl, res);
+  err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE))
     return PSYNC_SSL_NEED_FINISH;
-  SSL_free(ssl);
+  SSL_free(conn->ssl);
+  psync_free(conn);
   return PSYNC_SSL_SUCCESS;
 }
 
 void psync_ssl_free(void *sslconn){
-  SSL_free((SSL *)sslconn);
+  ssl_connection_t *conn;
+  conn=(ssl_connection_t *)sslconn;
+  SSL_free(conn->ssl);
+  psync_free(conn);
 }
 
 int psync_ssl_pendingdata(void *sslconn){
-  return SSL_pending((SSL *)sslconn);
+  return SSL_pending(((ssl_connection_t *)sslconn)->ssl);
 }
 
 int psync_ssl_read(void *sslconn, void *buf, int num){
-  SSL *ssl;
+  ssl_connection_t *conn;
   int res, err;
-  ssl=(SSL *)sslconn;
-  res=SSL_read(ssl, buf, num);
+  conn=(ssl_connection_t *)sslconn;
+  res=SSL_read(conn->ssl, buf, num);
   if (res>=0)
     return res;
-  err=SSL_get_error(ssl, res);
+  err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
   return PSYNC_SSL_FAIL;
 }
 
 int psync_ssl_write(void *sslconn, const void *buf, int num){
-  SSL *ssl;
+  ssl_connection_t *conn;
   int res, err;
-  ssl=(SSL *)sslconn;
-  res=SSL_write(ssl, buf, num);
+  conn=(ssl_connection_t *)sslconn;
+  res=SSL_write(conn->ssl, buf, num);
   if (res>=0)
     return res;
-  err=SSL_get_error(ssl, res);
+  err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
   return PSYNC_SSL_FAIL;
 }
@@ -226,7 +271,7 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
 void psync_ssl_rand_strong(unsigned char *buf, int num){
   static int seeds=0;
   int ret;
-  if (seeds<5){
+  if (seeds<2){
     unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
     psync_get_random_seed(seed, NULL, 0);
     RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);

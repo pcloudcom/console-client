@@ -34,5 +34,6 @@ void psync_diff_init();
 void psync_diff_lock();
 void psync_diff_unlock();
 void psync_diff_create_file(const binresult *meta);
+void psync_diff_update_file(const binresult *meta);
 
 #endif

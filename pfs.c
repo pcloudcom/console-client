@@ -245,7 +245,7 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
     return -ENOENT;
   }
   folder=psync_fstask_get_folder_tasks_locked(fpath->folderid);
-  if (!folder || !psync_fstask_find_rmdir(folder, fpath->name)){
+  if (!folder || !psync_fstask_find_rmdir(folder, fpath->name, 0)){
     res=psync_sql_query("SELECT id, permissions, ctime, mtime, subdircnt FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fpath->folderid);
     psync_sql_bind_string(res, 2, fpath->name);
@@ -262,7 +262,7 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
   }
   if (folder){
     psync_fstask_mkdir_t *mk;
-    mk=psync_fstask_find_mkdir(folder, fpath->name);
+    mk=psync_fstask_find_mkdir(folder, fpath->name, 0);
     if (mk){
       psync_mkdir_to_folder_stat(mk, stbuf);
       psync_fstask_release_folder_tasks_locked(folder);
@@ -278,9 +278,9 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
     psync_row_to_file_stat(row, stbuf);
   psync_sql_free_result(res);
   if (folder){
-    if (psync_fstask_find_unlink(folder, fpath->name))
+    if (psync_fstask_find_unlink(folder, fpath->name, 0))
       row=NULL;
-    if (!row && (cr=psync_fstask_find_creat(folder, fpath->name)))
+    if (!row && (cr=psync_fstask_find_creat(folder, fpath->name, 0)))
       crr=psync_creat_to_file_stat(cr, stbuf);
     else
       crr=-1;
@@ -319,7 +319,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_string(row[0]);
-      if (folder && (psync_fstask_find_rmdir(folder, name) || psync_fstask_find_mkdir(folder, name)))
+      if (folder && (psync_fstask_find_rmdir(folder, name, 0) || psync_fstask_find_mkdir(folder, name, 0)))
         continue;
       psync_row_to_folder_stat(row, &st);
       filler(buf, name, &st, 0);
@@ -329,7 +329,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_string(row[0]);
-      if (folder && psync_fstask_find_unlink(folder, name))
+      if (folder && psync_fstask_find_unlink(folder, name, 0))
         continue;
       psync_row_to_file_stat(row, &st);
       filler(buf, name, &st, 0);
@@ -480,7 +480,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   }
   else
     row=NULL;
-  if (!row && folder && (cr=psync_fstask_find_creat(folder, fpath->name))){
+  if (!row && folder && (cr=psync_fstask_find_creat(folder, fpath->name, 0))){
     if (cr->fileid>=0){
       res=psync_sql_query("SELECT id, size, hash FROM file WHERE id=?");
       psync_sql_bind_uint(res, 1, cr->fileid);
@@ -569,7 +569,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     psync_sql_lock();
     folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
     if (folder){
-      if ((cr=psync_fstask_find_creat(folder, fpath->name))){
+      if ((cr=psync_fstask_find_creat(folder, fpath->name, 0))){
         psync_tree_del(&folder->creats, &cr->tree);
         psync_free(cr);
       }
@@ -864,7 +864,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
     goto err_enoent;
   }
   folder=psync_fstask_get_folder_tasks_locked(fnew_path->folderid);
-  if (folder && (mkdir=psync_fstask_find_mkdir(folder, fnew_path->name))){
+  if (folder && (mkdir=psync_fstask_find_mkdir(folder, fnew_path->name, 0))){
     to_folderid=mkdir->folderid;
     if (mkdir->folderid>0){
       res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
@@ -884,7 +884,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
     psync_sql_bind_uint(res, 1, fnew_path->folderid);
     psync_sql_bind_string(res, 2, fnew_path->name);
     row=psync_sql_fetch_rowint(res);
-    if (row && (!folder || !psync_fstask_find_rmdir(folder, fnew_path->name))){
+    if (row && (!folder || !psync_fstask_find_rmdir(folder, fnew_path->name, 0))){
       to_folderid=row[0];
       targetperms=row[1]&fnew_path->permissions;
       new_name=NULL;
@@ -901,20 +901,21 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
     targetperms=fnew_path->permissions;
     new_name=fnew_path->name;
   }
-  psync_fstask_release_folder_tasks_locked(folder);
+  if (folder)
+    psync_fstask_release_folder_tasks_locked(folder);
 move_to_root:
   folder=psync_fstask_get_folder_tasks_locked(fold_path->folderid);
   if (folder){
-    if ((mkdir=psync_fstask_find_mkdir(folder, fold_path->name))){
+    if ((mkdir=psync_fstask_find_mkdir(folder, fold_path->name, 0))){
       ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
       goto finish;
     }
-    else if ((creat=psync_fstask_find_creat(folder, fold_path->name))){
+    else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
       ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
       goto finish;
     }
   }
-  if (!folder || !psync_fstask_find_rmdir(folder, fold_path->name)){
+  if (!folder || !psync_fstask_find_rmdir(folder, fold_path->name, 0)){
     // even if we don't use permissions, it is probably better to use same query as above
     res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fold_path->folderid);
@@ -927,7 +928,7 @@ move_to_root:
     }
     psync_sql_free_result(res);
   }
-  if (!folder || !psync_fstask_find_unlink(folder, fold_path->name)){
+  if (!folder || !psync_fstask_find_unlink(folder, fold_path->name, 0)){
     res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fold_path->folderid);
     psync_sql_bind_string(res, 2, fold_path->name);
@@ -1128,6 +1129,16 @@ int psync_fs_start(){
   char *mp;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
 
+#if defined(P_OS_LINUX)
+  fuse_opt_add_arg(&args, "-oallow_root");
+  fuse_opt_add_arg(&args, "-oauto_unmount");
+  fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
+#endif
+#if defined(P_OS_MACOSX)
+  fuse_opt_add_arg(&args, "-ovolname=pCloudDrive");
+  fuse_opt_add_arg(&args, "-olocal");
+#endif
+
   psync_oper.init     = psync_fs_init;
   psync_oper.getattr  = psync_fs_getattr;
   psync_oper.readdir  = psync_fs_readdir;
@@ -1173,6 +1184,14 @@ err0:
 err00:
   pthread_mutex_unlock(&start_mutex);
   return -1;
+}
+
+int psync_fs_isstarted(){
+  int s;
+  pthread_mutex_lock(&start_mutex);
+  s=started;
+  pthread_mutex_unlock(&start_mutex);
+  return s;
 }
 
 int psync_fs_remount(){
