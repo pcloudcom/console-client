@@ -579,11 +579,20 @@ retry:
     psync_task_delete_remote_folder(fl->syncid, folderid);
 }
 
+#define check_for_query_cnt() do {\
+    if (unlikely(++trn>1000)){\
+      trn=0;\
+      psync_sql_commit_transaction();\
+      psync_milisleep(20);\
+      psync_sql_start_transaction();\
+    }\
+  } while (0)
+
 static void scanner_scan(int first){
   psync_list slist, newtmp, *l1, *l2;
   sync_folderlist *fl;
   sync_list *l;
-  psync_uint_t i, w;
+  psync_uint_t i, w, trn;
   if (first)
     localsleepperfolder=0;
   else{
@@ -627,6 +636,7 @@ restart:
                                 &scan_lists[SCAN_LIST_RENFOLDERSROM], 
                                 &scan_lists[SCAN_LIST_RENFOLDERSTO],
                                 compare_inode);
+    trn=0;
     psync_sql_start_transaction();
     l2=&scan_lists[SCAN_LIST_RENFOLDERSTO];
     psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFOLDERSROM]){
@@ -634,6 +644,7 @@ restart:
       scan_rename_folder(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
       i++;
       w++;
+      check_for_query_cnt();
     }
     psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSROM], sync_folderlist, list, psync_free);
     psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSROM]);
@@ -643,6 +654,7 @@ restart:
       scan_create_folder(fl);
       i++;
       w++;
+      check_for_query_cnt();
     }
     psync_sql_commit_transaction();
     psync_list_init(&newtmp);
@@ -671,27 +683,33 @@ restart:
                                &scan_lists[SCAN_LIST_RENFILESTO],
                                compare_sizeinodemtime);
   l2=&scan_lists[SCAN_LIST_RENFILESTO];
+  trn=0;
   psync_sql_start_transaction();
   psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFILESFROM]){
     l2=l2->next;
     scan_rename_file(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
     w++;
+    check_for_query_cnt();
   }
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFILES], sync_folderlist, list){
     scan_upload_file(fl);
     w++;
+    check_for_query_cnt();
   }
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_MODFILES], sync_folderlist, list){
     scan_upload_modified_file(fl);
     w++;
+    check_for_query_cnt();
   }
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFILES], sync_folderlist, list){
     scan_delete_file(fl);
     w++;
+    check_for_query_cnt();
   }
   psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_DELFOLDERS], sync_folderlist, list){
     scan_delete_folder(fl);
     w++;
+    check_for_query_cnt();
   }
   psync_sql_commit_transaction();
   if (w){

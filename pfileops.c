@@ -64,6 +64,10 @@ void psync_ops_create_file_in_db(const binresult *meta){
   psync_diff_create_file(meta);
 }
 
+void psync_ops_update_file_in_db(const binresult *meta){
+  psync_diff_update_file(meta);
+}
+
 void psync_ops_delete_file_from_db(psync_fileid_t fileid){
   psync_sql_res *res;
   res=psync_sql_prep_statement("DELETE FROM file WHERE id=?");

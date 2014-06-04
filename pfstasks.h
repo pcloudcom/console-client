@@ -37,7 +37,8 @@
 #define PSYNC_FS_TASK_RMDIR   2
 #define PSYNC_FS_TASK_CREAT   3
 #define PSYNC_FS_TASK_UNLINK  4
-#define PSYNC_FS_TASK_RENFILE 5
+#define PSYNC_FS_TASK_RENFILE_FROM 5
+#define PSYNC_FS_TASK_RENFILE_TO   6
 
 typedef struct {
   psync_tree tree;
@@ -95,11 +96,12 @@ void psync_fstask_folder_created(psync_folderid_t parentfolderid, uint64_t taski
 void psync_fstask_folder_deleted(psync_folderid_t parentfolderid, uint64_t taskid, const char *name);
 void psync_fstask_file_created(psync_folderid_t parentfolderid, uint64_t taskid, const char *name);
 void psync_fstask_file_deleted(psync_folderid_t parentfolderid, uint64_t taskid, const char *name);
+void psync_fstask_file_renamed(psync_folderid_t folderid, uint64_t taskid, const char *name, uint64_t frtaskid);
 
-psync_fstask_mkdir_t *psync_fstask_find_mkdir(psync_fstask_folder_t *folder, const char *name);
-psync_fstask_rmdir_t *psync_fstask_find_rmdir(psync_fstask_folder_t *folder, const char *name);
-psync_fstask_creat_t *psync_fstask_find_creat(psync_fstask_folder_t *folder, const char *name);
-psync_fstask_unlink_t *psync_fstask_find_unlink(psync_fstask_folder_t *folder, const char *name);
+psync_fstask_mkdir_t *psync_fstask_find_mkdir(psync_fstask_folder_t *folder, const char *name, uint64_t taskid);
+psync_fstask_rmdir_t *psync_fstask_find_rmdir(psync_fstask_folder_t *folder, const char *name, uint64_t taskid);
+psync_fstask_creat_t *psync_fstask_find_creat(psync_fstask_folder_t *folder, const char *name, uint64_t taskid);
+psync_fstask_unlink_t *psync_fstask_find_unlink(psync_fstask_folder_t *folder, const char *name, uint64_t taskid);
 
 int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name);
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name);

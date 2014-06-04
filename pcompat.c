@@ -260,6 +260,7 @@ static void thread_started(){
 }
 
 static void thread_exited(){
+  debug(D_NOTICE, "thread exited");
 }
 
 static void *thread_entry0(void *data){
@@ -751,6 +752,12 @@ static psync_socket_t connect_socket(const char *host, const char *port){
   freeaddrinfo(res);
   if (likely(sock!=INVALID_SOCKET)){
     int sock_opt=1;
+#if defined(TCP_NODELAY) && defined(SOL_TCP)
+    setsockopt(sock, SOL_TCP, TCP_NODELAY, (char*)&sock_opt, sizeof(sock_opt));
+#endif
+#if defined(TCP_NODELAY) && defined(IPPROTO_TCP)
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char*)&sock_opt, sizeof(sock_opt));
+#endif
 #if defined(SO_KEEPALIVE) && defined(SOL_SOCKET)
     setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
 #endif
@@ -1704,6 +1711,16 @@ int psync_file_sync(psync_file_t fd){
   return fsync(fd);
 #elif defined(P_OS_WINDOWS)
   return psync_bool_to_zero(FlushFileBuffers(fd));
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
+#if defined(P_OS_POSIX)
+  return posix_fadvise(fd, offset, count, POSIX_FADV_WILLNEED);
+#elif defined(P_OS_WINDOWS)
+  return 0;
 #else
 #error "Function not implemented for your operating system"
 #endif

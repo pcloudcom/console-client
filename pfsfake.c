@@ -29,8 +29,12 @@ int psync_fs_remount(){
   return 0;
 }
 
-int psync_fs_start(){
+int psync_fs_isstarted(){
   return 0;
+}
+
+int psync_fs_start(){
+  return -1;
 }
 
 void psync_fs_stop(){

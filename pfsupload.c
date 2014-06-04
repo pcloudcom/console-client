@@ -586,6 +586,42 @@ static int psync_process_task_unlink(fsupload_task_t *task){
   return 0;
 }
 
+static int psync_send_task_rename_file(psync_socket *api, fsupload_task_t *task){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->fileid), P_NUM("tofolderid", task->folderid), 
+                     P_STR("toname", task->text1), P_STR("timeformat", "timestamp")};
+  if (likely_log(send_command_no_res(api, "renamefile", params)==PTR_OK))
+    return 0;
+  else
+    return -1;
+}
+
+static int handle_rename_file_api_error(uint64_t result, fsupload_task_t *task){
+  debug(D_ERROR, "renamefile returned error %u", (unsigned)result);
+  switch (result){
+    case 2009: /* file does not exist, skip */
+    case 2005: /* destination does not exist, skip */
+    case 2003: /* access denied, skip */
+    case 2001: /* invalid name, should not happen */
+    case 2008: /* overquota */
+      psync_fstask_file_deleted(task->folderid, task->id, task->text1);
+      return 0;
+  }
+  return -1;
+}
+
+static int psync_process_task_rename_file(fsupload_task_t *task){
+  uint64_t result;
+  const binresult *meta;
+  result=psync_find_result(task->res, "result", PARAM_NUM)->num;
+  if (result)
+    return handle_rename_file_api_error(result, task);
+  meta=psync_find_result(task->res, "metadata", PARAM_HASH);
+  psync_ops_update_file_in_db(meta);
+  psync_fstask_file_renamed(task->folderid, task->id, task->text1, task->int1);
+  debug(D_NOTICE, "file %lu/%s renamed", (unsigned long)task->folderid, task->text1);
+  return 0;
+}
+
 typedef int (*psync_send_task_ptr)(psync_socket *, fsupload_task_t *);
 typedef int (*psync_process_task_ptr)(fsupload_task_t *);
 
@@ -594,7 +630,9 @@ static psync_send_task_ptr psync_send_task_func[]={
   psync_send_task_mkdir,
   psync_send_task_rmdir,
   psync_send_task_creat,
-  psync_send_task_unlink
+  psync_send_task_unlink,
+  NULL,
+  psync_send_task_rename_file
 };
 
 static psync_process_task_ptr psync_process_task_func[]={
@@ -602,7 +640,9 @@ static psync_process_task_ptr psync_process_task_func[]={
   psync_process_task_mkdir,
   psync_process_task_rmdir,
   psync_process_task_creat,
-  psync_process_task_unlink
+  psync_process_task_unlink,
+  NULL,
+  psync_process_task_rename_file
 };
 
 static void psync_fsupload_process_tasks(psync_list *tasks){
