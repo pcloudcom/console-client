@@ -595,6 +595,10 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   psync_lhash_update(&hctx, &ptr, sizeof(ptr));
   ptr=(void *)psync_get_random_seed;
   psync_lhash_update(&hctx, &ptr, sizeof(ptr));
+  ptr=(void *)pthread_self;
+  psync_lhash_update(&hctx, &ptr, sizeof(ptr));
+  ptr=(void *)malloc;
+  psync_lhash_update(&hctx, &ptr, sizeof(ptr));
   ptr=(void *)&lastseed;
   psync_lhash_update(&hctx, &ptr, sizeof(ptr));
   home=psync_get_home_dir();
