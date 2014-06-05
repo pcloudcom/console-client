@@ -1728,6 +1728,8 @@ int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
   ra.ra_offset=offset;
   ra.ra_count=count;
   return fcntl(fd, F_RDADVISE, &ra);
+#else
+  return 0;
 #endif
 #elif defined(P_OS_WINDOWS)
   return 0;
