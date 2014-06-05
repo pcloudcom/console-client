@@ -1721,7 +1721,14 @@ int psync_file_sync(psync_file_t fd){
 
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
 #if defined(P_OS_POSIX)
+#if defined(POSIX_FADV_WILLNEED)
   return posix_fadvise(fd, offset, count, POSIX_FADV_WILLNEED);
+#elif defined(F_RDADVISE)
+  struct radvisory ra;
+  ra.ra_offset=offset;
+  ra.ra_count=count;
+  return fcntl(fd, F_RDADVISE, &ra);
+#endif
 #elif defined(P_OS_WINDOWS)
   return 0;
 #else
