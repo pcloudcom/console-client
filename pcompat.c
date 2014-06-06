@@ -1866,16 +1866,16 @@ char *psync_deviceid(){
   SYSTEM_POWER_STATUS bat;
   const char *hardware, *ver;
   char versbuff[32];
-  DWORD ver, vmajor, vminor;
+  DWORD vers, vmajor, vminor;
   if (GetSystemMetrics(SM_TABLETPC))
     hardware="Tablet";
   else if (GetSystemPowerStatus(&bat) || (bat.BatteryFlag&128))
     hardware="Desktop";
   else
     hardware="Laptop";
-  ver=GetVersion();
-  vmajor=(DWORD)(LOBYTE(LOWORD(ver)));
-  vminor=(DWORD)(HIBYTE(LOWORD(ver)));
+  vers=GetVersion();
+  vmajor=(DWORD)(LOBYTE(LOWORD(vers)));
+  vminor=(DWORD)(HIBYTE(LOWORD(vers)));
   if (vmajor==6){
     switch (vminor){
       case 3: ver="8.1"; break;
