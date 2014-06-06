@@ -226,8 +226,44 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
+#define run_command(cmd, params, err) do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
+
+static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    goto neterr;
+  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+  if (likely(res))
+    psync_apipool_release(api);
+  else{
+    psync_apipool_release_bad(api);
+    goto neterr;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+  }
+  psync_free(res);
+  return (int)result;
+neterr:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
+}
+
+static void psync_invalidate_auth(const char *auth){
+  binparam params[]={P_STR("auth", psync_my_auth)};
+  run_command("logout", params, NULL);
+}
+
 void psync_logout(){
   psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth', 'saveauth')");
+  psync_invalidate_auth(psync_my_auth);
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
   pthread_mutex_lock(&psync_my_auth_mutex);
   psync_free(psync_my_pass);
@@ -253,6 +289,7 @@ void psync_unlink(){
   psync_stop_all_upload();
   psync_timer_notify_exception();
   psync_milisleep(20);
+  psync_invalidate_auth(psync_my_auth);
   psync_sql_lock();
   psync_list_init(&list);
   res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='index'");
@@ -294,6 +331,7 @@ void psync_unlink(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_sql_unlock();
   psync_settings_reset();
+  psync_cache_clean_all();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
@@ -641,36 +679,6 @@ int psync_resume(){
 
 void psync_run_localscan(){
   psync_wake_localscan();
-}
-
-#define run_command(cmd, params, err) do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
-
-static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
-  psync_socket *api;
-  binresult *res;
-  uint64_t result;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    goto neterr;
-  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
-  if (likely(res))
-    psync_apipool_release(api);
-  else{
-    psync_apipool_release_bad(api);
-    goto neterr;
-  }
-  result=psync_find_result(res, "result", PARAM_NUM)->num;
-  if (result){
-    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
-    if (err)
-      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
-  }
-  psync_free(res);
-  return (int)result;
-neterr:
-  if (err)
-    *err=psync_strdup("Could not connect to the server.");
-  return -1;
 }
 
 #define run_command_get_res(cmd, params, err, res) do_run_command_get_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err, res)

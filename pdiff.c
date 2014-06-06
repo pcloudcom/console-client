@@ -49,17 +49,19 @@ static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 
-static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen){
+static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
+                                           const char *device){
   binparam params[]={P_STR("timeformat", "timestamp"), 
                       P_LSTR("username", username, userlen),
                       P_LSTR("digest", digest, diglen),
                       P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
+                      P_STR("device", device),
                       P_BOOL("getauth", 1),
                       P_NUM("os", P_OS_ID)};
   return send_command(sock, "userinfo", params);
 }
 
-static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password){
+static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password, const char *device){
   binparam empty_params[]={P_STR("MS", "sucks")};
   psync_sha1_ctx ctx;
   binresult *res, *ret;
@@ -90,7 +92,7 @@ static binresult *get_userinfo_user_pass(psync_socket *sock, const char *usernam
   psync_sha1_update(&ctx, dig->str, dig->length);
   psync_sha1_final(sha1bin, &ctx);
   psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
-  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length);
+  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length, device);
   psync_free(res);
   return ret;
 }
@@ -100,6 +102,7 @@ static psync_socket *get_connected_socket(){
   psync_socket *sock;
   binresult *res;
   psync_sql_res *q;
+  char *device;
   uint64_t result, userid, luserid;
   int saveauth;
   auth=user=pass=NULL;
@@ -129,15 +132,18 @@ static psync_socket *get_connected_socket(){
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
+    device=psync_deviceid();
     if (user && pass)
-      res=get_userinfo_user_pass(sock, user, pass);
+      res=get_userinfo_user_pass(sock, user, pass, device);
     else {
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("auth", auth),
+                         P_STR("device", device),
                          P_BOOL("getauth", 1),
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
+    psync_free(device);
     if (unlikely_log(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
