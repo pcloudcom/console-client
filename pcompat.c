@@ -40,6 +40,10 @@
 #include <sys/sysinfo.h>
 #endif
 
+#if defined(P_OS_MACOSX)
+#include <sys/sysctl.h>
+#endif
+
 #if defined(P_OS_POSIX)
 
 #include <sys/types.h>
@@ -1896,7 +1900,7 @@ char *psync_deviceid(){
   device=psync_strcat(hardware, ", ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
 #elif defined(P_OS_MACOSX)
   struct utsname un;
-  const char *hardware, *ver;
+  const char *ver;
   size_t len;
   char versbuff[64], modelname[256];
   int v;
