@@ -188,6 +188,7 @@ void psync_sql_close(){
   int code=sqlite3_close(psync_db);
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "error when closing database: %d", code);
+  psync_db=NULL;
 }
 
 void psync_sql_lock(){

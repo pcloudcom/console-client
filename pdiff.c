@@ -212,7 +212,7 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_uint(q, 2, psync_find_result(res, "emailverified", PARAM_BOOL)->num);
       psync_sql_run(q);
       psync_sql_bind_string(q, 1, "registered");
-      psync_sql_bind_uint(q, 2, psync_find_result(res, "registered", PARAM_BOOL)->num);
+      psync_sql_bind_uint(q, 2, psync_find_result(res, "registered", PARAM_NUM)->num);
       psync_sql_run(q);
       psync_sql_bind_string(q, 1, "username");
       psync_sql_bind_string(q, 2, psync_find_result(res, "email", PARAM_STR)->str);
