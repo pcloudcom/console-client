@@ -40,6 +40,10 @@
 #include <sys/sysinfo.h>
 #endif
 
+#if defined(P_OS_MACOSX)
+#include <sys/sysctl.h>
+#endif
+
 #if defined(P_OS_POSIX)
 
 #include <sys/types.h>
@@ -595,6 +599,10 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
   ptr=(void *)&ptr;
   psync_lhash_update(&hctx, &ptr, sizeof(ptr));
   ptr=(void *)psync_get_random_seed;
+  psync_lhash_update(&hctx, &ptr, sizeof(ptr));
+  ptr=(void *)pthread_self;
+  psync_lhash_update(&hctx, &ptr, sizeof(ptr));
+  ptr=(void *)malloc;
   psync_lhash_update(&hctx, &ptr, sizeof(ptr));
   ptr=(void *)&lastseed;
   psync_lhash_update(&hctx, &ptr, sizeof(ptr));
@@ -1718,7 +1726,16 @@ int psync_file_sync(psync_file_t fd){
 
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
 #if defined(P_OS_POSIX)
+#if defined(POSIX_FADV_WILLNEED)
   return posix_fadvise(fd, offset, count, POSIX_FADV_WILLNEED);
+#elif defined(F_RDADVISE)
+  struct radvisory ra;
+  ra.ra_offset=offset;
+  ra.ra_count=count;
+  return fcntl(fd, F_RDADVISE, &ra);
+#else
+  return 0;
+#endif
 #elif defined(P_OS_WINDOWS)
   return 0;
 #else
@@ -1842,4 +1859,97 @@ int64_t psync_file_size(psync_file_t fd){
 #else
 #error "Function not implemented for your operating system"
 #endif
+}
+
+char *psync_deviceid(){
+  char *device;
+#if defined(P_OS_WINDOWS)
+  SYSTEM_POWER_STATUS bat;
+  const char *hardware, *ver;
+  char versbuff[32];
+  DWORD vers, vmajor, vminor;
+  if (GetSystemMetrics(SM_TABLETPC))
+    hardware="Tablet";
+  else if (GetSystemPowerStatus(&bat) || (bat.BatteryFlag&128))
+    hardware="Desktop";
+  else
+    hardware="Laptop";
+  vers=GetVersion();
+  vmajor=(DWORD)(LOBYTE(LOWORD(vers)));
+  vminor=(DWORD)(HIBYTE(LOWORD(vers)));
+  if (vmajor==6){
+    switch (vminor){
+      case 3: ver="8.1"; break;
+      case 2: ver="8.0"; break;
+      case 1: ver="7.0"; break;
+      case 0: ver="Vista"; break;
+      default: sprintf(versbuff, "6.%u", (unsigned int)vminor); ver=versbuff;
+    }
+  }
+  else if (vmajor==5){
+    switch (vminor){
+      case 2: ver="XP 64bit"; break;
+      case 1: ver="XP"; break;
+      case 0: ver="2000"; break;
+      default: sprintf(versbuff, "5.%u", (unsigned int)vminor); ver=versbuff;
+    }
+  }
+  else{
+    sprintf(versbuff, "%u.%u", (unsigned int)vmajor, (unsigned int)vminor);
+    ver=versbuff;
+  }
+  device=psync_strcat(hardware, ", ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
+#elif defined(P_OS_MACOSX)
+  struct utsname un;
+  const char *ver;
+  size_t len;
+  char versbuff[64], modelname[256];
+  int v;
+  if (uname(&un))
+    ver="Mac OS X";
+  else{
+    v=atoi(un.release);
+    switch (v){
+      case 13: ver="OS X 10.9 Mavericks"; break;
+      case 12: ver="OS X 10.8 Mountain Lion"; break;
+      case 11: ver="OS X 10.7 Lion"; break;
+      case 10: ver="OS X 10.6 Snow Leopard"; break;
+      default: sprintf(versbuff, "Mac/Darwin %s", un.release); ver=versbuff;
+    }
+  }
+  len=sizeof(modelname);
+  if (sysctlbyname("hw.model", modelname, &len, NULL, 0))
+    strcpy(modelname, "Mac");
+  device=psync_strcat(modelname, ", ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
+#elif defined(P_OS_LINUX)
+  DIR *dh;
+  struct dirent entry, *de;
+  const char *hardware;
+  char *path, buf[8];
+  int fd;
+  hardware="Desktop";
+  dh=opendir("/sys/class/power_supply");
+  if (dh){
+    while (!readdir_r(dh, &entry, &de) && de)
+      if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
+        path=psync_strcat("/sys/class/power_supply/", de->d_name, "/type", NULL);
+        fd=open(path, O_RDONLY);
+        psync_free(path);
+        if (fd==-1)
+          continue;
+        if (read(fd, buf, 7)==7 && !memcmp(buf, "Battery", 7)){
+          close(fd);
+          hardware="Laptop";
+          break;
+        }
+        close(fd);
+      }
+    closedir(dh);
+  }
+  device=psync_strcat(hardware, ", Linux, pCloudSync library "PSYNC_LIB_VERSION, NULL);
+#else
+  device=psync_strdup("Desktop, pCloudSync library "PSYNC_LIB_VERSION);
+#endif
+  debug(D_NOTICE, "detected device: %s", device);
+  return device;
 }

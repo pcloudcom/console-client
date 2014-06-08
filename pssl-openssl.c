@@ -124,12 +124,17 @@ static int psync_ssl_verify_cert(SSL *ssl, const char *hostname){
     cert=SSL_get_peer_certificate(ssl);
     if (unlikely_log(!cert))
       return -1;
-    if (unlikely_log(X509_NAME_get_text_by_NID(X509_get_subject_name(cert), OBJ_txt2nid("commonName"), buff, sizeof(buff))==-1))
+    if (unlikely_log(X509_NAME_get_text_by_NID(X509_get_subject_name(cert), OBJ_txt2nid("commonName"), buff, sizeof(buff))==-1)){
+      X509_free(cert);
       return -1;
+    }
     debug(D_NOTICE, "got certificate with commonName: %s", buff);
-    if (psync_match_pattern(hostname, buff, strlen(buff)))
+    if (psync_match_pattern(hostname, buff, strlen(buff))){
+      X509_free(cert);
       return 0;
+    }
     else{
+      X509_free(cert);
       debug(D_WARNING, "hostname %s does not match certificate common name %s", hostname, buff);
       return -1;
     }
@@ -140,8 +145,8 @@ static int psync_ssl_verify_cert(SSL *ssl, const char *hostname){
 static ssl_connection_t *psync_ssl_alloc_conn(SSL *ssl, const char *hostname){
   ssl_connection_t *conn;
   size_t len;
-  len=strlen(hostname)+5;
-  conn=(ssl_connection_t *)psync_malloc(offsetof(ssl_connection_t, cachekey)+len);
+  len=strlen(hostname)+1;
+  conn=(ssl_connection_t *)psync_malloc(offsetof(ssl_connection_t, cachekey)+len+4);
   conn->ssl=ssl;
   memcpy(conn->cachekey, "SSLS", 4);
   memcpy(conn->cachekey+4, hostname, len);

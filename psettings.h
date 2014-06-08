@@ -32,6 +32,8 @@
 #include "pcompiler.h"
 #include "pcompat.h"
 
+#define PSYNC_LIB_VERSION "1.1.0"
+
 #define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
 #define PSYNC_API_PORT_SSL 443
@@ -127,7 +129,6 @@
 #define PSYNC_P2P_SLEEP_WAIT_DOWNLOAD  20000
 
 #define PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS 20000
-#define PSYNC_CRYPTO_PASS_TO_KEY_SALT       "cak]As1`;CXGTq,+9dh:C'xxTGTDgy*~dF|$,yD>3*uR-hHM?wsY\"Np>j.)Z/[|"
 
 #define PSYNC_PERM_READ   1
 #define PSYNC_PERM_CREATE 2
