@@ -262,6 +262,7 @@ static void psync_invalidate_auth(const char *auth){
 }
 
 void psync_logout(){
+  debug(D_NOTICE, "logout");
   psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth', 'saveauth')");
   psync_invalidate_auth(psync_my_auth);
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
@@ -278,6 +279,7 @@ void psync_logout(){
 }
 
 void psync_unlink(){
+  debug(D_NOTICE, "unlink");
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_stop_all_download();
   psync_stop_all_upload();
@@ -285,6 +287,7 @@ void psync_unlink(){
   psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
   psync_sql_lock();
+  debug(D_NOTICE, "clearing database, locked");
   psync_cache_clean_all();
   psync_sql_close();
   psync_file_delete(psync_database);
@@ -336,6 +339,7 @@ void psync_unlink(){
   psync_my_pass=NULL;
   psync_my_userid=0;
   pthread_mutex_unlock(&psync_my_auth_mutex);
+  debug(D_NOTICE, "clearing database, finished");
   psync_sql_unlock();
   psync_settings_reset();
   psync_cache_clean_all();
