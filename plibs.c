@@ -163,7 +163,12 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
-  int code=sqlite3_open(db, &psync_db);
+  int code;
+  if (!sqlite3_threadsafe()){
+    debug(D_CRITICAL, "sqlite is compiled without thread support");
+    return -1;
+  }
+  code=sqlite3_open(db, &psync_db);
   if (likely(code==SQLITE_OK)){
     pthread_mutexattr_init(&mattr);
     pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
@@ -181,9 +186,26 @@ int psync_sql_connect(const char *db){
 }
 
 void psync_sql_close(){
-  int code=sqlite3_close(psync_db);
+  int code, tries;
+  tries=0;
+  do {
+    code=sqlite3_close(psync_db);
+    if (code==SQLITE_BUSY){
+      psync_cache_clean_all();
+      tries++;
+      if (tries>100){
+        psync_milisleep(tries-90);
+        if (tries>200){
+          debug(D_ERROR, "failed to close database");
+          break;
+        }
+      }
+      continue;
+    }
+  } while (0);
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "error when closing database: %d", code);
+  psync_db=NULL;
 }
 
 void psync_sql_lock(){

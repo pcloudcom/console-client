@@ -226,8 +226,45 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
+#define run_command(cmd, params, err) do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
+
+static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  api=psync_apipool_get();
+  if (unlikely(!api))
+    goto neterr;
+  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+  if (likely(res))
+    psync_apipool_release(api);
+  else{
+    psync_apipool_release_bad(api);
+    goto neterr;
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+  }
+  psync_free(res);
+  return (int)result;
+neterr:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
+}
+
+static void psync_invalidate_auth(const char *auth){
+  binparam params[]={P_STR("auth", psync_my_auth)};
+  run_command("logout", params, NULL);
+}
+
 void psync_logout(){
+  debug(D_NOTICE, "logout");
   psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth', 'saveauth')");
+  psync_invalidate_auth(psync_my_auth);
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
   pthread_mutex_lock(&psync_my_auth_mutex);
   psync_free(psync_my_pass);
@@ -237,54 +274,64 @@ void psync_logout(){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_stop_all_download();
   psync_stop_all_upload();
+  psync_cache_clean_all();
   psync_timer_notify_exception();
 }
 
 void psync_unlink(){
-  psync_sql_res *res;
-  psync_variant_row row;
-  char *sql;
-  const char *str;
-  size_t len;
-  psync_list list;
-  string_list *le;
+  debug(D_NOTICE, "unlink");
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_stop_all_download();
   psync_stop_all_upload();
   psync_timer_notify_exception();
+  psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
   psync_sql_lock();
-  psync_list_init(&list);
-  res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='index'");
-  while ((row=psync_sql_fetch_row(res))){
-    str=psync_get_lstring(row[0], &len);
-    le=(string_list *)psync_malloc(offsetof(string_list, str)+len+1);
-    memcpy(le->str, str, len+1);
-    psync_list_add_tail(&list, &le->list);
-  }
-  psync_sql_free_result(res);
-  psync_list_for_each_element(le, &list, string_list, list){
-    sql=psync_strcat("DROP INDEX ", le->str, NULL);
-    psync_sql_statement(sql);
-    psync_free(sql);
-  }
-  psync_list_for_each_element_call(&list, string_list, list, psync_free);
-  psync_list_init(&list);
-  res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='table'");
-  while ((row=psync_sql_fetch_row(res))){
-    str=psync_get_lstring(row[0], &len);
-    le=(string_list *)psync_malloc(offsetof(string_list, str)+len+1);
-    memcpy(le->str, str, len+1);
-    psync_list_add_tail(&list, &le->list);
-  }
-  psync_sql_free_result(res);
-  psync_list_for_each_element(le, &list, string_list, list){
-    sql=psync_strcat("DROP TABLE ", le->str, NULL);
-    psync_sql_statement(sql);
-    psync_free(sql);
-  }
-  psync_list_for_each_element_call(&list, string_list, list, psync_free);
-  psync_sql_statement("VACUUM");
+  debug(D_NOTICE, "clearing database, locked");
+  psync_cache_clean_all();
+  psync_sql_close();
+  psync_file_delete(psync_database);
+  psync_sql_connect(psync_database);
+  /*
+    psync_sql_res *res;
+    psync_variant_row row;
+    char *sql;
+    const char *str;
+    size_t len;
+    psync_list list;
+    string_list *le;
+    psync_list_init(&list);
+    res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='index'");
+    while ((row=psync_sql_fetch_row(res))){
+      str=psync_get_lstring(row[0], &len);
+      le=(string_list *)psync_malloc(offsetof(string_list, str)+len+1);
+      memcpy(le->str, str, len+1);
+      psync_list_add_tail(&list, &le->list);
+    }
+    psync_sql_free_result(res);
+    psync_list_for_each_element(le, &list, string_list, list){
+      sql=psync_strcat("DROP INDEX ", le->str, NULL);
+      psync_sql_statement(sql);
+      psync_free(sql);
+    }
+    psync_list_for_each_element_call(&list, string_list, list, psync_free);
+    psync_list_init(&list);
+    res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='table'");
+    while ((row=psync_sql_fetch_row(res))){
+      str=psync_get_lstring(row[0], &len);
+      le=(string_list *)psync_malloc(offsetof(string_list, str)+len+1);
+      memcpy(le->str, str, len+1);
+      psync_list_add_tail(&list, &le->list);
+    }
+    psync_sql_free_result(res);
+    psync_list_for_each_element(le, &list, string_list, list){
+      sql=psync_strcat("DROP TABLE ", le->str, NULL);
+      psync_sql_statement(sql);
+      psync_free(sql);
+    }
+    psync_list_for_each_element_call(&list, string_list, list, psync_free);
+    psync_sql_statement("VACUUM");
+  */
   psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
   pthread_mutex_lock(&psync_my_auth_mutex);
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
@@ -292,8 +339,10 @@ void psync_unlink(){
   psync_my_pass=NULL;
   psync_my_userid=0;
   pthread_mutex_unlock(&psync_my_auth_mutex);
+  debug(D_NOTICE, "clearing database, finished");
   psync_sql_unlock();
   psync_settings_reset();
+  psync_cache_clean_all();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
@@ -641,36 +690,6 @@ int psync_resume(){
 
 void psync_run_localscan(){
   psync_wake_localscan();
-}
-
-#define run_command(cmd, params, err) do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
-
-static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
-  psync_socket *api;
-  binresult *res;
-  uint64_t result;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    goto neterr;
-  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
-  if (likely(res))
-    psync_apipool_release(api);
-  else{
-    psync_apipool_release_bad(api);
-    goto neterr;
-  }
-  result=psync_find_result(res, "result", PARAM_NUM)->num;
-  if (result){
-    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
-    if (err)
-      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
-  }
-  psync_free(res);
-  return (int)result;
-neterr:
-  if (err)
-    *err=psync_strdup("Could not connect to the server.");
-  return -1;
 }
 
 #define run_command_get_res(cmd, params, err, res) do_run_command_get_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err, res)

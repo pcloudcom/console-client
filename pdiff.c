@@ -49,17 +49,19 @@ static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 
-static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen){
+static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
+                                           const char *device){
   binparam params[]={P_STR("timeformat", "timestamp"), 
                       P_LSTR("username", username, userlen),
                       P_LSTR("digest", digest, diglen),
                       P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
+                      P_STR("device", device),
                       P_BOOL("getauth", 1),
                       P_NUM("os", P_OS_ID)};
   return send_command(sock, "userinfo", params);
 }
 
-static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password){
+static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password, const char *device){
   binparam empty_params[]={P_STR("MS", "sucks")};
   psync_sha1_ctx ctx;
   binresult *res, *ret;
@@ -90,7 +92,7 @@ static binresult *get_userinfo_user_pass(psync_socket *sock, const char *usernam
   psync_sha1_update(&ctx, dig->str, dig->length);
   psync_sha1_final(sha1bin, &ctx);
   psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
-  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length);
+  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length, device);
   psync_free(res);
   return ret;
 }
@@ -100,6 +102,7 @@ static psync_socket *get_connected_socket(){
   psync_socket *sock;
   binresult *res;
   psync_sql_res *q;
+  char *device;
   uint64_t result, userid, luserid;
   int saveauth;
   auth=user=pass=NULL;
@@ -129,15 +132,18 @@ static psync_socket *get_connected_socket(){
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
+    device=psync_deviceid();
     if (user && pass)
-      res=get_userinfo_user_pass(sock, user, pass);
+      res=get_userinfo_user_pass(sock, user, pass, device);
     else {
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("auth", auth),
+                         P_STR("device", device),
                          P_BOOL("getauth", 1),
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
+    psync_free(device);
     if (unlikely_log(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
@@ -181,6 +187,7 @@ static psync_socket *get_connected_socket(){
     else{
       used_quota=0;
       q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+      psync_sql_start_transaction();
       psync_sql_bind_string(q, 1, "userid");
       psync_sql_bind_uint(q, 2, userid);
       psync_sql_run(q);
@@ -201,9 +208,11 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_string(q, 1, "premiumexpires");
       psync_sql_bind_uint(q, 2, result);
       psync_sql_run(q);
-      result=psync_find_result(res, "emailverified", PARAM_BOOL)->num;
       psync_sql_bind_string(q, 1, "emailverified");
-      psync_sql_bind_uint(q, 2, result);
+      psync_sql_bind_uint(q, 2, psync_find_result(res, "emailverified", PARAM_BOOL)->num);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "registered");
+      psync_sql_bind_uint(q, 2, psync_find_result(res, "registered", PARAM_NUM)->num);
       psync_sql_run(q);
       psync_sql_bind_string(q, 1, "username");
       psync_sql_bind_string(q, 2, psync_find_result(res, "email", PARAM_STR)->str);
@@ -216,16 +225,24 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_string(q, 2, psync_my_auth);
         psync_sql_run(q);
       }
+      psync_sql_commit_transaction();
       psync_sql_free_result(q);
     }
     pthread_mutex_lock(&psync_my_auth_mutex);
-    psync_free(psync_my_pass);
-    psync_my_pass=NULL;
+    if (psync_my_pass){
+      memset(psync_my_pass, 'X', strlen(psync_my_pass));
+      q=psync_sql_prep_statement("UPDATE setting SET value=? WHERE id='pass'");
+      psync_sql_bind_string(q, 1, psync_my_pass);
+      psync_sql_run_free(q);
+      psync_free(psync_my_pass);
+      psync_my_pass=NULL;
+    }
     pthread_mutex_unlock(&psync_my_auth_mutex);
     if (saveauth)
       psync_sql_statement("DELETE FROM setting WHERE id='pass'");
     else
       psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
+    psync_sql_sync();
     psync_free(res);
     psync_free(auth);
     psync_free(user);
@@ -648,6 +665,29 @@ void psync_diff_create_file(const binresult *meta){
   const binresult *name;
   uint64_t userid;
   st=psync_sql_prep_statement("INSERT OR IGNORE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+                                "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
+                                "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  name=psync_find_result(meta, "name", PARAM_STR);
+  check_for_deletedfileid(meta);
+  if (psync_find_result(meta, "ismine", PARAM_BOOL)->num)
+    userid=psync_my_userid;
+  else
+    userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 3, userid);
+  psync_sql_bind_uint(st, 4, psync_find_result(meta, "size", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_lstring(st, 6, name->str, name->length);
+  bind_meta(st, meta, 7);
+  psync_sql_run_free(st);
+}
+
+void psync_diff_update_file(const binresult *meta){
+  psync_sql_res *st;
+  const binresult *name;
+  uint64_t userid;
+  st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
                                 "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
                                 "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   name=psync_find_result(meta, "name", PARAM_STR);
