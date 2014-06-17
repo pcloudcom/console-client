@@ -654,7 +654,7 @@ static binresult *psync_pagecache_of_get_urls(psync_openfile_t *of){
                      P_STR("timeformat", "timestamp"), P_BOOL("skipfilename", 1)};
   char buff[64];
   binresult *ret;
-  sprintf(buff, "urls-%"PRIu64, of->hash);
+  sprintf(buff, "urls-"PRIu64, of->hash);
   ret=(binresult *)psync_cache_get(buff);
   if (ret){
     debug(D_NOTICE, "got file URLS of fileid %lu, hash %lu from cache", (unsigned long)of->fileid, (unsigned long)of->hash);
