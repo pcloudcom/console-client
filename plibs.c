@@ -188,7 +188,7 @@ int psync_sql_connect(const char *db){
 void psync_sql_close(){
   int code, tries;
   tries=0;
-  do {
+  while (1){
     code=sqlite3_close(psync_db);
     if (code==SQLITE_BUSY){
       psync_cache_clean_all();
@@ -197,12 +197,13 @@ void psync_sql_close(){
         psync_milisleep(tries-90);
         if (tries>200){
           debug(D_ERROR, "failed to close database");
-          break;
-        }
-      }
-      continue;
+		  break;
+	    }
+	  }
     }
-  } while (0);
+	else
+	  break;
+  }
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "error when closing database: %d", code);
   psync_db=NULL;

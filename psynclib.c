@@ -283,13 +283,17 @@ void psync_unlink(){
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_stop_all_download();
   psync_stop_all_upload();
+  psync_status_recalc_to_download();//<----
+  psync_status_recalc_to_upload();//<----
   psync_timer_notify_exception();
   psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
   psync_sql_lock();
   debug(D_NOTICE, "clearing database, locked");
   psync_cache_clean_all();
+  psync_sql_unlock();//<----
   psync_sql_close();
+  psync_sql_lock();//<----
   psync_file_delete(psync_database);
   psync_sql_connect(psync_database);
   /*
