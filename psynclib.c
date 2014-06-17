@@ -291,9 +291,7 @@ void psync_unlink(){
   psync_sql_lock();
   debug(D_NOTICE, "clearing database, locked");
   psync_cache_clean_all();
-  psync_sql_unlock();//<----
   psync_sql_close();
-  psync_sql_lock();//<----
   psync_file_delete(psync_database);
   psync_sql_connect(psync_database);
   /*
