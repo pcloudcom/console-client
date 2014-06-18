@@ -188,7 +188,7 @@ int psync_sql_connect(const char *db){
 void psync_sql_close(){
   int code, tries;
   tries=0;
-  do {
+  while (1){
     code=sqlite3_close(psync_db);
     if (code==SQLITE_BUSY){
       psync_cache_clean_all();
@@ -200,9 +200,10 @@ void psync_sql_close(){
           break;
         }
       }
-      continue;
     }
-  } while (0);
+    else
+      break;
+  }
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "error when closing database: %d", code);
   psync_db=NULL;
@@ -350,12 +351,13 @@ char *psync_sql_cellstr(const char *sql){
   sqlite3_stmt *stmt;
   int code;
   psync_sql_check_query_plan(sql);
+  psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
+    psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
-  psync_sql_lock();
   code=sqlite3_step(stmt);
   if (code==SQLITE_ROW){
     char *ret;
@@ -379,8 +381,8 @@ int64_t psync_sql_cellint(const char *sql, int64_t dflt){
   sqlite3_stmt *stmt;
   int code;
   psync_sql_check_query_plan(sql);
-  code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   psync_sql_lock();
+  code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
   else{
@@ -399,13 +401,14 @@ char **psync_sql_rowstr(const char *sql){
   sqlite3_stmt *stmt;
   int code, cnt;
   psync_sql_check_query_plan(sql);
+  psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
+    psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
-  psync_sql_lock();
   code=sqlite3_step(stmt);
   if (code==SQLITE_ROW){
     char **arr, *nstr, *str;
@@ -450,13 +453,14 @@ psync_variant *psync_sql_row(const char *sql){
   sqlite3_stmt *stmt;
   int code, cnt;
   psync_sql_check_query_plan(sql);
+  psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
+    psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
-  psync_sql_lock();
   code=sqlite3_step(stmt);
   if (code==SQLITE_ROW){
     psync_variant *arr;
@@ -518,8 +522,10 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
   psync_sql_res *res;
   int code, cnt;
   psync_sql_check_query_plan(sql);
+  psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
+    psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
@@ -528,7 +534,6 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
   res->stmt=stmt;
   res->sql=sql;
   res->column_count=cnt;
-  psync_sql_lock();
   return res;
 }
 
@@ -570,15 +575,16 @@ psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
   psync_sql_res *res;
   int code;
   psync_sql_check_query_plan(sql);
+  psync_sql_lock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
+    psync_sql_unlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   res=psync_new(psync_sql_res);
   res->stmt=stmt;
   res->sql=sql;
-  psync_sql_lock();
   return res;
 }
 
@@ -620,14 +626,16 @@ void psync_sql_run_free_nocache(psync_sql_res *res){
 
 void psync_sql_run_free(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
-  psync_sql_unlock();
   if (unlikely(code!=SQLITE_DONE || (code=sqlite3_reset(res->stmt))!=SQLITE_OK)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
     sqlite3_finalize(res->stmt);
+    psync_sql_unlock();
     psync_free(res);
   }
-  else
+  else{
+    psync_sql_unlock();
     psync_cache_add(res->sql, res, PSYNC_QUERY_CACHE_SEC, psync_sql_free_cache, PSYNC_QUERY_MAX_CNT);
+  }
 }
 
 void psync_sql_bind_int(psync_sql_res *res, int n, int64_t val){

@@ -283,6 +283,8 @@ void psync_unlink(){
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_stop_all_download();
   psync_stop_all_upload();
+  psync_status_recalc_to_download();//<----
+  psync_status_recalc_to_upload();//<----
   psync_timer_notify_exception();
   psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
