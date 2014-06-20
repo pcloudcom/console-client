@@ -111,7 +111,7 @@ typedef unsigned long psync_uint_t;
 #define P_PRI_U "lu"
 
 #ifndef PRIu64
-#define PRIu64 "%I64u"
+#define PRIu64 "I64u"
 #endif
 
 
