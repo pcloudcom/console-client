@@ -996,6 +996,29 @@ int psync_http_request_readall(psync_http_socket *http, void *buff, int num){
   }
 }
 
+char *psync_url_decode(const char *s){
+  char *ret, *p;
+  size_t slen;
+  char unsigned ch1, ch2;
+  slen=strlen(s);
+  ret=p=(char *)psync_malloc(slen+1);
+  while (slen--) {
+    if (*s=='+')
+      *p=' ';
+    else if (*s=='%' && slen>=2 && isxdigit(ch1=tolower(*(s+1))) && isxdigit(ch2=tolower(*(s+2)))){
+      *p=(char)(((ch1>='a'&&ch1<='f'?ch1-'a'+10:ch1-'0')<<4)+(ch2>='a'&&ch2<='f'?ch2-'a'+10:ch2-'0'));
+      s+=2;
+      slen-=2;
+    }
+    else
+      *p=*s;
+    s++;
+    p++;
+  }
+  *p=0;
+  return ret;
+}
+
 static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uint64_t hash, psync_file_checksums **checksums){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("hash", hash)};
   binresult *res;

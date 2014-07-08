@@ -374,6 +374,7 @@ extern PSYNC_THREAD const char *psync_thread_name;
 void psync_compat_init();
 int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits) PSYNC_PURE;
 char *psync_get_pcloud_path();
+char *psync_get_private_tmp_dir();
 char *psync_get_default_database_path();
 char *psync_get_home_dir();
 void psync_run_thread(const char *name, psync_thread_start0 run);
@@ -439,5 +440,7 @@ char *psync_deviceid();
 #if defined(P_OS_WINDOWS)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
 #endif
+
+int psync_run_update_file(const char *path);
 
 #endif

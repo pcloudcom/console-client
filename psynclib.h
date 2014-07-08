@@ -286,7 +286,9 @@ typedef struct {
   const char *url;
   const char *notes;
   const char *versionstr;
+  const char *localpath;
   unsigned long version;
+  uint64_t updatesize;
 } psync_new_version_t;
 
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
@@ -636,14 +638,26 @@ psync_share_list_t *psync_list_shares(int incoming);
  * WIN
  * WIN_XP
  * MAC
- * LINUX
+ * LINUX32
+ * LINUX64
  * 
  * String versions are in format "a.b.c", equivalen numeric version is a*10000+b*100+c
+ * 
+ * The _download version also downloads (and is potentially slow) the update and stores it in 
+ * (returned value)->localpath.
+ *
+ * Function psync_run_new_version actually runs the update. On success it exists and does not return.
+ * 
+ * Applications are expected to run psync_check_new_version and upon non-NULL return to seek user
+ * confirmation for updating and if the user confirms run psync_run_new_version
  * 
  */
 
 psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion);
 psync_new_version_t *psync_check_new_version(const char *os, unsigned long currentversion);
+psync_new_version_t *psync_check_new_version_download_str(const char *os, const char *currentversion);
+psync_new_version_t *psync_check_new_version_download(const char *os, unsigned long currentversion);
+void psync_run_new_version(psync_new_version_t *ver);
 
 /* Filesystem functions.
  * 

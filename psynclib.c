@@ -85,6 +85,7 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 int psync_init(){
+  psync_thread_name="main app thread";
   if (IS_DEBUG){
     pthread_mutex_lock(&psync_libstate_mutex);
     if (psync_libstate!=0){
@@ -966,7 +967,7 @@ psync_share_list_t *psync_list_shares(int incoming){
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
 }
 
-psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion){
+static unsigned long psync_parse_version(const char *currentversion){
   unsigned long cv, cm;
   cv=cm=0;
   while (1){
@@ -975,7 +976,7 @@ psync_new_version_t *psync_check_new_version_str(const char *os, const char *cur
       cm=0;
     }
     else if (*currentversion==0)
-      return psync_check_new_version(os, cv+cm);
+      return cv+cm;
     else if (*currentversion>='0' && *currentversion<='9')
       cm=cm*10+*currentversion-'0';
     else
@@ -984,14 +985,67 @@ psync_new_version_t *psync_check_new_version_str(const char *os, const char *cur
   }
 }
 
+psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion){
+  return psync_check_new_version(os, psync_parse_version(currentversion));
+}
+
+static psync_new_version_t *psync_res_to_ver(const binresult *res, char *localpath){
+  psync_new_version_t *ver;
+  const char *notes, *versionstr;
+  size_t lurl, lnotes, lversion, llpath, llocalpath;
+  const binresult *cres, *pres, *hres;
+  char *ptr;
+  unsigned long usize;
+  cres=psync_find_result(res, "download", PARAM_HASH);
+  lurl=sizeof("https://")-1;
+  pres=psync_find_result(cres, "path", PARAM_STR);
+  lurl+=pres->length;
+  hres=psync_find_result(cres, "hosts", PARAM_ARRAY)->array[0];
+  lurl+=hres->length;
+  lurl=(lurl+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  usize=psync_find_result(cres, "size", PARAM_NUM)->num;
+  cres=psync_find_result(res, "notes", PARAM_STR);
+  notes=cres->str;
+  lnotes=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  cres=psync_find_result(res, "versionstr", PARAM_STR);
+  versionstr=cres->str;
+  lversion=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  if (localpath){
+    llpath=strlen(localpath);
+    llocalpath=(llpath+sizeof(void *))/sizeof(void *)*sizeof(void *);
+  }
+  else
+    llpath=llocalpath=0;
+  ver=(psync_new_version_t *)psync_malloc(sizeof(psync_new_version_t)+lurl+lnotes+lversion+llocalpath);
+  ptr=(char *)(ver+1);
+  ver->url=ptr;
+  memcpy(ptr, "https://", sizeof("https://")-1);
+  ptr+=sizeof("https://")-1;
+  memcpy(ptr, hres->str, hres->length);
+  ptr+=hres->length;
+  memcpy(ptr, pres->str, pres->length+1);
+  ptr=(char *)ver->url+lurl;
+  memcpy(ptr, notes, lnotes);
+  ver->notes=ptr;
+  ptr+=lnotes;
+  memcpy(ptr, versionstr, lversion);
+  ver->versionstr=ptr;
+  if (localpath){
+    ptr+=lversion;
+    memcpy(ptr, localpath, llpath+1);
+    ver->localpath=ptr;
+  }
+  else
+    ver->localpath=NULL;
+  ver->version=psync_find_result(res, "version", PARAM_NUM)->num;
+  ver->updatesize=usize;
+  return ver;
+}
+
 psync_new_version_t *psync_check_new_version(const char *os, unsigned long currentversion){
   binparam params[]={P_STR("os", os), P_NUM("version", currentversion)};
   psync_new_version_t *ver;
-  const char *url, *notes, *versionstr;
-  size_t lurl, lnotes, lversion;
-  const binresult *cres;
   binresult *res;
-  char *ptr;
   int ret;
   ret=run_command_get_res("getlastversion", params, NULL, &res);
   if (ret){
@@ -1002,27 +1056,128 @@ psync_new_version_t *psync_check_new_version(const char *os, unsigned long curre
     psync_free(res);
     return NULL;
   }
-  cres=psync_find_result(res, "url", PARAM_STR);
-  url=cres->str;
-  lurl=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
-  cres=psync_find_result(res, "notes", PARAM_STR);
-  notes=cres->str;
-  lnotes=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
-  cres=psync_find_result(res, "versionstr", PARAM_STR);
-  versionstr=cres->str;
-  lversion=(cres->length+sizeof(void *))/sizeof(void *)*sizeof(void *);
-  ver=(psync_new_version_t *)psync_malloc(sizeof(psync_new_version_t)+lurl+lnotes+lversion);
-  ptr=(char *)(ver+1);
-  memcpy(ptr, url, lurl);
-  ver->url=ptr;
-  ptr+=lurl;
-  memcpy(ptr, notes, lnotes);
-  ver->notes=ptr;
-  ptr+=lnotes;
-  memcpy(ptr, versionstr, lversion);
-  ver->versionstr=ptr;
-  ver->version=psync_find_result(res, "version", PARAM_NUM)->num;
+  ver=psync_res_to_ver(res, NULL);
   psync_free(res);
   return ver;
+}
+
+static char *psync_filename_from_res(const binresult *res){
+  const char *nm;
+  char *nmd, *path, *ret;
+  nm=strrchr(psync_find_result(res, "path", PARAM_STR)->str, '/');
+  if (unlikely_log(!nm))
+    return NULL;
+  path=psync_get_private_tmp_dir();
+  if (unlikely_log(!path))
+    return NULL;
+  nmd=psync_url_decode(nm+1);
+  ret=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, nmd, NULL);
+  psync_free(nmd);
+  psync_free(path);
+  return ret;
+}
+
+static int psync_download_new_version(const binresult *res, char **lpath){
+  const char *host;
+  psync_http_socket *sock;
+  char *buff, *filename;
+  uint64_t size;
+  psync_stat_t st;
+  psync_file_t fd;
+  int rd;
+  sock=psync_http_connect_multihost(psync_find_result(res, "hosts", PARAM_ARRAY), &host);
+  if (unlikely_log(!sock))
+    return -1;
+  if (unlikely_log(psync_http_request(sock, host, psync_find_result(res, "path", PARAM_STR)->str, 0, 0))){
+    psync_http_close(sock);
+    return -1;
+  }
+  if (unlikely_log(psync_http_next_request(sock))){
+    psync_http_close(sock);
+    return 1;
+  }
+  size=psync_find_result(res, "size", PARAM_NUM)->num;
+  filename=psync_filename_from_res(res);
+  if (!unlikely_log(filename)){
+    psync_http_close(sock);
+    return 1;
+  }
+  if (!psync_stat(filename, &st) && psync_stat_size(&st)==size){
+    *lpath=filename;
+    psync_http_close(sock);
+    return 0;
+  }
+  if (unlikely_log((fd=psync_file_open(filename, P_O_WRONLY, P_O_CREAT|P_O_TRUNC))==INVALID_HANDLE_VALUE)){
+    psync_free(filename);
+    psync_http_close(sock);
+    return 1;
+  }
+  buff=(char *)psync_malloc(PSYNC_COPY_BUFFER_SIZE);
+  while (size){
+    rd=psync_http_request_readall(sock, buff, PSYNC_COPY_BUFFER_SIZE);
+    if (unlikely_log(rd<=0 || psync_file_write(fd, buff, rd)!=rd))
+      break;
+    size-=rd;
+  }
+  psync_free(buff);
+  psync_file_close(fd);
+  psync_http_close(sock);
+  if (unlikely_log(size)){
+    psync_free(filename);
+    return -1;
+  }
+  *lpath=filename;
+  return 0;
+}
+
+psync_new_version_t *psync_check_new_version_download_str(const char *os, const char *currentversion){
+  return psync_check_new_version_download(os, psync_parse_version(currentversion));
+}
+
+psync_new_version_t *psync_check_new_version_download(const char *os, unsigned long currentversion){
+  binparam params[]={P_STR("os", os), P_NUM("version", currentversion)};
+  psync_new_version_t *ver;
+  binresult *res;
+  char *lfilename;
+  int ret;
+  ret=run_command_get_res("getlastversion", params, NULL, &res);
+  if (unlikely(ret==-1))
+    do{
+      debug(D_WARNING, "could not connect to server, sleeping");
+      psync_milisleep(10000);
+      ret=run_command_get_res("getlastversion", params, NULL, &res);
+    } while (ret==-1);
+  if (ret){
+    debug(D_WARNING, "getlastversion returned %d", ret);
+    return NULL;
+  }
+  if (!psync_find_result(res, "newversion", PARAM_BOOL)->num){
+    psync_free(res);
+    return NULL;
+  }
+  ret=psync_download_new_version(psync_find_result(res, "download", PARAM_HASH), &lfilename);
+  if (unlikely(ret==-1))
+    do{
+      debug(D_WARNING, "could not download update, sleeping");
+      psync_milisleep(10000);
+      ret=psync_download_new_version(psync_find_result(res, "download", PARAM_HASH), &lfilename);
+    } while (ret==-1);
+  if (unlikely_log(ret)){
+    psync_free(res);
+    return NULL;
+  }
+  debug(D_NOTICE, "update downloaded to %s", lfilename);
+  ver=psync_res_to_ver(res, lfilename);
+  psync_free(lfilename);
+  psync_free(res);
+  return ver;
+}
+
+void psync_run_new_version(psync_new_version_t *ver){
+  debug(D_NOTICE, "running %s", ver->localpath);
+  if (psync_run_update_file(ver->localpath))
+    return;
+  psync_destroy();
+  exit(0);
 }
 
