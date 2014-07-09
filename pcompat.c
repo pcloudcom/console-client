@@ -2008,7 +2008,7 @@ int psync_run_update_file(const char *path){
     exit(1);
   }
 #elif defined(P_OS_WINDOWS)
-  if (ShellExecute(NULL, "open", path, NULL, NULL, SW_SHOWDEFAULT)>32)
+  if ((int)ShellExecuteA(NULL, "open", path, NULL, NULL, SW_SHOWDEFAULT)>32)
     return 0;
   else
     return -1;
