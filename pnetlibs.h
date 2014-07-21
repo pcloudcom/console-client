@@ -117,6 +117,8 @@ int psync_http_request(psync_http_socket *sock, const char *host, const char *pa
 int psync_http_next_request(psync_http_socket *sock);
 int psync_http_request_readall(psync_http_socket *http, void *buff, int num);
 
+char *psync_url_decode(const char *s);
+
 int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_t filehash, uint64_t filesize, char *const *files, uint32_t filecnt);
 int psync_net_scan_file_for_blocks(psync_socket *api, psync_list *rlist, psync_fileid_t fileid, uint64_t filehash, psync_file_t fd);
 int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync_uploadid_t uploadid, psync_file_t fd);

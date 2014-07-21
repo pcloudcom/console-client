@@ -52,6 +52,7 @@
 #include <sys/statvfs.h>
 #include <sys/utsname.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
 #include <unistd.h>
@@ -205,6 +206,21 @@ char *psync_get_pcloud_path(){
     return NULL;
   }
   return path;
+}
+
+char *psync_get_private_tmp_dir(){
+  char *path, *rpath;
+  psync_stat_t st;
+  path=psync_get_pcloud_path();
+  if (!path)
+    return NULL;
+  rpath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_TMP_DIR, NULL);
+  free(path);
+  if (psync_stat(rpath, &st) && psync_mkdir(rpath)){
+    psync_free(rpath);
+    return NULL;
+  }
+  return rpath;
 }
 
 char *psync_get_default_database_path(){
@@ -1954,4 +1970,51 @@ char *psync_deviceid(){
 #endif
   debug(D_NOTICE, "detected device: %s", device);
   return device;
+}
+
+int psync_run_update_file(const char *path){
+#if defined(P_OS_LINUX) || defined(P_OS_MACOSX)
+#if defined(P_OS_LINUX)
+#define PSYNC_RUN_CMD "qapt-deb-installer"
+#else
+#define PSYNC_RUN_CMD "open"
+#endif
+  pid_t pid;
+  debug(D_NOTICE, "running %s with "PSYNC_RUN_CMD, path);
+  pid=fork();
+  if (unlikely(pid==-1)){
+    debug(D_ERROR, "fork failed");
+    return -1;
+  }
+  else if (pid){
+    int status;
+    psync_milisleep(100);
+    if (waitpid(pid, &status, WNOHANG)==0)
+      return 0;
+    else
+      return -1;
+  }
+  else{
+    char *ex;
+    int fd;
+    fd=open("/dev/null", O_RDWR);
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+    setsid();
+    ex=psync_strcat(PSYNC_RUN_CMD" \"", path, "\"", NULL);
+    execl("/bin/sh", "/bin/sh", "-c", ex, NULL);
+    debug(D_ERROR, "exec of %s failed", ex);
+    psync_free(ex);
+    exit(1);
+  }
+#elif defined(P_OS_WINDOWS)
+  if ((int)ShellExecuteA(NULL, "open", path, NULL, NULL, SW_SHOWDEFAULT)>32)
+    return 0;
+  else
+    return -1;
+#else
+  return -1;
+#endif
 }
