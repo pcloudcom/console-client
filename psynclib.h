@@ -192,6 +192,14 @@ typedef struct {
 #define PLIST_FOLDERS 2
 #define PLIST_ALL     3
 
+#define PSYNC_PERM_READ   1
+#define PSYNC_PERM_CREATE 2
+#define PSYNC_PERM_MODIFY 4
+#define PSYNC_PERM_DELETE 8
+
+#define PSYNC_PERM_ALL (PSYNC_PERM_READ|PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
+#define PSYNC_PERM_WRITE (PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
+
 typedef struct {
   const char *localname;
   const char *localpath;
@@ -253,6 +261,7 @@ typedef struct {
   const char *email;
   const char *sharename;
   const char *message;
+  unsigned char permissions;
   unsigned char canread;
   unsigned char cancreate;
   unsigned char canmodify;
@@ -271,6 +280,7 @@ typedef struct {
   psync_userid_t userid;
   const char *email;
   const char *sharename;
+  unsigned char permissions;
   unsigned char canread;
   unsigned char cancreate;
   unsigned char canmodify;
@@ -631,6 +641,57 @@ void psync_network_exception();
 
 psync_sharerequest_list_t *psync_list_sharerequests(int incoming);
 psync_share_list_t *psync_list_shares(int incoming);
+
+/* psync_share_folder shares a folder with the user "mail". The "permissions" parameter is bitwise or of
+ * PSYNC_PERM_READ, PSYNC_PERM_CREATE, PSYNC_PERM_MODIFY and PSYNC_PERM_DELETE (PSYNC_PERM_READ is actually
+ * ignored and always set).
+ * 
+ * On success returns 0, otherwise returns API error number (or -1 on network error) and sets err to a string
+ * error message if it is not NULL. This string should be freed if the return value is not 0 and err is not NULL.
+ * 
+ * It is NOT guaranteed that upon successful return psync_list_sharerequests(0) will return the newly created 
+ * share request. Windows showing list of sharerequests/shares are supposed to requery shares/request upon receiving of
+ * PEVENT_SHARE_* event. That is true for all share management functions.
+ * 
+ */
+
+int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err);
+
+
+/* Cancels a share request (this is to be called for outgoing requests).
+ * 
+ * Return value same as psync_share_folder.
+ */
+
+int psync_cancel_share_request(psync_sharerequestid_t requestid, char **err);
+
+/* Declines a share request (this is to be called for incoming requests).
+ * 
+ * Return value same as psync_share_folder.
+ */
+
+int psync_decline_share_request(psync_sharerequestid_t requestid, char **err);
+
+/* Accepts a share request to a folder "tofolderid" under a name "name". If "name" is NULL then the original share name is used.
+ * 
+ * Return value same as psync_share_folder.
+ */
+
+int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_t tofolderid, const char *name, char **err);
+
+/* Removes established share. Can be called by both receiving and sharing user.
+ * 
+ * Return value same as psync_share_folder.
+ */
+
+int psync_remove_share(psync_shareid_t shareid, char **err);
+
+/* Removes established share. Can be called by both receiving and sharing user.
+ * 
+ * Return value same as psync_share_folder.
+ */
+
+int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err);
 
 /* The following function check for new version of the application. Return NULL if there is no new
  * version or psync_new_version_t structure if a new version is available. Returned value is to be
