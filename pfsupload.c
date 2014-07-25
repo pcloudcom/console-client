@@ -37,7 +37,7 @@
 #include "ppagecache.h"
 #include "pssl.h"
 #include <string.h>
-#include <lua5.2/llimits.h>
+//#include <lua5.2/llimits.h>
 
 typedef struct {
   psync_list list;
@@ -422,7 +422,7 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
     psync_apipool_release(api);
     return -1;
   }
-  return large_upload_save(api, uploadid, folderid, name, taskid);
+  return large_upload_save(api, uploadid, folderid, name, taskid, writeid);
 ret01:
   psync_file_close(fd);
 ret0:
