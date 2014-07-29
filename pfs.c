@@ -84,6 +84,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
   psync_fsfileid_t fileid;
   int64_t d;
   int ret;
+  fileid=-taskid;
   pthread_mutex_lock(&openfiles_mutex);
   tr=openfiles;
   d=-1;
