@@ -340,7 +340,7 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
  * Do not expect localpath to exist after receiving PEVENT_FILE_DOWNLOAD_STARTED
  * as the file will be created with alternative name first and renamed when download
  * is finished.
-s * 
+ * 
  */
 
 typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t data);
