@@ -861,21 +861,19 @@ static void delete_uploadid(psync_uploadid_t uploadid){
 
 static void delete_uploadids(psync_fileid_t localfileid){
   psync_sql_res *res;
-  psync_uint_row row;
-  int hasuploadids;
-  hasuploadids=0;
+  psync_full_result_int *rows;
+  uint32_t i;
   res=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=?");
   psync_sql_bind_uint(res, 1, localfileid);
-  while ((row=psync_sql_fetch_rowint(res))){
-    hasuploadids=1;
-    delete_uploadid(row[0]);
-  }
-  psync_sql_free_result(res);
-  if (hasuploadids){
+  rows=psync_sql_fetchall_int(res);
+  if (rows->rows){
+    for (i=0; i<rows->rows; i++)
+      delete_uploadid(psync_get_result_cell(rows, i, 0));
     res=psync_sql_prep_statement("DELETE FROM localfileupload WHERE localfileid=?");
     psync_sql_bind_uint(res, 1, localfileid);
     psync_sql_run_free(res);
   }
+  psync_free(rows);
 }
   
 static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, const char *name, upload_list_t *upload){
