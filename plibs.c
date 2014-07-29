@@ -210,7 +210,20 @@ void psync_sql_close(){
 }
 
 void psync_sql_lock(){
+#if IS_DEBUG
+  if (pthread_mutex_trylock(&psync_db_mutex)){
+    struct timespec start, end;
+    unsigned long msec;
+    psync_nanotime(&start);
+    pthread_mutex_lock(&psync_db_mutex);
+    psync_nanotime(&end);
+    msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
+    if (msec>=5)
+      debug(D_WARNING, "waited %lu miliseconds for database mutex", msec);
+  }
+#else
   pthread_mutex_lock(&psync_db_mutex);
+#endif
 }
 
 void psync_sql_unlock(){
