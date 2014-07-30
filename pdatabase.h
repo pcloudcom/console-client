@@ -109,6 +109,8 @@ CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER, dependfstaskid INTEGE
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOt EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
+  data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\

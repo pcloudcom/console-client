@@ -35,6 +35,7 @@
 #include "plibs.h"
 #include "psettings.h"
 #include "pssl.h"
+#include "ptimer.h"
 
 #if defined(P_OS_LINUX)
 #include <sys/sysinfo.h>
@@ -750,30 +751,194 @@ psync_socket_t psync_create_socket(int domain, int type, int protocol){
   return ret;
 }
 
+static void addr_save_to_db(const char *host, const char *port, struct addrinfo *addr){
+  psync_sql_res *res;
+  uint64_t id;
+  psync_sql_start_transaction();
+  res=psync_sql_prep_statement("DELETE FROM resolver WHERE hostname=? AND port=?");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("INSERT INTO resolver (hostname, port, prio, created, family, socktype, protocol, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  psync_sql_bind_uint(res, 4, psync_timer_time());
+  id=0;
+  do {
+    psync_sql_bind_uint(res, 3, id++);
+    psync_sql_bind_int(res, 5, addr->ai_family);
+    psync_sql_bind_int(res, 6, addr->ai_socktype);
+    psync_sql_bind_int(res, 7, addr->ai_protocol);
+    psync_sql_bind_blob(res, 8, (char *)addr->ai_addr, addr->ai_addrlen);
+    psync_sql_run(res);
+    addr=addr->ai_next;
+  } while (addr);
+  psync_sql_free_result(res);
+  psync_sql_commit_transaction();
+}
+
+static struct addrinfo *addr_load_from_db(const char *host, const char *port){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_variant_row vrow;
+  struct addrinfo *ret;
+  char *data;
+  const char *str;
+  uint64_t i;
+  size_t len;
+  psync_sql_lock();
+  res=psync_sql_query("SELECT COUNT(*), SUM(LENGTH(data)) FROM resolver WHERE hostname=? AND port=?");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  if (!(row=psync_sql_fetch_rowint(res)) || row[0]==0){
+    psync_sql_free_result(res);
+    psync_sql_unlock();
+    return NULL;
+  }
+  ret=psync_malloc(sizeof(struct addrinfo)*row[0]+row[1]);
+  data=(char *)(ret+row[0]);
+  for (i=0; i<row[0]-1; i++)
+    ret[i].ai_next=&ret[i+1];
+  ret[i].ai_next=NULL;
+  psync_sql_free_result(res);
+  res=psync_sql_query("SELECT family, socktype, protocol, data FROM resolver WHERE hostname=? AND port=? ORDER BY prio");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  i=0;
+  while ((vrow=psync_sql_fetch_row(res))){
+    ret[i].ai_family=psync_get_snumber(vrow[0]);
+    ret[i].ai_socktype=psync_get_snumber(vrow[1]);
+    ret[i].ai_protocol=psync_get_snumber(vrow[2]);
+    str=psync_get_lstring(vrow[3], &len);
+    ret[i].ai_addr=(struct sockaddr *)data;
+    ret[i].ai_addrlen=len;
+    i++;
+    memcpy(data, str, len);
+    data+=len;
+  }
+  psync_sql_free_result(res);
+  psync_sql_unlock();
+  return ret;
+}
+
+static int addr_still_valid(struct addrinfo *olda, struct addrinfo *newa){
+  struct addrinfo *a;
+  do {
+    a=newa;
+    while (1){
+      if (a->ai_addrlen==olda->ai_addrlen && !memcmp(a->ai_addr, olda->ai_addr, a->ai_addrlen))
+        break;
+      a=a->ai_next;
+      if (!a)
+        return 0;
+    }
+    olda=olda->ai_next;
+  } while (olda);
+  return 1;
+}
+
+typedef struct {
+  const char *host;
+  const char *port;
+} resolve_host_port;
+
+static void connect_res_callback(void *h, void *ptr){
+  struct addrinfo *res;
+  psync_socket_t sock;
+  int r;
+  res=(struct addrinfo *)ptr;
+  sock=connect_res(res);
+  r=psync_task_complete(h, (void *)(uintptr_t)sock);
+  psync_free(res);
+  if (r && sock!=INVALID_SOCKET)
+    psync_close_socket(sock);
+}
+
+static void resolve_callback(void *h, void *ptr){
+  resolve_host_port *hp;
+  struct addrinfo *res;
+  struct addrinfo hints;
+  int rc;
+  hp=(resolve_host_port *)ptr;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family=AF_UNSPEC;
+  hints.ai_socktype=SOCK_STREAM;
+  res=NULL;
+  rc=getaddrinfo(hp->host, hp->port, &hints, &res);
+#if defined(P_OS_WINDOWS)
+  if (unlikely(rc==WSANOTINITIALISED)){
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData)){
+      psync_task_complete(h, NULL);
+      return;
+    }
+    rc=getaddrinfo(host, port, &hints, &res);
+  }
+#endif
+  if (unlikely(rc!=0))
+    res=NULL;
+  psync_task_complete(h, res);
+}
+
 static psync_socket_t connect_socket(const char *host, const char *port){
-  struct addrinfo *res=NULL;
+  struct addrinfo *res, *dbres;
   struct addrinfo hints;
   psync_socket_t sock;
   int rc;
   debug(D_NOTICE, "connecting to %s:%s", host, port);
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family=AF_UNSPEC;
-  hints.ai_socktype=SOCK_STREAM;
-  rc=getaddrinfo(host, port, &hints, &res);
-#if defined(P_OS_WINDOWS)
-  if (unlikely(rc==WSANOTINITIALISED)){
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+  dbres=addr_load_from_db(host, port);
+  if (dbres){
+    resolve_host_port resolv;
+    void *params[2];
+    psync_task_callback_t callbacks[2];
+    psync_task_manager_t tasks;
+    resolv.host=host;
+    resolv.port=port;
+    params[0]=dbres;
+    params[1]=&resolv;
+    callbacks[0]=connect_res_callback;
+    callbacks[1]=resolve_callback;
+    tasks=psync_task_run_tasks(callbacks, params, 2);
+    res=(struct addrinfo *)psync_task_get_result(tasks, 1);
+    if (unlikely(!res)){
+      psync_task_free(tasks);
+      debug(D_WARNING, "failed to resolve %s", host);
       return INVALID_SOCKET;
+    }
+    addr_save_to_db(host, port, res);
+    if (addr_still_valid(dbres, res)){
+      debug(D_NOTICE, "successfuly reused cached IP for %s:%s", host, port);
+      sock=(psync_socket_t)(uintptr_t)psync_task_get_result(tasks, 0);
+    }
+    else{
+      debug(D_NOTICE, "cached IP not valid for %s:%s", host, port);
+      sock=connect_res(res);
+    }
+    freeaddrinfo(res);
+    psync_task_free(tasks);
+  }
+  else{
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family=AF_UNSPEC;
+    hints.ai_socktype=SOCK_STREAM;
+    res=NULL;
     rc=getaddrinfo(host, port, &hints, &res);
-  }
+#if defined(P_OS_WINDOWS)
+    if (unlikely(rc==WSANOTINITIALISED)){
+      WSADATA wsaData;
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+        return INVALID_SOCKET;
+      rc=getaddrinfo(host, port, &hints, &res);
+    }
 #endif
-  if (unlikely(rc!=0)){
-    debug(D_WARNING, "failed to resolve %s", host);
-    return INVALID_SOCKET;
+    if (unlikely(rc!=0)){
+      debug(D_WARNING, "failed to resolve %s", host);
+      return INVALID_SOCKET;
+    }
+    addr_save_to_db(host, port, res);
+    sock=connect_res(res);
+    freeaddrinfo(res);
   }
-  sock=connect_res(res);
-  freeaddrinfo(res);
   if (likely(sock!=INVALID_SOCKET)){
     int sock_opt=1;
 #if defined(TCP_NODELAY) && defined(SOL_TCP)

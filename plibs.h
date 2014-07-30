@@ -135,6 +135,9 @@ struct psync_list_builder_t_;
 
 typedef struct psync_list_builder_t_ psync_list_builder_t;
 
+struct psync_task_manager_t_;
+
+typedef struct psync_task_manager_t_* psync_task_manager_t;
 
 typedef const uint64_t* psync_uint_row;
 typedef const char* const* psync_str_row;
@@ -142,6 +145,8 @@ typedef const psync_variant* psync_variant_row;
 
 typedef void (*psync_run_after_t)(void *);
 typedef int (*psync_list_builder_sql_callback)(psync_list_builder_t *, void *, psync_variant_row);
+
+typedef void (*psync_task_callback_t)(void *, void *);
 
 extern int psync_do_run;
 extern pstatus_t psync_status;
@@ -210,6 +215,11 @@ void psync_list_bulder_add_sql(psync_list_builder_t *builder, psync_sql_res *res
 void psync_list_add_string_offset(psync_list_builder_t *builder, size_t offset);
 void psync_list_add_lstring_offset(psync_list_builder_t *builder, size_t offset, size_t length);
 void *psync_list_builder_finalize(psync_list_builder_t *builder);
+
+psync_task_manager_t psync_task_run_tasks(psync_task_callback_t const *callbacks, void *const *params, int cnt);
+void *psync_task_get_result(psync_task_manager_t tm, int id);
+void psync_task_free(psync_task_manager_t tm);
+int psync_task_complete(void *h, void *data);
 
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
