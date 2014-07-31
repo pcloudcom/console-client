@@ -872,7 +872,7 @@ static void resolve_callback(void *h, void *ptr){
       psync_task_complete(h, NULL);
       return;
     }
-    rc=getaddrinfo(host, port, &hints, &res);
+    rc=getaddrinfo(hp->host, hp->port, &hints, &res);
   }
 #endif
   if (unlikely(rc!=0))
