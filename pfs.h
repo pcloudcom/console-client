@@ -57,6 +57,7 @@ typedef struct {
   uint64_t currentsize;
   uint64_t laststreamid;
   uint64_t indexoff;
+  uint64_t writeid;
   psync_file_t datafile;
   psync_file_t indexfile;
   uint32_t refcnt;
@@ -65,8 +66,11 @@ typedef struct {
   unsigned char modified;
   unsigned char urlsstatus;
   unsigned char newfile;
+  unsigned char uploading;
 } psync_openfile_t;
 
+int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash);
+int64_t psync_fs_get_file_writeid(uint64_t taskid);
 int psync_fs_remount();
 void psync_fs_inc_of_refcnt(psync_openfile_t *of);
 void psync_fs_dec_of_refcnt(psync_openfile_t *of);

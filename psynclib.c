@@ -914,6 +914,7 @@ static int create_request(psync_list_builder_t *builder, void *element, psync_va
   else{
     request->message="";
   }
+  request->permissions=perms;
   request->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
   request->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
   request->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
@@ -949,6 +950,7 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   str=psync_get_lstring(row[6], &len);
   share->sharename=str;
   psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
+  share->permissions=perms;
   share->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
   share->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
   share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
@@ -965,6 +967,51 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_sql_bind_uint(res, 1, incoming);
   psync_list_bulder_add_sql(builder, res, create_share);
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
+}
+
+static uint32_t convert_perms(uint32_t permissions){
+  return 
+    (permissions&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE*1+
+    (permissions&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY*2+
+    (permissions&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE*4;
+}
+
+int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_STR("mail", mail),
+                     P_STR("message", message), P_NUM("permissions", convert_perms(permissions))};
+  return run_command("sharefolder", params, err);
+}
+
+int psync_cancel_share_request(psync_sharerequestid_t requestid, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid)};
+  return run_command("cancelsharerequest", params, err);
+}
+
+int psync_decline_share_request(psync_sharerequestid_t requestid, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid)};
+  return run_command("declineshare", params, err);
+}
+
+int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_t tofolderid, const char *name, char **err){
+  if (name){
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid), P_NUM("folderid", tofolderid), P_STR("name", name)};
+    return run_command("acceptshare", params, err);
+  }
+  else{
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid), P_NUM("folderid", tofolderid)};
+    return run_command("acceptshare", params, err);
+  }
+}
+
+int psync_remove_share(psync_shareid_t shareid, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid)};
+  return run_command("removeshare", params, err);
+}
+
+
+int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid), P_NUM("permissions", convert_perms(permissions))};
+  return run_command("changeshare", params, err);
 }
 
 static unsigned long psync_parse_version(const char *currentversion){

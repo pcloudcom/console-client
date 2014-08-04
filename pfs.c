@@ -78,6 +78,96 @@ static gid_t mygid=0;
 static psync_tree *openfiles=PSYNC_TREE_EMPTY;
 static pthread_mutex_t openfiles_mutex=PTHREAD_MUTEX_INITIALIZER;
 
+int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash){
+  psync_openfile_t *fl;
+  psync_tree *tr;
+  psync_fsfileid_t fileid;
+  int64_t d;
+  int ret;
+  fileid=-taskid;
+  pthread_mutex_lock(&openfiles_mutex);
+  tr=openfiles;
+  d=-1;
+  while (tr){
+    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    if (d<0){
+      if (tr->left)
+        tr=tr->left;
+      else
+        break;
+    }
+    else if (d>0){
+      if (tr->right)
+        tr=tr->right;
+      else
+        break;
+    }
+    else{
+      fl=psync_tree_element(tr, psync_openfile_t, tree);
+      pthread_mutex_lock(&fl->mutex);
+      if (fl->writeid==writeid){
+        fl->fileid=newfileid;
+        fl->hash=hash;
+        fl->modified=0;
+        fl->newfile=0;
+        ret=0;
+      }
+      else
+        ret=-1;
+      pthread_mutex_unlock(&fl->mutex);
+      pthread_mutex_unlock(&openfiles_mutex);
+      return ret;
+    }
+  }
+  pthread_mutex_unlock(&openfiles_mutex);
+  return 0;
+}
+
+int64_t psync_fs_get_file_writeid(uint64_t taskid){
+  psync_openfile_t *fl;
+  psync_tree *tr;
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_fsfileid_t fileid;
+  int64_t d;
+  fileid=-taskid;
+  pthread_mutex_lock(&openfiles_mutex);
+  tr=openfiles;
+  d=-1;
+  while (tr){
+    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    if (d<0){
+      if (tr->left)
+        tr=tr->left;
+      else
+        break;
+    }
+    else if (d>0){
+      if (tr->right)
+        tr=tr->right;
+      else
+        break;
+    }
+    else{
+      fl=psync_tree_element(tr, psync_openfile_t, tree);
+      pthread_mutex_lock(&fl->mutex);
+      d=fl->writeid;
+      pthread_mutex_unlock(&fl->mutex);
+      pthread_mutex_unlock(&openfiles_mutex);
+      return d;
+    }
+  }
+  pthread_mutex_unlock(&openfiles_mutex);
+  res=psync_sql_query("SELECT int1 FROM fstask WHERE id=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  if ((row=psync_sql_fetch_rowint(res)))
+    d=row[0];
+  else
+    d=-1;
+  psync_sql_free_result(res);
+  return d;
+}
+
 static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
   memset(stbuf, 0, sizeof(struct stat));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
@@ -394,6 +484,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, uint64_t 
   fl->initialsize=size;
   fl->currentsize=size;
   fl->laststreamid=0;
+  fl->writeid=0;
   fl->datafile=INVALID_HANDLE_VALUE;
   fl->indexfile=INVALID_HANDLE_VALUE;
   fl->refcnt=1;
@@ -402,6 +493,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, uint64_t 
   fl->modified=fileid<0?1:0;
   fl->urlsstatus=0;
   fl->newfile=0;
+  fl->uploading=0;
   memset(fl->streams, 0, sizeof(fl->streams));
   pthread_mutex_init(&fl->mutex, NULL);
   pthread_cond_init(&fl->cond, NULL);
@@ -466,7 +558,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     return -EACCES;
   }
   folder=psync_fstask_get_folder_tasks_locked(fpath->folderid);
-  if (fpath->folderid>=0){ // TODO: when there are unlinks, change to if !find_unlink
+  if (fpath->folderid>=0 && (!folder || !psync_fstask_find_unlink(folder, fpath->name, 0))){
     res=psync_sql_query("SELECT id, size, hash FROM file WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fpath->folderid);
     psync_sql_bind_string(res, 2, fpath->name);
@@ -655,14 +747,19 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
   psync_openfile_t *of;
   debug(D_NOTICE, "flush %s", path);
   of=fh_to_openfile(fi->fh);
+  pthread_mutex_lock(&of->mutex);
   if (of->newfile){
     psync_sql_res *res;
+    of->uploading=1;
+    pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "releasing new file %s for upload", path);
     res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=? AND status=1");
     psync_sql_bind_uint(res, 1, -of->fileid);
     psync_sql_run_free(res);
     psync_fsupload_wake();
   }
+  else
+    pthread_mutex_unlock(&of->mutex);
   return 0;
 }
 
@@ -718,7 +815,16 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   index_record rec;
   int ret;
   of=fh_to_openfile(fi->fh);
+  pthread_mutex_lock(&of->mutex);
+  if (unlikely(of->uploading)){
+    pthread_mutex_unlock(&of->mutex);
+    debug(D_NOTICE, "stopping upload of file %s as new write arrived", path);
+    //TODO: stop upload
+    pthread_mutex_lock(&of->mutex);
+  }
+  of->writeid++;
   if (of->newfile){
+    pthread_mutex_unlock(&of->mutex);
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
     if (unlikely_log(bw==-1))
       return -EIO;
@@ -726,7 +832,6 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
       return bw;
   }
   else{
-    pthread_mutex_lock(&of->mutex);
     if (unlikely(!of->modified)){
       ret=open_write_files(of, 0);
       if (unlikely_log(ret)){
@@ -748,7 +853,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
     pthread_mutex_lock(&of->mutex);
     psync_interval_tree_add(&of->writeintervals, offset, offset+bw);
     pthread_mutex_unlock(&of->mutex);
-    return 0;
+    return bw;
   }
 }
 
@@ -820,7 +925,16 @@ static int psync_fs_unlink(const char *path){
 
 static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t src_permissions,
                                   psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
-  return -ENOSYS;
+  if (parentfolderid==to_folderid){
+    assertw(targetperms==src_permissions);
+    if (!(src_permissions&PSYNC_PERM_MODIFY))
+      return -EACCES;
+  }
+  else{
+    if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
+      return -EACCES;
+  }
+  return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
 }
 
 static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t src_permissions,
