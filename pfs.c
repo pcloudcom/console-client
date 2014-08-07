@@ -315,9 +315,9 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   }
   memset(stbuf, 0, sizeof(struct stat));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
-  stbuf->st_birthtime=st->st_birthtime;
-  stbuf->st_ctime=st->st_ctime;
-  stbuf->st_mtime=st->st_mtime;
+  stbuf->st_birthtime=st.st_birthtime;
+  stbuf->st_ctime=st.st_ctime;
+  stbuf->st_mtime=st.st_mtime;
 #else
   stbuf->st_ctime=psync_stat_ctime(&st);
   stbuf->st_mtime=psync_stat_mtime(&st);

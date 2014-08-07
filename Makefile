@@ -20,6 +20,7 @@ else
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
+        CFLAGS += -DP_OS_MACOSX -I/usr/local/include/osxfuse/
         #USESSL=securetransport
     endif
 endif
