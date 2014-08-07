@@ -279,7 +279,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
   psync_sql_start_transaction();
-  if (psync_fs_update_openfile(taskid, writeid, fileid, hash)){
+  if (psync_fs_update_openfile(taskid, writeid, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num)){
     psync_sql_rollback_transaction();
     psync_free(res);
     return -1;
@@ -552,7 +552,7 @@ static int psync_process_task_creat(fsupload_task_t *task){
     return handle_upload_api_error(result, task);
   meta=psync_find_result(task->res, "metadata", PARAM_ARRAY)->array[0];
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
-  if (psync_fs_update_openfile(task->id, task->int1, fileid, psync_find_result(meta, "hash", PARAM_NUM)->num))
+  if (psync_fs_update_openfile(task->id, task->int1, fileid, psync_find_result(meta, "hash", PARAM_NUM)->num, psync_find_result(meta, "size", PARAM_NUM)->num))
     return -1;
   psync_ops_create_file_in_db(meta);
   psync_fstask_file_created(task->folderid, task->id, task->text1, fileid);

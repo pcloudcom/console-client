@@ -47,6 +47,8 @@ typedef int (*psync_list_compare)(const psync_list *, const psync_list *);
 #define PSYNC_LIST_STATIC_INIT(l) {&l, &l}
   
 #define psync_list_isempty(l) ((l)->next==(l))
+#define psync_list_is_head(l, e) ((l)->next==(e))
+#define psync_list_is_tail(l, e) ((l)->prev==(e))
   
 static inline void psync_list_add_between(psync_list *l1, psync_list *l2, psync_list *a){
   a->next=l2;

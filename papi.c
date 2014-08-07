@@ -382,6 +382,22 @@ binresult *get_result(psync_socket *sock){
   return res;
 }
 
+binresult *get_result_thread(psync_socket *sock){
+  unsigned char *data;
+  binresult *res;
+  uint32_t ressize;
+  if (unlikely_log(psync_socket_readall_thread(sock, &ressize, sizeof(uint32_t))!=sizeof(uint32_t)))
+    return NULL;
+  data=(unsigned char *)psync_malloc(ressize);
+  if (unlikely_log(psync_socket_readall_thread(sock, data, ressize)!=ressize)){
+    psync_free(data);
+    return NULL;
+  }
+  res=parse_result(data, ressize);
+  psync_free(data);
+  return res;
+}
+
 binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres){
   size_t i, plen;
   unsigned char *data;
@@ -430,12 +446,20 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
       *data++=params[i].num&1;
   }
   plen+=2;
-  if (unlikely_log(psync_socket_writeall(sock, sdata, plen)!=plen)){
-    psync_free(sdata);
-    return NULL;
+  if (readres&2){
+    if (unlikely_log(psync_socket_writeall_thread(sock, sdata, plen)!=plen)){
+      psync_free(sdata);
+      return NULL;
+    }
+  }
+  else{
+    if (unlikely_log(psync_socket_writeall(sock, sdata, plen)!=plen)){
+      psync_free(sdata);
+      return NULL;
+    }
   }
   psync_free(sdata);
-  if (readres)
+  if (readres&1)
     return get_result(sock);
   else
     return PTR_OK;

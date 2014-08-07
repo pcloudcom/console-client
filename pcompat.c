@@ -96,6 +96,7 @@ static int psync_gids_cnt;
 #endif
 
 PSYNC_THREAD const char *psync_thread_name="no name";
+static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 void psync_compat_init(){
 #if defined(P_OS_POSIX)
@@ -1104,6 +1105,27 @@ int psync_socket_pendingdata_buf(psync_socket *sock){
   return ret;
 }
 
+int psync_socket_pendingdata_buf_thread(psync_socket *sock){
+  int ret;
+  pthread_mutex_lock(&socket_mutex);
+#if defined(P_OS_POSIX) && defined(FIONREAD)
+  if (ioctl(sock->sock, FIONREAD, &ret))
+    return -1;
+#elif defined(P_OS_WINDOWS)
+  u_long l;
+  if (ioctlsocket(sock->sock, FIONREAD, &l))
+    return -1;
+  else
+    ret=l;
+#else
+  return -1;
+#endif
+  if (sock->ssl)
+    ret+=psync_ssl_pendingdata(sock->ssl);
+  pthread_mutex_unlock(&socket_mutex);
+  return ret;
+}
+
 int psync_socket_readable(psync_socket *sock){
   if (sock->ssl && psync_ssl_pendingdata(sock->ssl))
     return 1;
@@ -1167,6 +1189,60 @@ int psync_socket_read(psync_socket *sock, void *buff, int num){
     return psync_socket_read_ssl(sock, buff, num);
   else
     return psync_socket_read_plain(sock, buff, num);
+}
+
+static int psync_socket_read_ssl_thread(psync_socket *sock, void *buff, int num){
+  int r;
+  if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
+  while (1){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_ssl_read(sock->ssl, buff, num);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==PSYNC_SSL_FAIL){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    else
+      return r;
+  }
+}
+
+static int psync_socket_read_plain_thread(psync_socket *sock, void *buff, int num){
+  int r;
+  while (1){
+    if (sock->pending)
+      sock->pending=0;
+    else if (psync_wait_socket_read_timeout(sock->sock))
+      return -1;
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_read_socket(sock->sock, buff, num);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==SOCKET_ERROR){
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+        continue;
+      else
+        return -1;
+    }
+    else
+      return r;
+  }
+}
+
+int psync_socket_read_thread(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_read_ssl_thread(sock, buff, num);
+  else
+    return psync_socket_read_plain_thread(sock, buff, num);
 }
 
 
@@ -1301,6 +1377,125 @@ int psync_socket_writeall(psync_socket *sock, const void *buff, int num){
     return psync_socket_writeall_ssl(sock, buff, num);
   else
     return psync_socket_writeall_plain(sock->sock, buff, num);
+}
+
+static int psync_socket_readall_ssl_thread(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  pthread_mutex_lock(&socket_mutex);
+  r=psync_ssl_pendingdata(sock->ssl);
+  pthread_mutex_unlock(&socket_mutex);
+  if (!r && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
+  while (br<num){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_ssl_read(sock->ssl, (char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==PSYNC_SSL_FAIL){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_readall_plain_thread(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    if (sock->pending)
+      sock->pending=0;
+    else if (psync_wait_socket_read_timeout(sock->sock))
+      return -1;
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_read_socket(sock->sock, (char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==SOCKET_ERROR){
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+        continue;
+      else
+        return -1;
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_readall_thread(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_readall_ssl_thread(sock, buff, num);
+  else
+    return psync_socket_readall_plain_thread(sock, buff, num);
+}
+
+
+static int psync_socket_writeall_ssl_thread(psync_socket *sock, const void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_ssl_write(sock->ssl, (char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==PSYNC_SSL_FAIL){
+      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_writeall_plain_thread(psync_socket_t sock, const void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_write_socket(sock, (const char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==SOCKET_ERROR){
+      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN){
+        if (psync_wait_socket_write_timeout(sock))
+          return -1;
+        else
+          continue;
+      }
+      else
+        return -1;
+    }
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_writeall_thread(psync_socket *sock, const void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_writeall_ssl_thread(sock, buff, num);
+  else
+    return psync_socket_writeall_plain_thread(sock->sock, buff, num);
 }
 
 psync_interface_list_t *psync_list_ip_adapters(){
@@ -1905,22 +2100,67 @@ int psync_file_sync(psync_file_t fd){
 #endif
 }
 
-int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
+psync_file_t psync_file_dup(psync_file_t fd){
 #if defined(P_OS_POSIX)
-#if defined(POSIX_FADV_WILLNEED)
+  return dup(fd);
+#elif defined(P_OS_WINDOWS)
+  HANDLE process, fddup;
+  process=GetCurrentProcess();
+  if (!DuplicateHandle(process, fd, process, &fddup, 0, FALSE, DUPLICATE_SAME_ACCESS))
+    return INVALID_HANDLE_VALUE;
+  else
+    return fddup;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+typedef struct {
+  uint64_t offset;
+  size_t count;
+  psync_file_t fd;
+} psync_file_preread_t;
+
+static void psync_file_preread_thread(void *ptr){
+  char buff[16*1024];
+  psync_file_preread_t *pr;
+  ssize_t rd;
+  pr=(psync_file_preread_t *)ptr;
+  while (pr->count){
+    rd=psync_file_pread(pr->fd, buff, pr->count>sizeof(buff)?sizeof(buff):pr->count, pr->offset);
+    if (rd<=0)
+      break;
+    pr->offset+=rd;
+    pr->count-=rd;
+  }
+  psync_file_close(pr->fd);
+  psync_free(pr);
+}
+
+int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count){
+  psync_file_preread_t *pr;
+  psync_file_t cfd;
+  cfd=psync_file_dup(fd);
+  if (cfd==INVALID_HANDLE_VALUE)
+    return -1;
+  pr=psync_new(psync_file_preread_t);
+  pr->offset=offset;
+  pr->count=count;
+  pr->fd=cfd;
+  psync_run_thread1("pre-read (readahead) thread", psync_file_preread_thread, pr);
+  return 0;
+}
+
+int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
+#if defined(P_OS_POSIX) && defined(POSIX_FADV_WILLNEED)
   return posix_fadvise(fd, offset, count, POSIX_FADV_WILLNEED);
-#elif defined(F_RDADVISE)
+#elif defined(P_OS_POSIX) && defined(F_RDADVISE)
   struct radvisory ra;
   ra.ra_offset=offset;
   ra.ra_count=count;
   return fcntl(fd, F_RDADVISE, &ra);
 #else
-  return 0;
-#endif
-#elif defined(P_OS_WINDOWS)
-  return 0;
-#else
-#error "Function not implemented for your operating system"
+  return psync_file_preread(fd, offset, count);
 #endif
 }
 

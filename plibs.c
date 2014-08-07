@@ -209,6 +209,23 @@ void psync_sql_close(){
   psync_db=NULL;
 }
 
+#if IS_DEBUG
+unsigned long sqllockcnt=0;
+struct timespec sqllockstart;
+#endif
+
+int psync_sql_trylock(){
+#if IS_DEBUG
+  if (pthread_mutex_trylock(&psync_db_mutex))
+    return -1;
+  if (++sqllockcnt==1)
+    psync_nanotime(&sqllockstart);
+  return 0;
+#else
+  return pthread_mutex_trylock(&psync_db_mutex);
+#endif
+}
+
 void psync_sql_lock(){
 #if IS_DEBUG
   if (pthread_mutex_trylock(&psync_db_mutex)){
@@ -220,14 +237,32 @@ void psync_sql_lock(){
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)
       debug(D_WARNING, "waited %lu miliseconds for database mutex", msec);
+    sqllockcnt++;
+    memcpy(&sqllockstart, &end, sizeof(struct timespec));
   }
+  else if (++sqllockcnt==1)
+    psync_nanotime(&sqllockstart);
 #else
   pthread_mutex_lock(&psync_db_mutex);
 #endif
 }
 
 void psync_sql_unlock(){
+#if IS_DEBUG
+  if (--sqllockcnt==0){
+    struct timespec end;
+    unsigned long msec;
+    pthread_mutex_unlock(&psync_db_mutex);
+    psync_nanotime(&end);
+    msec=(end.tv_sec-sqllockstart.tv_sec)*1000+end.tv_nsec/1000000-sqllockstart.tv_nsec/1000000;
+    if (msec>=10)
+      debug(D_WARNING, "held database mutex for %lu miliseconds", msec);
+  }
+  else
+    pthread_mutex_unlock(&psync_db_mutex);
+#else
   pthread_mutex_unlock(&psync_db_mutex);
+#endif
 }
 
 int psync_sql_sync(){
@@ -1222,11 +1257,12 @@ int psync_task_complete(void *h, void *data){
   return ret;
 }
 
-static void time_format(time_t tm, char *result){
+static void time_format(time_t tm, unsigned long ns, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   struct tm dt;
   psync_uint_t y;
+  ns/=1000000;
   gmtime_r(&tm, &dt);
   memcpy(result, day_names[dt.tm_wday], 3);
   result+=3;
@@ -1255,6 +1291,10 @@ static void time_format(time_t tm, char *result){
   *result++=':';
   *result++=dt.tm_sec/10+'0';
   *result++=dt.tm_sec%10+'0';
+  *result++='.';
+  *result++=ns/100+'0';
+  *result++=(ns/10)%10+'0';
+  *result++=ns%10+'0';
   memcpy(result, " +0000", 7); // copies the null byte
 }
 
@@ -1264,12 +1304,12 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
     const char *name;
   } debug_levels[]=DEBUG_LEVELS;
   static FILE *log=NULL;
-  char dttime[32], format[512];
+  struct timespec ts;
+  char dttime[36], format[512];
   va_list ap;
   const char *errname;
   psync_uint_t i;
   unsigned int u;
-  time_t currenttime;
   pthread_t threadid;
   errname="BAD_ERROR_CODE";
   for (i=0; i<ARRAY_SIZE(debug_levels); i++)
@@ -1282,8 +1322,8 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
     if (!log)
       return 1;
   }
-  currenttime=psync_timer_time();
-  time_format(currenttime, dttime);
+  psync_nanotime(&ts);
+  time_format(ts.tv_sec, ts.tv_nsec, dttime);
   threadid=pthread_self();
   memcpy(&u, &threadid, sizeof(u));
   snprintf(format, sizeof(format), "%s %u %s %s: %s:%u (function %s): %s\n", dttime, u, psync_thread_name, errname, file, line, function, fmt);

@@ -34,6 +34,7 @@
 #include "papi.h"
 #include "psettings.h"
 #include "pfsfolder.h"
+#include "pfstasks.h"
 #include <pthread.h>
 
 typedef struct {
@@ -42,34 +43,39 @@ typedef struct {
   uint64_t length;
   uint64_t requestedto;
   uint64_t id;
+  time_t lastuse;
 } psync_file_stream_t;
 
 typedef struct {
   psync_tree tree;
   psync_file_stream_t streams[PSYNC_FS_FILESTREAMS_CNT];
   pthread_mutex_t mutex;
-  pthread_cond_t cond;
-  binresult *urls;
   psync_interval_tree_t *writeintervals;
+  psync_fstask_folder_t *currentfolder;
+  char *currentname;
   psync_fsfileid_t fileid;
+  psync_fsfileid_t localfileid;
   uint64_t hash;
   uint64_t initialsize;
   uint64_t currentsize;
   uint64_t laststreamid;
   uint64_t indexoff;
   uint64_t writeid;
+  time_t currentsec;
   psync_file_t datafile;
   psync_file_t indexfile;
   uint32_t refcnt;
   uint32_t condwaiters;
   uint32_t runningreads;
+  uint32_t currentspeed;
+  uint32_t bytesthissec;
   unsigned char modified;
-  unsigned char urlsstatus;
   unsigned char newfile;
   unsigned char uploading;
 } psync_openfile_t;
 
-int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash);
+int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size);
+int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t folderid, const char *name);
 int64_t psync_fs_get_file_writeid(uint64_t taskid);
 int psync_fs_remount();
 void psync_fs_inc_of_refcnt(psync_openfile_t *of);

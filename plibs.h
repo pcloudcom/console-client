@@ -163,6 +163,7 @@ char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
 
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
 void psync_sql_close();
+int psync_sql_trylock();
 void psync_sql_lock();
 void psync_sql_unlock();
 int psync_sql_sync();
