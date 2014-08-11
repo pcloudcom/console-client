@@ -209,6 +209,31 @@ void psync_sql_close(){
   psync_db=NULL;
 }
 
+int psync_sql_reopen(const char *path){
+  sqlite3 *db;
+  int code;
+  debug(D_NOTICE, "reopening database %s", path);
+  code=sqlite3_open(path, &db);
+  if (likely(code==SQLITE_OK)){
+    code=sqlite3_wal_checkpoint(db, NULL);
+    if (unlikely(code!=SQLITE_OK)){
+      debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
+      sqlite3_close(db);
+      return -1;
+    }
+    code=sqlite3_close(db);
+    if (unlikely(code!=SQLITE_OK)){
+      debug(D_CRITICAL, "sqlite3_close returned error %d", code);
+      return -1;
+    }
+    return 0;
+  }
+  else{
+    debug(D_CRITICAL, "could not open sqlite dabase %s: %d", path, code);
+    return -1;
+  }
+}
+
 #if IS_DEBUG
 unsigned long sqllockcnt=0;
 struct timespec sqllockstart;

@@ -234,8 +234,14 @@ char *psync_get_default_database_path(){
   path=psync_strcat(dirpath, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_DB_NAME, NULL);
   psync_free(dirpath);
   if (psync_stat(path, &st) && (dirpath=psync_get_default_database_path_old())){
-    if (!psync_stat(dirpath, &st))
-      psync_file_rename(dirpath, path);
+    if (!psync_stat(dirpath, &st)){
+      if (psync_sql_reopen(dirpath)){
+        psync_free(path);
+        return dirpath;
+      }
+      else
+        psync_file_rename(dirpath, path);
+    }
     psync_free(dirpath);
   }
   return path;
@@ -450,6 +456,8 @@ static void psync_get_random_seed_from_db(psync_lhash_ctx *hctx){
   res=psync_sql_query("SELECT * FROM file ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM localfile ORDER BY RANDOM() LIMIT 50");
+  psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM resolver ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM folder ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);

@@ -99,6 +99,7 @@ void psync_fstask_release_folder_tasks_locked(psync_fstask_folder_t *folder);
 void psync_fstask_folder_created(psync_folderid_t parentfolderid, uint64_t taskid, psync_folderid_t folderid, const char *name);
 void psync_fstask_folder_deleted(psync_folderid_t parentfolderid, uint64_t taskid, const char *name);
 void psync_fstask_file_created(psync_folderid_t parentfolderid, uint64_t taskid, const char *name, psync_fileid_t fileid);
+void psync_fstask_file_modified(psync_folderid_t parentfolderid, uint64_t taskid, const char *name, psync_fileid_t fileid);
 void psync_fstask_file_deleted(psync_folderid_t parentfolderid, uint64_t taskid, const char *name);
 void psync_fstask_file_renamed(psync_folderid_t folderid, uint64_t taskid, const char *name, uint64_t frtaskid);
 void psync_fstask_folder_renamed(psync_folderid_t parentfolderid, uint64_t taskid, const char *name, uint64_t frtaskid);

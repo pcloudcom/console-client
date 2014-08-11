@@ -173,6 +173,9 @@ typedef struct stat psync_stat_t;
 
 #define psync_fs_err() errno
 
+typedef int psync_sock_err_t;
+typedef int psync_fs_err_t;
+
 #define psync_inode_supported(path) 1
 
 #define PSYNC_DIRECTORY_SEPARATOR "/"
@@ -260,6 +263,9 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_sock_set_err(e) WSASetLastError(e)
 
 #define psync_fs_err() GetLastError()
+
+typedef int psync_sock_err_t;
+typedef DWORD psync_fs_err_t;
 
 #define psync_inode_supported(path) 1
 
