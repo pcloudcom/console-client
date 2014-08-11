@@ -1120,11 +1120,13 @@ int psync_socket_pendingdata_buf_thread(psync_socket *sock){
   if (ioctl(sock->sock, FIONREAD, &ret))
     return -1;
 #elif defined(P_OS_WINDOWS)
+  {
   u_long l;
   if (ioctlsocket(sock->sock, FIONREAD, &l))
     return -1;
   else
     ret=l;
+  }
 #else
   return -1;
 #endif
