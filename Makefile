@@ -27,9 +27,9 @@ endif
 
 OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o pupload.o pdownload.o pfolder.o\
      psyncer.o ptasks.o psettings.o pnetlibs.o pcache.o pscanner.o plist.o plocalscan.o plocalnotify.o pp2p.o\
-     pcrypto.o pssl.o pfileops.o
+     pcrypto.o pssl.o pfileops.o ptree.o
 
-OBJFS=pfs.o ppagecache.o pfsfolder.o pfstasks.o pfsupload.o ptree.o pintervaltree.o
+OBJFS=pfs.o ppagecache.o pfsfolder.o pfstasks.o pfsupload.o pintervaltree.o
 
 OBJNOFS=pfsfake.o
 
