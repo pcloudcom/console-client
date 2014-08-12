@@ -385,7 +385,7 @@ char *psync_get_default_database_path();
 char *psync_get_home_dir();
 void psync_run_thread(const char *name, psync_thread_start0 run);
 void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr);
-void psync_milisleep(uint64_t milisec);
+void psync_milisleep(uint64_t millisec);
 time_t psync_time();
 void psync_nanotime(struct timespec *tm);
 void psync_yield_cpu();
@@ -420,7 +420,7 @@ int psync_pipe_close(psync_socket_t pfd);
 int psync_pipe_read(psync_socket_t pfd, void *buff, int num);
 int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 
-int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec);
+int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec);
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr);
 int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback, void *ptr);

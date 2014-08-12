@@ -706,7 +706,7 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
     sockets[i]=INVALID_SOCKET;
     sock=psync_create_socket(il->interfaces[i].address.ss_family, SOCK_DGRAM, IPPROTO_UDP);
     if (unlikely(sock==INVALID_SOCKET)){
-      debug(D_NOTICE, "could not create a socket for addres family %u", (unsigned)il->interfaces[i].address.ss_family);
+      debug(D_NOTICE, "could not create a socket for address family %u", (unsigned)il->interfaces[i].address.ss_family);
       continue;
     }
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));

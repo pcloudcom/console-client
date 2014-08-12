@@ -344,14 +344,14 @@ void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr){
   pthread_attr_destroy(&attr);
 }
 
-void psync_milisleep(uint64_t milisec){
+void psync_milisleep(uint64_t millisec){
 #if defined(P_OS_POSIX)
   struct timespec tm;
-  tm.tv_sec=milisec/1000;
-  tm.tv_nsec=(milisec%1000)*1000000;
+  tm.tv_sec=millisec/1000;
+  tm.tv_nsec=(millisec%1000)*1000000;
   nanosleep(&tm, NULL);
 #elif defined(P_OS_WINDOWS)
-  Sleep(milisec);
+  Sleep(millisec);
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -916,7 +916,7 @@ static psync_socket_t connect_socket(const char *host, const char *port){
     }
     addr_save_to_db(host, port, res);
     if (addr_still_valid(dbres, res)){
-      debug(D_NOTICE, "successfuly reused cached IP for %s:%s", host, port);
+      debug(D_NOTICE, "successfully reused cached IP for %s:%s", host, port);
       sock=(psync_socket_t)(uintptr_t)psync_task_get_result(tasks, 0);
     }
     else{
@@ -1684,16 +1684,16 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
 #endif
 }
 
-int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec){
+int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec){
   fd_set rfds;
   struct timeval tv, *ptv;
   psync_socket_t max;
   int i;
-  if (timeoutmilisec<0)
+  if (timeoutmillisec<0)
     ptv=NULL;
   else{
-    tv.tv_sec=timeoutmilisec/1000;
-    tv.tv_usec=(timeoutmilisec%1000)*1000;
+    tv.tv_sec=timeoutmillisec/1000;
+    tv.tv_usec=(timeoutmillisec%1000)*1000;
     ptv=&tv;
   }
   FD_ZERO(&rfds);

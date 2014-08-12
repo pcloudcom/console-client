@@ -135,7 +135,7 @@ char *psync_strcat(const char *str, ...){
 }
 
 void psync_sql_err_callback(void *ptr, int code, const char *msg){
-  debug(D_WARNING, "dabase warning %d: %s", code, msg);
+  debug(D_WARNING, "database warning %d: %s", code, msg);
 }
 
 static void psync_sql_wal_checkpoint(){
@@ -180,7 +180,7 @@ int psync_sql_connect(const char *db){
     return 0;
   }
   else{
-    debug(D_CRITICAL, "could not open sqlite dabase %s: %d", db, code);
+    debug(D_CRITICAL, "could not open sqlite database %s: %d", db, code);
     return -1;
   }
 }
@@ -261,7 +261,7 @@ void psync_sql_lock(){
     psync_nanotime(&end);
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)
-      debug(D_WARNING, "waited %lu miliseconds for database mutex", msec);
+      debug(D_WARNING, "waited %lu milliseconds for database mutex", msec);
     sqllockcnt++;
     memcpy(&sqllockstart, &end, sizeof(struct timespec));
   }
@@ -281,7 +281,7 @@ void psync_sql_unlock(){
     psync_nanotime(&end);
     msec=(end.tv_sec-sqllockstart.tv_sec)*1000+end.tv_nsec/1000000-sqllockstart.tv_nsec/1000000;
     if (msec>=10)
-      debug(D_WARNING, "held database mutex for %lu miliseconds", msec);
+      debug(D_WARNING, "held database mutex for %lu milliseconds", msec);
   }
   else
     pthread_mutex_unlock(&psync_db_mutex);
