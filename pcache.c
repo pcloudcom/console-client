@@ -96,6 +96,7 @@ void *psync_cache_get(const char *key){
                    "query/statement, you can use _nocache version)", key);
 
   h=hash_func(key);
+//  debug(D_NOTICE, "get %s %lu", key, h);
   pthread_mutex_lock(&cache_mutexes[h%CACHE_LOCKS]);
   psync_list_for_each_element (he, &cache_hash[h], hash_element, list)
     if (!strcmp(key, he->key)){
@@ -152,10 +153,14 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
         pthread_mutex_unlock(&cache_mutexes[h%CACHE_LOCKS]);
         psync_free(he);
         freefunc(ptr);
+        debug(D_NOTICE, "not adding key %s to cache as there already %u elements present", key, (unsigned int)maxkeys);
         return;
       }
   }
-  psync_list_add_tail(&cache_hash[h], &he->list);
+  /* adding to head should be better than to the tail: more recent objects are likely to be in processor cache, more recent
+   * connections are likely to be "faster" (e.g. further from idle slowstart reset)
+   */
+  psync_list_add_head(&cache_hash[h], &he->list);
   he->timer=psync_timer_register(cache_timer, freeafter, he);
   pthread_mutex_unlock(&cache_mutexes[h%CACHE_LOCKS]);
 }

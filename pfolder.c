@@ -719,9 +719,10 @@ psync_folder_list_t *psync_list_get_list(){
     memcpy(str, folders[i].localpath, l);
     psync_free(folders[i].localpath);
     ret->folders[i].localpath=str;
+    l--;
     while (l && str[l]!=PSYNC_DIRECTORY_SEPARATORC && str[l]!='/')
       l--;
-    if (str[l]==PSYNC_DIRECTORY_SEPARATORC || str[l]=='/')
+    if ((str[l]==PSYNC_DIRECTORY_SEPARATORC || str[l]=='/') && str[l+1])
       l++;
     ret->folders[i].localname=str+l;
     str+=folders[i].locallen;

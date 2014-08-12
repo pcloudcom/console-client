@@ -173,6 +173,9 @@ typedef struct stat psync_stat_t;
 
 #define psync_fs_err() errno
 
+typedef int psync_sock_err_t;
+typedef int psync_fs_err_t;
+
 #define psync_inode_supported(path) 1
 
 #define PSYNC_DIRECTORY_SEPARATOR "/"
@@ -260,6 +263,9 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_sock_set_err(e) WSASetLastError(e)
 
 #define psync_fs_err() GetLastError()
+
+typedef int psync_sock_err_t;
+typedef DWORD psync_fs_err_t;
 
 #define psync_inode_supported(path) 1
 
@@ -395,12 +401,16 @@ int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);
+int psync_socket_pendingdata_buf_thread(psync_socket *sock);
 int psync_socket_readable(psync_socket *sock);
 int psync_socket_writable(psync_socket *sock);
 int psync_socket_read(psync_socket *sock, void *buff, int num);
+int psync_socket_read_thread(psync_socket *sock, void *buff, int num);
 int psync_socket_write(psync_socket *sock, const void *buff, int num);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall(psync_socket *sock, const void *buff, int num);
+int psync_socket_readall_thread(psync_socket *sock, void *buff, int num);
+int psync_socket_writeall_thread(psync_socket *sock, const void *buff, int num);
 
 psync_interface_list_t *psync_list_ip_adapters();
 
@@ -427,6 +437,8 @@ int psync_file_delete(const char *path);
 psync_file_t psync_file_open(const char *path, int access, int flags);
 int psync_file_close(psync_file_t fd);
 int psync_file_sync(psync_file_t fd);
+psync_file_t psync_file_dup(psync_file_t fd);
+int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count);
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
 ssize_t psync_file_pread(psync_file_t fd, void *buf, size_t count, uint64_t offset);

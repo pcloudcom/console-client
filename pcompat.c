@@ -35,6 +35,7 @@
 #include "plibs.h"
 #include "psettings.h"
 #include "pssl.h"
+#include "ptimer.h"
 
 #if defined(P_OS_LINUX)
 #include <sys/sysinfo.h>
@@ -95,6 +96,7 @@ static int psync_gids_cnt;
 #endif
 
 PSYNC_THREAD const char *psync_thread_name="no name";
+static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 void psync_compat_init(){
 #if defined(P_OS_POSIX)
@@ -232,8 +234,14 @@ char *psync_get_default_database_path(){
   path=psync_strcat(dirpath, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_DB_NAME, NULL);
   psync_free(dirpath);
   if (psync_stat(path, &st) && (dirpath=psync_get_default_database_path_old())){
-    if (!psync_stat(dirpath, &st))
-      psync_file_rename(dirpath, path);
+    if (!psync_stat(dirpath, &st)){
+      if (psync_sql_reopen(dirpath)){
+        psync_free(path);
+        return dirpath;
+      }
+      else
+        psync_file_rename(dirpath, path);
+    }
     psync_free(dirpath);
   }
   return path;
@@ -448,6 +456,8 @@ static void psync_get_random_seed_from_db(psync_lhash_ctx *hctx){
   res=psync_sql_query("SELECT * FROM file ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM localfile ORDER BY RANDOM() LIMIT 50");
+  psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM resolver ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM folder ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);
@@ -750,30 +760,194 @@ psync_socket_t psync_create_socket(int domain, int type, int protocol){
   return ret;
 }
 
+static void addr_save_to_db(const char *host, const char *port, struct addrinfo *addr){
+  psync_sql_res *res;
+  uint64_t id;
+  psync_sql_start_transaction();
+  res=psync_sql_prep_statement("DELETE FROM resolver WHERE hostname=? AND port=?");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("INSERT INTO resolver (hostname, port, prio, created, family, socktype, protocol, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  psync_sql_bind_uint(res, 4, psync_timer_time());
+  id=0;
+  do {
+    psync_sql_bind_uint(res, 3, id++);
+    psync_sql_bind_int(res, 5, addr->ai_family);
+    psync_sql_bind_int(res, 6, addr->ai_socktype);
+    psync_sql_bind_int(res, 7, addr->ai_protocol);
+    psync_sql_bind_blob(res, 8, (char *)addr->ai_addr, addr->ai_addrlen);
+    psync_sql_run(res);
+    addr=addr->ai_next;
+  } while (addr);
+  psync_sql_free_result(res);
+  psync_sql_commit_transaction();
+}
+
+static struct addrinfo *addr_load_from_db(const char *host, const char *port){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_variant_row vrow;
+  struct addrinfo *ret;
+  char *data;
+  const char *str;
+  uint64_t i;
+  size_t len;
+  psync_sql_lock();
+  res=psync_sql_query("SELECT COUNT(*), SUM(LENGTH(data)) FROM resolver WHERE hostname=? AND port=?");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  if (!(row=psync_sql_fetch_rowint(res)) || row[0]==0){
+    psync_sql_free_result(res);
+    psync_sql_unlock();
+    return NULL;
+  }
+  ret=psync_malloc(sizeof(struct addrinfo)*row[0]+row[1]);
+  data=(char *)(ret+row[0]);
+  for (i=0; i<row[0]-1; i++)
+    ret[i].ai_next=&ret[i+1];
+  ret[i].ai_next=NULL;
+  psync_sql_free_result(res);
+  res=psync_sql_query("SELECT family, socktype, protocol, data FROM resolver WHERE hostname=? AND port=? ORDER BY prio");
+  psync_sql_bind_string(res, 1, host);
+  psync_sql_bind_string(res, 2, port);
+  i=0;
+  while ((vrow=psync_sql_fetch_row(res))){
+    ret[i].ai_family=psync_get_snumber(vrow[0]);
+    ret[i].ai_socktype=psync_get_snumber(vrow[1]);
+    ret[i].ai_protocol=psync_get_snumber(vrow[2]);
+    str=psync_get_lstring(vrow[3], &len);
+    ret[i].ai_addr=(struct sockaddr *)data;
+    ret[i].ai_addrlen=len;
+    i++;
+    memcpy(data, str, len);
+    data+=len;
+  }
+  psync_sql_free_result(res);
+  psync_sql_unlock();
+  return ret;
+}
+
+static int addr_still_valid(struct addrinfo *olda, struct addrinfo *newa){
+  struct addrinfo *a;
+  do {
+    a=newa;
+    while (1){
+      if (a->ai_addrlen==olda->ai_addrlen && !memcmp(a->ai_addr, olda->ai_addr, a->ai_addrlen))
+        break;
+      a=a->ai_next;
+      if (!a)
+        return 0;
+    }
+    olda=olda->ai_next;
+  } while (olda);
+  return 1;
+}
+
+typedef struct {
+  const char *host;
+  const char *port;
+} resolve_host_port;
+
+static void connect_res_callback(void *h, void *ptr){
+  struct addrinfo *res;
+  psync_socket_t sock;
+  int r;
+  res=(struct addrinfo *)ptr;
+  sock=connect_res(res);
+  r=psync_task_complete(h, (void *)(uintptr_t)sock);
+  psync_free(res);
+  if (r && sock!=INVALID_SOCKET)
+    psync_close_socket(sock);
+}
+
+static void resolve_callback(void *h, void *ptr){
+  resolve_host_port *hp;
+  struct addrinfo *res;
+  struct addrinfo hints;
+  int rc;
+  hp=(resolve_host_port *)ptr;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family=AF_UNSPEC;
+  hints.ai_socktype=SOCK_STREAM;
+  res=NULL;
+  rc=getaddrinfo(hp->host, hp->port, &hints, &res);
+#if defined(P_OS_WINDOWS)
+  if (unlikely(rc==WSANOTINITIALISED)){
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData)){
+      psync_task_complete(h, NULL);
+      return;
+    }
+    rc=getaddrinfo(hp->host, hp->port, &hints, &res);
+  }
+#endif
+  if (unlikely(rc!=0))
+    res=NULL;
+  psync_task_complete(h, res);
+}
+
 static psync_socket_t connect_socket(const char *host, const char *port){
-  struct addrinfo *res=NULL;
+  struct addrinfo *res, *dbres;
   struct addrinfo hints;
   psync_socket_t sock;
   int rc;
   debug(D_NOTICE, "connecting to %s:%s", host, port);
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_family=AF_UNSPEC;
-  hints.ai_socktype=SOCK_STREAM;
-  rc=getaddrinfo(host, port, &hints, &res);
-#if defined(P_OS_WINDOWS)
-  if (unlikely(rc==WSANOTINITIALISED)){
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+  dbres=addr_load_from_db(host, port);
+  if (dbres){
+    resolve_host_port resolv;
+    void *params[2];
+    psync_task_callback_t callbacks[2];
+    psync_task_manager_t tasks;
+    resolv.host=host;
+    resolv.port=port;
+    params[0]=dbres;
+    params[1]=&resolv;
+    callbacks[0]=connect_res_callback;
+    callbacks[1]=resolve_callback;
+    tasks=psync_task_run_tasks(callbacks, params, 2);
+    res=(struct addrinfo *)psync_task_get_result(tasks, 1);
+    if (unlikely(!res)){
+      psync_task_free(tasks);
+      debug(D_WARNING, "failed to resolve %s", host);
       return INVALID_SOCKET;
+    }
+    addr_save_to_db(host, port, res);
+    if (addr_still_valid(dbres, res)){
+      debug(D_NOTICE, "successfuly reused cached IP for %s:%s", host, port);
+      sock=(psync_socket_t)(uintptr_t)psync_task_get_result(tasks, 0);
+    }
+    else{
+      debug(D_NOTICE, "cached IP not valid for %s:%s", host, port);
+      sock=connect_res(res);
+    }
+    freeaddrinfo(res);
+    psync_task_free(tasks);
+  }
+  else{
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family=AF_UNSPEC;
+    hints.ai_socktype=SOCK_STREAM;
+    res=NULL;
     rc=getaddrinfo(host, port, &hints, &res);
-  }
+#if defined(P_OS_WINDOWS)
+    if (unlikely(rc==WSANOTINITIALISED)){
+      WSADATA wsaData;
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+        return INVALID_SOCKET;
+      rc=getaddrinfo(host, port, &hints, &res);
+    }
 #endif
-  if (unlikely(rc!=0)){
-    debug(D_WARNING, "failed to resolve %s", host);
-    return INVALID_SOCKET;
+    if (unlikely(rc!=0)){
+      debug(D_WARNING, "failed to resolve %s", host);
+      return INVALID_SOCKET;
+    }
+    addr_save_to_db(host, port, res);
+    sock=connect_res(res);
+    freeaddrinfo(res);
   }
-  sock=connect_res(res);
-  freeaddrinfo(res);
   if (likely(sock!=INVALID_SOCKET)){
     int sock_opt=1;
 #if defined(TCP_NODELAY) && defined(SOL_TCP)
@@ -939,6 +1113,29 @@ int psync_socket_pendingdata_buf(psync_socket *sock){
   return ret;
 }
 
+int psync_socket_pendingdata_buf_thread(psync_socket *sock){
+  int ret;
+  pthread_mutex_lock(&socket_mutex);
+#if defined(P_OS_POSIX) && defined(FIONREAD)
+  if (ioctl(sock->sock, FIONREAD, &ret))
+    return -1;
+#elif defined(P_OS_WINDOWS)
+  {
+  u_long l;
+  if (ioctlsocket(sock->sock, FIONREAD, &l))
+    return -1;
+  else
+    ret=l;
+  }
+#else
+  return -1;
+#endif
+  if (sock->ssl)
+    ret+=psync_ssl_pendingdata(sock->ssl);
+  pthread_mutex_unlock(&socket_mutex);
+  return ret;
+}
+
 int psync_socket_readable(psync_socket *sock){
   if (sock->ssl && psync_ssl_pendingdata(sock->ssl))
     return 1;
@@ -1002,6 +1199,60 @@ int psync_socket_read(psync_socket *sock, void *buff, int num){
     return psync_socket_read_ssl(sock, buff, num);
   else
     return psync_socket_read_plain(sock, buff, num);
+}
+
+static int psync_socket_read_ssl_thread(psync_socket *sock, void *buff, int num){
+  int r;
+  if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
+  while (1){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_ssl_read(sock->ssl, buff, num);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==PSYNC_SSL_FAIL){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    else
+      return r;
+  }
+}
+
+static int psync_socket_read_plain_thread(psync_socket *sock, void *buff, int num){
+  int r;
+  while (1){
+    if (sock->pending)
+      sock->pending=0;
+    else if (psync_wait_socket_read_timeout(sock->sock))
+      return -1;
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_read_socket(sock->sock, buff, num);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==SOCKET_ERROR){
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+        continue;
+      else
+        return -1;
+    }
+    else
+      return r;
+  }
+}
+
+int psync_socket_read_thread(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_read_ssl_thread(sock, buff, num);
+  else
+    return psync_socket_read_plain_thread(sock, buff, num);
 }
 
 
@@ -1138,6 +1389,125 @@ int psync_socket_writeall(psync_socket *sock, const void *buff, int num){
     return psync_socket_writeall_plain(sock->sock, buff, num);
 }
 
+static int psync_socket_readall_ssl_thread(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  pthread_mutex_lock(&socket_mutex);
+  r=psync_ssl_pendingdata(sock->ssl);
+  pthread_mutex_unlock(&socket_mutex);
+  if (!r && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
+    return -1;
+  sock->pending=0;
+  while (br<num){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_ssl_read(sock->ssl, (char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==PSYNC_SSL_FAIL){
+      if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE)){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_readall_plain_thread(psync_socket *sock, void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    if (sock->pending)
+      sock->pending=0;
+    else if (psync_wait_socket_read_timeout(sock->sock))
+      return -1;
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_read_socket(sock->sock, (char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==SOCKET_ERROR){
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+        continue;
+      else
+        return -1;
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_readall_thread(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_readall_ssl_thread(sock, buff, num);
+  else
+    return psync_socket_readall_plain_thread(sock, buff, num);
+}
+
+
+static int psync_socket_writeall_ssl_thread(psync_socket *sock, const void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_ssl_write(sock->ssl, (char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==PSYNC_SSL_FAIL){
+      if (psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE){
+        if (wait_sock_ready_for_ssl(sock->sock))
+          return -1;
+        else
+          continue;
+      }
+      else{
+        psync_sock_set_err(P_CONNRESET);
+        return -1;
+      }
+    }
+    if (r==0)
+      return br;
+    br+=r;
+  }
+  return br;
+}
+
+static int psync_socket_writeall_plain_thread(psync_socket_t sock, const void *buff, int num){
+  int br, r;
+  br=0;
+  while (br<num){
+    pthread_mutex_lock(&socket_mutex);
+    r=psync_write_socket(sock, (const char *)buff+br, num-br);
+    pthread_mutex_unlock(&socket_mutex);
+    if (r==SOCKET_ERROR){
+      if (psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN){
+        if (psync_wait_socket_write_timeout(sock))
+          return -1;
+        else
+          continue;
+      }
+      else
+        return -1;
+    }
+    br+=r;
+  }
+  return br;
+}
+
+int psync_socket_writeall_thread(psync_socket *sock, const void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_writeall_ssl_thread(sock, buff, num);
+  else
+    return psync_socket_writeall_plain_thread(sock->sock, buff, num);
+}
+
 psync_interface_list_t *psync_list_ip_adapters(){
   psync_interface_list_t *ret;
   size_t cnt;
@@ -1151,7 +1521,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   addr=addrs;
   while (addr){
     family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr)
+    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask && addr->ifa_addr)
       cnt++;
     addr=addr->ifa_next;
   }
@@ -1161,7 +1531,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   cnt=0;
   while (addr){
     family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr){
+    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask && addr->ifa_addr){
       if (family==AF_INET)
         sz=sizeof(struct sockaddr_in);
       else
@@ -1742,22 +2112,67 @@ int psync_file_sync(psync_file_t fd){
 #endif
 }
 
-int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
+psync_file_t psync_file_dup(psync_file_t fd){
 #if defined(P_OS_POSIX)
-#if defined(POSIX_FADV_WILLNEED)
+  return dup(fd);
+#elif defined(P_OS_WINDOWS)
+  HANDLE process, fddup;
+  process=GetCurrentProcess();
+  if (!DuplicateHandle(process, fd, process, &fddup, 0, FALSE, DUPLICATE_SAME_ACCESS))
+    return INVALID_HANDLE_VALUE;
+  else
+    return fddup;
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+typedef struct {
+  uint64_t offset;
+  size_t count;
+  psync_file_t fd;
+} psync_file_preread_t;
+
+static void psync_file_preread_thread(void *ptr){
+  char buff[16*1024];
+  psync_file_preread_t *pr;
+  ssize_t rd;
+  pr=(psync_file_preread_t *)ptr;
+  while (pr->count){
+    rd=psync_file_pread(pr->fd, buff, pr->count>sizeof(buff)?sizeof(buff):pr->count, pr->offset);
+    if (rd<=0)
+      break;
+    pr->offset+=rd;
+    pr->count-=rd;
+  }
+  psync_file_close(pr->fd);
+  psync_free(pr);
+}
+
+int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count){
+  psync_file_preread_t *pr;
+  psync_file_t cfd;
+  cfd=psync_file_dup(fd);
+  if (cfd==INVALID_HANDLE_VALUE)
+    return -1;
+  pr=psync_new(psync_file_preread_t);
+  pr->offset=offset;
+  pr->count=count;
+  pr->fd=cfd;
+  psync_run_thread1("pre-read (readahead) thread", psync_file_preread_thread, pr);
+  return 0;
+}
+
+int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
+#if defined(P_OS_POSIX) && defined(POSIX_FADV_WILLNEED)
   return posix_fadvise(fd, offset, count, POSIX_FADV_WILLNEED);
-#elif defined(F_RDADVISE)
+#elif defined(P_OS_POSIX) && defined(F_RDADVISE)
   struct radvisory ra;
   ra.ra_offset=offset;
   ra.ra_count=count;
   return fcntl(fd, F_RDADVISE, &ra);
 #else
-  return 0;
-#endif
-#elif defined(P_OS_WINDOWS)
-  return 0;
-#else
-#error "Function not implemented for your operating system"
+  return psync_file_preread(fd, offset, count);
 #endif
 }
 

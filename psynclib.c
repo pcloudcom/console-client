@@ -85,6 +85,7 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 int psync_init(){
+  uint64_t dbver;
   psync_thread_name="main app thread";
   if (IS_DEBUG){
     pthread_mutex_lock(&psync_libstate_mutex);
@@ -109,6 +110,18 @@ int psync_init(){
     if (IS_DEBUG)
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_DATABASE_OPEN);
+  }
+  dbver=psync_sql_cellint("SELECT value FROM setting WHERE id='dbversion'", 0);
+  if (dbver<PSYNC_DATABASE_VERSION){
+    uint64_t i;
+    debug(D_NOTICE, "database version %d detected, upgrading to %d", (int)dbver, (int)PSYNC_DATABASE_VERSION);
+    for (i=dbver; i<PSYNC_DATABASE_VERSION; i++)
+      if (psync_sql_statement(psync_db_upgrade[i])){
+        debug(D_ERROR, "error running statement %s", psync_db_upgrade[i]);
+        if (IS_DEBUG)
+          pthread_mutex_unlock(&psync_libstate_mutex);
+        return_error(PERROR_DATABASE_OPEN);
+      }
   }
   psync_sql_statement("UPDATE task SET inprogress=0 WHERE inprogress=1");
   if (unlikely_log(psync_ssl_init())){

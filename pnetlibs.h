@@ -90,6 +90,7 @@ typedef struct {
 void psync_netlibs_init();
 
 psync_socket *psync_apipool_get();
+psync_socket *psync_apipool_get_from_cache();
 void psync_apipool_release(psync_socket *api);
 void psync_apipool_release_bad(psync_socket *api);
 
@@ -107,12 +108,15 @@ int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t 
 
 int psync_set_default_sendbuf(psync_socket *sock);
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
+int psync_socket_readall_download_thread(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
 
 psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);
 void psync_http_close(psync_http_socket *http);
 int psync_http_readall(psync_http_socket *http, void *buff, int num);
+void psync_http_connect_and_cache_host(const char *host);
 psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const char **host);
+psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *hosts, const char **host);
 int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to);
 int psync_http_next_request(psync_http_socket *sock);
 int psync_http_request_readall(psync_http_socket *http, void *buff, int num);

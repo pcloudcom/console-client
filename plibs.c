@@ -209,6 +209,48 @@ void psync_sql_close(){
   psync_db=NULL;
 }
 
+int psync_sql_reopen(const char *path){
+  sqlite3 *db;
+  int code;
+  debug(D_NOTICE, "reopening database %s", path);
+  code=sqlite3_open(path, &db);
+  if (likely(code==SQLITE_OK)){
+    code=sqlite3_wal_checkpoint(db, NULL);
+    if (unlikely(code!=SQLITE_OK)){
+      debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
+      sqlite3_close(db);
+      return -1;
+    }
+    code=sqlite3_close(db);
+    if (unlikely(code!=SQLITE_OK)){
+      debug(D_CRITICAL, "sqlite3_close returned error %d", code);
+      return -1;
+    }
+    return 0;
+  }
+  else{
+    debug(D_CRITICAL, "could not open sqlite dabase %s: %d", path, code);
+    return -1;
+  }
+}
+
+#if IS_DEBUG
+unsigned long sqllockcnt=0;
+struct timespec sqllockstart;
+#endif
+
+int psync_sql_trylock(){
+#if IS_DEBUG
+  if (pthread_mutex_trylock(&psync_db_mutex))
+    return -1;
+  if (++sqllockcnt==1)
+    psync_nanotime(&sqllockstart);
+  return 0;
+#else
+  return pthread_mutex_trylock(&psync_db_mutex);
+#endif
+}
+
 void psync_sql_lock(){
 #if IS_DEBUG
   if (pthread_mutex_trylock(&psync_db_mutex)){
@@ -220,20 +262,43 @@ void psync_sql_lock(){
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)
       debug(D_WARNING, "waited %lu miliseconds for database mutex", msec);
+    sqllockcnt++;
+    memcpy(&sqllockstart, &end, sizeof(struct timespec));
   }
+  else if (++sqllockcnt==1)
+    psync_nanotime(&sqllockstart);
 #else
   pthread_mutex_lock(&psync_db_mutex);
 #endif
 }
 
 void psync_sql_unlock(){
+#if IS_DEBUG
+  if (--sqllockcnt==0){
+    struct timespec end;
+    unsigned long msec;
+    pthread_mutex_unlock(&psync_db_mutex);
+    psync_nanotime(&end);
+    msec=(end.tv_sec-sqllockstart.tv_sec)*1000+end.tv_nsec/1000000-sqllockstart.tv_nsec/1000000;
+    if (msec>=10)
+      debug(D_WARNING, "held database mutex for %lu miliseconds", msec);
+  }
+  else
+    pthread_mutex_unlock(&psync_db_mutex);
+#else
   pthread_mutex_unlock(&psync_db_mutex);
+#endif
 }
 
 int psync_sql_sync(){
   int code;
   pthread_mutex_lock(&psync_db_checkpoint_mutex);
   code=sqlite3_wal_checkpoint(psync_db, NULL);
+  if (unlikely(code==SQLITE_BUSY || code==SQLITE_LOCKED)){
+    psync_sql_lock();
+    code=sqlite3_wal_checkpoint(psync_db, NULL);
+    psync_sql_unlock();
+  }
   pthread_mutex_unlock(&psync_db_checkpoint_mutex);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
@@ -1070,11 +1135,164 @@ void *psync_list_builder_finalize(psync_list_builder_t *builder){
   return ret;
 }
 
-static void time_format(time_t tm, char *result){
+#define PSYNC_TASK_STATUS_RUNNING  0
+#define PSYNC_TASK_STATUS_READY    1
+#define PSYNC_TASK_STATUS_DONE     2
+#define PSYNC_TASK_STATUS_RETURNED 3
+
+struct psync_task_t_{
+  psync_task_callback_t callback;
+  void *param;
+  pthread_cond_t cond;
+  int id;
+  int status;
+};
+
+#define PSYNC_WAIT_ANYBODY -1
+#define PSYNC_WAIT_NOBODY  -2
+#define PSYNC_WAIT_FREED   -3
+
+struct psync_task_manager_t_{
+  pthread_mutex_t mutex;
+  int taskcnt;
+  int refcnt;
+  int waitfor;
+  struct psync_task_t_ tasks[];
+};
+
+static void psync_task_destroy(psync_task_manager_t tm){
+  int i;
+  for (i=0; i<tm->taskcnt; i++)
+    pthread_cond_destroy(&tm->tasks[i].cond);
+  pthread_mutex_destroy(&tm->mutex);
+  psync_free(tm);
+}
+
+static void psync_task_dec_refcnt(psync_task_manager_t tm){
+  int refcnt;
+  pthread_mutex_lock(&tm->mutex);
+  refcnt=--tm->refcnt;
+  pthread_mutex_unlock(&tm->mutex);
+  if (!refcnt)
+    psync_task_destroy(tm);
+}
+
+static psync_task_manager_t psync_get_manager_of_task(struct psync_task_t_ *t){
+  return (psync_task_manager_t)(((char *)(t-t->id))-offsetof(struct psync_task_manager_t_, tasks));
+}
+
+static void psync_task_entry(void *ptr){
+  struct psync_task_t_ *t;
+  t=(struct psync_task_t_*)ptr;
+  t->callback(ptr, t->param);
+  psync_task_dec_refcnt(psync_get_manager_of_task(t));
+}
+
+psync_task_manager_t psync_task_run_tasks(psync_task_callback_t const *callbacks, void *const *params, int cnt){
+  psync_task_manager_t ret;
+  struct psync_task_t_ *t;
+  int i;
+  ret=(psync_task_manager_t)psync_malloc(offsetof(struct psync_task_manager_t_, tasks)+sizeof(struct psync_task_t_)*cnt);
+  pthread_mutex_init(&ret->mutex, NULL);
+  ret->taskcnt=cnt;
+  ret->refcnt=cnt+1;
+  ret->waitfor=PSYNC_WAIT_NOBODY;
+  for (i=0; i<cnt; i++){
+    t=&ret->tasks[i];
+    t->callback=callbacks[i];
+    t->param=params[i];
+    pthread_cond_init(&t->cond, NULL);
+    t->id=i;
+    t->status=PSYNC_TASK_STATUS_RUNNING;
+    psync_run_thread1("task", psync_task_entry, t);
+  }
+  return ret;
+}
+
+void *psync_task_get_result(psync_task_manager_t tm, int id){
+  void *ret;
+  pthread_mutex_lock(&tm->mutex);
+  if (tm->tasks[id].status==PSYNC_TASK_STATUS_RUNNING){
+    do {
+      tm->waitfor=id;
+      pthread_cond_wait(&tm->tasks[id].cond, &tm->mutex);
+      tm->waitfor=PSYNC_WAIT_NOBODY;
+    } while (tm->tasks[id].status==PSYNC_TASK_STATUS_RUNNING);
+    ret=tm->tasks[id].param;
+    tm->tasks[id].status=PSYNC_TASK_STATUS_DONE;
+  }
+  else if (tm->tasks[id].status==PSYNC_TASK_STATUS_READY){
+    ret=tm->tasks[id].param;
+    tm->tasks[id].status=PSYNC_TASK_STATUS_DONE;
+    pthread_cond_signal(&tm->tasks[id].cond);
+  }
+  else{
+    debug(D_BUG, "invalid status %d of task id %d", (int)tm->tasks[id].status, id);
+    ret=NULL;
+  }  
+  pthread_mutex_unlock(&tm->mutex);
+  return ret;
+}
+
+void psync_task_free(psync_task_manager_t tm){
+  if (tm->refcnt==1)
+    psync_task_destroy(tm);
+  else{
+    int refcnt, i;
+    pthread_mutex_lock(&tm->mutex);
+    tm->waitfor=PSYNC_WAIT_FREED;
+    for (i=0; i<tm->taskcnt; i++)
+      if (tm->tasks[i].status==PSYNC_TASK_STATUS_READY){
+        tm->tasks[i].status=PSYNC_TASK_STATUS_RETURNED;
+        pthread_cond_signal(&tm->tasks[i].cond);
+      }
+    refcnt=--tm->refcnt;
+    pthread_mutex_unlock(&tm->mutex);
+    if (!refcnt)
+      psync_task_destroy(tm);
+  }
+}
+
+int psync_task_complete(void *h, void *data){
+  psync_task_manager_t tm;
+  struct psync_task_t_ *t;
+  int ret;
+  t=(struct psync_task_t_ *)h;
+  tm=psync_get_manager_of_task(t);
+  pthread_mutex_lock(&tm->mutex);
+  if (tm->waitfor==t->id){
+    t->param=data;
+    t->status=PSYNC_TASK_STATUS_READY;
+    pthread_cond_signal(&t->cond);
+    ret=0;
+  }
+  else if (tm->waitfor==PSYNC_WAIT_NOBODY || tm->waitfor>=0){
+    t->param=data;
+    t->status=PSYNC_TASK_STATUS_READY;
+    do {
+      pthread_cond_wait(&t->cond, &tm->mutex);
+    } while (t->status==PSYNC_TASK_STATUS_READY);
+    if (t->status==PSYNC_TASK_STATUS_RETURNED)
+      ret=-1;
+    else
+      ret=0;
+  }
+  else if (tm->waitfor==PSYNC_WAIT_FREED)
+    ret=-1;
+  else{
+    debug(D_BUG, "invalid waitfor value %d", tm->waitfor);
+    ret=-1;
+  }
+  pthread_mutex_unlock(&tm->mutex);
+  return ret;
+}
+
+static void time_format(time_t tm, unsigned long ns, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   struct tm dt;
   psync_uint_t y;
+  ns/=1000000;
   gmtime_r(&tm, &dt);
   memcpy(result, day_names[dt.tm_wday], 3);
   result+=3;
@@ -1103,6 +1321,10 @@ static void time_format(time_t tm, char *result){
   *result++=':';
   *result++=dt.tm_sec/10+'0';
   *result++=dt.tm_sec%10+'0';
+  *result++='.';
+  *result++=ns/100+'0';
+  *result++=(ns/10)%10+'0';
+  *result++=ns%10+'0';
   memcpy(result, " +0000", 7); // copies the null byte
 }
 
@@ -1112,12 +1334,12 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
     const char *name;
   } debug_levels[]=DEBUG_LEVELS;
   static FILE *log=NULL;
-  char dttime[32], format[512];
+  struct timespec ts;
+  char dttime[36], format[512];
   va_list ap;
   const char *errname;
   psync_uint_t i;
   unsigned int u;
-  time_t currenttime;
   pthread_t threadid;
   errname="BAD_ERROR_CODE";
   for (i=0; i<ARRAY_SIZE(debug_levels); i++)
@@ -1130,8 +1352,8 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
     if (!log)
       return 1;
   }
-  currenttime=psync_timer_time();
-  time_format(currenttime, dttime);
+  psync_nanotime(&ts);
+  time_format(ts.tv_sec, ts.tv_nsec, dttime);
   threadid=pthread_self();
   memcpy(&u, &threadid, sizeof(u));
   snprintf(format, sizeof(format), "%s %u %s %s: %s:%u (function %s): %s\n", dttime, u, psync_thread_name, errname, file, line, function, fmt);

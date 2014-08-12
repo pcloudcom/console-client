@@ -643,7 +643,7 @@ static void bind_meta(psync_sql_res *res, const binresult *meta, int off){
   bind_opt_num("rotate");
 }
 
-static void insert_revision(psync_fileid_t fileid, uint64_t hash, uint64_t ctime){
+static void insert_revision(psync_fileid_t fileid, uint64_t hash, uint64_t ctime, uint64_t size){
   static psync_sql_res *st=NULL;
   if (!fileid){
     if (st){
@@ -653,17 +653,18 @@ static void insert_revision(psync_fileid_t fileid, uint64_t hash, uint64_t ctime
     return;
   }
   if (!st)
-    st=psync_sql_prep_statement("REPLACE INTO filerevision (fileid, hash, ctime) VALUES (?, ?, ?)");
+    st=psync_sql_prep_statement("REPLACE INTO filerevision (fileid, hash, ctime, size) VALUES (?, ?, ?, ?)");
   psync_sql_bind_uint(st, 1, fileid);
   psync_sql_bind_uint(st, 2, hash);
   psync_sql_bind_uint(st, 3, ctime);
+  psync_sql_bind_uint(st, 4, size);
   psync_sql_run(st);
 }
 
 void psync_diff_create_file(const binresult *meta){
   psync_sql_res *st;
   const binresult *name;
-  uint64_t userid;
+  uint64_t userid, fileid, hash, size;
   st=psync_sql_prep_statement("INSERT OR IGNORE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
                                 "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
                                 "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -673,20 +674,25 @@ void psync_diff_create_file(const binresult *meta){
     userid=psync_my_userid;
   else
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+  size=psync_find_result(meta, "size", PARAM_NUM)->num;
+  hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, fileid);
   psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
   psync_sql_bind_uint(st, 3, userid);
-  psync_sql_bind_uint(st, 4, psync_find_result(meta, "size", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 4, size);
+  psync_sql_bind_uint(st, 5, hash);
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run_free(st);
+  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num, size);
+  insert_revision(0, 0, 0, 0);
 }
 
 void psync_diff_update_file(const binresult *meta){
   psync_sql_res *st;
   const binresult *name;
-  uint64_t userid;
+  uint64_t userid, fileid, hash, size;
   st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
                                 "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
                                 "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -696,14 +702,19 @@ void psync_diff_update_file(const binresult *meta){
     userid=psync_my_userid;
   else
     userid=psync_find_result(meta, "userid", PARAM_NUM)->num;
-  psync_sql_bind_uint(st, 1, psync_find_result(meta, "fileid", PARAM_NUM)->num);
+  fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+  size=psync_find_result(meta, "size", PARAM_NUM)->num;
+  hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  psync_sql_bind_uint(st, 1, fileid);
   psync_sql_bind_uint(st, 2, psync_find_result(meta, "parentfolderid", PARAM_NUM)->num);
   psync_sql_bind_uint(st, 3, userid);
-  psync_sql_bind_uint(st, 4, psync_find_result(meta, "size", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 5, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 4, size);
+  psync_sql_bind_uint(st, 5, hash);
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run_free(st);
+  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num, size);
+  insert_revision(0, 0, 0, 0);
 }
 
 static void process_createfile(const binresult *entry){
@@ -721,7 +732,7 @@ static void process_createfile(const binresult *entry){
       psync_sql_free_result(st);
       st=NULL;
     }
-    insert_revision(0, 0, 0);
+    insert_revision(0, 0, 0, 0);
     return;
   }
   if (!st)
@@ -749,7 +760,7 @@ static void process_createfile(const binresult *entry){
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run(st);
-  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num, size);
   if (psync_is_folder_in_downloadlist(parentfolderid) && !psync_is_name_to_ignore(name->str)){
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
     psync_sql_bind_uint(res, 1, parentfolderid);
@@ -840,7 +851,7 @@ static void process_modifyfile(const binresult *entry){
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run(st);
-  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num, size);
   oldparentfolderid=psync_get_number(row[0]);
   oldsync=psync_is_folder_in_downloadlist(oldparentfolderid);
   if (oldparentfolderid==parentfolderid)

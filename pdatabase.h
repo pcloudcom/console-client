@@ -43,6 +43,8 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
+#define PSYNC_DATABASE_VERSION 2
+
 #define PSYNC_DATABASE_STRUCTURE \
 "\
 PRAGMA journal_mode=WAL;\
@@ -62,7 +64,7 @@ CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER,
 CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
 CREATE INDEX IF NOT EXISTS kfilecategory ON file(category);\
 CREATE INDEX IF NOT EXISTS kfileartist ON file(artist, album);\
-CREATE TABLE IF NOT EXISTS filerevision (fileid INTEGER REFERENCES file(id) ON DELETE CASCADE, hash INTEGER, ctime INTEGER,\
+CREATE TABLE IF NOT EXISTS filerevision (fileid INTEGER REFERENCES file(id) ON DELETE CASCADE, hash INTEGER, ctime INTEGER, size INTEGER,\
   PRIMARY KEY (fileid, hash)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS syncfolderdelayed (id INTEGER PRIMARY KEY, localpath VARCHAR(4096), remotepath VARCHAR(4096), synctype INTEGER); \
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE SET NULL,\
@@ -109,10 +111,22 @@ CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER, dependfstaskid INTEGE
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
+  data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
-INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', 1);\
+INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
 COMMIT;\
 "
+
+static const char *psync_db_upgrade[PSYNC_DATABASE_VERSION]={
+  "",
+  "BEGIN;\
+ALTER TABLE filerevision ADD size INTEGER;\
+UPDATE filerevision SET size=(SELECT size FROM file WHERE file.id=filerevision.fileid AND file.hash=filerevision.hash);\
+UPDATE setting SET value=2 WHERE id='dbversion';\
+COMMIT;\
+"
+};
 
 #endif

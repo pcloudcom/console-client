@@ -37,6 +37,7 @@
 #include "pstatus.h"
 #include "papi.h"
 #include "pcache.h"
+#include "ptree.h"
 
 #define API_CACHE_KEY "ApiConn"
 
@@ -122,6 +123,22 @@ retnew:
   ret=psync_get_api();
   if (unlikely_log(!ret))
     psync_timer_notify_exception();
+  return ret;
+}
+
+psync_socket *psync_apipool_get_from_cache(){
+  psync_socket *ret;
+  ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
+  if (!ret)
+    return NULL;
+  while (unlikely_log(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
+    psync_ret_api(ret);
+    ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
+    if (!ret)
+      break;
+  }
+  if (ret)
+    debug(D_NOTICE, "got api connection from cache");
   return ret;
 }
 
@@ -504,19 +521,25 @@ static psync_uint_t get_download_bytes_this_sec(){
     return 0;
 }
 
-int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
+static int psync_socket_readall_download_th(psync_socket *sock, void *buff, int num, int th){
   psync_int_t dwlspeed, readbytes, pending, lpending, rd, rrd;
   psync_uint_t thissec, ds;
   dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
   if (dwlspeed==0){
-    lpending=psync_socket_pendingdata_buf(sock);
+    if (th)
+      lpending=psync_socket_pendingdata_buf_thread(sock);
+    else
+      lpending=psync_socket_pendingdata_buf(sock);
     if (download_speed>100*1024)
       ds=download_speed/1024;
     else
       ds=100;
     while (1){
       psync_milisleep(PSYNC_SLEEP_AUTO_SHAPER*100/ds);
-      pending=psync_socket_pendingdata_buf(sock);
+      if (th)
+        pending=psync_socket_pendingdata_buf_thread(sock);
+      else
+        pending=psync_socket_pendingdata_buf(sock);
       if (pending==lpending)
         break;
       else
@@ -534,7 +557,10 @@ int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
         rrd=dwlspeed-thissec;
       else
         rrd=num;
-      rd=psync_socket_read(sock, buff, rrd);
+      if (th)
+        rd=psync_socket_read_thread(sock, buff, rrd);
+      else
+        rd=psync_socket_read(sock, buff, rrd);
       if (rd<=0)
         return readbytes?readbytes:rd;
       num-=rd;
@@ -544,10 +570,21 @@ int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
     }
     return readbytes;
   }
-  readbytes=psync_socket_readall(sock, buff, num);
+  if (th)
+    readbytes=psync_socket_readall_thread(sock, buff, num);
+  else
+    readbytes=psync_socket_readall(sock, buff, num);
   if (readbytes>0)
     account_downloaded_bytes(readbytes);
   return readbytes;
+}
+
+int psync_socket_readall_download(psync_socket *sock, void *buff, int num){
+  return psync_socket_readall_download_th(sock, buff, num, 0);
+}
+
+int psync_socket_readall_download_thread(psync_socket *sock, void *buff, int num){
+  return psync_socket_readall_download_th(sock, buff, num, 1);
 }
 
 static void account_uploaded_bytes(int unsigned bytes){
@@ -764,8 +801,11 @@ err0:
 }
 
 void psync_http_close(psync_http_socket *http){
-  if (http->keepalive>5 && http->readbytes==http->contentlength)
+  if (http->keepalive>5 && http->readbytes==http->contentlength){
+//    debug(D_NOTICE, "caching socket %s keepalive=%u, readbytes=%lu, contentlength=%lu", http->cachekey, (unsigned)http->keepalive,
+//                    (unsigned long)http->readbytes, (unsigned long)http->contentlength);
     psync_cache_add(http->cachekey, http->sock, http->keepalive-5, (psync_cache_free_callback)psync_socket_close_download, PSYNC_MAX_IDLE_HTTP_CONNS);
+  }
   else{
     debug(D_NOTICE, "closing socket %s keepalive=%u, readbytes=%lu, contentlength=%lu", http->cachekey, (unsigned)http->keepalive,
                     (unsigned long)http->readbytes, (unsigned long)http->contentlength);
@@ -814,6 +854,184 @@ int psync_http_readall(psync_http_socket *http, void *buff, int num){
   }
 }
 
+typedef struct {
+  psync_tree tree;
+  pthread_cond_t *cond;
+  psync_socket **res;
+  int usessl;
+  int haswaiter;
+  int ready;
+  char host[];
+} connect_cache_tree_node_t;
+
+pthread_mutex_t connect_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
+psync_tree *connect_cache_tree=PSYNC_TREE_EMPTY;
+
+static void connect_cache_thread(void *ptr){
+  connect_cache_tree_node_t *node;
+  psync_socket *sock;
+  node=(connect_cache_tree_node_t *)ptr;
+  sock=psync_socket_connect(node->host, node->usessl?443:80, node->usessl);
+  pthread_mutex_lock(&connect_cache_mutex);
+  psync_tree_del(&connect_cache_tree, &node->tree);
+  if (node->haswaiter){
+    *node->res=sock;
+    node->ready=1;
+    debug(D_NOTICE, "passing connection to %s to waiter", node->host);
+    pthread_cond_signal(node->cond);
+    pthread_mutex_unlock(&connect_cache_mutex);
+  }
+  else{
+    if (sock){
+      char cachekey[256];
+      snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", node->usessl, node->host);
+      cachekey[sizeof(cachekey)-1]=0;
+      psync_cache_add(cachekey, sock, 25, (psync_cache_free_callback)psync_socket_close_download, PSYNC_MAX_IDLE_HTTP_CONNS);
+    }
+    pthread_mutex_unlock(&connect_cache_mutex);
+    if (sock)
+      debug(D_NOTICE, "added connection to %s to cache", node->host);
+    psync_free(node);
+  }
+}
+
+connect_cache_tree_node_t *connect_cache_create_node(const char *host){
+  connect_cache_tree_node_t *res;
+  size_t len;
+  len=strlen(host)+1;
+  res=(connect_cache_tree_node_t *)psync_malloc(offsetof(connect_cache_tree_node_t, host)+len);
+  res->usessl=psync_setting_get_bool(_PS(usessl));
+  res->haswaiter=0;
+  res->ready=0;
+  memcpy(res->host, host, len);
+  return res;
+}
+
+static connect_cache_tree_node_t *connect_cache_neighbour_is_free_duplicate(psync_tree *e, const char *host){
+  connect_cache_tree_node_t *node;
+  psync_tree *n;
+  n=psync_tree_get_next(e);
+  while (n){
+    node=psync_tree_element(n, connect_cache_tree_node_t, tree);
+    if (strcmp(node->host, host))
+      break;
+    if (!node->haswaiter)
+      return node;
+    n=psync_tree_get_next(n);
+  }
+  n=psync_tree_get_prev(e);
+  while (n){
+    node=psync_tree_element(n, connect_cache_tree_node_t, tree);
+    if (strcmp(node->host, host))
+      break;
+    if (!node->haswaiter)
+      return node;
+    n=psync_tree_get_prev(n);
+  }
+  return NULL;
+}
+
+void psync_http_connect_and_cache_host(const char *host){
+  connect_cache_tree_node_t *node;
+  psync_tree *e;
+  int c;
+  debug(D_NOTICE, "creating connection to host %s for cache", host);
+  pthread_mutex_lock(&connect_cache_mutex);
+  if (!connect_cache_tree){
+    node=connect_cache_create_node(host);
+    psync_tree_add_after(&connect_cache_tree, NULL, &node->tree);
+  }
+  else{
+    e=connect_cache_tree;
+    while (1){
+      node=psync_tree_element(e, connect_cache_tree_node_t, tree);
+      c=strcmp(host, node->host);
+      if (c<0){
+        if (e->left)
+          e=e->left;
+        else{
+          node=connect_cache_create_node(host);
+          psync_tree_add_before(&connect_cache_tree, e, &node->tree);
+          break;
+        }
+      }
+      else if (c>0){
+        if (e->right)
+          e=e->right;
+        else{
+          node=connect_cache_create_node(host);
+          psync_tree_add_after(&connect_cache_tree, e, &node->tree);
+          break;
+        }
+      }
+      else{
+        if (!node->haswaiter || connect_cache_neighbour_is_free_duplicate(e, host)){
+          node=NULL;
+          break;
+        }
+        else{
+          node=connect_cache_create_node(host);
+          psync_tree_add_after(&connect_cache_tree, e, &node->tree);
+          break;
+        }
+      }
+    }
+  }
+  pthread_mutex_unlock(&connect_cache_mutex);
+  if (node)
+    psync_run_thread1("connect http cache", connect_cache_thread, node);
+  else
+    debug(D_NOTICE, "connection for %s is already in progress", host);
+}
+
+psync_socket *connect_cache_wait_for_http_connection(const char *host, int usessl){
+  connect_cache_tree_node_t *node;
+  psync_tree *e;
+  int c;
+  pthread_mutex_lock(&connect_cache_mutex);
+  if (connect_cache_tree){
+    e=connect_cache_tree;
+    while (1){
+      node=psync_tree_element(e, connect_cache_tree_node_t, tree);
+      c=strcmp(host, node->host);
+      if (c<0){
+        if (e->left)
+          e=e->left;
+        else
+          break;
+      }
+      else if (c>0){
+        if (e->right)
+          e=e->right;
+        else
+          break;
+      }
+      else{
+        if ((!node->haswaiter || (node=connect_cache_neighbour_is_free_duplicate(e, host))) && node->usessl==usessl){
+          pthread_cond_t cond;
+          psync_socket *sock;
+          pthread_cond_init(&cond, NULL);
+          node->haswaiter=1;
+          node->cond=&cond;
+          node->res=&sock;
+          do {
+            pthread_cond_wait(&cond, &connect_cache_mutex);
+          } while (!node->ready);
+          pthread_mutex_unlock(&connect_cache_mutex);
+          psync_free(node);
+          if (sock)
+            debug(D_NOTICE, "waited successfully for connection to %s", host);
+          return sock;
+        }
+        break;
+      }
+    }
+
+  }
+  pthread_mutex_unlock(&connect_cache_mutex);
+  return NULL;
+}
+
 psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const char **host){
   psync_socket *sock;
   psync_http_socket *hsock;
@@ -827,24 +1045,65 @@ psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const ch
     cachekey[sizeof(cachekey)-1]=0;
     sock=(psync_socket *)psync_cache_get(cachekey);
     if (sock){
-//      debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
+      debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
       *host=hosts->array[i]->str;
       break;
     }
   }
   if (!sock){
-    for (i=0; i<hosts->length; i++){
-      cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
-      cachekey[sizeof(cachekey)-1]=0;
-      sock=psync_socket_connect(hosts->array[i]->str, usessl?443:80, usessl);
-      if (sock){
+    for (i=0; i<hosts->length; i++)
+      if ((sock=connect_cache_wait_for_http_connection(hosts->array[i]->str, usessl))){
+        cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+        cachekey[sizeof(cachekey)-1]=0;
         *host=hosts->array[i]->str;
         break;
       }
+    if (!sock){
+      for (i=0; i<hosts->length; i++){
+        sock=psync_socket_connect(hosts->array[i]->str, usessl?443:80, usessl);
+        if (sock){
+          cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+          cachekey[sizeof(cachekey)-1]=0;
+          *host=hosts->array[i]->str;
+          break;
+        }
+      }
+      if (!sock)
+        return NULL;
     }
-    if (!sock)
-      return NULL;
   }
+  hsock=(psync_http_socket *)psync_malloc(offsetof(psync_http_socket, cachekey)+cl);
+  hsock->sock=sock;
+  hsock->readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);;
+  hsock->contentlength=-1;
+  hsock->readbytes=0;
+  hsock->keepalive=0;
+  hsock->readbuffoff=0;
+  hsock->readbuffsize=0;
+  memcpy(hsock->cachekey, cachekey, cl);
+  return hsock;
+}
+
+psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *hosts, const char **host){
+  psync_socket *sock;
+  psync_http_socket *hsock;
+  uint32_t i;
+  int usessl, cl;
+  char cachekey[256];
+  usessl=psync_setting_get_bool(_PS(usessl));
+  sock=NULL;
+  for (i=0; i<hosts->length; i++){
+    cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+    cachekey[sizeof(cachekey)-1]=0;
+    sock=(psync_socket *)psync_cache_get(cachekey);
+    if (sock){
+      debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
+      *host=hosts->array[i]->str;
+      break;
+    }
+  }
+  if (!sock)
+    return NULL;
   hsock=(psync_http_socket *)psync_malloc(offsetof(psync_http_socket, cachekey)+cl);
   hsock->sock=sock;
   hsock->readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);;
@@ -888,8 +1147,15 @@ int psync_http_next_request(psync_http_socket *sock){
     ptr++;
   while (*ptr && isspace(*ptr))
     ptr++;
-  if (unlikely_log(!isdigit(*ptr)) || unlikely_log(atoi(ptr)/10!=20))
+  if (unlikely_log(!isdigit(*ptr)))
     goto err0;
+  rl=atoi(ptr);
+  if (unlikely_log(rl/10!=20)){
+    if (unlikely_log(rl==0))
+      return -1;
+    else
+      return rl;
+  }
   while (*ptr && *ptr!='\012')
     ptr++;
   if (unlikely_log(!*ptr))

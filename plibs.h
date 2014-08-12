@@ -62,8 +62,8 @@
 #endif
 
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
-#define assert(cond) do {if (D_CRITICAL<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion "TO_STR(cond)" failed, aborting"); abort();}} while (0)
-#define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion "TO_STR(cond)" failed");}} while (0)
+#define assert(cond) do {if (D_CRITICAL<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion %s failed, aborting", TO_STR(cond)); abort();}} while (0)
+#define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion %s failed", TO_STR(cond));}} while (0)
 
 #define PSYNC_TNUMBER 1
 #define PSYNC_TSTRING 2
@@ -135,6 +135,9 @@ struct psync_list_builder_t_;
 
 typedef struct psync_list_builder_t_ psync_list_builder_t;
 
+struct psync_task_manager_t_;
+
+typedef struct psync_task_manager_t_* psync_task_manager_t;
 
 typedef const uint64_t* psync_uint_row;
 typedef const char* const* psync_str_row;
@@ -142,6 +145,8 @@ typedef const psync_variant* psync_variant_row;
 
 typedef void (*psync_run_after_t)(void *);
 typedef int (*psync_list_builder_sql_callback)(psync_list_builder_t *, void *, psync_variant_row);
+
+typedef void (*psync_task_callback_t)(void *, void *);
 
 extern int psync_do_run;
 extern pstatus_t psync_status;
@@ -158,6 +163,8 @@ char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
 
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
 void psync_sql_close();
+int psync_sql_reopen(const char *path);
+int psync_sql_trylock();
 void psync_sql_lock();
 void psync_sql_unlock();
 int psync_sql_sync();
@@ -210,6 +217,11 @@ void psync_list_bulder_add_sql(psync_list_builder_t *builder, psync_sql_res *res
 void psync_list_add_string_offset(psync_list_builder_t *builder, size_t offset);
 void psync_list_add_lstring_offset(psync_list_builder_t *builder, size_t offset, size_t length);
 void *psync_list_builder_finalize(psync_list_builder_t *builder);
+
+psync_task_manager_t psync_task_run_tasks(psync_task_callback_t const *callbacks, void *const *params, int cnt);
+void *psync_task_get_result(psync_task_manager_t tm, int id);
+void psync_task_free(psync_task_manager_t tm);
+int psync_task_complete(void *h, void *data);
 
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
