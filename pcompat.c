@@ -2392,7 +2392,11 @@ char *psync_deviceid(){
 int psync_run_update_file(const char *path){
 #if defined(P_OS_LINUX) || defined(P_OS_MACOSX)
 #if defined(P_OS_LINUX)
+#if defined(P_OS_DEBIAN)
+#define PSYNC_RUN_CMD "/usr/lib/psyncgui/debinstall.sh"
+#else
 #define PSYNC_RUN_CMD "qapt-deb-installer"
+#endif
 #else
 #define PSYNC_RUN_CMD "open"
 #endif
