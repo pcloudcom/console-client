@@ -1521,7 +1521,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   addr=addrs;
   while (addr){
     family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr)
+    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask && addr->ifa_addr)
       cnt++;
     addr=addr->ifa_next;
   }
@@ -1531,7 +1531,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
   cnt=0;
   while (addr){
     family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr){
+    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask && addr->ifa_addr){
       if (family==AF_INET)
         sz=sizeof(struct sockaddr_in);
       else

@@ -294,6 +294,11 @@ int psync_sql_sync(){
   int code;
   pthread_mutex_lock(&psync_db_checkpoint_mutex);
   code=sqlite3_wal_checkpoint(psync_db, NULL);
+  if (unlikely(code==SQLITE_BUSY || code==SQLITE_LOCKED)){
+    psync_sql_lock();
+    code=sqlite3_wal_checkpoint(psync_db, NULL);
+    psync_sql_unlock();
+  }
   pthread_mutex_unlock(&psync_db_checkpoint_mutex);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
