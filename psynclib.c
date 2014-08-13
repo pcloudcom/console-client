@@ -106,7 +106,7 @@ int psync_init(){
       return_error(PERROR_NO_HOMEDIR);
     }
   }
-  if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE)){
+  if (psync_sql_connect(psync_database)){
     if (IS_DEBUG)
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_DATABASE_OPEN);
