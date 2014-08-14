@@ -30,6 +30,7 @@
 #include "ptimer.h"
 #include "pcache.h"
 #include "ptree.h"
+#include "pdatabase.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -163,11 +164,17 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
+  psync_stat_t st;
+  int initdbneeded=0;
+
   int code;
   if (!sqlite3_threadsafe()){
     debug(D_CRITICAL, "sqlite is compiled without thread support");
     return -1;
   }
+  if (psync_stat(db, &st)!=0)
+    initdbneeded=1;
+
   code=sqlite3_open(db, &psync_db);
   if (likely(code==SQLITE_OK)){
     pthread_mutexattr_init(&mattr);
@@ -177,6 +184,9 @@ int psync_sql_connect(const char *db){
     if (IS_DEBUG)
       sqlite3_config(SQLITE_CONFIG_LOG, psync_sql_err_callback, NULL);
     sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
+    if (initdbneeded==1)
+      return psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
+
     return 0;
   }
   else{
