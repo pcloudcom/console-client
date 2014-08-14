@@ -329,10 +329,10 @@ static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf
 static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
   psync_stat_t st;
   psync_fsfileid_t fileid;
-  uint64_t size, osize;
+  uint64_t size;
   const char *cachepath;
   char *filename;
-  psync_file_t fd;
+//  psync_file_t fd;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int stret;
   fileid=-cr->fileid;
@@ -347,7 +347,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   psync_free(filename);
   if (stret)
     return -1;
-  if (cr->newfile)
+/*  if (cr->newfile)
     osize=0;
   else{
     fileidhex[sizeof(psync_fsfileid_t)]='i';
@@ -360,7 +360,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
     psync_file_close(fd);
     if (stret!=sizeof(osize))
       return -EIO;
-  }
+  }*/
   memset(stbuf, 0, sizeof(struct stat));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=st.st_birthtime;
@@ -373,11 +373,11 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   size=psync_stat_size(&st);
-  if (osize>size)
-    size=osize;
+//  if (osize>size)
+//    size=osize;
   stbuf->st_size=size;
 #if defined(P_OS_POSIX)
-  stbuf->st_blocks=(stbuf->st_size+511)/512;
+  stbuf->st_blocks=(size+511)/512;
   stbuf->st_blksize=FS_BLOCK_SIZE;
 #endif
   stbuf->st_uid=myuid;
@@ -679,7 +679,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   psync_fstask_creat_t *cr;
   psync_fstask_folder_t *folder;
   psync_openfile_t *of;
-  int ret, status;
+  int ret, status, type;
   debug(D_NOTICE, "open %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -722,68 +722,63 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       }
       psync_sql_free_result(res);
     }
-    else if (cr->newfile){
-      fileid=cr->fileid;
-      status=0;
-      res=psync_sql_query("SELECT status FROM fstask WHERE id=?");
-      psync_sql_bind_uint(res, 1, -fileid);
-      row=psync_sql_fetch_rowint(res);
-      if (row)
-        status=row[0];
-      psync_sql_free_result(res);
-      if (unlikely_log(!row)){
-        ret=-ENOENT;
-        goto ex0;
-      }
-      of=psync_fs_create_file(fileid, 0, 0, 0, 1, psync_fstask_get_ref_locked(folder), fpath->name);
-      psync_fstask_release_folder_tasks_locked(folder);
-      psync_sql_unlock();
-      debug(D_NOTICE, "opening new file %ld %s", (long)fileid, fpath->name);
-      psync_free(fpath);
-      of->newfile=1;
-      of->releasedforupload=status!=1;
-      ret=open_write_files(of, fi->flags&O_TRUNC);
-      pthread_mutex_unlock(&of->mutex);
-      fi->fh=openfile_to_fh(of);
-      if (unlikely_log(ret)){
-        psync_fs_dec_of_refcnt(of);
-        return ret;
-      }
-      else
-        return ret;
-    }
     else{
-      debug(D_NOTICE, "opening sparse file %ld %s", (long)cr->fileid, fpath->name);
-      status=fileid=writeid=hash=size=0; // prevent (stupid) warnings
-      res=psync_sql_query("SELECT status, fileid, int1, int2 FROM fstask WHERE id=?");
+      status=fileid=writeid=hash=size=type=0; // prevent (stupid) warnings
+      res=psync_sql_query("SELECT type, status, fileid, int1, int2 FROM fstask WHERE id=?");
       psync_sql_bind_uint(res, 1, -cr->fileid);
       row=psync_sql_fetch_rowint(res);
       if (row){
-        status=row[0];
-        fileid=row[1];
-        writeid=row[2];
-        hash=row[3];
+        type=row[0];
+        status=row[1];
+        fileid=row[2];
+        writeid=row[3];
+        hash=row[4];
       }
       psync_sql_free_result(res);
       if (unlikely_log(!row)){
         ret=-ENOENT;
         goto ex0;
       }
-      if (fi->flags&O_TRUNC)
-        size=0;
-      else{
-        res=psync_sql_query("SELECT size FROM filerevision WHERE fileid=? AND hash=?");
-        psync_sql_bind_uint(res, 1, fileid);
-        psync_sql_bind_uint(res, 2, hash);
-        row=psync_sql_fetch_rowint(res);
-        if (row)
-          size=row[0];
-        psync_sql_free_result(res);
-        if (unlikely_log(!row)){
-          ret=-ENOENT;
-          goto ex0;
+      if (type==PSYNC_FS_TASK_CREAT){
+        fileid=cr->fileid;
+        of=psync_fs_create_file(fileid, 0, 0, 0, 1, psync_fstask_get_ref_locked(folder), fpath->name);
+        psync_fstask_release_folder_tasks_locked(folder);
+        psync_sql_unlock();
+        debug(D_NOTICE, "opening new file %ld %s", (long)fileid, fpath->name);
+        psync_free(fpath);
+        of->newfile=1;
+        of->releasedforupload=status!=1;
+        ret=open_write_files(of, fi->flags&O_TRUNC);
+        pthread_mutex_unlock(&of->mutex);
+        fi->fh=openfile_to_fh(of);
+        if (unlikely_log(ret)){
+          psync_fs_dec_of_refcnt(of);
+          return ret;
+        }
+        else
+          return ret;
+      }
+      else if (type==PSYNC_FS_TASK_MODIFY){
+        debug(D_NOTICE, "opening sparse file %ld %s", (long)cr->fileid, fpath->name);
+        if (fi->flags&O_TRUNC)
+          size=0;
+        else{
+          res=psync_sql_query("SELECT size FROM filerevision WHERE fileid=? AND hash=?");
+          psync_sql_bind_uint(res, 1, fileid);
+          psync_sql_bind_uint(res, 2, hash);
+          row=psync_sql_fetch_rowint(res);
+          if (row)
+            size=row[0];
+          psync_sql_free_result(res);
+          if (unlikely(!row)){
+            debug(D_WARNING, "could not find fileid %lu with hash %lu (%ld) in filerevision", (unsigned long)fileid, (unsigned long)hash, (long)hash);
+            ret=-ENOENT;
+            goto ex0;
+          }
         }
       }
+      else
+        debug(D_BUG, "trying to open file %s with id %ld but task type is %d", fpath->name, (long)cr->fileid, type);
       of=psync_fs_create_file(cr->fileid, fileid, size, hash, 1, psync_fstask_get_ref_locked(folder), fpath->name);
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();

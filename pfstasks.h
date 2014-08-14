@@ -64,7 +64,6 @@ typedef struct {
   psync_tree tree;
   psync_fsfileid_t fileid;
   uint64_t taskid;
-  unsigned char newfile;
   char name[];
 } psync_fstask_creat_t;
 
