@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <stddef.h>
 
+#define return_error(err) do {psync_error=err; return -1;} while (0)
+
 struct run_after_ptr {
   struct run_after_ptr *next;
   psync_run_after_t run;
@@ -165,6 +167,7 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
   psync_stat_t st;
+  uint64_t dbver;
   int initdbneeded=0;
 
   int code;
@@ -186,6 +189,18 @@ int psync_sql_connect(const char *db){
     sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
     if (initdbneeded==1)
       return psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
+
+    dbver=psync_sql_cellint("SELECT value FROM setting WHERE id='dbversion'", 0);
+    if (dbver<PSYNC_DATABASE_VERSION){
+      uint64_t i;
+      debug(D_NOTICE, "database version %d detected, upgrading to %d", (int)dbver, (int)PSYNC_DATABASE_VERSION);
+      for (i=dbver; i<PSYNC_DATABASE_VERSION; i++)
+        if (psync_sql_statement(psync_db_upgrade[i])){
+          debug(D_ERROR, "error running statement %s", psync_db_upgrade[i]);
+          if (IS_DEBUG)
+            return_error(PERROR_DATABASE_OPEN);
+        }
+    }
 
     return 0;
   }
