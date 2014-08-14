@@ -527,7 +527,8 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   return 0;
 }
 
-static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsfileid_t remotefileid, uint64_t size, uint64_t hash, int lock, psync_fstask_folder_t *folder, const char *name){
+static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsfileid_t remotefileid, uint64_t size, uint64_t hash, int lock, 
+                                              uint32_t writeid, psync_fstask_folder_t *folder, const char *name){
   psync_openfile_t *fl;
   psync_tree *tr;
   int64_t d;
@@ -578,6 +579,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
   fl->hash=hash;
   fl->initialsize=size;
   fl->currentsize=size;
+  fl->writeid=writeid;
   fl->datafile=INVALID_HANDLE_VALUE;
   fl->indexfile=INVALID_HANDLE_VALUE;
   fl->refcnt=1;
@@ -741,7 +743,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       }
       if (type==PSYNC_FS_TASK_CREAT){
         fileid=cr->fileid;
-        of=psync_fs_create_file(fileid, 0, 0, 0, 1, psync_fstask_get_ref_locked(folder), fpath->name);
+        of=psync_fs_create_file(fileid, 0, 0, 0, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name);
         psync_fstask_release_folder_tasks_locked(folder);
         psync_sql_unlock();
         debug(D_NOTICE, "opening new file %ld %s", (long)fileid, fpath->name);
@@ -779,12 +781,11 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       }
       else
         debug(D_BUG, "trying to open file %s with id %ld but task type is %d", fpath->name, (long)cr->fileid, type);
-      of=psync_fs_create_file(cr->fileid, fileid, size, hash, 1, psync_fstask_get_ref_locked(folder), fpath->name);
+      of=psync_fs_create_file(cr->fileid, fileid, size, hash, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name);
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();
       psync_free(fpath);
       of->newfile=0;
-      of->writeid=writeid;
       of->releasedforupload=status!=1;
       ret=open_write_files(of, fi->flags&O_TRUNC);
       pthread_mutex_unlock(&of->mutex);
@@ -799,7 +800,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     }
   }
   if (row){
-    of=psync_fs_create_file(fileid, fileid, size, hash, 0, psync_fstask_get_ref_locked(folder), fpath->name);
+    of=psync_fs_create_file(fileid, fileid, size, hash, 0, 0, psync_fstask_get_ref_locked(folder), fpath->name);
     fi->fh=openfile_to_fh(of);
     ret=0;
   }
@@ -810,6 +811,25 @@ ex0:
   psync_sql_unlock();
   psync_free(fpath);
   return ret;
+}
+
+static int psync_fs_file_exists_in_folder(psync_fstask_folder_t *folder, const char *name){
+  psync_fstask_creat_t *cr;
+  psync_sql_res *res;
+  psync_uint_row row;
+  cr=psync_fstask_find_creat(folder, name, 0);
+  if (cr)
+    return 1;
+  if (folder->folderid<0)
+    return 0;
+  if (psync_fstask_find_unlink(folder, name, 0))
+    return 0;
+  res=psync_sql_query("SELECT id FROM file WHERE folderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, folder->folderid);
+  psync_sql_bind_string(res, 2, name);
+  row=psync_sql_fetch_rowint(res);
+  psync_sql_free_result(res);
+  return row?1:0;
 }
 
 static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *fi){
@@ -832,14 +852,22 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     return -EACCES;
   }
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
-  //TODO: check if file exists
+  if (psync_fs_file_exists_in_folder(folder, fpath->name)){
+    psync_fstask_release_folder_tasks_locked(folder);
+    debug(D_NOTICE, "file %s already exists, processing as open", path);
+    ret=psync_fs_open(path, fi);
+    psync_sql_unlock();
+    psync_free(fpath);
+    return ret;
+  }
   cr=psync_fstask_add_creat(folder, fpath->name);
   if (unlikely_log(!cr)){
     psync_fstask_release_folder_tasks_locked(folder);
     psync_sql_unlock();
+    psync_free(fpath);
     return -EIO;
   }
-  of=psync_fs_create_file(cr->fileid, 0, 0, 0, 1, psync_fstask_get_ref_locked(folder), fpath->name);
+  of=psync_fs_create_file(cr->fileid, 0, 0, 0, 1, 0, psync_fstask_get_ref_locked(folder), fpath->name);
   psync_fstask_release_folder_tasks_locked(folder);
   psync_sql_unlock();
   of->newfile=1;
@@ -1363,6 +1391,16 @@ static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
   return 0;
 }
 
+static int psync_fs_ftruncate(const char *path, off_t size, struct fuse_file_info *fi){
+  debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
+  return -ENOSYS;
+}
+
+static int psync_fs_truncate(const char *path, off_t size){
+  debug(D_NOTICE, "truncate %s %lu", path, (unsigned long)size);
+  return -ENOSYS;
+}
+
 void *psync_fs_init(struct fuse_conn_info *conn){
 #if defined(FUSE_CAP_ASYNC_READ)
   conn->want|=FUSE_CAP_ASYNC_READ;
@@ -1511,11 +1549,16 @@ int psync_fs_start(){
   fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-oauto_unmount");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
+  fuse_opt_add_arg(&args, "-olarge_read");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "-ovolname=pCloudDrive");
+  fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
   fuse_opt_add_arg(&args, "-olocal");
-#endif
+  fuse_opt_add_arg(&args, "-oallow_root");
+  fuse_opt_add_arg(&args, "-olarge_read");
+  fuse_opt_add_arg(&args, "-onolocalcaches");
+  #endif
 
   psync_oper.init     = psync_fs_init;
   psync_oper.getattr  = psync_fs_getattr;
@@ -1536,6 +1579,8 @@ int psync_fs_start(){
   psync_oper.chmod    = psync_fs_chmod;
   psync_oper.chown    = psync_fs_chown;
   psync_oper.utimens  = psync_fs_utimens;
+  psync_oper.ftruncate= psync_fs_ftruncate;
+  psync_oper.truncate = psync_fs_truncate;
 
 #if defined(P_OS_POSIX)
   myuid=getuid();
