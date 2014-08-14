@@ -30,10 +30,13 @@
 #include "ptimer.h"
 #include "pcache.h"
 #include "ptree.h"
+#include "pdatabase.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stddef.h>
+
+#define return_error(err) do {psync_error=err; return -1;} while (0)
 
 struct run_after_ptr {
   struct run_after_ptr *next;
@@ -163,11 +166,18 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 
 int psync_sql_connect(const char *db){
   pthread_mutexattr_t mattr;
+  psync_stat_t st;
+  uint64_t dbver;
+  int initdbneeded=0;
+
   int code;
   if (!sqlite3_threadsafe()){
     debug(D_CRITICAL, "sqlite is compiled without thread support");
     return -1;
   }
+  if (psync_stat(db, &st)!=0)
+    initdbneeded=1;
+
   code=sqlite3_open(db, &psync_db);
   if (likely(code==SQLITE_OK)){
     pthread_mutexattr_init(&mattr);
@@ -177,6 +187,21 @@ int psync_sql_connect(const char *db){
     if (IS_DEBUG)
       sqlite3_config(SQLITE_CONFIG_LOG, psync_sql_err_callback, NULL);
     sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
+    if (initdbneeded==1)
+      return psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
+
+    dbver=psync_sql_cellint("SELECT value FROM setting WHERE id='dbversion'", 0);
+    if (dbver<PSYNC_DATABASE_VERSION){
+      uint64_t i;
+      debug(D_NOTICE, "database version %d detected, upgrading to %d", (int)dbver, (int)PSYNC_DATABASE_VERSION);
+      for (i=dbver; i<PSYNC_DATABASE_VERSION; i++)
+        if (psync_sql_statement(psync_db_upgrade[i])){
+          debug(D_ERROR, "error running statement %s", psync_db_upgrade[i]);
+          if (IS_DEBUG)
+            return_error(PERROR_DATABASE_OPEN);
+        }
+    }
+
     return 0;
   }
   else{

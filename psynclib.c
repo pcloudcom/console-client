@@ -29,7 +29,6 @@
 #include "pcompat.h"
 #include "psynclib.h"
 #include "pcallbacks.h"
-#include "pdatabase.h"
 #include "pstatus.h"
 #include "pdiff.h"
 #include "pssl.h"
@@ -85,7 +84,6 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 int psync_init(){
-  uint64_t dbver;
   psync_thread_name="main app thread";
   if (IS_DEBUG){
     pthread_mutex_lock(&psync_libstate_mutex);
@@ -106,22 +104,10 @@ int psync_init(){
       return_error(PERROR_NO_HOMEDIR);
     }
   }
-  if (psync_sql_connect(psync_database) || psync_sql_statement(PSYNC_DATABASE_STRUCTURE)){
+  if (psync_sql_connect(psync_database)){
     if (IS_DEBUG)
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_DATABASE_OPEN);
-  }
-  dbver=psync_sql_cellint("SELECT value FROM setting WHERE id='dbversion'", 0);
-  if (dbver<PSYNC_DATABASE_VERSION){
-    uint64_t i;
-    debug(D_NOTICE, "database version %d detected, upgrading to %d", (int)dbver, (int)PSYNC_DATABASE_VERSION);
-    for (i=dbver; i<PSYNC_DATABASE_VERSION; i++)
-      if (psync_sql_statement(psync_db_upgrade[i])){
-        debug(D_ERROR, "error running statement %s", psync_db_upgrade[i]);
-        if (IS_DEBUG)
-          pthread_mutex_unlock(&psync_libstate_mutex);
-        return_error(PERROR_DATABASE_OPEN);
-      }
   }
   psync_sql_statement("UPDATE task SET inprogress=0 WHERE inprogress=1");
   if (unlikely_log(psync_ssl_init())){
@@ -348,7 +334,6 @@ void psync_unlink(){
     psync_list_for_each_element_call(&list, string_list, list, psync_free);
     psync_sql_statement("VACUUM");
   */
-  psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
   pthread_mutex_lock(&psync_my_auth_mutex);
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
   psync_my_user=NULL;

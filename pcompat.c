@@ -1520,9 +1520,11 @@ psync_interface_list_t *psync_list_ip_adapters(){
   cnt=0;
   addr=addrs;
   while (addr){
-    family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask && addr->ifa_addr)
-      cnt++;
+    if (addr->ifa_addr){
+      family=addr->ifa_addr->sa_family;
+      if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask)
+        cnt++;
+    }
     addr=addr->ifa_next;
   }
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
@@ -1530,21 +1532,23 @@ psync_interface_list_t *psync_list_ip_adapters(){
   addr=addrs;
   cnt=0;
   while (addr){
-    family=addr->ifa_addr->sa_family;
-    if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask && addr->ifa_addr){
-      if (family==AF_INET)
-        sz=sizeof(struct sockaddr_in);
-      else
-        sz=sizeof(struct sockaddr_in6);
-      memcpy(&ret->interfaces[cnt].address, addr->ifa_addr, sz);
-      memcpy(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr, sz);
-      memcpy(&ret->interfaces[cnt].netmask, addr->ifa_netmask, sz);
-      if (family==AF_INET)
-        ((struct sockaddr_in *)&ret->interfaces[cnt].address)->sin_port=0;
-      else
-        ((struct sockaddr_in6 *)&ret->interfaces[cnt].address)->sin6_port=0;
-      ret->interfaces[cnt].addrsize=sz;
-      cnt++;
+    if (addr->ifa_addr){
+      family=addr->ifa_addr->sa_family;
+      if ((family==AF_INET || family==AF_INET6) && addr->ifa_broadaddr && addr->ifa_netmask){
+        if (family==AF_INET)
+          sz=sizeof(struct sockaddr_in);
+        else
+          sz=sizeof(struct sockaddr_in6);
+        memcpy(&ret->interfaces[cnt].address, addr->ifa_addr, sz);
+        memcpy(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr, sz);
+        memcpy(&ret->interfaces[cnt].netmask, addr->ifa_netmask, sz);
+        if (family==AF_INET)
+          ((struct sockaddr_in *)&ret->interfaces[cnt].address)->sin_port=0;
+        else
+          ((struct sockaddr_in6 *)&ret->interfaces[cnt].address)->sin6_port=0;
+        ret->interfaces[cnt].addrsize=sz;
+        cnt++;
+      }
     }
     addr=addr->ifa_next;
   }
@@ -2390,7 +2394,11 @@ char *psync_deviceid(){
 int psync_run_update_file(const char *path){
 #if defined(P_OS_LINUX) || defined(P_OS_MACOSX)
 #if defined(P_OS_LINUX)
+#if defined(P_OS_DEBIAN)
+#define PSYNC_RUN_CMD "/usr/lib/psyncgui/debinstall.sh"
+#else
 #define PSYNC_RUN_CMD "qapt-deb-installer"
+#endif
 #else
 #define PSYNC_RUN_CMD "open"
 #endif

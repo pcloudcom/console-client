@@ -104,11 +104,12 @@ up:
     if (e==tree)
       return psync_tree_rotate_right(e);
     else{
-      if (e->parent->left==e)
-        e->parent->left=psync_tree_rotate_right(e);
+      psync_tree *e2=e->parent;
+      if (e2->left==e)
+        e2->left=psync_tree_rotate_right(e);
       else{
-        assert(e->parent->right==e);
-        e->parent->right=psync_tree_rotate_right(e);
+        assert(e2->right==e);
+        e2->right=psync_tree_rotate_right(e);
       }
       return tree;
     }
@@ -120,11 +121,12 @@ up:
     if (e==tree)
       return psync_tree_rotate_left(e);
     else{
-      if (e->parent->left==e)
-        e->parent->left=psync_tree_rotate_left(e);
+      psync_tree *e2=e->parent;
+      if (e2->left==e)
+        e2->left=psync_tree_rotate_left(e);
       else{
-        assert(e->parent->right==e);
-        e->parent->right=psync_tree_rotate_left(e);
+        assert(e2->right==e);
+        e2->right=psync_tree_rotate_left(e);
       }
       return tree;
     }
@@ -136,7 +138,7 @@ psync_tree *psync_tree_get_add_after(psync_tree *tree, psync_tree *node, psync_t
     return psync_tree_init_node(newnode);
   if (!node)
     return psync_tree_get_add_before(tree, psync_tree_get_first(tree), newnode);
-  newnode=psync_tree_init_node(newnode);
+  psync_tree_init_node(newnode);
   if (node->right){
     node=node->right;
     while (node->left)
@@ -154,7 +156,7 @@ psync_tree *psync_tree_get_add_before(psync_tree *tree, psync_tree *node, psync_
     return psync_tree_init_node(newnode);
   if (!node)
     return psync_tree_get_add_after(tree, psync_tree_get_last(tree), newnode);
-  newnode=psync_tree_init_node(newnode);
+  psync_tree_init_node(newnode);
   if (node->left){
     node=node->left;
     while (node->right)
@@ -201,13 +203,14 @@ up:
     if (e==tree)
       return psync_tree_rotate_right(e);
     else{
-      if (e->parent->left==e)
-        e->parent->left=psync_tree_rotate_right(e);
+      psync_tree *e2=e->parent;
+      if (e2->left==e)
+        e2->left=psync_tree_rotate_right(e);
       else{
-        assert(e->parent->right==e);
-        e->parent->right=psync_tree_rotate_right(e);
+        assert(e2->right==e);
+        e2->right=psync_tree_rotate_right(e);
       }
-      e=e->parent;
+      e=e2;
       goto up;
     }
   }
@@ -218,13 +221,14 @@ up:
     if (e==tree)
       return psync_tree_rotate_left(e);
     else{
-      if (e->parent->left==e)
-        e->parent->left=psync_tree_rotate_left(e);
+      psync_tree *e2=e->parent;
+      if (e2->left==e)
+        e2->left=psync_tree_rotate_left(e);
       else{
-        assert(e->parent->right==e);
-        e->parent->right=psync_tree_rotate_left(e);
+        assert(e2->right==e);
+        e2->right=psync_tree_rotate_left(e);
       }
-      e=e->parent;
+      e=e2;
       goto up;
     }
   }

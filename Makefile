@@ -15,8 +15,12 @@ ifeq ($(OS),Windows_NT)
     LDFLAGS=-s
 else
     UNAME_S := $(shell uname -s)
+    UNAME_V := $(shell uname -v)
     ifeq ($(UNAME_S),Linux)
         CFLAGS += -DP_OS_LINUX
+            ifneq (,$(findstring Debian,$(UNAME_V)))
+                CFLAGS += -DP_OS_DEBIAN
+            endif
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/

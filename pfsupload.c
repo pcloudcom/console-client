@@ -366,8 +366,6 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   //TODO: check if file exists on the remote
   if (uploadid && memcmp(fileparthash, uploadhash, PSYNC_HASH_DIGEST_HEXLEN))
     uploadid=0;
-  else if (usize)
-    debug(D_NOTICE, "resuming from position %lu", usize);
   api=psync_apipool_get();
   if (unlikely(!api))
     return -1;

@@ -1894,6 +1894,7 @@ void psync_pagecache_init(){
                     (unsigned long)i, (unsigned long)db_cache_in_pages, (unsigned long)db_cache_max_page);
   }
   readcache=psync_file_open(cache_file, P_O_RDWR, P_O_CREAT);
+  psync_free(cache_file);
   if (db_cache_max_page>db_cache_in_pages)
     delete_extra_pages();
   free_db_pages=psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0);

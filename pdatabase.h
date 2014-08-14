@@ -123,6 +123,14 @@ static const char *psync_db_upgrade[PSYNC_DATABASE_VERSION]={
   "",
   "BEGIN;\
 ALTER TABLE filerevision ADD size INTEGER;\
+DROP TABLE IF EXISTS fstask;\
+CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, folderid INTEGER, sfolderid INTEGER, fileid INTEGER,\
+  text1 TEXT, text2 TEXT, int1 INTEGER, int2 INTEGER);\
+CREATE INDEX IF NOT EXISTS kfstaskfolderid ON fstask(folderid);\
+CREATE INDEX IF NOT EXISTS kfstasksfolderid ON fstask(sfolderid);\
+CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
+CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
+  data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 UPDATE filerevision SET size=(SELECT size FROM file WHERE file.id=filerevision.fileid AND file.hash=filerevision.hash);\
 UPDATE setting SET value=2 WHERE id='dbversion';\
 COMMIT;\
