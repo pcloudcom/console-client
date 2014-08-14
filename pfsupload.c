@@ -406,6 +406,10 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
     goto err1;
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
   while (usize<fsize){
+    if (unlikely(stop_current_upload)){
+      debug(D_NOTICE, "got stop for file %s", name);
+      goto err2;
+    }
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     if (fsize-usize>PSYNC_COPY_BUFFER_SIZE)
       rd=PSYNC_COPY_BUFFER_SIZE;
@@ -488,6 +492,10 @@ static int upload_modify_send_local(psync_socket *api, psync_uploadid_t uploadid
     
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
   while (bw<length){
+    if (unlikely(stop_current_upload)){
+      debug(D_NOTICE, "got stop");
+      goto err0;
+    }
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     if (length-bw>PSYNC_COPY_BUFFER_SIZE)
       rd=PSYNC_COPY_BUFFER_SIZE;
@@ -637,6 +645,10 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
     if (ret){
       if (unlikely_log(ret==PSYNC_NET_PERMFAIL))
         perm_fail_upload_task(taskid);
+      goto err3;
+    }
+    if (unlikely(stop_current_upload)){
+      debug(D_NOTICE, "got stop for file %s", name);
       goto err3;
     }
   }
