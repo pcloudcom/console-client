@@ -894,13 +894,13 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
   debug(D_NOTICE, "flush %s", path);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
-  if (of->modified && !of->uploading){
+  if (of->modified){
     psync_sql_res *res;
     uint64_t writeid;
     uint32_t aff;
     writeid=of->writeid;
     pthread_mutex_unlock(&of->mutex);
-    debug(D_NOTICE, "releasing new file %s for upload", path);
+    debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", path, (unsigned long)of->currentsize, (unsigned)of->writeid);
     res=psync_sql_prep_statement("UPDATE fstask SET status=0, int1=? WHERE id=? AND status=1");
     psync_sql_bind_uint(res, 1, writeid);
     psync_sql_bind_uint(res, 2, -of->fileid);
