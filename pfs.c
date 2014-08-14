@@ -96,7 +96,9 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       fl=psync_tree_element(tr, psync_openfile_t, tree);
       pthread_mutex_lock(&fl->mutex);
       if (fl->writeid==writeid){
+        debug(D_NOTICE, "updating fileid %ld to %lu, hash %lu", (long)fileid, (unsigned long)newfileid, (unsigned long)hash);
         fl->fileid=newfileid;
+        fl->remotefileid=newfileid;
         fl->hash=hash;
         fl->modified=0;
         fl->newfile=0;
@@ -111,6 +113,32 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
           psync_file_close(fl->indexfile);
           fl->indexfile=INVALID_HANDLE_VALUE;
         }
+        psync_tree_del(&openfiles, &fl->tree);
+        tr=openfiles;
+        d=-1;
+        while (tr){
+          d=newfileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+          if (d<0){
+            if (tr->left)
+              tr=tr->left;
+            else
+              break;
+          }
+          else if (d>0){
+            if (tr->right)
+              tr=tr->right;
+            else
+              break;
+          }
+          else{
+            debug(D_BUG, "found already open file %lu, should not happen", (unsigned long)newfileid);
+            break;
+          }
+        }
+        if (d<0)
+          psync_tree_add_before(&openfiles, tr, &fl->tree);
+        else
+          psync_tree_add_after(&openfiles, tr, &fl->tree);
         ret=0;
       }
       else
@@ -292,6 +320,8 @@ static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_file_stat(row, stbuf);
+  else
+    debug(D_NOTICE, "fileid %lu not found in database", (unsigned long)fileid);
   psync_sql_free_result(res);
   return row?0:-1;
 }
@@ -305,13 +335,15 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   psync_file_t fd;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int stret;
-  fileid=cr->taskid;
+  fileid=-cr->fileid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
   fileidhex[sizeof(psync_fsfileid_t)]='d';
   fileidhex[sizeof(psync_fsfileid_t)+1]=0;
   cachepath=psync_setting_get_string(_PS(fscachepath));
   filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
   stret=psync_stat(filename, &st);
+  if (stret)
+    debug(D_NOTICE, "could not stat file %s", filename);
   psync_free(filename);
   if (stret)
     return -1;
@@ -354,6 +386,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
 }
 
 static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
+  debug(D_NOTICE, "getting stat from creat for file %s fileid %ld taskid %lu", cr->name, (long)cr->fileid, (unsigned long)cr->taskid);
   if (cr->fileid>=0)
     return psync_creat_db_to_file_stat(cr->fileid, stbuf);
   else
@@ -384,6 +417,7 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
     psync_sql_unlock();
+    debug(D_NOTICE, "could not find path component of %s, returning ENOENT", path);
     return -ENOENT;
   }
   folder=psync_fstask_get_folder_tasks_locked(fpath->folderid);
@@ -1320,14 +1354,17 @@ static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
 }
 
 static int psync_fs_chmod(const char *path, mode_t mode){
+  debug(D_NOTICE, "chmod %s %u", path, (unsigned)mode);
   return 0;
 }
 
 int psync_fs_chown(const char *path, uid_t uid, gid_t gid){
+  debug(D_NOTICE, "chown %s %u %u", path, (unsigned)uid, (unsigned)gid);
   return 0;
 }
 
 static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
+  debug(D_NOTICE, "utimens %s", path);
   return 0;
 }
 

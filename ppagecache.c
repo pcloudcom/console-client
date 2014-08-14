@@ -519,8 +519,10 @@ static psync_urls_t *get_urls_for_request(psync_request_t *req){
     set_urls(urls, res);
     return urls;
   }
-  if (get_urls(req, urls))
+  if (get_urls(req, urls)){
+    set_urls(urls, NULL);
     return NULL;
+  }
   else
     return urls;
 }
