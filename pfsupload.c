@@ -54,8 +54,10 @@ typedef struct {
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t upload_cond=PTHREAD_COND_INITIALIZER;
+static uint64_t current_upload_taskid=0;
 static uint32_t upload_wakes=0;
 static int large_upload_running=0;
+static int stop_current_upload=0;
 
 static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED),
@@ -681,6 +683,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     row=psync_sql_fetch_row(res);
     if (!row){
       large_upload_running=0;
+      current_upload_taskid=0;
       psync_sql_free_result(res);
       break;
     }
@@ -692,6 +695,8 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     len++;
     name=psync_new_cnt(char, len);
     memcpy(name, cname, len);
+    current_upload_taskid=taskid;
+    stop_current_upload=0;
     psync_sql_free_result(res);
     psync_binhex(fileidhex, &taskid, sizeof(psync_fsfileid_t));
     fileidhex[sizeof(psync_fsfileid_t)]='d';
@@ -730,13 +735,23 @@ static int psync_sent_task_creat_upload_large(fsupload_task_t *task){
   psync_sql_res *res;
   res=psync_sql_prep_statement("UPDATE fstask SET status=2 WHERE id=?");
   psync_sql_bind_uint(res, 1, task->id);
-  psync_fs_uploading_openfile(task->id);
+  //psync_fs_uploading_openfile(task->id);
   if (!large_upload_running){
     large_upload_running=1;
     psync_run_thread("large file fs upload", large_upload);
   }
   psync_sql_run_free(res);
   return 0;
+}
+
+void psync_fsupload_stop_upload_locked(uint64_t taskid){
+  psync_sql_res *res;
+  if (current_upload_taskid==taskid)
+    stop_current_upload=1;
+  res=psync_sql_prep_statement("UPDATE fstask SET status=1 WHERE id=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  psync_sql_run_free(res);
+  assertw(psync_sql_affected_rows());
 }
 
 static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){

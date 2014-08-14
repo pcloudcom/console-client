@@ -102,7 +102,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
         fl->newfile=0;
         fl->currentsize=size;
         fl->initialsize=size;
-        fl->uploading=0;
+        fl->releasedforupload=0;
         if (fl->datafile!=INVALID_HANDLE_VALUE){
           psync_file_close(fl->datafile);
           fl->datafile=INVALID_HANDLE_VALUE;
@@ -113,10 +113,8 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
         }
         ret=0;
       }
-      else{
-        fl->uploading=0;
+      else
         ret=-1;
-      }
       pthread_mutex_unlock(&fl->mutex);
       psync_sql_unlock();
       return ret;
@@ -126,7 +124,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
   return 0;
 }
 
-void psync_fs_uploading_openfile(uint64_t taskid){
+/*void psync_fs_uploading_openfile(uint64_t taskid){
   psync_openfile_t *fl;
   psync_tree *tr;
   psync_fsfileid_t fileid;
@@ -149,7 +147,7 @@ void psync_fs_uploading_openfile(uint64_t taskid){
     }
   }
   psync_sql_unlock();
-}
+}*/
 
 int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t folderid, const char *name){
   psync_openfile_t *fl;
@@ -641,13 +639,13 @@ static int open_write_files(psync_openfile_t *of, int trunc){
 static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   psync_sql_res *res;
   psync_uint_row row;
-  psync_fileid_t fileid;
+  psync_fsfileid_t fileid;
   uint64_t size, hash, writeid;
   psync_fspath_t *fpath;
   psync_fstask_creat_t *cr;
   psync_fstask_folder_t *folder;
   psync_openfile_t *of;
-  int ret;
+  int ret, status;
   debug(D_NOTICE, "open %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -692,12 +690,24 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     }
     else if (cr->newfile){
       fileid=cr->fileid;
+      status=0;
+      res=psync_sql_query("SELECT status FROM fstask WHERE id=?");
+      psync_sql_bind_uint(res, 1, -fileid);
+      row=psync_sql_fetch_rowint(res);
+      if (row)
+        status=row[0];
+      psync_sql_free_result(res);
+      if (unlikely_log(!row)){
+        ret=-ENOENT;
+        goto ex0;
+      }
       of=psync_fs_create_file(fileid, 0, 0, 0, 1, psync_fstask_get_ref_locked(folder), fpath->name);
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();
       debug(D_NOTICE, "opening new file %ld %s", (long)fileid, fpath->name);
       psync_free(fpath);
       of->newfile=1;
+      of->releasedforupload=status!=1;
       ret=open_write_files(of, fi->flags&O_TRUNC);
       pthread_mutex_unlock(&of->mutex);
       fi->fh=openfile_to_fh(of);
@@ -710,14 +720,15 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     }
     else{
       debug(D_NOTICE, "opening sparse file %ld %s", (long)cr->fileid, fpath->name);
-      fileid=writeid=hash=size=0; // prevent (stupid) warnings
-      res=psync_sql_query("SELECT fileid, int1, int2 FROM fstask WHERE id=?");
+      status=fileid=writeid=hash=size=0; // prevent (stupid) warnings
+      res=psync_sql_query("SELECT status, fileid, int1, int2 FROM fstask WHERE id=?");
       psync_sql_bind_uint(res, 1, -cr->fileid);
       row=psync_sql_fetch_rowint(res);
       if (row){
-        fileid=row[0];
-        writeid=row[1];
-        hash=row[2];
+        status=row[0];
+        fileid=row[1];
+        writeid=row[2];
+        hash=row[3];
       }
       psync_sql_free_result(res);
       if (unlikely_log(!row)){
@@ -745,6 +756,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       psync_free(fpath);
       of->newfile=0;
       of->writeid=writeid;
+      of->releasedforupload=status!=1;
       ret=open_write_files(of, fi->flags&O_TRUNC);
       pthread_mutex_unlock(&of->mutex);
       fi->fh=openfile_to_fh(of);
@@ -899,6 +911,7 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
     uint64_t writeid;
     uint32_t aff;
     writeid=of->writeid;
+    of->releasedforupload=1;
     pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", path, (unsigned long)of->currentsize, (unsigned)of->writeid);
     res=psync_sql_prep_statement("UPDATE fstask SET status=0, int1=? WHERE id=? AND status=1");
@@ -997,16 +1010,26 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   int ret;
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
-  if (unlikely(of->uploading)){
-    pthread_mutex_unlock(&of->mutex);
-    //debug(D_NOTICE, "stopping upload of file %s as new write arrived", path);
-    //TODO: stop upload
-    pthread_mutex_lock(&of->mutex);
+  if (unlikely(of->releasedforupload)){
+    if (unlikely(psync_sql_trylock())){
+      pthread_mutex_unlock(&of->mutex);
+      psync_sql_lock();
+      pthread_mutex_lock(&of->mutex);
+    }
+    if (of->releasedforupload){
+      of->releasedforupload=0;
+      debug(D_NOTICE, "stopping upload of file %s as new write arrived", path);
+      assertw(of->fileid<0);
+      psync_fsupload_stop_upload_locked(-of->fileid);
+    }
+    psync_sql_unlock();
   }
   of->writeid++;
 retry:
   if (of->newfile){
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
+    if (of->currentsize<offset+size && bw!=-1)
+      of->currentsize=offset+size;
     pthread_mutex_unlock(&of->mutex);
     if (unlikely_log(bw==-1))
       return -EIO;
@@ -1055,6 +1078,8 @@ retry:
       return -EIO;
     }
     psync_interval_tree_add(&of->writeintervals, offset, offset+bw);
+    if (of->currentsize<offset+size)
+      of->currentsize=offset+size;
     pthread_mutex_unlock(&of->mutex);
     return bw;
   }

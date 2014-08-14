@@ -28,7 +28,10 @@
 #ifndef _PSYNC_FSUPLOAD_H
 #define _PSYNC_FSUPLOAD_H
 
+#include "psynclib.h"
+
 void psync_fsupload_init();
 void psync_fsupload_wake();
+void psync_fsupload_stop_upload_locked(uint64_t taskid);
 
 #endif
