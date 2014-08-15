@@ -824,7 +824,7 @@ static int psync_fs_file_exists_in_folder(psync_fstask_folder_t *folder, const c
     return 0;
   if (psync_fstask_find_unlink(folder, name, 0))
     return 0;
-  res=psync_sql_query("SELECT id FROM file WHERE folderid=? AND name=?");
+  res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, folder->folderid);
   psync_sql_bind_string(res, 2, name);
   row=psync_sql_fetch_rowint(res);
@@ -1558,7 +1558,7 @@ int psync_fs_start(){
   fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-olarge_read");
   fuse_opt_add_arg(&args, "-onolocalcaches");
-  #endif
+#endif
 
   psync_oper.init     = psync_fs_init;
   psync_oper.getattr  = psync_fs_getattr;
