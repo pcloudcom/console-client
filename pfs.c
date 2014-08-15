@@ -1430,9 +1430,9 @@ static int is_mountable(char where){
 static int get_first_free_drive(){
     DWORD drives = GetLogicalDrives();
     int pos = 3;
-    while (pos < 26 && drives & (1<<pos))
-        pos ++;
-    return pos < 26;
+    while (pos < 26 && (drives & (1<<pos)))
+        pos++;
+    return pos < 26 ? pos : 0;
 }
 
 static char *psync_fuse_get_mountpoint(){
