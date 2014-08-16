@@ -142,8 +142,10 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
           psync_tree_add_after(&openfiles, tr, &fl->tree);
         ret=0;
       }
-      else
+      else{
+        debug(D_NOTICE, "writeid of fileid %ld (%s) differs %lu!=%lu", (long)fileid, fl->currentname, (unsigned long)fl->writeid, (unsigned long)writeid);
         ret=-1;
+      }
       pthread_mutex_unlock(&fl->mutex);
       psync_sql_unlock();
       return ret;
@@ -1149,19 +1151,15 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
   debug(D_NOTICE, "mkdir %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
-  if (!fpath){
-    psync_sql_unlock();
-    debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
-    return -ENOENT;
-  }
-  if (!(fpath->permissions&PSYNC_PERM_CREATE)){
-    psync_sql_unlock();
-    psync_free(fpath);
-    return -EACCES;
-  }
-  ret=psync_fstask_mkdir(fpath->folderid, fpath->name);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_CREATE))
+    ret=-EACCES;
+  else
+    ret=psync_fstask_mkdir(fpath->folderid, fpath->name);
   psync_sql_unlock();
   psync_free(fpath);
+  debug(D_NOTICE, "mkdir %s=%d", path, ret);
   return ret;
 }
 
@@ -1171,19 +1169,15 @@ static int psync_fs_rmdir(const char *path){
   debug(D_NOTICE, "rmdir %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
-  if (!fpath){
-    psync_sql_unlock();
-    debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
-    return -ENOENT;
-  }
-  if (!(fpath->permissions&PSYNC_PERM_DELETE)){
-    psync_sql_unlock();
-    psync_free(fpath);
-    return -EACCES;
-  }
-  ret=psync_fstask_rmdir(fpath->folderid, fpath->name);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_DELETE))
+    ret=-EACCES;
+  else
+    ret=psync_fstask_rmdir(fpath->folderid, fpath->name);
   psync_sql_unlock();
   psync_free(fpath);
+  debug(D_NOTICE, "rmdir %s=%d", path, ret);
   return ret;
 }
 
@@ -1193,19 +1187,15 @@ static int psync_fs_unlink(const char *path){
   debug(D_NOTICE, "unlink %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
-  if (!fpath){
-    psync_sql_unlock();
-    debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
-    return -ENOENT;
-  }
-  if (!(fpath->permissions&PSYNC_PERM_DELETE)){
-    psync_sql_unlock();
-    psync_free(fpath);
-    return -EACCES;
-  }
-  ret=psync_fstask_unlink(fpath->folderid, fpath->name);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_DELETE))
+    ret=-EACCES;
+  else
+    ret=psync_fstask_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
   psync_free(fpath);
+  debug(D_NOTICE, "unlink %s=%d", path, ret);
   return ret;
 }
 

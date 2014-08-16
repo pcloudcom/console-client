@@ -749,6 +749,7 @@ void psync_fstask_folder_created(psync_folderid_t parentfolderid, uint64_t taski
   }
   folder=psync_fstask_get_folder_tasks_locked(-taskid);
   if (folder){
+    debug(D_NOTICE, "re-inserting into tree folder diffs of folder %ld as %lu", (long)folder->folderid, (unsigned long)folderid);
     psync_tree_del(&folders, &folder->tree);
     folder->folderid=folderid;
     psync_tree_add(&folders, &folder->tree, folder_cmp);
