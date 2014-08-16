@@ -77,13 +77,13 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
     folder=psync_fstask_get_folder_tasks_locked(cfolderid);
     if (folder){
       char *name=psync_strndup(path, len);
-      if (row && !psync_fstask_find_rmdir(folder, name, 0)){
-        cfolderid=row[0];
-        permissions&=row[1];
+      if ((mk=psync_fstask_find_mkdir(folder, name, 0))){
+        cfolderid=mk->folderid;
         hasit=1;
       }
-      else if ((mk=psync_fstask_find_mkdir(folder, name, 0))){
-        cfolderid=mk->folderid;
+      else if (row && !psync_fstask_find_rmdir(folder, name, 0)){
+        cfolderid=row[0];
+        permissions&=row[1];
         hasit=1;
       }
       else
