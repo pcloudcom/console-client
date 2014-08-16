@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "pfs.h"
+#include "pfsxattr.h"
 #include "pfsfolder.h"
 #include "pcompat.h"
 #include "plibs.h"
@@ -53,7 +54,7 @@
 #define openfile_to_fh(x) ((uintptr_t)x)
 
 #define FS_BLOCK_SIZE 4096
-#define FS_MAX_WRITE  256*1024
+#define FS_MAX_WRITE  16*1024*1024
 
 typedef struct {
   uint64_t offset;
@@ -1549,7 +1550,6 @@ int psync_fs_start(){
   fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-oauto_unmount");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
-  fuse_opt_add_arg(&args, "-olarge_read");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "-ovolname=pCloudDrive");
@@ -1581,6 +1581,11 @@ int psync_fs_start(){
   psync_oper.utimens  = psync_fs_utimens;
   psync_oper.ftruncate= psync_fs_ftruncate;
   psync_oper.truncate = psync_fs_truncate;
+  
+  psync_oper.setxattr = psync_fs_setxattr;
+  psync_oper.getxattr = psync_fs_getxattr;
+  psync_oper.listxattr= psync_fs_listxattr;
+  psync_oper.removexattr=psync_fs_removexattr;
 
 #if defined(P_OS_POSIX)
   myuid=getuid();

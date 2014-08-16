@@ -36,6 +36,7 @@
 #include "pfileops.h"
 #include "ppagecache.h"
 #include "pssl.h"
+#include "pfsxattr.h"
 #include <string.h>
 
 typedef struct {
@@ -115,6 +116,7 @@ static int psync_process_task_mkdir(fsupload_task_t *task){
   task->int2=folderid;
   psync_ops_create_folder_in_db(meta);
   psync_fstask_folder_created(task->folderid, task->id, folderid, task->text1);
+  psync_fs_task_to_folder(task->id, folderid);
   debug(D_NOTICE, "folder %lu/%s created", (unsigned long)task->folderid, task->text1);
   return 0;
 }
@@ -291,6 +293,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
     psync_ops_create_file_in_db(meta);
     psync_pagecache_creat_to_pagecache(taskid, hash);
     psync_fstask_file_created(folderid, taskid, name, fileid);
+    psync_fs_task_to_file(taskid, fileid);
   }
   else{
     psync_ops_update_file_in_db(meta);
@@ -332,6 +335,7 @@ static void perm_fail_upload_task(uint64_t taskid){
   sql=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_run_free(sql);
+  psync_fs_task_deleted(taskid);
   psync_sql_commit_transaction();
 }
 
@@ -827,6 +831,7 @@ static int psync_process_task_creat(fsupload_task_t *task){
   psync_ops_create_file_in_db(meta);
   psync_fstask_file_created(task->folderid, task->id, task->text1, fileid);
   psync_pagecache_creat_to_pagecache(task->id, psync_find_result(meta, "hash", PARAM_NUM)->num);
+  psync_fs_task_to_file(task->id, fileid);
   task->int2=fileid;
   debug(D_NOTICE, "file %lu/%s uploaded", (unsigned long)task->folderid, task->text1);
   return 0;

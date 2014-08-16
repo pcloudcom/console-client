@@ -187,8 +187,15 @@ int psync_sql_connect(const char *db){
     if (IS_DEBUG)
       sqlite3_config(SQLITE_CONFIG_LOG, psync_sql_err_callback, NULL);
     sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
+    psync_sql_statement(PSYNC_DATABASE_CONFIG);
     if (initdbneeded==1)
       return psync_sql_statement(PSYNC_DATABASE_STRUCTURE);
+    else if (psync_sql_statement("DELETE FROM setting WHERE id='justcheckingiflocked'")){
+      debug(D_ERROR, "database is locked");
+      sqlite3_close(psync_db);
+      pthread_mutex_destroy(&psync_db_mutex);
+      return -1;
+    }
 
     dbver=psync_sql_cellint("SELECT value FROM setting WHERE id='dbversion'", 0);
     if (dbver<PSYNC_DATABASE_VERSION){

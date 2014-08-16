@@ -43,13 +43,17 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 2
+#define PSYNC_DATABASE_VERSION 3
 
-#define PSYNC_DATABASE_STRUCTURE \
+#define PSYNC_DATABASE_CONFIG \
 "\
 PRAGMA journal_mode=WAL;\
 PRAGMA synchronous=1;\
 PRAGMA locking_mode=EXCLUSIVE;\
+"
+
+#define PSYNC_DATABASE_STRUCTURE \
+"\
 BEGIN;\
 PRAGMA page_size=4096;\
 PRAGMA cache_size=8000;\
@@ -113,6 +117,7 @@ CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, t
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
@@ -134,7 +139,11 @@ CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, cre
 UPDATE filerevision SET size=(SELECT size FROM file WHERE file.id=filerevision.fileid AND file.hash=filerevision.hash);\
 UPDATE setting SET value=2 WHERE id='dbversion';\
 COMMIT;\
-"
+",
+  "BEGIN;\
+CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
+UPDATE setting SET value=3 WHERE id='dbversion';\
+COMMIT;"
 };
 
 #endif
