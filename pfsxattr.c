@@ -27,7 +27,7 @@
 
 static void delete_object_id(uint64_t oid){
   psync_sql_res *res;
-  res=psync_sql_prep_statement("DELTE FROM fsxattr WHERE objectid=?");
+  res=psync_sql_prep_statement("DELETE FROM fsxattr WHERE objectid=?");
   psync_sql_bind_uint(res, 1, oid);
   psync_sql_run_free(res);
 }
