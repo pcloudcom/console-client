@@ -229,7 +229,7 @@ int psync_fs_getxattr(const char *path, const char *name, char *value, size_t si
     }
     else{
       ret=-ENOATTR;
-      debug(D_NOTICE, "attribute %s not found for %s", name, path);
+//      debug(D_NOTICE, "attribute %s not found for %s", name, path);
     }
     psync_sql_free_result(res);
   }
@@ -244,7 +244,7 @@ int psync_fs_getxattr(const char *path, const char *name, char *value, size_t si
     }
     else{
       ret=-ENOATTR;
-      debug(D_NOTICE, "attribute %s not found for %s", name, path);
+//      debug(D_NOTICE, "attribute %s not found for %s", name, path);
     }
     psync_sql_free_result(res);
   }

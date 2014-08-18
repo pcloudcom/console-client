@@ -909,7 +909,7 @@ break2:
   }
   cpih=cache_pages_in_hash;
   if (!psync_list_isempty(&pages_to_flush)){
-    res=psync_sql_prep_statement("UPDATE pagecache SET hash=?, pageid=?, type="NTO_STR(PAGE_TYPE_READ)", lastuse=?, usecnt=?, size=? WHERE id=?");
+    res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=?, pageid=?, type="NTO_STR(PAGE_TYPE_READ)", lastuse=?, usecnt=?, size=? WHERE id=?");
     psync_list_for_each_element(page, &pages_to_flush, psync_cache_page_t, flushlist){
       psync_list_del(&page->list);
       psync_sql_bind_uint(res, 1, page->hash);
@@ -919,10 +919,12 @@ break2:
       psync_sql_bind_uint(res, 5, page->size);
       psync_sql_bind_uint(res, 6, page->flushpageid);
       psync_sql_run(res);
-      updates++;
-      pagecnt++;
       cache_pages_free++;
-      free_db_pages--;
+      if (psync_sql_affected_rows()){
+        updates++;
+        pagecnt++;
+        free_db_pages--;
+      }
       psync_list_add_head(&free_pages, &page->list);
       if (updates%64==0){
         psync_sql_free_result(res);
