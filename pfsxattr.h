@@ -1,10 +1,17 @@
 #ifndef _PSYNC_FSXATTR_H
 #define _PSYNC_FSXATTR_H
 
+#include "pcompat.h"
 #include "psynclib.h"
 
-int psync_fs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags);
-int psync_fs_getxattr(const char *path, const char *name, char *value, size_t size);
+#if defined(P_IS_MACOSX)
+#define PFS_XATTR_IGN , uint32_t ign
+#else
+#define PFS_XATTR_IGN
+#endif
+
+int psync_fs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags PFS_XATTR_IGN);
+int psync_fs_getxattr(const char *path, const char *name, char *value, size_t size PFS_XATTR_IGN);
 int psync_fs_listxattr(const char *path, char *list, size_t size);
 int psync_fs_removexattr(const char *path, const char *name);
 

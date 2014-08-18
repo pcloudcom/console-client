@@ -176,7 +176,7 @@ static int64_t xattr_get_object_id_locked(const char *path){
   }\
 } while (0)
 
-int psync_fs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags){
+int psync_fs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags PFS_XATTR_IGN){
   psync_sql_res *res;
   int64_t oid;
   int ret;
@@ -215,7 +215,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
   return ret;
 }
 
-int psync_fs_getxattr(const char *path, const char *name, char *value, size_t size){
+int psync_fs_getxattr(const char *path, const char *name, char *value, size_t size PFS_XATTR_IGN){
   psync_sql_res *res;
   int64_t oid;
   int ret;
