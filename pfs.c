@@ -1545,12 +1545,16 @@ int psync_fs_start(){
   char *mp;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
 
+// it seems that fuse option parser ignores the firs argument
+  
 #if defined(P_OS_LINUX)
+  fuse_opt_add_arg(&args, "-oTHIS_IS_IGNORED");
   fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-oauto_unmount");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
 #endif
 #if defined(P_OS_MACOSX)
+  fuse_opt_add_arg(&args, "-oTHIS_IS_IGNORED");
   fuse_opt_add_arg(&args, "-ovolname=pCloudDrive");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
   fuse_opt_add_arg(&args, "-olocal");
