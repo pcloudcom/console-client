@@ -79,6 +79,8 @@ static gid_t mygid=0;
 static psync_tree *openfiles=PSYNC_TREE_EMPTY;
 
 int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size){
+  psync_sql_res *res;
+  psync_uint_row row;
   psync_openfile_t *fl;
   psync_tree *tr;
   psync_fsfileid_t fileid;
@@ -151,8 +153,15 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       return ret;
     }
   }
+  res=psync_sql_query("SELECT int1 FROM fstask WHERE id=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  if ((row=psync_sql_fetch_rowint(res)) && row[0]==writeid)
+    ret=0;
+  else
+    ret=-1;
+  psync_sql_free_result(res);
   psync_sql_unlock();
-  return 0;
+  return ret;
 }
 
 /*void psync_fs_uploading_openfile(uint64_t taskid){

@@ -826,8 +826,10 @@ static int psync_process_task_creat(fsupload_task_t *task){
     return handle_upload_api_error(result, task);
   meta=psync_find_result(task->res, "metadata", PARAM_ARRAY)->array[0];
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
-  if (psync_fs_update_openfile(task->id, task->int1, fileid, psync_find_result(meta, "hash", PARAM_NUM)->num, psync_find_result(meta, "size", PARAM_NUM)->num))
+  if (psync_fs_update_openfile(task->id, task->int1, fileid, psync_find_result(meta, "hash", PARAM_NUM)->num, psync_find_result(meta, "size", PARAM_NUM)->num)){
+    debug(D_NOTICE, "file %lu/%s changed while uploading, failing task", (unsigned long)task->folderid, task->text1);
     return -1;
+  }
   psync_ops_create_file_in_db(meta);
   psync_fstask_file_created(task->folderid, task->id, task->text1, fileid);
   psync_pagecache_creat_to_pagecache(task->id, psync_find_result(meta, "hash", PARAM_NUM)->num);
