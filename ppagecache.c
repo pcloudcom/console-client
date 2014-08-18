@@ -1083,7 +1083,8 @@ int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   fi=psync_interval_tree_first_interval_after(of->writeintervals, offset);
   if (!fi || fi->from>=offset+size){
     pthread_mutex_unlock(&of->mutex);
-    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu", (unsigned long)size, (unsigned long)offset, of->remotefileid, of->hash);
+    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu", 
+          (unsigned long)size, (unsigned long)offset, (unsigned long)of->remotefileid, (unsigned long)of->hash);
     return rd;
   }
   debug(D_NOTICE, "reading %lu bytes at offset %lu from both network and local", (unsigned long)size, (unsigned long)offset);
@@ -1563,7 +1564,7 @@ int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint
     psync_list_for_each_element(pw, &wait_page_hash[h], psync_page_wait_t, list)
       if (pw->hash==hash && pw->pageid==first_page_id+i)        
         goto found;
-    debug(D_NOTICE, "page %lu not found", first_page_id+i);
+    debug(D_NOTICE, "page %lu not found", (unsigned long)(first_page_id+i));
     pw=psync_new(psync_page_wait_t);
     psync_list_add_tail(&wait_page_hash[h], &pw->list);
     psync_list_init(&pw->waiters);

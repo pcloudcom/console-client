@@ -4,7 +4,7 @@
 #include "pcompat.h"
 #include "psynclib.h"
 
-#if defined(P_IS_MACOSX)
+#if defined(P_OS_MACOSX)
 #define PFS_XATTR_IGN , uint32_t ign
 #else
 #define PFS_XATTR_IGN
