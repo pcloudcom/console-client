@@ -10,7 +10,19 @@
 #include <string.h>
 
 // Do we have this in Win?
+#if !defined(P_OS_WINDOWS)
 #include <sys/xattr.h>
+#else
+// No xattr in win.
+// Value get from standard xattr.h
+enum
+{
+  XATTR_CREATE = 1,	/* set value, fail if attr already exists.  */
+#define XATTR_CREATE	XATTR_CREATE
+  XATTR_REPLACE = 2	/* set value, fail if attr does not exist.  */
+#define XATTR_REPLACE	XATTR_REPLACE
+};
+#endif
 
 #ifndef ENOATTR
 #define ENOATTR ENODATA
