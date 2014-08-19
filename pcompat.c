@@ -2500,7 +2500,7 @@ end tell\n";
     close(fd);
     setsid();
     execl("/bin/sh", "/bin/sh", "-c", "osascript", NULL);
-    debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed", ex);
+    debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed");
     exit(1);
   }
 #else

@@ -1588,9 +1588,8 @@ int psync_fs_start(){
   char *mp;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
 
-// it seems that fuse option parser ignores the firs argument
+// it seems that fuse option parser ignores the first argument
 // it is ignored as it's like the exec(), argv[0] is the program
-    
     
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
