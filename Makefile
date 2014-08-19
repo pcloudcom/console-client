@@ -21,10 +21,12 @@ else
             ifneq (,$(findstring Debian,$(UNAME_V)))
                 CFLAGS += -DP_OS_DEBIAN
             endif
+	LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
         CFLAGS += -DP_OS_MACOSX -I/usr/local/include/osxfuse/
+	LDFLAGS += -lssl -lcrypto -losxfuse -lsqlite3
         #USESSL=securetransport
     endif
 endif
@@ -55,6 +57,9 @@ $(LIB_A): $(OBJ) $(OBJNOFS)
 fs: $(OBJ) $(OBJFS)
 	$(AR) $(LIB_A) $(OBJ) $(OBJFS)
 	$(RANLIB) $(LIB_A)
+
+cli: fs
+	$(CC) $(CFLAGS) -o cli cli.c $(LIB_A) $(LDFLAGS)
 
 clean:
 	rm -f *~ *.o $(LIB_A)
