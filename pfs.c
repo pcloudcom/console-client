@@ -1576,14 +1576,12 @@ static char *psync_fuse_get_mountpoint(){
 static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
-  if (started){
+  if (started==1){
     debug(D_NOTICE, "running fuse_unmount");
     fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
-    debug(D_NOTICE, "fuse_unmount exited, running fuse_destroy");
-    fuse_destroy(psync_fuse);
-    debug(D_NOTICE, "fuse_destroy exited");
+    debug(D_NOTICE, "fuse_unmount exited");
     psync_free(psync_current_mountpoint);
-    started=0;
+    started=2;
     psync_pagecache_flush();
   }
   pthread_mutex_unlock(&start_mutex);
@@ -1642,7 +1640,12 @@ static void psync_fuse_thread(){
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
   fuse_loop_mt(psync_fuse);
-  debug(D_NOTICE, "fuse_loop_mt exited");
+  pthread_mutex_lock(&start_mutex);
+  debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
+  fuse_destroy(psync_fuse);
+  debug(D_NOTICE, "fuse_destroy exited");
+  started=0;
+  pthread_mutex_unlock(&start_mutex);
 }
 
 int psync_fs_start(){
