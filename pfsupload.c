@@ -440,6 +440,10 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   res=get_result(api);
   if (unlikely_log(!res))
     goto err0;
+  if (asize){
+    psync_upload_sub_bytes_uploaded(asize);
+    asize=0;
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
   if (result){
