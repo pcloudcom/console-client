@@ -70,6 +70,7 @@
 void psync_status_init();
 void psync_status_recalc_to_download();
 void psync_status_recalc_to_upload();
+void psync_status_recalc_to_upload_async();
 uint32_t psync_status_get(uint32_t statusid) PSYNC_PURE;
 void psync_set_status(uint32_t statusid, uint32_t status);
 void psync_wait_status(uint32_t statusid, uint32_t status);

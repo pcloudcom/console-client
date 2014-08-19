@@ -45,6 +45,7 @@
 #include "ptimer.h"
 #include "pfstasks.h"
 #include "pfsupload.h"
+#include "pstatus.h"
 
 #if defined(P_OS_POSIX)
 #include <signal.h>
@@ -999,6 +1000,7 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
       psync_sql_bind_uint(res, 3, writeid);
       psync_sql_run_free(res);
     }
+    psync_status_recalc_to_upload_async();
     return 0;
   }
   pthread_mutex_unlock(&of->mutex);
@@ -1072,14 +1074,7 @@ static int psync_fs_read(const char *path, char *buf, size_t size, off_t offset,
     return psync_pagecache_read_unmodified_locked(of, buf, size, offset);
 }
 
-static int psync_fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
-  psync_openfile_t *of;
-  ssize_t bw;
-  uint64_t ioff;
-  index_record rec;
-  int ret;
-  of=fh_to_openfile(fi->fh);
-  pthread_mutex_lock(&of->mutex);
+static void psync_fs_inc_writeid_locked(psync_openfile_t *of, const char *path){
   if (unlikely(of->releasedforupload)){
     if (unlikely(psync_sql_trylock())){
       pthread_mutex_unlock(&of->mutex);
@@ -1095,6 +1090,17 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
     psync_sql_unlock();
   }
   of->writeid++;
+}
+
+static int psync_fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+  psync_openfile_t *of;
+  ssize_t bw;
+  uint64_t ioff;
+  index_record rec;
+  int ret;
+  of=fh_to_openfile(fi->fh);
+  pthread_mutex_lock(&of->mutex);
+  psync_fs_inc_writeid_locked(of, path);
 retry:
   if (of->newfile){
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
@@ -1130,6 +1136,8 @@ retry:
       ret=open_write_files(of, 0);
       if (unlikely_log(ret) || psync_file_seek(of->datafile, of->initialsize, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
         pthread_mutex_unlock(&of->mutex);
+        if (!ret)
+          ret=-EIO;
         return ret;
       }
       of->modified=1;
@@ -1394,12 +1402,65 @@ static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
 
 static int psync_fs_ftruncate(const char *path, off_t size, struct fuse_file_info *fi){
   debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
-  return -ENOSYS;
+  psync_openfile_t *of;
+  int ret;
+  of=fh_to_openfile(fi->fh);
+  pthread_mutex_lock(&of->mutex);
+  psync_fs_inc_writeid_locked(of, path);
+retry:
+  if (unlikely(!of->newfile && !of->modified)){
+    psync_fstask_creat_t *cr;
+    debug(D_NOTICE, "reopening file %s for writing", of->currentname);
+    if (psync_sql_trylock()){
+      // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
+      pthread_mutex_unlock(&of->mutex);
+      psync_sql_lock();
+      pthread_mutex_lock(&of->mutex);
+      if (of->newfile || of->modified){
+        psync_sql_unlock();
+        goto retry;
+      }
+    }
+    cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
+    psync_sql_unlock();
+    if (unlikely_log(!cr)){
+      pthread_mutex_unlock(&of->mutex);
+      return -EIO;
+    }
+    of->fileid=cr->fileid;
+    ret=open_write_files(of, 0);
+    if (unlikely_log(ret) || psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
+      if (!ret)
+        ret=-EIO;
+    }
+    else{
+      of->modified=1;
+      of->indexoff=0;
+      ret=0;
+    }
+  }
+  else{
+    if (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile))
+      ret=-EIO;
+    else
+      ret=0;
+  }
+  pthread_mutex_unlock(&of->mutex);
+  return ret;
 }
 
 static int psync_fs_truncate(const char *path, off_t size){
+  struct fuse_file_info fi;
+  int ret;
   debug(D_NOTICE, "truncate %s %lu", path, (unsigned long)size);
-  return -ENOSYS;
+  memset(&fi, 0, sizeof(fi));
+  ret=psync_fs_open(path, &fi);
+  if (ret)
+    return ret;
+  ret=psync_fs_ftruncate(path, size, &fi);
+  psync_fs_flush(path, &fi);
+  psync_fs_release(path, &fi);
+  return ret;
 }
 
 static void *psync_fs_init(struct fuse_conn_info *conn){

@@ -71,6 +71,41 @@ static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK)
 };
 
+void psync_upload_inc_uploads(){
+  pthread_mutex_lock(&upload_mutex);
+  psync_status.filesuploading++;
+  pthread_mutex_unlock(&upload_mutex);
+  psync_send_status_update();
+}
+
+void psync_upload_dec_uploads(){
+  pthread_mutex_lock(&upload_mutex);
+  psync_status.filesuploading--;
+  pthread_mutex_unlock(&upload_mutex);
+  psync_send_status_update();
+}
+
+void psync_upload_dec_uploads_cnt(uint32_t cnt){
+  pthread_mutex_lock(&upload_mutex);
+  psync_status.filesuploading-=cnt;
+  pthread_mutex_unlock(&upload_mutex);
+  psync_send_status_update();
+}
+
+void psync_upload_add_bytes_uploaded(uint64_t bytes){
+  pthread_mutex_lock(&upload_mutex);
+  psync_status.bytesuploaded+=bytes;
+  pthread_mutex_unlock(&upload_mutex);
+  psync_send_status_update();
+}
+
+void psync_upload_sub_bytes_uploaded(uint64_t bytes){
+  pthread_mutex_lock(&upload_mutex);
+  psync_status.bytesuploaded-=bytes;
+  pthread_mutex_unlock(&upload_mutex);
+  psync_send_status_update();
+}
+
 static void task_wait_no_uploads(){
   pthread_mutex_lock(&current_uploads_mutex);
   while (psync_status.filesuploading){
