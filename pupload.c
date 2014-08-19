@@ -386,7 +386,7 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
     ret=psync_get_remote_file_checksum(fileid, shashhex, &filesize, &hash);
     if (ret==PSYNC_NET_OK){
       if (filesize==fsize && !memcmp(hashhex, shashhex, PSYNC_HASH_DIGEST_HEXLEN)){
-        debug(D_NOTICE, "file %lu/%s already exists and matches local checksum, not doing anythhing", (unsigned long)folderid, name);
+        debug(D_NOTICE, "file %lu/%s already exists and matches local checksum, not doing anything", (unsigned long)folderid, name);
         set_local_file_remote_id(localfileid, fileid, hash);
         return 1;
       }
@@ -808,13 +808,13 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
       }
       else if (le->type==PSYNC_URANGE_LAST && le->id==psync_find_result(res, "id", PARAM_NUM)->num){
         if (unlikely(psync_find_result(res, "size", PARAM_NUM)->num!=fsize)){
-          debug(D_WARNING, "file size mismach after upload, expected: %lu, got: %lu", (unsigned long)fsize, 
+          debug(D_WARNING, "file size mismatch after upload, expected: %lu, got: %lu", (unsigned long)fsize,
                 (unsigned long)psync_find_result(res, "size", PARAM_NUM)->num);
           psync_free(res);
           goto err1;
         }
         else if (unlikely(memcmp(psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR)->str, hashhex, PSYNC_HASH_DIGEST_HEXLEN))){
-          debug(D_WARNING, "hash mismach after upload, expected: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)
+          debug(D_WARNING, "hash mismatch after upload, expected: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)
                            "s, got: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", hashhex, 
                            psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR)->str);
           psync_free(res);
