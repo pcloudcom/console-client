@@ -174,7 +174,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
       goto fail;
     *sslconn=conn;
     if (IS_DEBUG && SSL_session_reused(ssl))
-      debug(D_NOTICE, "succefully reused session");
+      debug(D_NOTICE, "successfully reused session");
     return PSYNC_SSL_SUCCESS;
   }
   err=SSL_get_error(ssl, res);
@@ -198,7 +198,7 @@ int psync_ssl_connect_finish(void *sslconn, const char *hostname){
     if (unlikely(psync_ssl_verify_cert(conn->ssl, hostname)))
       goto fail;
     if (IS_DEBUG && SSL_session_reused(conn->ssl))
-      debug(D_NOTICE, "succefully reused session");
+      debug(D_NOTICE, "successfully reused session");
     return PSYNC_SSL_SUCCESS;
   }
   err=SSL_get_error(conn->ssl, res);

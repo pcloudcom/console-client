@@ -118,7 +118,7 @@
 
 #define PSYNC_APPEND_PARTIAL_FILES ".part"
 
-/* in miliseconds */
+/* in milliseconds */
 #define PSYNC_SLEEP_BEFORE_RECONNECT   5000
 #define PSYNC_SLEEP_ON_DISK_FULL       10000
 #define PSYNC_SLEEP_ON_FAILED_DOWNLOAD 200
