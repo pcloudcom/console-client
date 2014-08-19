@@ -2482,8 +2482,11 @@ end tell\n";
       waitpid(pid, &status, 0);
       return -1;
     }
-    if (waitpid(pid, &status, 0)==0 && WIFEXITED(status) && WEXITSTATUS(status)==0)
+    close(pfds[1]);
+    if (waitpid(pid, &status, 0)==0 && WIFEXITED(status) && WEXITSTATUS(status)==0){
+      debug(D_ERROR, "execution of osascript succeded");
       return 0;
+    }
     else{
       debug(D_ERROR, "execution of osascript failed");
       return -1;
@@ -2498,7 +2501,6 @@ end tell\n";
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
     close(fd);
-    setsid();
     execl("/bin/sh", "/bin/sh", "-c", "osascript", NULL);
     debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed");
     exit(1);
