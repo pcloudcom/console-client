@@ -2439,3 +2439,71 @@ int psync_run_update_file(const char *path){
   return -1;
 #endif
 }
+
+int psync_invalidate_os_cache_needed(){
+#if defined(P_OS_MACOSX)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
+int psync_invalidate_os_cache(){
+#if defined(P_OS_MACOSX)
+  int pfds[2];
+  pid_t pid;
+  debug(D_NOTICE, "running osascript to refresh finder");
+  if (unlikely(pipe(pfds))){
+    debug(D_ERROR, "pipe failed");
+  }
+  pid=fork();
+  if (unlikely(pid==-1)){
+    close(pfds[0]);
+    close(pfds[1]);
+    debug(D_ERROR, "fork failed");
+    return -1;
+  }
+  else if (pid){
+    const char *cmd="tell application \"Finder\"\n\
+  repeat with i from 1 to count of Finder windows\n\
+    tell window i\n\
+      try\n\
+        update every item with necessity\n\
+      end try\n\
+    end tell\n\
+  end repeat\n\
+end tell\n";
+    int status;
+    close(pfds[0]);
+    status=strlen(cmd);
+    if (write(pfds[1], cmd, status)!=status){
+      debug(D_ERROR, "write to pipe failed");
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      return -1;
+    }
+    if (waitpid(pid, &status, 0)==0 && WIFEXITED(status) && WEXITSTATUS(status)==0)
+      return 0;
+    else{
+      debug(D_ERROR, "execution of osascript failed");
+      return -1;
+    }
+  }
+  else{
+    int fd;
+    close(pfds[1]);
+    dup2(pfds[0], STDIN_FILENO);
+    close(pfds[0]);
+    fd=open("/dev/null", O_RDWR);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+    setsid();
+    execl("/bin/sh", "/bin/sh", "-c", "osascript", NULL);
+    debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed", ex);
+    exit(1);
+  }
+#else
+  return 0;
+#endif
+}

@@ -40,6 +40,7 @@
 #include "pcallbacks.h"
 #include "pfileops.h"
 #include "pfsxattr.h"
+#include "pfs.h"
 #include <ctype.h>
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -1481,6 +1482,7 @@ restart:
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
   send_diff_command(sock, diffid);
+  psync_fs_refresh();
   while (psync_do_run){
     if (psync_socket_pendingdata(sock))
       sel=1;
@@ -1518,6 +1520,7 @@ restart:
           newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
           diffid=process_entries(entries, newdiffid);
           check_overquota();
+          psync_fs_refresh();
         }
         else
           debug(D_NOTICE, "diff with 0 entries, did we send a nop recently?");

@@ -86,4 +86,6 @@ void psync_fs_dec_of_refcnt(psync_openfile_t *of);
 void psync_fs_inc_of_refcnt_and_readers(psync_openfile_t *of);
 void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of);
 
+void psync_fs_refresh();
+
 #endif

@@ -967,6 +967,7 @@ void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of){
 static int psync_fs_release(const char *path, struct fuse_file_info *fi){
   debug(D_NOTICE, "release %s", path);
   psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
+  psync_fs_refresh();
   return 0;
 }
 
@@ -1401,7 +1402,7 @@ static int psync_fs_truncate(const char *path, off_t size){
   return -ENOSYS;
 }
 
-void *psync_fs_init(struct fuse_conn_info *conn){
+static void *psync_fs_init(struct fuse_conn_info *conn){
 #if defined(FUSE_CAP_ASYNC_READ)
   conn->want|=FUSE_CAP_ASYNC_READ;
 #endif
@@ -1416,6 +1417,48 @@ void *psync_fs_init(struct fuse_conn_info *conn){
   return 0;
 }
 
+static pthread_mutex_t fsrefreshmutex=PTHREAD_MUTEX_INITIALIZER;
+static time_t lastfsrefresh=0;
+static int fsrefreshtimerscheduled=0;
+#define REFRESH_SEC 3
+
+static void psync_invalidate_os_cache_noret(){
+  psync_invalidate_os_cache();
+}
+
+static void psync_fs_refresh_timer(psync_timer_t timer, void *ptr){
+  time_t ct;
+  ct=psync_timer_time();
+  psync_timer_stop(timer);
+  pthread_mutex_lock(&fsrefreshmutex);
+  fsrefreshtimerscheduled=0;
+  lastfsrefresh=ct;
+  pthread_mutex_unlock(&fsrefreshmutex);
+  psync_run_thread("os cache invalidate", psync_invalidate_os_cache_noret);
+}
+
+void psync_fs_refresh(){
+  time_t ct;
+  int todo;
+  if (!psync_invalidate_os_cache_needed())
+    return;
+  ct=psync_timer_time();
+  todo=0;
+  pthread_mutex_lock(&fsrefreshmutex);
+  if (fsrefreshtimerscheduled)
+    todo=2;
+  else if (lastfsrefresh+REFRESH_SEC<ct)
+    lastfsrefresh=ct;
+  else{
+    todo=1;
+    fsrefreshtimerscheduled=1;
+  }
+  pthread_mutex_unlock(&fsrefreshmutex);
+  if (todo==0)
+    psync_run_thread("os cache invalidate", psync_invalidate_os_cache_noret);
+  else if (todo==1)
+    psync_timer_register(psync_fs_refresh_timer, REFRESH_SEC, NULL);
+}
 
 static struct fuse_operations psync_oper;
 

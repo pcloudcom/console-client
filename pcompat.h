@@ -454,5 +454,7 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result);
 #endif
 
 int psync_run_update_file(const char *path);
+int psync_invalidate_os_cache_needed();
+int psync_invalidate_os_cache();
 
 #endif
