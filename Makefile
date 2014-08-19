@@ -26,7 +26,7 @@ else
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
         CFLAGS += -DP_OS_MACOSX -I/usr/local/include/osxfuse/
-	LDFLAGS += -lssl -lcrypto -losxfuse -lsqlite3
+	LDFLAGS += -lssl -lcrypto -losxfuse -lsqlite3 -framework Cocoa -L/usr/local/ssl/lib
         #USESSL=securetransport
     endif
 endif
