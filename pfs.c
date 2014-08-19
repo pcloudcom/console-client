@@ -1603,7 +1603,6 @@ int psync_fs_start(){
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
   fuse_opt_add_arg(&args, "-olocal");
   fuse_opt_add_arg(&args, "-oallow_root");
-  fuse_opt_add_arg(&args, "-olarge_read");
   fuse_opt_add_arg(&args, "-onolocalcaches");
 #endif
 
