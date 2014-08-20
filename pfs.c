@@ -1401,9 +1401,9 @@ static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
 }
 
 static int psync_fs_ftruncate(const char *path, off_t size, struct fuse_file_info *fi){
-  debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   psync_openfile_t *of;
   int ret;
+  debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
   psync_fs_inc_writeid_locked(of, path);
@@ -1539,6 +1539,8 @@ static int get_first_free_drive(){
     return pos < 26 ? pos : 0;
 }
 
+static char mount_point = 'a';
+
 static char *psync_fuse_get_mountpoint(){
   const char *stored;
   char *mp = (char*)psync_malloc(3);
@@ -1555,7 +1557,13 @@ static char *psync_fuse_get_mountpoint(){
   }
   mp[0] = 'A' + get_first_free_drive();
 ready:
+  mount_point = mp[0];
   return mp;
+}
+
+char psync_getMountPoint()
+{
+    return mount_point;
 }
 
 #else
