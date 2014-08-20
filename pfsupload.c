@@ -52,6 +52,7 @@ typedef struct {
   const char *text2;
   int64_t int1;
   int64_t int2;
+  unsigned char ccreat;
 } fsupload_task_t;
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -823,8 +824,10 @@ static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){
       debug(D_NOTICE, "uploading file %lu/%s pipelined due to size of %lu", (unsigned long)task->folderid, task->text1, (unsigned long)size);
       ret=psync_send_task_creat_upload_small(api, task, fd, size);
       psync_file_close(fd);
-      if (!ret)
+      if (!ret){
         psync_upload_inc_uploads();
+        task->ccreat=1;
+      }
       return ret;
     }
   }
@@ -1056,7 +1059,7 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
   sfol=psync_sql_prep_statement("UPDATE fstask SET sfolderid=? WHERE sfolderid=?");
   fil=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_list_for_each_element (task, tasks, fsupload_task_t, list){
-    if (task->type==PSYNC_FS_TASK_CREAT)
+    if (task->ccreat)
       creats++;
     if (task->res){
       if (psync_process_task_func[task->type](task))
@@ -1185,6 +1188,7 @@ static void psync_fsupload_check_tasks(){
       task->text2=NULL;
     task->int1=psync_get_snumber_or_null(row[6]);
     task->int2=psync_get_snumber_or_null(row[7]);
+    task->ccreat=0;
     psync_list_add_tail(&tasks, &task->list);
   }
   psync_sql_free_result(res);
