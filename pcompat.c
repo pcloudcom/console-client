@@ -2333,7 +2333,7 @@ char *psync_deviceid(){
     sprintf(versbuff, "%u.%u", (unsigned int)vmajor, (unsigned int)vminor);
     ver=versbuff;
   }
-  device=psync_strcat(hardware, ", ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
+  device=psync_strcat(hardware, ", Windows ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
 #elif defined(P_OS_MACOSX)
   struct utsname un;
   const char *ver;
