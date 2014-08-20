@@ -54,11 +54,16 @@ static pthread_mutex_t cache_mutexes[CACHE_LOCKS];
 static pthread_cond_t cache_cond=PTHREAD_COND_INITIALIZER;
 
 void psync_cache_init(){
+  pthread_mutexattr_t mattr;
   psync_uint_t i;
   for (i=0; i<CACHE_HASH_SIZE; i++)
     psync_list_init(&cache_hash[i]);
-  for (i=0; i<CACHE_LOCKS; i++)
-    pthread_mutex_init(&cache_mutexes[i], NULL);
+  for (i=0; i<CACHE_LOCKS; i++){
+    pthread_mutexattr_init(&mattr);
+    pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&cache_mutexes[i], &mattr);
+    pthread_mutexattr_destroy(&mattr);
+  }
 }
 
 static psync_uint_t hash_func(const char *key){
@@ -158,7 +163,7 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
       }
   }
   /* adding to head should be better than to the tail: more recent objects are likely to be in processor cache, more recent
-   * connections are likely to be "faster" (e.g. further from idle slowstart reset)
+   * connections are likely to be "faster" (e.g. futher from idle slowstart reset)
    */
   psync_list_add_head(&cache_hash[h], &he->list);
   he->timer=psync_timer_register(cache_timer, freeafter, he);

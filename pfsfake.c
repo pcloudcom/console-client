@@ -25,6 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "psynclib.h"
+
 int psync_fs_remount(){
   return 0;
 }
@@ -38,4 +40,16 @@ int psync_fs_start(){
 }
 
 void psync_fs_stop(){
+}
+
+void psync_fs_refresh(){
+}
+
+void psync_fs_file_deleted(psync_fileid_t fileid){
+}
+
+void psync_fs_folder_deleted(psync_folderid_t folderid){
+}
+
+void psync_fs_task_deleted(uint64_t taskid){
 }

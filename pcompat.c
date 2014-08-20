@@ -344,14 +344,14 @@ void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr){
   pthread_attr_destroy(&attr);
 }
 
-void psync_milisleep(uint64_t milisec){
+void psync_milisleep(uint64_t millisec){
 #if defined(P_OS_POSIX)
   struct timespec tm;
-  tm.tv_sec=milisec/1000;
-  tm.tv_nsec=(milisec%1000)*1000000;
+  tm.tv_sec=millisec/1000;
+  tm.tv_nsec=(millisec%1000)*1000000;
   nanosleep(&tm, NULL);
 #elif defined(P_OS_WINDOWS)
-  Sleep(milisec);
+  Sleep(millisec);
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -916,7 +916,7 @@ static psync_socket_t connect_socket(const char *host, const char *port){
     }
     addr_save_to_db(host, port, res);
     if (addr_still_valid(dbres, res)){
-      debug(D_NOTICE, "successfuly reused cached IP for %s:%s", host, port);
+      debug(D_NOTICE, "successfully reused cached IP for %s:%s", host, port);
       sock=(psync_socket_t)(uintptr_t)psync_task_get_result(tasks, 0);
     }
     else{
@@ -1684,16 +1684,16 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
 #endif
 }
 
-int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmilisec){
+int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec){
   fd_set rfds;
   struct timeval tv, *ptv;
   psync_socket_t max;
   int i;
-  if (timeoutmilisec<0)
+  if (timeoutmillisec<0)
     ptv=NULL;
   else{
-    tv.tv_sec=timeoutmilisec/1000;
-    tv.tv_usec=(timeoutmilisec%1000)*1000;
+    tv.tv_sec=timeoutmillisec/1000;
+    tv.tv_usec=(timeoutmillisec%1000)*1000;
     ptv=&tv;
   }
   FD_ZERO(&rfds);
@@ -2335,7 +2335,7 @@ char *psync_deviceid(){
     sprintf(versbuff, "%u.%u", (unsigned int)vmajor, (unsigned int)vminor);
     ver=versbuff;
   }
-  device=psync_strcat(hardware, ", ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
+  device=psync_strcat(hardware, ", Windows ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
 #elif defined(P_OS_MACOSX)
   struct utsname un;
   const char *ver;
@@ -2347,6 +2347,7 @@ char *psync_deviceid(){
   else{
     v=atoi(un.release);
     switch (v){
+      case 14: ver="OS X 10.10 Yosemite"; break;
       case 13: ver="OS X 10.9 Mavericks"; break;
       case 12: ver="OS X 10.8 Mountain Lion"; break;
       case 11: ver="OS X 10.7 Lion"; break;
@@ -2439,5 +2440,75 @@ int psync_run_update_file(const char *path){
     return -1;
 #else
   return -1;
+#endif
+}
+
+int psync_invalidate_os_cache_needed(){
+#if defined(P_OS_MACOSX)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
+int psync_invalidate_os_cache(){
+#if defined(P_OS_MACOSX)
+  int pfds[2];
+  pid_t pid;
+  debug(D_NOTICE, "running osascript to refresh finder");
+  if (unlikely(pipe(pfds))){
+    debug(D_ERROR, "pipe failed");
+  }
+  pid=fork();
+  if (unlikely(pid==-1)){
+    close(pfds[0]);
+    close(pfds[1]);
+    debug(D_ERROR, "fork failed");
+    return -1;
+  }
+  else if (pid){
+    const char *cmd="tell application \"Finder\"\n\
+  repeat with i from 1 to count of Finder windows\n\
+    tell window i\n\
+      try\n\
+        update every item with necessity\n\
+      end try\n\
+    end tell\n\
+  end repeat\n\
+end tell\n";
+    int status;
+    close(pfds[0]);
+    status=strlen(cmd);
+    if (write(pfds[1], cmd, status)!=status){
+      debug(D_ERROR, "write to pipe failed");
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      return -1;
+    }
+    close(pfds[1]);
+    if (waitpid(pid, &status, 0)==0 && WIFEXITED(status) && WEXITSTATUS(status)==0){
+      debug(D_ERROR, "execution of osascript succeded");
+      return 0;
+    }
+    else{
+      debug(D_ERROR, "execution of osascript failed");
+      return -1;
+    }
+  }
+  else{
+    int fd;
+    close(pfds[1]);
+    dup2(pfds[0], STDIN_FILENO);
+    close(pfds[0]);
+    fd=open("/dev/null", O_RDWR);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+    execl("/bin/sh", "/bin/sh", "-c", "osascript", NULL);
+    debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed");
+    exit(1);
+  }
+#else
+  return 0;
 #endif
 }

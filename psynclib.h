@@ -732,6 +732,10 @@ int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
 
+#if defined(P_OS_WINDOWS)
+char psync_getMountPoint();
+#endif
+
 #ifdef __cplusplus
 }
 #endif

@@ -29,6 +29,8 @@
 #include "pcallbacks.h"
 #include "plibs.h"
 #include "ptasks.h"
+#include "pfstasks.h"
+#include "psettings.h"
 #include <string.h>
 #include <stdarg.h>
 
@@ -148,23 +150,56 @@ void psync_status_recalc_to_download(){
 }
 
 void psync_status_recalc_to_upload(){
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  char *filename;
+  const char *fscpath;
   psync_sql_res *res;
   psync_uint_row row;
+  psync_stat_t st;
+  uint64_t bytestou;
+  uint32_t filestou, ofilestou;
+  
   res=psync_sql_query("SELECT COUNT(*), SUM(f.size) FROM task t, localfile f WHERE t.type=? AND t.localitemid=f.id");
   psync_sql_bind_uint(res, 1, PSYNC_UPLOAD_FILE);
   if ((row=psync_sql_fetch_rowint(res))){
-    psync_status.filestoupload=row[0];
-    psync_status.bytestoupload=row[1];
+    filestou=row[0];
+    bytestou=row[1];
   }
   else{
-    psync_status.filestodownload=0;
-    psync_status.bytestodownload=0;
+    filestou=0;
+    bytestou=0;
   }
   psync_sql_free_result(res);
-  if (!psync_status.filestoupload){
-    psync_status.uploadspeed=0;
-    psync_status.status=psync_calc_status();
+  fscpath=psync_setting_get_string(_PS(fscachepath));
+  res=psync_sql_query("SELECT id FROM fstask WHERE type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") AND text1 NOT LIKE '.%'");
+  while ((row=psync_sql_fetch_rowint(res))){
+    psync_binhex(fileidhex, &row[0], sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    filename=psync_strcat(fscpath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    if (!psync_stat(filename, &st)){
+      filestou++;
+      bytestou+=psync_stat_size(&st);
+    }
+    psync_free(filename);
   }
+  psync_sql_free_result(res);
+  ofilestou=psync_status.filestoupload;
+  psync_status.filestoupload=filestou;
+  psync_status.bytestoupload=bytestou;
+  if (!filestou)
+    psync_status.uploadspeed=0;
+  if (ofilestou!=filestou)
+    psync_status.status=psync_calc_status();
+}
+
+static void psync_status_recalc_to_upload_async_thread(){
+  psync_status_recalc_to_upload();
+  psync_send_status_update();
+}
+
+void psync_status_recalc_to_upload_async(){
+  psync_run_thread("recalc upload", psync_status_recalc_to_upload_async_thread);
 }
 
 

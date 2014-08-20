@@ -519,8 +519,10 @@ static psync_urls_t *get_urls_for_request(psync_request_t *req){
     set_urls(urls, res);
     return urls;
   }
-  if (get_urls(req, urls))
+  if (get_urls(req, urls)){
+    set_urls(urls, NULL);
     return NULL;
+  }
   else
     return urls;
 }
@@ -907,7 +909,7 @@ break2:
   }
   cpih=cache_pages_in_hash;
   if (!psync_list_isempty(&pages_to_flush)){
-    res=psync_sql_prep_statement("UPDATE pagecache SET hash=?, pageid=?, type="NTO_STR(PAGE_TYPE_READ)", lastuse=?, usecnt=?, size=? WHERE id=?");
+    res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=?, pageid=?, type="NTO_STR(PAGE_TYPE_READ)", lastuse=?, usecnt=?, size=? WHERE id=?");
     psync_list_for_each_element(page, &pages_to_flush, psync_cache_page_t, flushlist){
       psync_list_del(&page->list);
       psync_sql_bind_uint(res, 1, page->hash);
@@ -917,10 +919,12 @@ break2:
       psync_sql_bind_uint(res, 5, page->size);
       psync_sql_bind_uint(res, 6, page->flushpageid);
       psync_sql_run(res);
-      updates++;
-      pagecnt++;
       cache_pages_free++;
-      free_db_pages--;
+      if (psync_sql_affected_rows()){
+        updates++;
+        pagecnt++;
+        free_db_pages--;
+      }
       psync_list_add_head(&free_pages, &page->list);
       if (updates%64==0){
         psync_sql_free_result(res);
@@ -1079,7 +1083,8 @@ int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   fi=psync_interval_tree_first_interval_after(of->writeintervals, offset);
   if (!fi || fi->from>=offset+size){
     pthread_mutex_unlock(&of->mutex);
-    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu", (unsigned long)size, (unsigned long)offset, of->remotefileid, of->hash);
+    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu, read returned %d", 
+          (unsigned long)size, (unsigned long)offset, (unsigned long)of->remotefileid, (unsigned long)of->hash, rd);
     return rd;
   }
   debug(D_NOTICE, "reading %lu bytes at offset %lu from both network and local", (unsigned long)size, (unsigned long)offset);
@@ -1559,7 +1564,7 @@ int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint
     psync_list_for_each_element(pw, &wait_page_hash[h], psync_page_wait_t, list)
       if (pw->hash==hash && pw->pageid==first_page_id+i)        
         goto found;
-    debug(D_NOTICE, "page %lu not found", first_page_id+i);
+    debug(D_NOTICE, "page %lu not found", (unsigned long)(first_page_id+i));
     pw=psync_new(psync_page_wait_t);
     psync_list_add_tail(&wait_page_hash[h], &pw->list);
     psync_list_init(&pw->waiters);

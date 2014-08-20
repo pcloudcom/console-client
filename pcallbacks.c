@@ -52,7 +52,8 @@ typedef struct {
 static void status_change_thread(void *ptr){
   pstatus_change_callback_t callback=(pstatus_change_callback_t)ptr;
   while (1){
-    psync_milisleep(5);
+    // Maximum 10 updates/sec
+    psync_milisleep(100);
     pthread_mutex_lock(&statusmutex);
     while (!statuschanges)
       pthread_cond_wait(&statuscond, &statusmutex);

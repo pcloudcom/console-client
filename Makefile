@@ -21,10 +21,12 @@ else
             ifneq (,$(findstring Debian,$(UNAME_V)))
                 CFLAGS += -DP_OS_DEBIAN
             endif
+	LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
         CFLAGS += -DP_OS_MACOSX -I/usr/local/include/osxfuse/
+	LDFLAGS += -lssl -lcrypto -losxfuse -lsqlite3 -framework Cocoa -L/usr/local/ssl/lib
         #USESSL=securetransport
     endif
 endif
@@ -33,7 +35,7 @@ OBJ=pcompat.o psynclib.o plibs.o pcallbacks.o pdiff.o pstatus.o papi.o ptimer.o 
      psyncer.o ptasks.o psettings.o pnetlibs.o pcache.o pscanner.o plist.o plocalscan.o plocalnotify.o pp2p.o\
      pcrypto.o pssl.o pfileops.o ptree.o
 
-OBJFS=pfs.o ppagecache.o pfsfolder.o pfstasks.o pfsupload.o pintervaltree.o
+OBJFS=pfs.o ppagecache.o pfsfolder.o pfstasks.o pfsupload.o pintervaltree.o pfsxattr.o
 
 OBJNOFS=pfsfake.o
 
@@ -55,6 +57,9 @@ $(LIB_A): $(OBJ) $(OBJNOFS)
 fs: $(OBJ) $(OBJFS)
 	$(AR) $(LIB_A) $(OBJ) $(OBJFS)
 	$(RANLIB) $(LIB_A)
+
+cli: fs
+	$(CC) $(CFLAGS) -o cli cli.c $(LIB_A) $(LDFLAGS)
 
 clean:
 	rm -f *~ *.o $(LIB_A)

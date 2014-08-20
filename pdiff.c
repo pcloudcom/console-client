@@ -39,6 +39,8 @@
 #include "pdownload.h"
 #include "pcallbacks.h"
 #include "pfileops.h"
+#include "pfsxattr.h"
+#include "pfs.h"
 #include <ctype.h>
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -553,6 +555,7 @@ static void process_deletefolder(const binresult *entry){
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
+  psync_fs_folder_deleted(folderid);
   if (psync_is_folder_in_downloadlist(folderid)){
     psync_del_folder_from_downloadlist(folderid);
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=?");
@@ -588,6 +591,7 @@ static void check_for_deletedfileid(const binresult *meta){
     res=psync_sql_prep_statement("DELETE FROM file WHERE id=?");
     psync_sql_bind_uint(res, 1, delfileid->num);
     psync_sql_run_free(res);
+    psync_fs_file_deleted(delfileid->num);
   }
 }
 
@@ -938,6 +942,7 @@ static void process_deletefile(const binresult *entry){
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+  psync_fs_folder_deleted(fileid);
   if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num)){
     psync_delete_download_tasks_for_file(fileid);
     path=psync_get_path_by_fileid(fileid, NULL);
@@ -1465,9 +1470,10 @@ restart:
   } while (result);
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
-  psync_sql_statement("ANALYZE");
   initialdownload=0;
   psync_syncer_check_delayed_syncs();
+  psync_fs_refresh();
+  psync_sql_statement("ANALYZE");
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){
     debug(D_ERROR, "could not create pipe");
@@ -1514,6 +1520,7 @@ restart:
           newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
           diffid=process_entries(entries, newdiffid);
           check_overquota();
+          psync_fs_refresh();
         }
         else
           debug(D_NOTICE, "diff with 0 entries, did we send a nop recently?");
