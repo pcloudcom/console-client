@@ -118,7 +118,7 @@ static int psync_process_task_mkdir(fsupload_task_t *task){
 }
 
 static int psync_send_task_rmdir(psync_socket *api, fsupload_task_t *task){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->int1)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->sfolderid)};
   if (likely_log(send_command_no_res(api, "deletefolder", params)==PTR_OK))
     return 0;
   else
@@ -129,7 +129,7 @@ static int handle_rmdir_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefolder returned error %u", (unsigned)result);
   switch (result){
     case 2005: /* folder does not exist, kind of success */
-      psync_ops_delete_folder_from_db(task->int1);
+      psync_ops_delete_folder_from_db(task->sfolderid);
       psync_fstask_folder_deleted(task->folderid, task->id, task->text1);
       return 0;
     case 2003: /* access denied, skip*/
@@ -147,7 +147,7 @@ static int psync_process_task_rmdir(fsupload_task_t *task){
   result=psync_find_result(task->res, "result", PARAM_NUM)->num;
   if (result)
     return handle_rmdir_api_error(result, task);
-  psync_ops_delete_folder_from_db(task->int1);
+  psync_ops_delete_folder_from_db(task->sfolderid);
   psync_fstask_folder_deleted(task->folderid, task->id, task->text1);
   debug(D_NOTICE, "folder %lu/%s deleted", (unsigned long)task->folderid, task->text1);
   return 0;
@@ -283,6 +283,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   if (psync_fs_update_openfile(taskid, writeid, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num)){
     psync_sql_rollback_transaction();
     psync_free(res);
+    debug(D_NOTICE, "upload of %s cancelled due to writeid mismatch", name);
     return -1;
   }
   if (newfile){
@@ -299,6 +300,8 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   sql=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_run_free(sql);
+  if (psync_sql_affected_rows())
+    psync_fsupload_wake();
   sql=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_sql_bind_uint(sql, 1, fileid);
   psync_sql_bind_int(sql, 2, -taskid);
@@ -308,6 +311,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   psync_sql_bind_uint(sql, 2, writeid);
   psync_sql_run_free(sql);
   if (!psync_sql_affected_rows()){
+    debug(D_BUG, "upload of %s cancelled due to writeid mismatch, psync_fs_update_openfile should have catched that", name);
     psync_sql_rollback_transaction();
     psync_free(res);
     return -1;
@@ -326,6 +330,8 @@ static void perm_fail_upload_task(uint64_t taskid){
   sql=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_run_free(sql);
+  if (psync_sql_affected_rows())
+    psync_fsupload_wake();
   sql=psync_sql_prep_statement("DELETE FROM fstask WHERE fileid=?");
   psync_sql_bind_int(sql, 1, -taskid);
   psync_sql_run_free(sql);
@@ -1212,6 +1218,8 @@ static void psync_fsupload_check_tasks(){
 static void psync_fsupload_thread(){
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
+    // it is better to sleep a bit to give a chance to events to accumulate
+    psync_milisleep(10);
     psync_fsupload_check_tasks();
     pthread_mutex_lock(&upload_mutex);
     while (!upload_wakes)
