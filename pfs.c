@@ -764,6 +764,8 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
         of->newfile=1;
         of->releasedforupload=status!=1;
         ret=open_write_files(of, fi->flags&O_TRUNC);
+        if (!ret)
+          of->currentsize=psync_file_size(of->datafile);
         pthread_mutex_unlock(&of->mutex);
         fi->fh=openfile_to_fh(of);
         if (unlikely_log(ret)){
@@ -801,6 +803,8 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       of->newfile=0;
       of->releasedforupload=status!=1;
       ret=open_write_files(of, fi->flags&O_TRUNC);
+      if (!ret)
+        of->currentsize=psync_file_size(of->datafile);
       pthread_mutex_unlock(&of->mutex);
       fi->fh=openfile_to_fh(of);
       if (unlikely_log(ret)){
@@ -1092,6 +1096,29 @@ static void psync_fs_inc_writeid_locked(psync_openfile_t *of, const char *path){
   of->writeid++;
 }
 
+static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
+  if (unlikely(of->currentsize<size)){
+    debug(D_NOTICE, "extending file %s from %lu to %lu bytes", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
+    if (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile))
+      return -1;
+    if (of->newfile)
+      return 0;
+    else{
+      index_record rec;
+      uint64_t ioff;
+      assertw(of->modified);
+      ioff=of->indexoff++;
+      rec.offset=of->currentsize;
+      rec.length=size-of->currentsize;
+      if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(index_header))!=sizeof(rec)))
+        return -1;
+      psync_interval_tree_add(&of->writeintervals, of->currentsize, size);
+      of->currentsize=size;
+    }
+  }
+  return 0;
+}
+
 static int psync_fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
   ssize_t bw;
@@ -1143,6 +1170,8 @@ retry:
       of->modified=1;
       of->indexoff=0;
     }
+    if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
+      return -1;
     ioff=of->indexoff++;
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
     if (unlikely_log(bw==-1)){
@@ -1429,21 +1458,27 @@ retry:
     }
     of->fileid=cr->fileid;
     ret=open_write_files(of, 0);
-    if (unlikely_log(ret) || psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
+    if (unlikely_log(ret) || psync_fs_modfile_check_size_ok(of, size) ||
+        (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))){
       if (!ret)
         ret=-EIO;
     }
     else{
       of->modified=1;
       of->indexoff=0;
+      of->currentsize=size;
       ret=0;
     }
   }
   else{
-    if (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile))
+    if (psync_fs_modfile_check_size_ok(of, size))
       ret=-EIO;
-    else
+    else if (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))
+      ret=-EIO;
+    else{
       ret=0;
+      of->currentsize=size;
+    }
   }
   pthread_mutex_unlock(&of->mutex);
   return ret;
@@ -1584,14 +1619,12 @@ static char *psync_fuse_get_mountpoint(){
 static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
-  if (started){
+  if (started==1){
     debug(D_NOTICE, "running fuse_unmount");
     fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
-    debug(D_NOTICE, "fuse_unmount exited, running fuse_destroy");
-    fuse_destroy(psync_fuse);
-    debug(D_NOTICE, "fuse_destroy exited");
+    debug(D_NOTICE, "fuse_unmount exited");
     psync_free(psync_current_mountpoint);
-    started=0;
+    started=2;
     psync_pagecache_flush();
   }
   pthread_mutex_unlock(&start_mutex);
@@ -1650,7 +1683,12 @@ static void psync_fuse_thread(){
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
   fuse_loop_mt(psync_fuse);
-  debug(D_NOTICE, "fuse_loop_mt exited");
+  pthread_mutex_lock(&start_mutex);
+  debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
+  fuse_destroy(psync_fuse);
+  debug(D_NOTICE, "fuse_destroy exited");
+  started=0;
+  pthread_mutex_unlock(&start_mutex);
 }
 
 int psync_fs_start(){
