@@ -315,7 +315,7 @@ int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
   task=(psync_fstask_mkdir_t *)psync_malloc(offsetof(psync_fstask_mkdir_t, name)+len);
   task->taskid=taskid;
   task->ctime=task->mtime=ctime;
-  task->folderid=-task->taskid;
+  task->folderid=-taskid;
   task->subdircnt=0;
   memcpy(task->name, name, len);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &task->tree);
@@ -395,6 +395,7 @@ int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name){
 psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name){
   psync_sql_res *res;
   psync_fstask_creat_t *task;
+  psync_fstask_unlink_t *un;
   uint64_t taskid;
   size_t len;
   len=strlen(name);
@@ -411,12 +412,17 @@ psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, cons
   if (unlikely_log(psync_sql_commit_transaction()))
     return NULL;
   len++;
+  un=(psync_fstask_unlink_t *)psync_malloc(offsetof(psync_fstask_unlink_t, name)+len);
+  un->taskid=taskid;
+  un->fileid=-taskid;
+  memcpy(un->name, name, len);
+  psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_unlink_t, name), &un->tree);
   task=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
   task->taskid=taskid;
-  task->fileid=-task->taskid;
+  task->fileid=-taskid;
   memcpy(task->name, name, len);
   psync_fstask_insert_into_tree(&folder->creats, offsetof(psync_fstask_creat_t, name), &task->tree);
-  folder->taskscnt++;
+  folder->taskscnt+=2;
   return task;
 }
 
@@ -456,7 +462,7 @@ psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *fold
   psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_unlink_t, name), &un->tree);
   task=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
   task->taskid=taskid;
-  task->fileid=-task->taskid;
+  task->fileid=-taskid;
   memcpy(task->name, name, len);
   psync_fstask_insert_into_tree(&folder->creats, offsetof(psync_fstask_creat_t, name), &task->tree);
   folder->taskscnt+=2;
@@ -804,12 +810,19 @@ static void psync_fstask_look_for_creat_in_db(psync_folderid_t parentfolderid, u
 void psync_fstask_file_created(psync_folderid_t parentfolderid, uint64_t taskid, const char *name, psync_fileid_t fileid){
   psync_fstask_folder_t *folder;
   psync_fstask_creat_t *cr;
+  psync_fstask_unlink_t *un;
   folder=psync_fstask_get_folder_tasks_locked(parentfolderid);
   if (folder){
     cr=psync_fstask_find_creat(folder, name, taskid);
     if (cr){
       psync_tree_del(&folder->creats, &cr->tree);
       psync_free(cr);
+      folder->taskscnt--;
+    }
+    un=psync_fstask_find_unlink(folder, name, taskid);
+    if (un){
+      psync_tree_del(&folder->unlinks, &un->tree);
+      psync_free(un);
       folder->taskscnt--;
     }
     psync_fstask_release_folder_tasks_locked(folder);
@@ -985,6 +998,7 @@ static void psync_init_task_rmdir(psync_variant_row row){
 
 static void psync_init_task_creat(psync_variant_row row){
   uint64_t taskid;
+  psync_fstask_unlink_t *un;
   psync_fstask_creat_t *task;
   psync_fstask_folder_t *folder;
   const char *name;
@@ -995,12 +1009,17 @@ static void psync_init_task_creat(psync_variant_row row){
   name=psync_get_lstring(row[4], &len);
   folder=psync_fstask_get_or_create_folder_tasks_locked(folderid);
   len++;
+  un=(psync_fstask_unlink_t *)psync_malloc(offsetof(psync_fstask_unlink_t, name)+len);
+  un->taskid=taskid;
+  un->fileid=-taskid;
+  memcpy(un->name, name, len);
+  psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_unlink_t, name), &un->tree);
   task=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
   task->taskid=taskid;
   task->fileid=-taskid;
   memcpy(task->name, name, len);
   psync_fstask_insert_into_tree(&folder->creats, offsetof(psync_fstask_creat_t, name), &task->tree);
-  folder->taskscnt++;
+  folder->taskscnt+=2;
   psync_fstask_release_folder_tasks_locked(folder);
 }
 
@@ -1135,7 +1154,7 @@ static void psync_init_task_modify(psync_variant_row row){
   len++;
   un=(psync_fstask_unlink_t *)psync_malloc(offsetof(psync_fstask_unlink_t, name)+len);
   un->taskid=taskid;
-  un->fileid=psync_get_snumber(row[3]);;
+  un->fileid=psync_get_snumber(row[3]);
   memcpy(un->name, name, len);
   psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_unlink_t, name), &un->tree);
   cr=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
