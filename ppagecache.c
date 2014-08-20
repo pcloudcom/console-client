@@ -1083,8 +1083,8 @@ int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   fi=psync_interval_tree_first_interval_after(of->writeintervals, offset);
   if (!fi || fi->from>=offset+size){
     pthread_mutex_unlock(&of->mutex);
-    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu", 
-          (unsigned long)size, (unsigned long)offset, (unsigned long)of->remotefileid, (unsigned long)of->hash);
+    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu, read returned %d", 
+          (unsigned long)size, (unsigned long)offset, (unsigned long)of->remotefileid, (unsigned long)of->hash, rd);
     return rd;
   }
   debug(D_NOTICE, "reading %lu bytes at offset %lu from both network and local", (unsigned long)size, (unsigned long)offset);

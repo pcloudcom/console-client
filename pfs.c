@@ -709,6 +709,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     return -EACCES;
   }
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
+  row=NULL;
   if ((cr=psync_fstask_find_creat(folder, fpath->name, 0))){
     if (cr->fileid>=0){
       res=psync_sql_query("SELECT id, size, hash FROM file WHERE id=?");
@@ -779,8 +780,11 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
           }
         }
       }
-      else
+      else{
         debug(D_BUG, "trying to open file %s with id %ld but task type is %d", fpath->name, (long)cr->fileid, type);
+        ret=-EIO;
+        goto ex0;
+      }
       of=psync_fs_create_file(cr->fileid, fileid, size, hash, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name);
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();
@@ -801,7 +805,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
 
     }
   }
-  if (fpath->folderid>=0 && !psync_fstask_find_unlink(folder, fpath->name, 0)){
+  if (!row && fpath->folderid>=0 && !psync_fstask_find_unlink(folder, fpath->name, 0)){
     res=psync_sql_query("SELECT id, size, hash FROM file WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fpath->folderid);
     psync_sql_bind_string(res, 2, fpath->name);
