@@ -68,13 +68,6 @@ static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK)
 };
 
-static void delete_task(uint64_t id){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
-  psync_sql_bind_uint(res, 1, id);
-  psync_sql_run_free(res);
-}
-
 static int psync_send_task_mkdir(psync_socket *api, fsupload_task_t *task){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp")};
   if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
@@ -492,7 +485,7 @@ static int upload_modify_send_copy_from(psync_socket *api, psync_uploadid_t uplo
                                         psync_fileid_t fileid, uint64_t hash, uint64_t *upl){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadoffset", offset), P_NUM("uploadid", uploadid),
                      P_NUM("fileid", fileid), P_NUM("hash", hash), P_NUM("offset", offset), P_NUM("count", length)};
-  debug(D_NOTICE, "copying %lu byte from fileid %lu hash %lu at offset %lu", (unsigned long)length, (unsigned long)fileid, (unsigned long) hash, (unsigned long)offset);
+  debug(D_NOTICE, "copying %lu bytes from fileid %lu hash %lu at offset %lu", (unsigned long)length, (unsigned long)fileid, (unsigned long) hash, (unsigned long)offset);
   if (unlikely_log(!send_command_no_res(api, "upload_writefromfile", params)))
     return PSYNC_NET_TEMPFAIL;
   else{
@@ -557,8 +550,10 @@ static int upload_modify_read_req(psync_socket *api){
     return PSYNC_NET_TEMPFAIL;
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
-  if (result)
+  if (result){
+    debug(D_WARNING, "got %lu from upload_writefromfile or upload_write", (unsigned long)result);
     return psync_handle_api_result(result);
+  }
   else
     return PSYNC_NET_OK;
 }
@@ -814,7 +809,7 @@ static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){
   if (unlikely_log(fd==INVALID_HANDLE_VALUE) || unlikely_log(psync_fstat(fd, &st))){
     if (fd!=INVALID_HANDLE_VALUE)
       psync_file_close(fd);
-    delete_task(task->id);
+    perm_fail_upload_task(task->id);
     return -1;
   }
   size=psync_stat_size(&st);

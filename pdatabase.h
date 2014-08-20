@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status 
 CREATE INDEX IF NOT EXISTS kfstaskfolderid ON fstask(folderid);\
 CREATE INDEX IF NOT EXISTS kfstasksfolderid ON fstask(sfolderid);\
 CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
-CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER, dependfstaskid INTEGER, PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, dependfstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE,\
+PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\

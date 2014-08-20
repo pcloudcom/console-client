@@ -1092,6 +1092,29 @@ static void psync_fs_inc_writeid_locked(psync_openfile_t *of, const char *path){
   of->writeid++;
 }
 
+static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
+  if (unlikely(of->currentsize<size)){
+    debug(D_NOTICE, "extending file %s from %lu to %lu bytes", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
+    if (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile))
+      return -1;
+    if (of->newfile)
+      return 0;
+    else{
+      index_record rec;
+      uint64_t ioff;
+      assertw(of->modified);
+      ioff=of->indexoff++;
+      rec.offset=of->currentsize;
+      rec.length=size-of->currentsize;
+      if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(index_header))!=sizeof(rec)))
+        return -1;
+      psync_interval_tree_add(&of->writeintervals, of->currentsize, size);
+      of->currentsize=size;
+    }
+  }
+  return 0;
+}
+
 static int psync_fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
   ssize_t bw;
@@ -1143,6 +1166,8 @@ retry:
       of->modified=1;
       of->indexoff=0;
     }
+    if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
+      return -1;
     ioff=of->indexoff++;
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
     if (unlikely_log(bw==-1)){
@@ -1429,7 +1454,8 @@ retry:
     }
     of->fileid=cr->fileid;
     ret=open_write_files(of, 0);
-    if (unlikely_log(ret) || psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
+    if (unlikely_log(ret) || psync_fs_modfile_check_size_ok(of, size) ||
+        (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))){
       if (!ret)
         ret=-EIO;
     }
@@ -1440,7 +1466,9 @@ retry:
     }
   }
   else{
-    if (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile))
+    if (psync_fs_modfile_check_size_ok(of, size))
+      ret=-EIO;
+    else if (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))
       ret=-EIO;
     else
       ret=0;
