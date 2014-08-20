@@ -53,6 +53,7 @@ typedef struct {
   int64_t int1;
   int64_t int2;
   unsigned char ccreat;
+  unsigned char needprocessing;
 } fsupload_task_t;
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -795,26 +796,26 @@ void psync_fsupload_stop_upload_locked(uint64_t taskid){
 }
 
 static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){
-  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
-  char *filename;
-  psync_stat_t st;
-  uint64_t size;
-  psync_file_t fd;
-  int ret;
-  psync_binhex(fileidhex, &task->id, sizeof(psync_fsfileid_t));
-  fileidhex[sizeof(psync_fsfileid_t)]='d';
-  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
-  filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  fd=psync_file_open(filename, P_O_RDONLY, 0);
-  psync_free(filename);
-  if (unlikely_log(fd==INVALID_HANDLE_VALUE) || unlikely_log(psync_fstat(fd, &st))){
-    if (fd!=INVALID_HANDLE_VALUE)
-      psync_file_close(fd);
-    perm_fail_upload_task(task->id);
-    return -1;
-  }
-  size=psync_stat_size(&st);
   if (api){
+    char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+    char *filename;
+    psync_stat_t st;
+    uint64_t size;
+    psync_file_t fd;
+    int ret;
+    psync_binhex(fileidhex, &task->id, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    fd=psync_file_open(filename, P_O_RDONLY, 0);
+    psync_free(filename);
+    if (unlikely_log(fd==INVALID_HANDLE_VALUE) || unlikely_log(psync_fstat(fd, &st))){
+      if (fd!=INVALID_HANDLE_VALUE)
+        psync_file_close(fd);
+      perm_fail_upload_task(task->id);
+      return -1;
+    }
+    size=psync_stat_size(&st);
     if (size>PSYNC_FS_DIRECT_UPLOAD_LIMIT){
       psync_file_close(fd);
       debug(D_NOTICE, "defering upload of %lu/%s due to size of %lu", (unsigned long)task->folderid, task->text1, (unsigned long)size);
@@ -831,11 +832,8 @@ static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){
       return ret;
     }
   }
-  else{
-    debug(D_NOTICE, "uploading file %lu/%s separately due to size of %lu", (unsigned long)task->folderid, task->text1, (unsigned long)size);
-    psync_file_close(fd);
+  else
     return psync_sent_task_creat_upload_large(task);
-  }
 }
 
 static int psync_send_task_modify(psync_socket *api, fsupload_task_t *task){
@@ -1103,13 +1101,16 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
 static void psync_fsupload_run_tasks(psync_list *tasks){
   psync_socket *api;
   fsupload_task_t *task, *rtask;
+  uint32_t np;
   int ret;
   api=psync_apipool_get();
   if (!api)
     goto err;
   rtask=psync_list_element(tasks->next, fsupload_task_t, list);
   ret=0;
+  np=0;
   psync_list_for_each_element (task, tasks, fsupload_task_t, list){
+    task->needprocessing=0;
     if (!task->type || task->type>=ARRAY_SIZE(psync_send_task_func)){
       debug(D_BUG, "bad task type %lu", (unsigned long)task->type);
       continue;
@@ -1117,8 +1118,10 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     ret=psync_send_task_func[task->type](api, task);
     if (ret==-1)
       goto err0;
-    else if (ret==-2)
-      break;
+    else if (ret==-2){
+      task->needprocessing=1;
+      np++;
+    }
     while (psync_select_in(&api->sock, 1, 0)==0){
       rtask->res=get_result(api);
       if (unlikely_log(!rtask->res))
@@ -1127,15 +1130,22 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     }
   }
   while (rtask!=task){
-    rtask->res=get_result(api);
-    if (unlikely_log(!rtask->res))
-      goto err0;
+    if (!rtask->needprocessing){
+      rtask->res=get_result(api);
+      if (unlikely_log(!rtask->res))
+        goto err0;
+    }
     rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
   }
   psync_apipool_release(api);
   psync_fsupload_process_tasks(tasks);
-  if (ret==-2)
-    psync_send_task_func[task->type](NULL, task);
+  if (np){
+    psync_sql_start_transaction();
+    psync_list_for_each_element (task, tasks, fsupload_task_t, list)
+      if (task->needprocessing)
+        psync_send_task_func[task->type](NULL, task);
+    psync_sql_commit_transaction();
+  }
   return;
 err0:
   psync_apipool_release_bad(api);
