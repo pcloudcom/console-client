@@ -764,6 +764,8 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
         of->newfile=1;
         of->releasedforupload=status!=1;
         ret=open_write_files(of, fi->flags&O_TRUNC);
+        if (!ret)
+          of->currentsize=psync_file_size(of->datafile);
         pthread_mutex_unlock(&of->mutex);
         fi->fh=openfile_to_fh(of);
         if (unlikely_log(ret)){
@@ -801,6 +803,8 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       of->newfile=0;
       of->releasedforupload=status!=1;
       ret=open_write_files(of, fi->flags&O_TRUNC);
+      if (!ret)
+        of->currentsize=psync_file_size(of->datafile);
       pthread_mutex_unlock(&of->mutex);
       fi->fh=openfile_to_fh(of);
       if (unlikely_log(ret)){
@@ -1462,6 +1466,7 @@ retry:
     else{
       of->modified=1;
       of->indexoff=0;
+      of->currentsize=size;
       ret=0;
     }
   }
@@ -1470,8 +1475,10 @@ retry:
       ret=-EIO;
     else if (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))
       ret=-EIO;
-    else
+    else{
       ret=0;
+      of->currentsize=size;
+    }
   }
   pthread_mutex_unlock(&of->mutex);
   return ret;

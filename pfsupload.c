@@ -1055,7 +1055,9 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
   fol=psync_sql_prep_statement("UPDATE fstask SET folderid=? WHERE folderid=?");
   sfol=psync_sql_prep_statement("UPDATE fstask SET sfolderid=? WHERE sfolderid=?");
   fil=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
-  psync_list_for_each_element (task, tasks, fsupload_task_t, list)
+  psync_list_for_each_element (task, tasks, fsupload_task_t, list){
+    if (task->type==PSYNC_FS_TASK_CREAT)
+      creats++;
     if (task->res){
       if (psync_process_task_func[task->type](task))
         debug(D_WARNING, "processing task %lu of type %lu failed", (unsigned long)task->id, (unsigned long)task->type);
@@ -1072,7 +1074,6 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
           psync_sql_bind_uint(fil, 1, task->int2);
           psync_sql_bind_int(fil, 2, -task->id);
           psync_sql_run(fil);
-          creats++;
         }
         psync_sql_bind_uint(dep, 1, task->id);
         psync_sql_run(dep);
@@ -1083,6 +1084,7 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
       }
       psync_free(task->res);
     }
+  }
   psync_sql_free_result(fil);
   psync_sql_free_result(sfol);
   psync_sql_free_result(fol);
@@ -1148,10 +1150,13 @@ static void psync_fsupload_check_tasks(){
   char *end;
   psync_list tasks;
   size_t size;
+  uint32_t cnt;
   psync_list_init(&tasks);
+  cnt=0;
   res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid FROM fstask f LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
                       " WHERE d.fstaskid IS NULL AND status=0 ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   while ((row=psync_sql_fetch_row(res))){
+    cnt++;
     size=sizeof(fsupload_task_t);
     if (row[4].type==PSYNC_TSTRING)
       size+=row[4].length+1;
@@ -1183,6 +1188,8 @@ static void psync_fsupload_check_tasks(){
     psync_list_add_tail(&tasks, &task->list);
   }
   psync_sql_free_result(res);
+  if (cnt==PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN)
+    upload_wakes++;
   if (!psync_list_isempty(&tasks))
     psync_fsupload_run_tasks(&tasks);
   psync_list_for_each_element_call(&tasks, fsupload_task_t, list, psync_free);
@@ -1193,7 +1200,7 @@ static void psync_fsupload_thread(){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     psync_fsupload_check_tasks();
     pthread_mutex_lock(&upload_mutex);
-    if (!upload_wakes)
+    while (!upload_wakes)
       pthread_cond_wait(&upload_cond, &upload_mutex);
     upload_wakes=0;
     pthread_mutex_unlock(&upload_mutex);
