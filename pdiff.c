@@ -1470,9 +1470,10 @@ restart:
   } while (result);
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
-  psync_sql_statement("ANALYZE");
   initialdownload=0;
   psync_syncer_check_delayed_syncs();
+  psync_fs_refresh();
+  psync_sql_statement("ANALYZE");
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){
     debug(D_ERROR, "could not create pipe");
@@ -1482,7 +1483,6 @@ restart:
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
   send_diff_command(sock, diffid);
-  psync_fs_refresh();
   while (psync_do_run){
     if (psync_socket_pendingdata(sock))
       sel=1;
