@@ -709,22 +709,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     return -EACCES;
   }
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
-  if (fpath->folderid>=0 && !psync_fstask_find_unlink(folder, fpath->name, 0)){
-    res=psync_sql_query("SELECT id, size, hash FROM file WHERE parentfolderid=? AND name=?");
-    psync_sql_bind_uint(res, 1, fpath->folderid);
-    psync_sql_bind_string(res, 2, fpath->name);
-    row=psync_sql_fetch_rowint(res);
-    if (row){
-      fileid=row[0];
-      size=row[1];
-      hash=row[2];
-      debug(D_NOTICE, "opening regular file %lu %s", (unsigned long)fileid, fpath->name);
-    }
-    psync_sql_free_result(res);
-  }
-  else
-    row=NULL;
-  if (!row && (cr=psync_fstask_find_creat(folder, fpath->name, 0))){
+  if ((cr=psync_fstask_find_creat(folder, fpath->name, 0))){
     if (cr->fileid>=0){
       res=psync_sql_query("SELECT id, size, hash FROM file WHERE id=?");
       psync_sql_bind_uint(res, 1, cr->fileid);
@@ -733,7 +718,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
         fileid=row[0];
         size=row[1];
         hash=row[2];
-        debug(D_NOTICE, "opening moved regular file %lu %s", (unsigned long)fileid, fpath->name);
+        debug(D_NOTICE, "opening moved regular file %lu %s size %lu hash %lu", (unsigned long)fileid, fpath->name, (unsigned long)size, (unsigned long)hash);
       }
       psync_sql_free_result(res);
     }
@@ -816,6 +801,21 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
 
     }
   }
+  if (fpath->folderid>=0 && !psync_fstask_find_unlink(folder, fpath->name, 0)){
+    res=psync_sql_query("SELECT id, size, hash FROM file WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fpath->folderid);
+    psync_sql_bind_string(res, 2, fpath->name);
+    row=psync_sql_fetch_rowint(res);
+    if (row){
+      fileid=row[0];
+      size=row[1];
+      hash=row[2];
+      debug(D_NOTICE, "opening regular file %lu %s size %lu hash %lu", (unsigned long)fileid, fpath->name, (unsigned long)size, (unsigned long)hash);
+    }
+    psync_sql_free_result(res);
+  }
+  else
+    row=NULL;
   if (row){
     of=psync_fs_create_file(fileid, fileid, size, hash, 0, 0, psync_fstask_get_ref_locked(folder), fpath->name);
     fi->fh=openfile_to_fh(of);
