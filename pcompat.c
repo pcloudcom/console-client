@@ -2456,6 +2456,7 @@ int psync_invalidate_os_cache(){
   debug(D_NOTICE, "running osascript to refresh finder");
   if (unlikely(pipe(pfds))){
     debug(D_ERROR, "pipe failed");
+    return -1;
   }
   pid=fork();
   if (unlikely(pid==-1)){
@@ -2477,15 +2478,14 @@ end tell\n";
     int status;
     close(pfds[0]);
     status=strlen(cmd);
-    if (write(pfds[1], cmd, status)!=status){
+    if (write(pfds[1], cmd, status)!=status || close(pfds[1])!=0){
       debug(D_ERROR, "write to pipe failed");
       kill(pid, SIGKILL);
       waitpid(pid, &status, 0);
       return -1;
     }
-    close(pfds[1]);
     if (waitpid(pid, &status, 0)==0 && WIFEXITED(status) && WEXITSTATUS(status)==0){
-      debug(D_ERROR, "execution of osascript succeded");
+      debug(D_NOTICE, "execution of osascript succeded");
       return 0;
     }
     else{
