@@ -666,7 +666,6 @@ static int open_write_files(psync_openfile_t *of, int trunc){
       debug(D_ERROR, "could not open cache file %s", filename);
       return -EIO;
     }
-    of->currentsize=psync_file_size(of->datafile);
   }
   if (!of->newfile && of->indexfile==INVALID_HANDLE_VALUE){
     fileidhex[sizeof(psync_fsfileid_t)]='i';
@@ -976,7 +975,6 @@ void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of){
 static int psync_fs_release(const char *path, struct fuse_file_info *fi){
   debug(D_NOTICE, "release %s", path);
   psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
-  psync_fs_refresh();
   return 0;
 }
 
@@ -1082,7 +1080,7 @@ static int psync_fs_read(const char *path, char *buf, size_t size, off_t offset,
     return psync_pagecache_read_unmodified_locked(of, buf, size, offset);
 }
 
-static void psync_fs_inc_writeid_locked(psync_openfile_t *of, const char *path){
+static void psync_fs_inc_writeid_locked(psync_openfile_t *of){
   if (unlikely(of->releasedforupload)){
     if (unlikely(psync_sql_trylock())){
       pthread_mutex_unlock(&of->mutex);
@@ -1091,7 +1089,7 @@ static void psync_fs_inc_writeid_locked(psync_openfile_t *of, const char *path){
     }
     if (of->releasedforupload){
       of->releasedforupload=0;
-      debug(D_NOTICE, "stopping upload of file %s as new write arrived", path);
+      debug(D_NOTICE, "stopping upload of file %s as new write arrived", of->currentname);
       assertw(of->fileid<0);
       psync_fsupload_stop_upload_locked(-of->fileid);
     }
@@ -1131,7 +1129,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   int ret;
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
-  psync_fs_inc_writeid_locked(of, path);
+  psync_fs_inc_writeid_locked(of);
 retry:
   if (of->newfile){
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
@@ -1146,7 +1144,7 @@ retry:
   else{
     if (unlikely(!of->modified)){
       psync_fstask_creat_t *cr;
-      debug(D_NOTICE, "reopening file %s for writing", of->currentname);
+      debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
       if (psync_sql_trylock()){
         // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
         pthread_mutex_unlock(&of->mutex);
@@ -1439,7 +1437,7 @@ static int psync_fs_ftruncate(const char *path, off_t size, struct fuse_file_inf
   debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
-  psync_fs_inc_writeid_locked(of, path);
+  psync_fs_inc_writeid_locked(of);
 retry:
   if (unlikely(!of->newfile && !of->modified)){
     psync_fstask_creat_t *cr;
@@ -1534,7 +1532,7 @@ static void psync_fs_refresh_timer(psync_timer_t timer, void *ptr){
   fsrefreshtimerscheduled=0;
   lastfsrefresh=ct;
   pthread_mutex_unlock(&fsrefreshmutex);
-  psync_run_thread("os cache invalidate", psync_invalidate_os_cache_noret);
+  psync_run_thread("os cache invalidate timer", psync_invalidate_os_cache_noret);
 }
 
 void psync_fs_refresh(){
@@ -1554,10 +1552,14 @@ void psync_fs_refresh(){
     fsrefreshtimerscheduled=1;
   }
   pthread_mutex_unlock(&fsrefreshmutex);
-  if (todo==0)
+  if (todo==0){
+    debug(D_NOTICE, "running cache invalidate direct");
     psync_run_thread("os cache invalidate", psync_invalidate_os_cache_noret);
-  else if (todo==1)
+  }
+  else if (todo==1){
+    debug(D_NOTICE, "setting timer to invalidate cache");
     psync_timer_register(psync_fs_refresh_timer, REFRESH_SEC, NULL);
+  }
 }
 
 static struct fuse_operations psync_oper;
