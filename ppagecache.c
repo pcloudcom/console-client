@@ -1066,7 +1066,7 @@ int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   uint64_t isize, ioffset;
   ssize_t br;
   int rd;
-  fi=psync_interval_tree_first_interval_after(of->writeintervals, offset);
+  fi=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, offset);
   if (fi && fi->from<=offset && fi->to>=offset+size){
     debug(D_NOTICE, "reading %lu bytes at offset %lu only from local storage", (unsigned long)size, (unsigned long)offset);
     br=psync_file_pread(of->datafile, buf, size, offset);
@@ -1080,11 +1080,15 @@ int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   if (rd<0)
     return rd;
   pthread_mutex_lock(&of->mutex);
-  fi=psync_interval_tree_first_interval_after(of->writeintervals, offset);
+  fi=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, offset);
   if (!fi || fi->from>=offset+size){
     pthread_mutex_unlock(&of->mutex);
-    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu, read returned %d", 
-          (unsigned long)size, (unsigned long)offset, (unsigned long)of->remotefileid, (unsigned long)of->hash, rd);
+    if (fi)
+      br=fi->from;
+    else
+      br=-1;
+    debug(D_NOTICE, "reading %lu bytes at offset %lu only from remote fileid %lu revision %lu, read returned %d, next local interval starts at %ld", 
+          (unsigned long)size, (unsigned long)offset, (unsigned long)of->remotefileid, (unsigned long)of->hash, rd, (long)br);
     return rd;
   }
   debug(D_NOTICE, "reading %lu bytes at offset %lu from both network and local", (unsigned long)size, (unsigned long)offset);

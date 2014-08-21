@@ -53,7 +53,7 @@
 #define DEBUG_LEVEL D_NOTICE
 #endif
 
-#define IS_DEBUG (DEBUG_LEVEL>=D_ERROR)
+#define IS_DEBUG (DEBUG_LEVEL>=D_WARNING)
 
 #define DEBUG_FILE "/tmp/psync_err.log"
 

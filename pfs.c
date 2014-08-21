@@ -622,6 +622,17 @@ int64_t psync_fs_load_interval_tree(psync_file_t fd, uint64_t size, psync_interv
     for (j=0; j<rd; j++)
       psync_interval_tree_add(tree, records[j].offset, records[j].offset+records[j].length);
   }
+  if (IS_DEBUG && *tree){
+    psync_interval_tree_t *tr;
+    tr=*tree;
+    debug(D_NOTICE, "loaded approx %lu intervals", (unsigned long)1<<(tr->tree.height-1));
+    tr=psync_interval_tree_get_first(*tree);
+    debug(D_NOTICE, "first interval from %lu to %lu", (unsigned long)tr->from, (unsigned long)tr->to);
+//    while ((tr=psync_interval_tree_get_next(tr)))
+//      debug(D_NOTICE, "next interval from %lu to %lu", (unsigned long)tr->from, (unsigned long)tr->to);
+    tr=psync_interval_tree_get_last(*tree);
+    debug(D_NOTICE, "last interval from %lu to %lu", (unsigned long)tr->from, (unsigned long)tr->to);
+  }
   return cnt;
 }
 
