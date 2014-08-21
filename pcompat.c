@@ -2469,7 +2469,7 @@ int psync_invalidate_os_cache(){
   repeat with i from 1 to count of Finder windows\n\
     tell window i\n\
       try\n\
-        update every item with necessity\n\
+        update every item in every folder with necessity\n\
       end try\n\
     end tell\n\
   end repeat\n\
