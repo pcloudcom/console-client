@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 3
+#define PSYNC_DATABASE_VERSION 4
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -114,7 +114,7 @@ CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
 CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, dependfstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE,\
 PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
-CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
+CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER, oldhash INTEGER);\
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
@@ -144,6 +144,10 @@ COMMIT;\
   "BEGIN;\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
 UPDATE setting SET value=3 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+ALTER TABLE pagecachetask ADD oldhash INTEGER;\
+UPDATE setting SET value=4 WHERE id='dbversion';\
 COMMIT;"
 };
 

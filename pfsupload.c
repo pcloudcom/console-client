@@ -255,7 +255,8 @@ static int handle_upload_api_error(uint64_t result, fsupload_task_t *task){
   return handle_upload_api_error_taskid(result, task->id);
 }
 
-static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderid_t folderid, const char *name, uint64_t taskid, uint64_t writeid, int newfile){
+static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderid_t folderid, const char *name, 
+                             uint64_t taskid, uint64_t writeid, int newfile, uint64_t oldhash){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid), 
                      /*P_STR("ifhash", "new"), */P_STR("timeformat", "timestamp")};
   binresult *res;
@@ -294,7 +295,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   }
   else{
     psync_ops_update_file_in_db(meta);
-    psync_pagecache_modify_to_pagecache(taskid, hash);
+    psync_pagecache_modify_to_pagecache(taskid, hash, oldhash);
     psync_fstask_file_modified(folderid, taskid, name, fileid);
   }
   sql=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
@@ -465,7 +466,7 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
     psync_apipool_release(api);
     return -1;
   }
-  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 1);
+  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 1, 0);
 ret01:
   psync_file_close(fd);
 ret0:
@@ -697,7 +698,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
     psync_apipool_release(api);
     return -1;
   }
-  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 0);
+  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 0, hash);
 err3:
   psync_file_close(fd);
 err2:
