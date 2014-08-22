@@ -1532,7 +1532,17 @@ static int fsrefreshtimerscheduled=0;
 #define REFRESH_SEC 3
 
 static void psync_invalidate_os_cache_noret(){
-  psync_invalidate_os_cache();
+  char *path;
+  pthread_mutex_lock(&start_mutex);
+  if (started)
+    path=psync_strdup(psync_current_mountpoint);
+  else
+    path=NULL;
+  pthread_mutex_unlock(&start_mutex);
+  if (path){
+    psync_invalidate_os_cache(path);
+    psync_free(path);
+  }
 }
 
 static void psync_fs_refresh_timer(psync_timer_t timer, void *ptr){

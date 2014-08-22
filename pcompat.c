@@ -2442,15 +2442,21 @@ int psync_run_update_file(const char *path){
 }
 
 int psync_invalidate_os_cache_needed(){
-#if defined(P_OS_MACOSX)
+#if defined(P_OS_WINDOWS) || defined(P_OS_MACOSX)
   return 1;
 #else
   return 0;
 #endif
 }
 
-int psync_invalidate_os_cache(){
-#if defined(P_OS_MACOSX)
+int psync_invalidate_os_cache(const char *path){
+#if defined(P_OS_WINDOWS)
+  wchar_t *wpath;
+  wpath=utf8_to_wchar(path);
+  SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH|SHCNF_NOTIFYRECURSIVE, wpath, NULL);
+  psync_free(wpath);
+  return 0;
+#elif defined(P_OS_MACOSX)
   int pfds[2];
   pid_t pid;
   debug(D_NOTICE, "running osascript to refresh finder");
