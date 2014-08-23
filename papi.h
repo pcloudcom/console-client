@@ -97,6 +97,9 @@ typedef struct {
 #define send_command_thread(sock, cmd, params) do_send_command(sock, cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), -1, 1|2)
 #define send_command_no_res_thread(sock, cmd, params) do_send_command(sock, cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), -1, 2)
 
+#define prepare_command_data_alloc(cmd, params, datalen, alloclen, retlen) \
+  do_prepare_command(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), datalen, alloclen, retlen)
+
 #define psync_find_result(res, name, type) psync_do_find_result(res, name, type, __FILE__, __FUNCTION__, __LINE__)
 #define psync_check_result(res, name, type) psync_do_check_result(res, name, type, __FILE__, __FUNCTION__, __LINE__)
 
@@ -109,6 +112,7 @@ binresult *get_result_thread(psync_socket *sock) PSYNC_NONNULL(1);
 void async_result_reader_init(async_result_reader *reader) PSYNC_NONNULL(1);
 void async_result_reader_destroy(async_result_reader *reader) PSYNC_NONNULL(1);
 int get_result_async(psync_socket *sock, async_result_reader *reader) PSYNC_NONNULL(1, 2);
+unsigned char *do_prepare_command(const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, size_t additionalalloc, size_t *retlen);
 binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres) PSYNC_NONNULL(1, 2);
 const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line) PSYNC_NONNULL(2) PSYNC_PURE;
 const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line)  PSYNC_NONNULL(2) PSYNC_PURE;

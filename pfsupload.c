@@ -156,16 +156,20 @@ static int psync_process_task_rmdir(fsupload_task_t *task){
 static int psync_send_task_creat_upload_small(psync_socket *api, fsupload_task_t *task, psync_file_t fd, uint64_t size){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("filename", task->text1), 
                       P_BOOL("nopartial", 1), /*P_STR("ifhash", "new"), */P_STR("timeformat", "timestamp")};
-  void *buff;
-  buff=psync_malloc(size);
-  if (unlikely_log(psync_file_read(fd, buff, size)!=size) || unlikely_log(psync_fs_get_file_writeid(task->id)!=task->int1) ||
-      unlikely_log(!do_send_command(api, "uploadfile", strlen("uploadfile"), params, ARRAY_SIZE(params), size, 0)) ||
-      unlikely_log(psync_socket_writeall_upload(api, buff, size)!=size)){
-    psync_free(buff);
+  unsigned char *data;
+  size_t len;
+  data=prepare_command_data_alloc("uploadfile", params, size, size, &len);
+  if (unlikely_log(psync_file_read(fd, data+len, size)!=size) || unlikely_log(psync_fs_get_file_writeid(task->id)!=task->int1)){
+    psync_free(data);
+    return -1;
+  }
+  size+=len;
+  if (unlikely_log(psync_socket_writeall_upload(api, data, size)!=size)){
+    psync_free(data);
     return -1;
   }
   else{
-    psync_free(buff);
+    psync_free(data);
     return 0;
   }
 }
