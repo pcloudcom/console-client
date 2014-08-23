@@ -1201,6 +1201,43 @@ int psync_socket_read(psync_socket *sock, void *buff, int num){
     return psync_socket_read_plain(sock, buff, num);
 }
 
+static int psync_socket_read_noblock_ssl(psync_socket *sock, void *buff, int num){
+  int r;
+  r=psync_ssl_read(sock->ssl, buff, num);
+  if (r==PSYNC_SSL_FAIL){
+    sock->pending=0;
+    if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE))
+      return PSYNC_SOCKET_WOULDBLOCK;
+    else{
+      psync_sock_set_err(P_CONNRESET);
+      return -1;
+    }
+  }
+  else
+    return r;
+}
+
+static int psync_socket_read_noblock_plain(psync_socket *sock, void *buff, int num){
+  int r;
+  r=psync_read_socket(sock->sock, buff, num);
+  if (r==SOCKET_ERROR){
+    sock->pending=0;
+    if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+      return PSYNC_SOCKET_WOULDBLOCK;
+    else
+      return -1;
+  }
+  else
+    return r;
+}
+
+int psync_socket_read_noblock(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_read_noblock_ssl(sock, buff, num);
+  else
+    return psync_socket_read_noblock_plain(sock, buff, num);
+}
+
 static int psync_socket_read_ssl_thread(psync_socket *sock, void *buff, int num){
   int r;
   if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))

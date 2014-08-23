@@ -280,10 +280,10 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   meta=psync_find_result(res, "metadata", PARAM_HASH);
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  psync_free(res);
   psync_sql_start_transaction();
   if (psync_fs_update_openfile(taskid, writeid, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num)){
     psync_sql_rollback_transaction();
-    psync_free(res);
     debug(D_NOTICE, "upload of %s cancelled due to writeid mismatch", name);
     return -1;
   }
@@ -314,11 +314,9 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   if (!psync_sql_affected_rows()){
     debug(D_BUG, "upload of %s cancelled due to writeid mismatch, psync_fs_update_openfile should have catched that", name);
     psync_sql_rollback_transaction();
-    psync_free(res);
     return -1;
   }
   psync_sql_commit_transaction(); 
-  psync_free(res);
   debug(D_NOTICE, "file %lu/%s uploaded", (unsigned long)folderid, name);
   psync_status_recalc_to_upload_async();
   return 0;
@@ -880,6 +878,14 @@ static int psync_send_task_unlink(psync_socket *api, fsupload_task_t *task){
     return -1;
 }
 
+static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *task){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->int1), P_NUM("revisionoffileid", task->fileid)};
+  if (likely_log(send_command_no_res(api, "deletefile", params)==PTR_OK))
+    return 0;
+  else
+    return -1;
+}
+
 static int handle_unlink_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefile returned error %u", (unsigned)result);
   switch (result){
@@ -1036,7 +1042,8 @@ static psync_send_task_ptr psync_send_task_func[]={
   psync_send_task_rename_file,
   NULL,
   psync_send_task_rename_folder,
-  psync_send_task_modify
+  psync_send_task_modify,
+  psync_send_task_unlink_set_rev
 };
 
 static psync_process_task_ptr psync_process_task_func[]={
@@ -1049,7 +1056,8 @@ static psync_process_task_ptr psync_process_task_func[]={
   psync_process_task_rename_file,
   NULL,
   psync_process_task_rename_folder,
-  NULL
+  NULL,
+  psync_process_task_unlink
 };
 
 static void psync_fsupload_process_tasks(psync_list *tasks){
@@ -1106,10 +1114,12 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
 }
 
 static void psync_fsupload_run_tasks(psync_list *tasks){
+  async_result_reader reader;
   psync_socket *api;
   fsupload_task_t *task, *rtask;
   uint32_t np;
   int ret;
+  async_result_reader_init(&reader);
   api=psync_apipool_get();
   if (!api)
     goto err;
@@ -1129,10 +1139,10 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
       task->needprocessing=1;
       np++;
     }
-    while (psync_select_in(&api->sock, 1, 0)==0){
-      rtask->res=get_result(api);
-      if (unlikely_log(!rtask->res))
+    while (get_result_async(api, &reader)==ASYNC_RES_READY){
+      if (unlikely_log(!reader.result))
         goto err0;
+      rtask->res=reader.result;
       rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
     }
   }
@@ -1145,6 +1155,7 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
   }
   psync_apipool_release(api);
+  async_result_reader_destroy(&reader);
   psync_fsupload_process_tasks(tasks);
   if (np){
     psync_sql_start_transaction();
@@ -1158,6 +1169,7 @@ err0:
   psync_apipool_release_bad(api);
   psync_fsupload_process_tasks(tasks);
 err:
+  async_result_reader_destroy(&reader);
   psync_timer_notify_exception();
   upload_wakes++;
   psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);

@@ -45,6 +45,9 @@
 
 #define PTR_OK ((binresult *)1)
 
+#define ASYNC_RES_NEEDMORE 0
+#define ASYNC_RES_READY    1
+
 typedef struct {
   uint16_t paramtype;
   uint16_t paramnamelen;
@@ -74,6 +77,15 @@ typedef struct _binresult{
   };
 } binresult;
 
+typedef struct {
+  binresult *result;
+  uint32_t state;
+  uint32_t bytesread;
+  uint32_t bytestoread;
+  uint32_t respsize;
+  unsigned char *data;
+} async_result_reader;
+
 #define P_STR(name, val) {PARAM_STR, strlen(name), strlen(val), (name), {(uint64_t)((uintptr_t)(val))}}
 #define P_LSTR(name, val, len) {PARAM_STR, strlen(name), (len), (name), {(uint64_t)((uintptr_t)(val))}}
 #define P_NUM(name, val) {PARAM_NUM, strlen(name), 0, (name), {(val)}}
@@ -94,6 +106,9 @@ void psync_api_conn_fail_reset();
 
 binresult *get_result(psync_socket *sock) PSYNC_NONNULL(1);
 binresult *get_result_thread(psync_socket *sock) PSYNC_NONNULL(1);
+void async_result_reader_init(async_result_reader *reader) PSYNC_NONNULL(1);
+void async_result_reader_destroy(async_result_reader *reader) PSYNC_NONNULL(1);
+int get_result_async(psync_socket *sock, async_result_reader *reader) PSYNC_NONNULL(1, 2);
 binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres) PSYNC_NONNULL(1, 2);
 const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line) PSYNC_NONNULL(2) PSYNC_PURE;
 const binresult *psync_do_check_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line)  PSYNC_NONNULL(2) PSYNC_PURE;

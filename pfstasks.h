@@ -42,6 +42,7 @@
 #define PSYNC_FS_TASK_RENFOLDER_FROM 7
 #define PSYNC_FS_TASK_RENFOLDER_TO   8
 #define PSYNC_FS_TASK_MODIFY         9
+#define PSYNC_FS_TASK_UN_SET_REV    10
 
 typedef struct {
   psync_tree tree;

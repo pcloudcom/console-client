@@ -50,6 +50,7 @@
 PRAGMA journal_mode=WAL;\
 PRAGMA synchronous=1;\
 PRAGMA locking_mode=EXCLUSIVE;\
+PRAGMA cache_size=8000;\
 "
 
 #define PSYNC_DATABASE_STRUCTURE \
@@ -115,7 +116,7 @@ CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER REFERENCES fstask(id) 
 PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER, oldhash INTEGER);\
-CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
