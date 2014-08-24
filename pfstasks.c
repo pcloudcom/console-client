@@ -336,7 +336,8 @@ int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name){
   psync_sql_res *res;
   psync_uint_row row;
-  psync_fstask_folder_t *folder;
+  psync_str_row srow;
+  psync_fstask_folder_t *folder, *cfolder;
   psync_fstask_rmdir_t *task;
   psync_fstask_mkdir_t *mk;
   uint64_t depend, taskid;
@@ -366,6 +367,41 @@ int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name){
     psync_free(mk);
     folder->taskscnt--;
   }
+  cfolder=psync_fstask_get_folder_tasks_locked(cfolderid);
+  if (cfolder && (cfolder->creats || cfolder->mkdirs)){
+    psync_fstask_release_folder_tasks_locked(cfolder);
+    psync_fstask_release_folder_tasks_locked(folder);
+    debug(D_NOTICE, "returning ENOTEMPTY for folder name");
+    return -ENOTEMPTY;
+  }
+  if (cfolderid>=0){
+    res=psync_sql_query("SELECT name FROM file WHERE parentfolderid=?");
+    psync_sql_bind_uint(res, 1, cfolderid);
+    while ((srow=psync_sql_fetch_rowstr(res)))
+      if (!cfolder || !psync_fstask_find_unlink(cfolder, srow[0], 0)){
+        psync_sql_free_result(res);
+        if (cfolder)
+          psync_fstask_release_folder_tasks_locked(cfolder);
+        psync_fstask_release_folder_tasks_locked(folder);
+        debug(D_NOTICE, "returning ENOTEMPTY for folder name");
+        return -ENOTEMPTY;
+      }
+    psync_sql_free_result(res);
+    res=psync_sql_query("SELECT name FROM folder WHERE parentfolderid=?");
+    psync_sql_bind_uint(res, 1, cfolderid);
+    while ((srow=psync_sql_fetch_rowstr(res)))
+      if (!cfolder || !psync_fstask_find_rmdir(cfolder, srow[0], 0)){
+        psync_sql_free_result(res);
+        if (cfolder)
+          psync_fstask_release_folder_tasks_locked(cfolder);
+        psync_fstask_release_folder_tasks_locked(folder);
+        debug(D_NOTICE, "returning ENOTEMPTY for folder name");
+        return -ENOTEMPTY;
+      }
+    psync_sql_free_result(res);
+  }
+  if (cfolder)
+    psync_fstask_release_folder_tasks_locked(cfolder);
   psync_sql_start_transaction();
   res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1) VALUES ("NTO_STR(PSYNC_FS_TASK_RMDIR)", 0, ?, ?, ?)");
   psync_sql_bind_int(res, 1, folderid);

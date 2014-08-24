@@ -55,9 +55,9 @@ PRAGMA cache_size=8000;\
 
 #define PSYNC_DATABASE_STRUCTURE \
 "\
-BEGIN;\
 PRAGMA page_size=4096;\
 PRAGMA cache_size=8000;\
+BEGIN;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
   name VARCHAR(1024), ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0, subdircnt INTEGER DEFAULT 0);\
