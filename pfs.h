@@ -35,7 +35,16 @@
 #include "psettings.h"
 #include "pfsfolder.h"
 #include "pfstasks.h"
+#include "pcompat.h"
 #include <pthread.h>
+
+#if defined(P_OS_POSIX)
+#define psync_fs_need_per_folder_refresh() psync_fs_need_per_folder_refresh_f()
+#define psync_fs_need_per_folder_refresh_const() 1
+#else
+#define psync_fs_need_per_folder_refresh() 0
+#define psync_fs_need_per_folder_refresh_const() 0
+#endif
 
 typedef struct {
   uint64_t frompage;
@@ -87,5 +96,7 @@ void psync_fs_inc_of_refcnt_and_readers(psync_openfile_t *of);
 void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of);
 
 void psync_fs_refresh();
+int psync_fs_need_per_folder_refresh_f();
+void psync_fs_refresh_folder(psync_folderid_t folderid);
 
 #endif

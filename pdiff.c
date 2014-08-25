@@ -51,6 +51,8 @@ static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 
+static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid);
+
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
                                            const char *device){
   binparam params[]={P_STR("timeformat", "timestamp"), 
@@ -451,8 +453,10 @@ static void process_modifyfolder(const binresult *entry){
   oldsync=psync_is_folder_in_downloadlist(oldparentfolderid);
   if (oldparentfolderid==parentfolderid)
     newsync=oldsync;
-  else
+  else{
     newsync=psync_is_folder_in_downloadlist(parentfolderid);
+    psync_diff_refresh_fs_add_folder(oldparentfolderid);
+  }
   if ((oldsync || newsync) && (oldparentfolderid!=parentfolderid || strcmp(name->str, oldname))){
     if (!oldsync) 
       psync_add_folder_to_downloadlist(folderid);
@@ -860,8 +864,10 @@ static void process_modifyfile(const binresult *entry){
   oldsync=psync_is_folder_in_downloadlist(oldparentfolderid);
   if (oldparentfolderid==parentfolderid)
     newsync=oldsync;
-  else
+  else{
     newsync=psync_is_folder_in_downloadlist(parentfolderid);
+    psync_diff_refresh_fs_add_folder(oldparentfolderid);
+  }
   if (oldsync || newsync){
     if (psync_is_name_to_ignore(name->str)){
       char *path;
@@ -1425,6 +1431,69 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, char ex){
   }
 }
 
+static int cmp_folderid(const void *ptr1, const void *ptr2){
+  psync_folderid_t *folderid1=(psync_folderid_t *)ptr1;
+  psync_folderid_t *folderid2=(psync_folderid_t *)ptr2;
+  if (folderid1<folderid2)
+    return -1;
+  else if (folderid1>folderid2)
+    return 1;
+  else
+    return 0;
+}
+
+static psync_folderid_t *refresh_folders=NULL;
+static uint32_t refresh_allocated=0;
+static uint32_t refresh_last=0;
+
+static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid){
+  if (psync_fs_need_per_folder_refresh()){
+    if (refresh_allocated==refresh_last){
+      if (refresh_allocated)
+        refresh_allocated*=2;
+      else
+        refresh_allocated=8;
+      refresh_folders=(psync_folderid_t *)psync_realloc(refresh_folders, sizeof(psync_folderid_t)*refresh_allocated);
+    }
+    refresh_folders[refresh_last++]=folderid;
+  }
+}
+
+static void psync_diff_refresh_fs(const binresult *entries){
+  if (psync_fs_need_per_folder_refresh()){
+    const binresult *meta;
+    psync_folderid_t folderid, lastfolderid;
+    uint32_t i;
+    lastfolderid=(psync_folderid_t)-1;
+    for (i=0; i<entries->length; i++){
+      meta=psync_check_result(entries->array[i], "metadata", PARAM_HASH);
+      if (!meta)
+        continue;
+      meta=psync_check_result(meta, "parentfolderid", PARAM_NUM);
+      if (!meta)
+        continue;
+      folderid=meta->num;
+      if (folderid==lastfolderid)
+        continue;
+      psync_diff_refresh_fs_add_folder(folderid);
+      lastfolderid=folderid;
+    }
+    if (!refresh_last)
+      return;
+    lastfolderid=(psync_folderid_t)-1;
+    qsort(refresh_folders, refresh_last, sizeof(psync_folderid_t), cmp_folderid);
+    for (i=0; i<refresh_last; i++)
+      if (refresh_folders[i]!=lastfolderid){
+        psync_fs_refresh_folder(refresh_folders[i]);
+        lastfolderid=refresh_folders[i];
+      }
+    psync_free(refresh_folders);
+    refresh_folders=NULL;
+    refresh_allocated=0;
+    refresh_last=0;
+  }
+}
+
 static void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
@@ -1464,6 +1533,7 @@ restart:
     if (entries->length){
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
       diffid=process_entries(entries, newdiffid);
+      psync_diff_refresh_fs(entries);
     }
     result=entries->length;
     psync_free(res);
@@ -1521,6 +1591,7 @@ restart:
           diffid=process_entries(entries, newdiffid);
           check_overquota();
           psync_fs_refresh();
+          psync_diff_refresh_fs(entries);
         }
         else
           debug(D_NOTICE, "diff with 0 entries, did we send a nop recently?");

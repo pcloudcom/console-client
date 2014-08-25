@@ -469,6 +469,11 @@ psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, cons
   return task;
 }
 
+void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat_t *cr){
+  psync_fstask_insert_into_tree(&folder->creats, offsetof(psync_fstask_creat_t, name), &cr->tree);
+  folder->taskscnt++;
+}
+
 psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, uint64_t hash){
   psync_sql_res *res;
   psync_fstask_unlink_t *un;

@@ -53,3 +53,10 @@ void psync_fs_folder_deleted(psync_folderid_t folderid){
 
 void psync_fs_task_deleted(uint64_t taskid){
 }
+
+int psync_fs_need_per_folder_refresh_f(){
+  return 0;
+}
+
+void psync_fs_refresh_folder(psync_folderid_t folderid){
+}

@@ -46,6 +46,8 @@
 #include "pfstasks.h"
 #include "pfsupload.h"
 #include "pstatus.h"
+#include "pssl.h"
+#include "pfolder.h"
 
 #if defined(P_OS_POSIX)
 #include <signal.h>
@@ -66,9 +68,12 @@ typedef struct {
   uint64_t copyfromoriginal;
 } index_header;
 
-static struct fuse_chan *psync_fuse_channel=0;
-static struct fuse *psync_fuse=0;
-static char *psync_current_mountpoint=0;
+static struct fuse_chan *psync_fuse_channel=NULL;
+static struct fuse *psync_fuse=NULL;
+static char *psync_current_mountpoint=NULL;
+static char *psync_fake_prefix=NULL;
+static size_t psync_fake_prefix_len=0;
+static int64_t psync_fake_fileid=INT64_MIN;
 
 static pthread_mutex_t start_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int started=0;
@@ -339,6 +344,31 @@ static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf
   return row?0:-1;
 }
 
+static int psync_creat_stat_fake_file(struct stat *stbuf){
+  time_t ctime;
+  memset(stbuf, 0, sizeof(struct stat));
+  ctime=psync_timer_time();
+#ifdef _DARWIN_FEATURE_64_BIT_INODE
+  stbuf->st_birthtime=ctime;
+  stbuf->st_ctime=ctime;
+  stbuf->st_mtime=ctime;
+#else
+  stbuf->st_ctime=ctime;
+  stbuf->st_mtime=ctime;
+#endif
+  stbuf->st_mode=S_IFREG | 0644;
+  stbuf->st_nlink=1;
+  stbuf->st_size=0;
+#if defined(P_OS_POSIX)
+  stbuf->st_blocks=0;
+  stbuf->st_blksize=FS_BLOCK_SIZE;
+#endif
+  stbuf->st_uid=myuid;
+  stbuf->st_gid=mygid;
+  return 0;
+
+}
+
 static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
   psync_stat_t st;
   psync_fsfileid_t fileid;
@@ -348,6 +378,8 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
 //  psync_file_t fd;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int stret;
+  if (unlikely(psync_fs_need_per_folder_refresh_const() && cr->fileid<psync_fake_fileid))
+    return psync_creat_stat_fake_file(stbuf);
   fileid=-cr->fileid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
   fileidhex[sizeof(psync_fsfileid_t)]='d';
@@ -863,6 +895,30 @@ static int psync_fs_file_exists_in_folder(psync_fstask_folder_t *folder, const c
   return row?1:0;
 }
 
+static int psync_fs_creat_fake_locked(psync_fspath_t *fpath, struct fuse_file_info *fi){
+  psync_fstask_creat_t *cr;
+  psync_fstask_folder_t *folder;
+  psync_openfile_t *of;
+  psync_fsfileid_t fileid;
+  size_t len;
+  fileid=psync_fake_fileid++;
+  len=strlen(fpath->name)+1;
+  cr=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
+  cr->fileid=fileid;
+  cr->taskid=fileid;
+  memcpy(cr->name, fpath->name, len);
+  folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
+  psync_fstask_inject_creat(folder, cr);
+  of=psync_fs_create_file(fileid, 0, 0, 0, 0, 0, psync_fstask_get_ref_locked(folder), fpath->name);
+  psync_fstask_release_folder_tasks_locked(folder);
+  of->newfile=0;
+  of->modified=0;
+  psync_sql_unlock();
+  psync_free(fpath);
+  fi->fh=openfile_to_fh(of);
+  return 0;
+}
+
 static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *fi){
   psync_fspath_t *fpath;
   psync_fstask_folder_t *folder;
@@ -877,6 +933,8 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     psync_sql_unlock();
     return -ENOENT;
   }
+  if (unlikely(psync_fs_need_per_folder_refresh_const() && !memcmp(psync_fake_prefix, fpath->name, psync_fake_prefix_len)))
+    return psync_fs_creat_fake_locked(fpath, fi);
   if (!(fpath->permissions&PSYNC_PERM_CREATE)){
     psync_sql_unlock();
     psync_free(fpath);
@@ -944,6 +1002,17 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
     psync_file_close(of->indexfile);
   if (of->writeintervals)
     psync_interval_tree_free(of->writeintervals);
+  if (unlikely(psync_fs_need_per_folder_refresh_const() && of->fileid<psync_fake_fileid)){
+    psync_fstask_creat_t *cr;
+    psync_sql_lock();
+    cr=psync_fstask_find_creat(of->currentfolder, of->currentname, 0);
+    if (cr){
+      psync_tree_del(&of->currentfolder->creats, &cr->tree);
+      of->currentfolder->taskscnt--;
+      psync_free(cr);
+    }
+    psync_sql_unlock();
+  }
   psync_fstask_release_folder_tasks(of->currentfolder);
   psync_free(of->currentname);
   psync_free(of);
@@ -1583,9 +1652,42 @@ void psync_fs_refresh(){
   }
 }
 
-static struct fuse_operations psync_oper;
+int psync_fs_need_per_folder_refresh_f(){
+#if psync_fs_need_per_folder_refresh_const()
+  return started==1;
+#else
+  return 0;
+#endif
+}
 
-#ifdef P_OS_WINDOWS
+void psync_fs_refresh_folder(psync_folderid_t folderid){
+  char *path, *fpath;
+  unsigned char rndbuff[20];
+  char rndhex[42];
+  psync_file_t fd;
+  path=psync_get_path_by_folderid(folderid, NULL);
+  if (path==PSYNC_INVALID_PATH)
+    return;
+  psync_ssl_rand_weak(rndbuff, sizeof(rndbuff));
+  psync_binhex(rndhex, rndbuff, sizeof(rndbuff));
+  rndhex[2*sizeof(rndbuff)]=0;
+  pthread_mutex_lock(&start_mutex);
+  if (started==1)
+    fpath=psync_strcat(psync_current_mountpoint, path, "/", psync_fake_prefix, rndhex, NULL);  
+  else
+    fpath=NULL;
+  pthread_mutex_unlock(&start_mutex);
+  psync_free(path);
+  if (!fpath)
+    return;
+  debug(D_NOTICE, "creating fake file %s", fpath);
+  fd=psync_file_open(fpath, P_O_WRONLY, P_O_CREAT);
+  if (fd!=INVALID_HANDLE_VALUE)
+    psync_file_close(fd);
+  psync_free(fpath);
+}
+
+#if defined(P_OS_WINDOWS)
 
 static int is_mountable(char where){
     DWORD drives = GetLogicalDrives();
@@ -1693,6 +1795,15 @@ static void psync_setup_signals(){
 #endif
 
 static void psync_fs_init_once(){
+#if psync_fs_need_per_folder_refresh_const()
+  unsigned char rndbuff[16];
+  char rndhex[34];
+  psync_ssl_rand_weak(rndbuff, sizeof(rndbuff));
+  psync_binhex(rndhex, rndbuff, sizeof(rndbuff));
+  rndhex[2*sizeof(rndbuff)]=0;
+  psync_fake_prefix=psync_strcat(".refresh", rndhex, NULL);
+  psync_fake_prefix_len=strlen(psync_fake_prefix);
+#endif
   psync_fstask_init();
   psync_pagecache_init();
   atexit(psync_fs_do_stop);
@@ -1720,6 +1831,7 @@ static void psync_fuse_thread(){
 
 int psync_fs_start(){
   char *mp;
+  struct fuse_operations psync_oper;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
 
 // it seems that fuse option parser ignores the first argument
@@ -1740,6 +1852,8 @@ int psync_fs_start(){
   fuse_opt_add_arg(&args, "-onolocalcaches");
 #endif
 
+  memset(&psync_oper, 0, sizeof(psync_oper));
+  
   psync_oper.init     = psync_fs_init;
   psync_oper.getattr  = psync_fs_getattr;
   psync_oper.readdir  = psync_fs_readdir;
