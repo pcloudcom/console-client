@@ -286,10 +286,15 @@ int psync_sql_trylock(){
 void psync_sql_lock(){
 #if IS_DEBUG
   if (pthread_mutex_trylock(&psync_db_mutex)){
-    struct timespec start, end;
+    struct timespec start, end, max;
     unsigned long msec;
     psync_nanotime(&start);
-    pthread_mutex_lock(&psync_db_mutex);
+    memcpy(&max, &start, sizeof(max));
+    max.tv_sec+=30;
+    if (pthread_mutex_timedlock(&psync_db_mutex, &max)){
+      debug(D_BUG, "sql mutex timed out");
+      abort();
+    }
     psync_nanotime(&end);
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)

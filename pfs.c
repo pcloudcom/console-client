@@ -541,6 +541,8 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_string(row[0]);
+      if (!name || !name[0])
+        continue;
       if (folder && (psync_fstask_find_rmdir(folder, name, 0) || psync_fstask_find_mkdir(folder, name, 0)))
         continue;
       psync_row_to_folder_stat(row, &st);
@@ -551,9 +553,9 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_string(row[0]);
-      if (folder && psync_fstask_find_unlink(folder, name, 0))
+      if (!name || !name[0])
         continue;
-      if (!psync_get_number(row[4]))
+      if (folder && psync_fstask_find_unlink(folder, name, 0))
         continue;
       psync_row_to_file_stat(row, &st);
       filler(buf, name, &st, 0);

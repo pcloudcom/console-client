@@ -51,6 +51,7 @@ PRAGMA journal_mode=WAL;\
 PRAGMA synchronous=1;\
 PRAGMA locking_mode=EXCLUSIVE;\
 PRAGMA cache_size=8000;\
+PRAGMA foreign_keys=ON;\
 "
 
 #define PSYNC_DATABASE_STRUCTURE \

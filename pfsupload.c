@@ -266,7 +266,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   binresult *res;
   const binresult *meta;
   psync_sql_res *sql;
-  uint64_t result, hash;
+  uint64_t result, hash, size;
   psync_fileid_t fileid;
   res=send_command(api, "upload_save", params);
   if (unlikely_log(!res)){
@@ -284,10 +284,11 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   meta=psync_find_result(res, "metadata", PARAM_HASH);
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
-  psync_free(res);
+  size=psync_find_result(meta, "size", PARAM_NUM)->num;
   psync_sql_start_transaction();
-  if (psync_fs_update_openfile(taskid, writeid, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num)){
+  if (psync_fs_update_openfile(taskid, writeid, fileid, hash, size)){
     psync_sql_rollback_transaction();
+    psync_free(res);
     debug(D_NOTICE, "upload of %s cancelled due to writeid mismatch", name);
     return -1;
   }
@@ -302,6 +303,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
     psync_pagecache_modify_to_pagecache(taskid, hash, oldhash);
     psync_fstask_file_modified(folderid, taskid, name, fileid);
   }
+  psync_free(res);
   sql=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_run_free(sql);
