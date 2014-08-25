@@ -533,7 +533,8 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return -ENOENT;
   }
   filler(buf, ".", NULL, 0);
-  filler(buf, "..", NULL, 0);
+  if (folderid!=0)
+    filler(buf, "..", NULL, 0);
   folder=psync_fstask_get_folder_tasks_locked(folderid);
   if (folderid>=0){
     res=psync_sql_query("SELECT name, permissions, ctime, mtime, subdircnt FROM folder WHERE parentfolderid=?");
@@ -546,11 +547,13 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       filler(buf, name, &st, 0);
     }
     psync_sql_free_result(res);
-    res=psync_sql_query("SELECT name, size, ctime, mtime FROM file WHERE parentfolderid=?");
+    res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_string(row[0]);
       if (folder && psync_fstask_find_unlink(folder, name, 0))
+        continue;
+      if (!psync_get_number(row[4]))
         continue;
       psync_row_to_file_stat(row, &st);
       filler(buf, name, &st, 0);
