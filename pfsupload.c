@@ -358,7 +358,7 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   psync_file_t fd;
   int ret;
   unsigned char uploadhash[PSYNC_HASH_DIGEST_HEXLEN], filehash[PSYNC_HASH_DIGEST_HEXLEN], fileparthash[PSYNC_HASH_DIGEST_HEXLEN];
-  debug(D_NOTICE, "uploading %s as %lu/%s", filename, (unsigned long)folderid, name);
+  debug(D_NOTICE, "uploading %s as %lu/%s (uploadid=%lu)", filename, (unsigned long)folderid, name, (unsigned long)uploadid);
   asize=0;
   if (uploadid){
     ret=psync_get_upload_checksum(uploadid, uploadhash, &usize);
@@ -756,6 +756,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     fileidhex[sizeof(psync_fsfileid_t)]='i';
     indexname=psync_strcat(cname, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
     res=psync_sql_query("SELECT uploadid FROM fstaskupload WHERE fstaskid=? ORDER BY uploadid DESC LIMIT 1");
+    psync_sql_bind_uint(res, 1, taskid);
     if ((urow=psync_sql_fetch_rowint(res)))
       uploadid=urow[0];
     else
