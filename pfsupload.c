@@ -309,6 +309,9 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   psync_sql_run_free(sql);
   if (psync_sql_affected_rows())
     psync_fsupload_wake();
+  sql=psync_sql_prep_statement("DELETE FROM fstaskupload WHERE fstaskid=?");
+  psync_sql_bind_uint(sql, 1, taskid);
+  psync_sql_run_free(sql);
   sql=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_sql_bind_uint(sql, 1, fileid);
   psync_sql_bind_int(sql, 2, -taskid);
