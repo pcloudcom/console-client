@@ -940,6 +940,15 @@ void psync_diff_create_file(const binresult *meta){
   insert_revision(0, 0, 0, 0);
 }
 
+static void start_download(){
+  if (needdownload){
+    psync_wake_download();
+    psync_status_recalc_to_download();
+    psync_send_status_update();
+    needdownload=0;
+  }
+}
+
 #define create_entry() \
   binresult entry;\
   hashpair pair;\
@@ -953,24 +962,28 @@ void psync_diff_update_file(const binresult *meta){
   create_entry();
   process_modifyfile(&entry);
   process_modifyfile(NULL);
+  start_download();
 }
 
 void psync_diff_delete_file(const binresult *meta){
   create_entry();
   process_deletefile(&entry);
   process_deletefile(NULL);
+  start_download();
 }
 
 void psync_diff_update_folder(const binresult *meta){
   create_entry();
   process_modifyfolder(&entry);
   process_modifyfolder(NULL);
+  start_download();
 }
 
 void psync_diff_delete_folder(const binresult *meta){
   create_entry();
   process_deletefolder(&entry);
   process_deletefolder(NULL);
+  start_download();
 }
 
 static void process_modifyuserinfo(const binresult *entry){
@@ -1373,6 +1386,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
     psync_wake_download();
     psync_status_recalc_to_download();
     psync_send_status_update();
+    needdownload=0;
   }
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   if (oused_quota!=used_quota)
