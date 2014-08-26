@@ -147,7 +147,7 @@ static int psync_process_task_rmdir(fsupload_task_t *task){
   result=psync_find_result(task->res, "result", PARAM_NUM)->num;
   if (result)
     return handle_rmdir_api_error(result, task);
-  psync_ops_delete_folder_from_db(task->sfolderid);
+  psync_ops_delete_folder_from_db(psync_find_result(task->res, "metadata", PARAM_HASH));
   psync_fstask_folder_deleted(task->folderid, task->id, task->text1);
   debug(D_NOTICE, "folder %lu/%s deleted", (unsigned long)task->folderid, task->text1);
   return 0;
@@ -916,7 +916,7 @@ static int psync_process_task_unlink(fsupload_task_t *task){
   result=psync_find_result(task->res, "result", PARAM_NUM)->num;
   if (result)
     return handle_unlink_api_error(result, task);
-  psync_ops_delete_file_from_db(task->fileid);
+  psync_ops_delete_file_from_db(psync_find_result(task->res, "metadata", PARAM_HASH));
   psync_fstask_file_deleted(task->folderid, task->id, task->text1);
   debug(D_NOTICE, "file %lu/%s deleted", (unsigned long)task->folderid, task->text1);
   return 0;

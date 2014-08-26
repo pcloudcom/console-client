@@ -1094,7 +1094,7 @@ static void download_thread(){
       type=psync_get_number(row[1]);
       if (!download_task(taskid, type, 
                          psync_get_number(row[2]), 
-                         psync_get_number(row[3]), 
+                         psync_get_number_or_null(row[3]), 
                          psync_get_number(row[4]), 
                          psync_get_number_or_null(row[5]),                          
                          psync_get_string_or_null(row[6]),
