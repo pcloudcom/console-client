@@ -129,7 +129,7 @@ static int handle_rmdir_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefolder returned error %u", (unsigned)result);
   switch (result){
     case 2005: /* folder does not exist, kind of success */
-      psync_ops_delete_folder_from_db(task->sfolderid);
+      //psync_ops_delete_folder_from_db(task->sfolderid);
       psync_fstask_folder_deleted(task->folderid, task->id, task->text1);
       return 0;
     case 2003: /* access denied, skip*/
@@ -900,7 +900,7 @@ static int handle_unlink_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefile returned error %u", (unsigned)result);
   switch (result){
     case 2009: /* file does not exist, kind of success */
-      psync_ops_delete_file_from_db(task->fileid);
+      //psync_ops_delete_file_from_db(task->fileid);
       psync_fstask_file_deleted(task->folderid, task->id, task->text1);
       return 0;
     case 2003: /* access denied, skip*/
