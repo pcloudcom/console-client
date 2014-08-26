@@ -2479,7 +2479,7 @@ int psync_run_update_file(const char *path){
 }
 
 int psync_invalidate_os_cache_needed(){
-#if defined(P_OS_WINDOWS) || defined(P_OS_MACOSX)
+#if defined(P_OS_WINDOWS)
   return 1;
 #else
   return 0;
