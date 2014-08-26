@@ -118,7 +118,7 @@ static int psync_process_task_mkdir(fsupload_task_t *task){
 }
 
 static int psync_send_task_rmdir(psync_socket *api, fsupload_task_t *task){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->sfolderid)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->sfolderid), P_STR("timeformat", "timestamp")};
   if (likely_log(send_command_no_res(api, "deletefolder", params)==PTR_OK))
     return 0;
   else
@@ -881,7 +881,7 @@ static int psync_process_task_creat(fsupload_task_t *task){
 }
 
 static int psync_send_task_unlink(psync_socket *api, fsupload_task_t *task){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->fileid)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->fileid), P_STR("timeformat", "timestamp")};
   if (likely_log(send_command_no_res(api, "deletefile", params)==PTR_OK))
     return 0;
   else
@@ -889,7 +889,7 @@ static int psync_send_task_unlink(psync_socket *api, fsupload_task_t *task){
 }
 
 static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *task){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->int1), P_NUM("revisionoffileid", task->fileid)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->int1), P_NUM("revisionoffileid", task->fileid), P_STR("timeformat", "timestamp")};
   if (likely_log(send_command_no_res(api, "deletefile", params)==PTR_OK))
     return 0;
   else
