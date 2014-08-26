@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 4
+#define PSYNC_DATABASE_VERSION 5
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
 CREATE INDEX IF NOT EXISTS klocalfilefileid ON localfile(fileid);\
 CREATE INDEX IF NOT EXISTS klocalfilechecksum ON localfile(checksum);\
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfilerpsn ON localfile(syncid, localparentfolderid, name);\
-CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id), uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS syncedfolder (syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, folderid INTEGER, localfolderid INTEGER, synctype INTEGER,\
   PRIMARY KEY (syncid, folderid));\
 CREATE INDEX IF NOT EXISTS ksyncedfolderdownfolderid ON syncedfolder(folderid);\
@@ -150,7 +150,13 @@ COMMIT;",
   "BEGIN;\
 ALTER TABLE pagecachetask ADD oldhash INTEGER;\
 UPDATE setting SET value=4 WHERE id='dbversion';\
-COMMIT;"
+COMMIT;",
+  "BEGIN;\
+DROP TABLE IF EXISTS localfileupload;\
+CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
+UPDATE setting SET value=5 WHERE id='dbversion';\
+COMMIT;",
+
 };
 
 #endif
