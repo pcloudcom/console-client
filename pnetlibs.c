@@ -142,6 +142,21 @@ psync_socket *psync_apipool_get_from_cache(){
   return ret;
 }
 
+void psync_apipool_prepare(){
+  if (psync_cache_has(API_CACHE_KEY))
+    return;
+  else{
+    psync_socket *ret;
+    ret=psync_get_api();
+    if (unlikely_log(!ret))
+      psync_timer_notify_exception();
+    else{
+      debug(D_NOTICE, "prepared api connection");
+      psync_apipool_release(ret);
+    }
+  }
+}
+
 void psync_apipool_release(psync_socket *api){
   psync_cache_add(API_CACHE_KEY, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
 }

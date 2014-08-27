@@ -923,6 +923,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   psync_folderid_t folderid;
   psync_uploadid_t uploadid;
   uint64_t fsize, ufsize;
+  psync_stat_t st;
   unsigned char hashhex[PSYNC_HASH_DIGEST_HEXLEN], uhashhex[PSYNC_HASH_DIGEST_HEXLEN], phashhex[PSYNC_HASH_DIGEST_HEXLEN];
   binparam pr;
   int ret;
@@ -933,6 +934,29 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   if (unlikely(!localpath)){
     debug(D_WARNING, "could not find local file %s (id %lu)", name, (unsigned long)localfileid);
     return 0;
+  }
+  if (!psync_stat(localpath, &st) && psync_stat_mtime(&st)>=psync_timer_time()-PSYNC_UPLOAD_OLDER_THAN_SEC){
+    time_t ctime;
+    debug(D_NOTICE, "file %s is too new, waiting for upload", localpath);
+    ctime=psync_timer_time();
+    psync_apipool_prepare();
+    if (ctime<psync_stat_mtime(&st)-2)
+      debug(D_NOTICE, "file %s has a modification time in the future, skipping waits", localpath);
+    else{
+      ret=0;
+      do {
+        psync_milisleep((psync_stat_mtime(&st)+PSYNC_UPLOAD_OLDER_THAN_SEC-ctime)*1000+500);
+        ctime=psync_timer_time();
+        if (psync_stat(localpath, &st))
+          break;
+      } while (psync_stat_mtime(&st)>=psync_timer_time()-PSYNC_UPLOAD_OLDER_THAN_SEC && ++ret<=10);
+      if (ret==10){
+        debug(D_NOTICE, "file %s kept changing %d times, skipping for now", localpath, ret);
+        psync_free(localpath);
+        return -1;
+      }
+      debug(D_NOTICE, "file %s got old enough", localpath);
+    }
   }
   lock=psync_lock_file(localpath);
   if (!lock){
@@ -1001,7 +1025,10 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   }
   psync_sql_free_result(res);
   ret=check_file_if_exists(hashhex, fsize, folderid, nname, localfileid);
-  if (ret==0)
+  /* PSYNC_MIN_SIZE_FOR_EXISTS_CHECK should be low enough not to waste bandwidth and high enough
+   * not to waste a roundtrip to the server. Few kilos should be fine
+   */
+  if (ret==0 && fsize>=PSYNC_MIN_SIZE_FOR_EXISTS_CHECK)
     ret=copy_file_if_exists(hashhex, fsize, folderid, nname, localfileid);
   if (ret==1 || ret==-1){
     psync_unlock_file(lock);
@@ -1009,7 +1036,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     psync_free(localpath);
     return ret==1?0:-1;
   }
-  memcpy(upload->hash, hashhex, PSYNC_HASH_DIGEST_HEXLEN);
+memcpy(upload->hash, hashhex, PSYNC_HASH_DIGEST_HEXLEN);
   res=psync_sql_query("SELECT hash FROM localfile WHERE hash IS NOT NULL AND id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res))){

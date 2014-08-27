@@ -1896,7 +1896,7 @@ int psync_fs_start(){
   mp=psync_fuse_get_mountpoint();
   
 #if defined(P_OS_MACOSX)
-  
+  unmount(mp, MNT_FORCE);
 #endif
 
   psync_fuse_channel=fuse_mount(mp, &args);
