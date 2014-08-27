@@ -88,6 +88,8 @@ void psync_upload_dec_uploads(){
 void psync_upload_dec_uploads_cnt(uint32_t cnt){
   pthread_mutex_lock(&upload_mutex);
   psync_status.filesuploading-=cnt;
+  if (psync_status.filesuploading==0 && current_uploads_waiters)
+    pthread_cond_broadcast(&current_uploads_cond);
   pthread_mutex_unlock(&upload_mutex);
   psync_send_status_update();
 }
