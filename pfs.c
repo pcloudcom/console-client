@@ -1894,6 +1894,10 @@ int psync_fs_start(){
   if (started)
     goto err00;
   mp=psync_fuse_get_mountpoint();
+  
+#if defined(P_OS_MACOSX)
+  
+#endif
 
   psync_fuse_channel=fuse_mount(mp, &args);
   if (unlikely_log(!psync_fuse_channel))
