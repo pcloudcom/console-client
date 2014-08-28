@@ -53,6 +53,11 @@
 #include <signal.h>
 #endif
 
+#if defined(P_OS_MACOSX)
+#include <sys/mount.h>
+#include <sys/mount.h>
+#endif
+
 #define fh_to_openfile(x) ((psync_openfile_t *)((uintptr_t)x))
 #define openfile_to_fh(x) ((uintptr_t)x)
 
