@@ -763,7 +763,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   psync_unlock_file(lock);
   psync_free(name);
   if (tmpold){
-    unlink(tmpold);
+    psync_file_delete(tmpold);
     psync_free(tmpold);
   }
   psync_free(tmpname);
@@ -782,7 +782,7 @@ err0:
   task_dec_counter(current_counter, addedsize, downloadedsize, downloadingcounted);
   psync_list_for_each_element_call(&ranges, psync_range_list_t, list, psync_free);
   if (tmpold){
-    unlink(tmpold);
+    psync_file_delete(tmpold);
     psync_free(tmpold);
   }
   psync_free(tmpname);
