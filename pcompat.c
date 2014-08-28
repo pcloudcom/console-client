@@ -2489,8 +2489,9 @@ int psync_invalidate_os_cache_needed(){
 int psync_invalidate_os_cache(const char *path){
 #if defined(P_OS_WINDOWS)
   wchar_t *wpath;
+  debug(D_NOTICE, "got invalidate for path %s", path);
   wpath=utf8_to_wchar(path);
-  SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH|SHCNF_NOTIFYRECURSIVE, wpath, NULL);
+  SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH, wpath, NULL);
   psync_free(wpath);
   return 0;
 #elif defined(P_OS_MACOSX)

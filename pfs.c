@@ -1681,25 +1681,33 @@ void psync_fs_refresh_folder(psync_folderid_t folderid){
   unsigned char rndbuff[20];
   char rndhex[42];
   psync_file_t fd;
-  path=psync_get_path_by_folderid(folderid, NULL);
+  path=psync_get_path_by_folderid_sep(folderid, PSYNC_DIRECTORY_SEPARATOR, NULL);
   if (path==PSYNC_INVALID_PATH)
     return;
   psync_ssl_rand_weak(rndbuff, sizeof(rndbuff));
   psync_binhex(rndhex, rndbuff, sizeof(rndbuff));
   rndhex[2*sizeof(rndbuff)]=0;
   pthread_mutex_lock(&start_mutex);
-  if (started==1)
-    fpath=psync_strcat(psync_current_mountpoint, path, "/", psync_fake_prefix, rndhex, NULL);  
+  if (started==1){
+	  if (psync_invalidate_os_cache_needed())
+      fpath=psync_strcat(psync_current_mountpoint, path, NULL);
+    else
+	    fpath=psync_strcat(psync_current_mountpoint, path, "/", psync_fake_prefix, rndhex, NULL);
+  }
   else
     fpath=NULL;
   pthread_mutex_unlock(&start_mutex);
   psync_free(path);
   if (!fpath)
     return;
-  debug(D_NOTICE, "creating fake file %s", fpath);
-  fd=psync_file_open(fpath, P_O_WRONLY, P_O_CREAT);
-  if (fd!=INVALID_HANDLE_VALUE)
-    psync_file_close(fd);
+  if (psync_invalidate_os_cache_needed())
+    psync_invalidate_os_cache(fpath);
+  else{
+    debug(D_NOTICE, "creating fake file %s", fpath);
+    fd=psync_file_open(fpath, P_O_WRONLY, P_O_CREAT);
+    if (fd!=INVALID_HANDLE_VALUE)
+      psync_file_close(fd);
+  }
   psync_free(fpath);
 }
 
