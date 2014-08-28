@@ -42,8 +42,8 @@
 #define psync_fs_need_per_folder_refresh() psync_fs_need_per_folder_refresh_f()
 #define psync_fs_need_per_folder_refresh_const() 1
 #else
-#define psync_fs_need_per_folder_refresh() 0
-#define psync_fs_need_per_folder_refresh_const() 0
+#define psync_fs_need_per_folder_refresh() psync_invalidate_os_cache_needed()
+#define psync_fs_need_per_folder_refresh_const() 1
 #endif
 
 typedef struct {

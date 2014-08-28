@@ -1567,7 +1567,6 @@ restart:
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   initialdownload=0;
   psync_syncer_check_delayed_syncs();
-  psync_fs_refresh();
   psync_sql_statement("ANALYZE");
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){
@@ -1615,7 +1614,6 @@ restart:
           newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
           diffid=process_entries(entries, newdiffid);
           check_overquota();
-          psync_fs_refresh();
           psync_diff_refresh_fs(entries);
         }
         else
