@@ -288,8 +288,8 @@ void psync_sql_lock(){
   if (pthread_mutex_trylock(&psync_db_mutex)){
     struct timespec start, end;
     unsigned long msec;
-#if defined(P_OS_LINUX)
     psync_nanotime(&start);
+#if defined(P_OS_LINUX)
     memcpy(&end, &start, sizeof(end));
     end.tv_sec+=30;
     if (pthread_mutex_timedlock(&psync_db_mutex, &end)){
