@@ -157,6 +157,12 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       }
       else{
         debug(D_NOTICE, "writeid of fileid %ld (%s) differs %lu!=%lu", (long)fileid, fl->currentname, (unsigned long)fl->writeid, (unsigned long)writeid);
+        if (fl->newfile){
+          res=psync_sql_prep_statement("REPLACE INTO fstaskfileid (fstaskid, fileid) VALUES (?, ?)");
+          psync_sql_bind_uint(res, 1, taskid);
+          psync_sql_bind_uint(res, 2, newfileid);
+          psync_sql_run_free(res);
+        }
         ret=-1;
       }
       pthread_mutex_unlock(&fl->mutex);
