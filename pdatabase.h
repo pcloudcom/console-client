@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 5
+#define PSYNC_DATABASE_VERSION 6
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -118,6 +118,7 @@ PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER, oldhash INTEGER);\
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS fstaskfileid (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, fileid INTEGER, PRIMARY KEY (fstaskid, fileid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
@@ -156,7 +157,10 @@ DROP TABLE IF EXISTS localfileupload;\
 CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
 UPDATE setting SET value=5 WHERE id='dbversion';\
 COMMIT;",
-
+  "BEGIN;\
+CREATE TABLE IF NOT EXISTS fstaskfileid (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, fileid INTEGER, PRIMARY KEY (fstaskid, fileid)) " P_SQL_WOWROWID ";\
+UPDATE setting SET value=6 WHERE id='dbversion';\
+COMMIT;"
 };
 
 #endif

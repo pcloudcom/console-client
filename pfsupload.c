@@ -54,6 +54,7 @@ typedef struct {
   int64_t int2;
   unsigned char ccreat;
   unsigned char needprocessing;
+  unsigned char status;
 } fsupload_task_t;
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -62,6 +63,7 @@ static uint64_t current_upload_taskid=0;
 static uint32_t upload_wakes=0;
 static int large_upload_running=0;
 static int stop_current_upload=0;
+static psync_list *current_upload_batch=NULL;
 
 static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED),
@@ -787,6 +789,8 @@ static void large_upload(){
   uint64_t taskid, type, writeid;
   psync_uploadid_t uploadid;
   psync_folderid_t folderid;
+  psync_fileid_t fileid;
+  uint64_t hash;
   const char *cname;
   char *name, *filename, *indexname;
   size_t len;
@@ -812,6 +816,8 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     folderid=psync_get_number(row[2]);
     cname=psync_get_lstring(row[3], &len);
     writeid=psync_get_number(row[4]);
+    fileid=psync_get_number(row[5]);
+    hash=psync_get_number_or_null(row[6]);
     len++;
     name=psync_new_cnt(char, len);
     memcpy(name, cname, len);
@@ -836,7 +842,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     if (type==PSYNC_FS_TASK_CREAT)
       ret=large_upload_creat(taskid, folderid, name, filename, uploadid, writeid);
     else if (type==PSYNC_FS_TASK_MODIFY)
-      ret=upload_modify(taskid, folderid, name, filename, indexname, psync_get_number(row[5]), psync_get_number(row[6]), writeid);
+      ret=upload_modify(taskid, folderid, name, filename, indexname, fileid, hash, writeid);
     else{
       ret=0;
       debug(D_BUG, "wrong type %lu for task %lu", (unsigned long)type, (unsigned long)taskid);
@@ -875,6 +881,32 @@ void psync_fsupload_stop_upload_locked(uint64_t taskid){
   psync_sql_bind_uint(res, 1, taskid);
   psync_sql_run_free(res);
   assertw(psync_sql_affected_rows());
+}
+
+int psync_fsupload_in_current_small_uploads_batch_locked(uint64_t taskid){
+  fsupload_task_t *task;
+  if (!current_upload_batch)
+    return 0;
+  psync_list_for_each_element(task, current_upload_batch, fsupload_task_t, list)
+    if (task->id==taskid && task->type==PSYNC_FS_TASK_CREAT){
+      char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+      char *filename;
+      psync_stat_t st;
+      int stret;
+      psync_binhex(fileidhex, &task->id, sizeof(psync_fsfileid_t));
+      fileidhex[sizeof(psync_fsfileid_t)]='d';
+      fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+      filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+      stret=psync_stat(filename, &st);
+      psync_free(filename);
+      if (stret)
+        return 1;
+      if (psync_stat_size(&st)>PSYNC_FS_DIRECT_UPLOAD_LIMIT)
+        return 0;
+      else
+        return 1;
+    }
+  return 0;
 }
 
 static int psync_send_task_creat(psync_socket *api, fsupload_task_t *task){
@@ -1106,8 +1138,82 @@ static int psync_process_task_rename_folder(fsupload_task_t *task){
   return 0;
 }
 
+static void psync_delete_write_cache_file(uint64_t taskid, int index){
+  char *filename;
+  const char *cachepath;
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  psync_binhex(fileidhex, &taskid, sizeof(psync_fsfileid_t));
+  fileidhex[sizeof(psync_fsfileid_t)]='d';
+  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  assertw(psync_file_delete(filename)==0);
+  psync_free(filename);
+  if (index){
+    fileidhex[sizeof(psync_fsfileid_t)]='i';
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    assertw(psync_file_delete(filename)==0);  
+    psync_free(filename);
+  }
+}
+
+static int psync_cancel_task_creat(fsupload_task_t *task){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_fileid_t fileid;
+  psync_delete_write_cache_file(task->id, 0);
+  psync_fstask_file_created(task->folderid, task->id, task->text1, 0);
+  res=psync_sql_query("SELECT fileid FROM fstaskfileid WHERE fstaskid=?");
+  psync_sql_bind_uint(res, 1, task->id);
+  if ((row=psync_sql_fetch_rowint(res)))
+    fileid=row[0];
+  else
+    fileid=0;
+  psync_sql_free_result(res);
+  if (fileid){
+    debug(D_NOTICE, "cancelled creat task %lu for file %s, changed to fileid %lu", (unsigned long)task->id, task->text1, (unsigned long)fileid);
+    res=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
+    psync_sql_bind_uint(res, 1, fileid);
+    psync_sql_bind_int(res, 2, -task->id);
+    psync_sql_run_free(res);
+  }
+  else{
+    debug(D_NOTICE, "cancelled creat task %lu for file %s, deleting unlink tasks", (unsigned long)task->id, task->text1);
+    res=psync_sql_prep_statement("DELETE FROM fstask WHERE fileid=? AND type="NTO_STR(PSYNC_FS_TASK_UNLINK));
+    psync_sql_bind_int(res, 1, -task->id);
+    psync_sql_run_free(res);
+  }
+  return 0;
+}
+
+static int psync_cancel_task_rename_file(fsupload_task_t *task){
+  psync_fstask_file_renamed(task->folderid, task->id, task->text1, task->int1);
+  debug(D_NOTICE, "cancelled rename task %lu (from task %lu) for file %s", (unsigned long)task->id, (unsigned long)task->int1, task->text1);
+  return 0;
+}
+
+static int psync_cancel_task_modify(fsupload_task_t *task){
+  psync_sql_res *res;
+  psync_delete_write_cache_file(task->id, 1);
+  psync_fstask_file_modified(task->folderid, task->id, task->text1, 0);
+  res=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
+  psync_sql_bind_uint(res, 1, task->fileid);
+  psync_sql_bind_int(res, 2, -task->id);
+  psync_sql_run_free(res);
+  debug(D_NOTICE, "cancelled modify task %lu for file %s, changed to fileid %lu", (unsigned long)task->id, task->text1, (unsigned long)task->fileid);
+  return 0;
+}
+
+static int psync_cancel_task_unlink(fsupload_task_t *task){
+  if (task->fileid>0)
+    return -1;
+  psync_fstask_file_deleted(task->folderid, task->id, task->text1);
+  return 0;
+}
+
 typedef int (*psync_send_task_ptr)(psync_socket *, fsupload_task_t *);
 typedef int (*psync_process_task_ptr)(fsupload_task_t *);
+typedef int (*psync_cancel_task_ptr)(fsupload_task_t *);
 
 static psync_send_task_ptr psync_send_task_func[]={
   NULL,
@@ -1137,11 +1243,26 @@ static psync_process_task_ptr psync_process_task_func[]={
   psync_process_task_unlink
 };
 
+static psync_cancel_task_ptr psync_cancel_task_func[]={
+  NULL,
+  NULL,
+  NULL,
+  psync_cancel_task_creat,
+  psync_cancel_task_unlink,
+  NULL,
+  psync_cancel_task_rename_file,
+  NULL,
+  NULL,
+  psync_cancel_task_modify,
+  psync_cancel_task_unlink
+};
+
 static void psync_fsupload_process_tasks(psync_list *tasks){
   fsupload_task_t *task;
   psync_sql_res *del, *dep, *fol, *sfol, *fil;
-  uint32_t creats;
+  uint32_t creats, cancels;
   creats=0;
+  cancels=0;
   psync_sql_start_transaction();
   del=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
   dep=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
@@ -1151,7 +1272,18 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
   psync_list_for_each_element (task, tasks, fsupload_task_t, list){
     if (task->ccreat)
       creats++;
-    if (task->res){
+    if (task->status==11){
+      if (psync_cancel_task_func[task->type] && psync_cancel_task_func[task->type](task))
+        continue;
+      psync_sql_bind_uint(dep, 1, task->id);
+      psync_sql_run(dep);
+      if (psync_sql_affected_rows())
+        upload_wakes++;
+      psync_sql_bind_uint(del, 1, task->id);
+      psync_sql_run(del);
+      cancels++;
+    }
+    else if (task->res){
       if (psync_process_task_func[task->type](task))
         debug(D_WARNING, "processing task %lu of type %lu failed", (unsigned long)task->id, (unsigned long)task->type);
       else{
@@ -1188,6 +1320,8 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
     psync_upload_dec_uploads_cnt(creats);
     psync_status_recalc_to_upload_async();
   }
+  else if (cancels)
+    psync_status_recalc_to_upload_async();
 }
 
 static void psync_fsupload_run_tasks(psync_list *tasks){
@@ -1207,6 +1341,10 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     task->needprocessing=0;
     if (!task->type || task->type>=ARRAY_SIZE(psync_send_task_func)){
       debug(D_BUG, "bad task type %lu", (unsigned long)task->type);
+      continue;
+    }
+    if (task->status==11){
+      task->needprocessing=1;
       continue;
     }
     ret=psync_send_task_func[task->type](api, task);
@@ -1262,8 +1400,8 @@ static void psync_fsupload_check_tasks(){
   uint32_t cnt;
   psync_list_init(&tasks);
   cnt=0;
-  res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid FROM fstask f LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
-                      " WHERE d.fstaskid IS NULL AND status=0 ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
+  res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
+                      " WHERE d.fstaskid IS NULL AND status IN (0, 11) ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   while ((row=psync_sql_fetch_row(res))){
     cnt++;
     size=sizeof(fsupload_task_t);
@@ -1279,6 +1417,7 @@ static void psync_fsupload_check_tasks(){
     task->folderid=psync_get_number(row[2]);
     task->fileid=psync_get_number_or_null(row[3]);
     task->sfolderid=psync_get_number_or_null(row[8]);
+    task->status=psync_get_number(row[9]);
     if (row[4].type==PSYNC_TSTRING){
       memcpy(end, row[4].str, row[4].length+1);
       task->text1=end;
@@ -1297,11 +1436,15 @@ static void psync_fsupload_check_tasks(){
     task->ccreat=0;
     psync_list_add_tail(&tasks, &task->list);
   }
+  current_upload_batch=&tasks;
   psync_sql_free_result(res);
   if (cnt==PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN)
     upload_wakes++;
   if (!psync_list_isempty(&tasks))
     psync_fsupload_run_tasks(&tasks);
+  psync_sql_lock();
+  current_upload_batch=NULL;
+  psync_sql_unlock();
   psync_list_for_each_element_call(&tasks, fsupload_task_t, list, psync_free);
 }
 
