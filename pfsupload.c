@@ -1188,7 +1188,7 @@ static int psync_cancel_task_creat(fsupload_task_t *task){
 
 static int psync_cancel_task_rename_file(fsupload_task_t *task){
   psync_fstask_file_renamed(task->folderid, task->id, task->text1, task->int1);
-  debug(D_NOTICE, "cancelled rename task %lu for file %s", (unsigned long)task->id, task->text1);
+  debug(D_NOTICE, "cancelled rename task %lu (from task %lu) for file %s", (unsigned long)task->id, (unsigned long)task->int1, task->text1);
   return 0;
 }
 

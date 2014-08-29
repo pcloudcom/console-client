@@ -567,7 +567,7 @@ void psync_fstask_stop_and_delete_file(psync_fsfileid_t fileid){
   res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE id=?");
   psync_sql_bind_uint(res, 1, -fileid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE fileid=?");
+  res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE fileid=? AND status!=10");
   psync_sql_bind_int(res, 1, fileid);
   psync_sql_run_free(res);
 }
