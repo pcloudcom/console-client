@@ -1138,10 +1138,30 @@ static int psync_process_task_rename_folder(fsupload_task_t *task){
   return 0;
 }
 
+static void psync_delete_write_cache_file(uint64_t taskid, int index){
+  char *filename;
+  const char *cachepath;
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  psync_binhex(fileidhex, &taskid, sizeof(psync_fsfileid_t));
+  fileidhex[sizeof(psync_fsfileid_t)]='d';
+  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  assertw(psync_file_delete(filename)==0);
+  psync_free(filename);
+  if (index){
+    fileidhex[sizeof(psync_fsfileid_t)]='i';
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    assertw(psync_file_delete(filename)==0);  
+    psync_free(filename);
+  }
+}
+
 static int psync_cancel_task_creat(fsupload_task_t *task){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fileid_t fileid;
+  psync_delete_write_cache_file(task->id, 0);
   psync_fstask_file_created(task->folderid, task->id, task->text1, 0);
   res=psync_sql_query("SELECT fileid FROM fstaskfileid WHERE fstaskid=?");
   psync_sql_bind_uint(res, 1, task->id);
@@ -1167,14 +1187,15 @@ static int psync_cancel_task_creat(fsupload_task_t *task){
 }
 
 static int psync_cancel_task_rename_file(fsupload_task_t *task){
-  psync_fstask_file_modified(task->folderid, task->id, task->text1, 0);
+  psync_fstask_file_renamed(task->folderid, task->id, task->text1, task->int1);
   debug(D_NOTICE, "cancelled rename task %lu for file %s", (unsigned long)task->id, task->text1);
   return 0;
 }
 
 static int psync_cancel_task_modify(fsupload_task_t *task){
   psync_sql_res *res;
-  psync_fstask_file_renamed(task->folderid, task->id, task->text1, task->int1);
+  psync_delete_write_cache_file(task->id, 1);
+  psync_fstask_file_modified(task->folderid, task->id, task->text1, 0);
   res=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_sql_bind_uint(res, 1, task->fileid);
   psync_sql_bind_int(res, 2, -task->id);
