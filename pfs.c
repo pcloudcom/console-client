@@ -233,6 +233,30 @@ int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t 
   return 0;
 }
 
+static int psync_fs_relock_fileid(psync_fsfileid_t fileid){
+  psync_openfile_t *fl;
+  psync_tree *tr;
+  int64_t d;
+  psync_sql_lock();
+  tr=openfiles;
+  while (tr){
+    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    if (d<0)
+      tr=tr->left;
+    else if (d>0)
+      tr=tr->right;
+    else{
+      fl=psync_tree_element(tr, psync_openfile_t, tree);
+      pthread_mutex_lock(&fl->mutex);
+      pthread_mutex_unlock(&fl->mutex);
+      psync_sql_unlock();
+      return 1;
+    }
+  }
+  psync_sql_unlock();
+  return 0;
+}
+
 int64_t psync_fs_get_file_writeid(uint64_t taskid){
   psync_openfile_t *fl;
   psync_tree *tr;
@@ -377,7 +401,6 @@ static int psync_creat_stat_fake_file(struct stat *stbuf){
   stbuf->st_uid=myuid;
   stbuf->st_gid=mygid;
   return 0;
-
 }
 
 static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
@@ -398,8 +421,14 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   cachepath=psync_setting_get_string(_PS(fscachepath));
   filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
   stret=psync_stat(filename, &st);
-  if (stret)
+  if (unlikely_log(stret)){
+    // since files are created out of sql_lock, it is possible that file is not created
+    // we can lookup cr->fileid in openfiles and take of->mutex, once we did it, the file
+    // should exist as we are holding sql_lock
     debug(D_NOTICE, "could not stat file %s", filename);
+    psync_fs_relock_fileid(cr->fileid);
+    stret=psync_stat(filename, &st);
+  }
   psync_free(filename);
   if (stret)
     return -1;
@@ -1250,6 +1279,28 @@ retry:
           psync_sql_unlock();
           goto retry;
         }
+      }
+      if (of->currentsize==0 || (of->currentsize<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE && 
+            psync_pagecache_have_all_pages_in_cache(of->hash, of->currentsize) && !psync_pagecache_lock_pages_in_cache())){
+        debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
+        cr=psync_fstask_add_creat(of->currentfolder, of->currentname);
+        psync_sql_unlock();
+        of->newfile=1;
+        ret=open_write_files(of, 0);
+        if (unlikely_log(ret)){
+          pthread_mutex_unlock(&of->mutex);
+          psync_pagecache_unlock_pages_from_cache();
+          return ret;
+        }
+        if (of->currentsize){
+          ret=psync_pagecache_copy_all_pages_from_cache_to_file_locked(of, of->hash, of->currentsize);
+          psync_pagecache_unlock_pages_from_cache();
+          if (unlikely_log(ret)){
+            pthread_mutex_unlock(&of->mutex);
+            return -EIO;
+          }
+        }
+        goto retry;
       }
       cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
       psync_sql_unlock();

@@ -36,5 +36,9 @@ int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64
 int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
 void psync_pagecache_creat_to_pagecache(uint64_t taskid, uint64_t hash);
 void psync_pagecache_modify_to_pagecache(uint64_t taskid, uint64_t hash, uint64_t oldhash);
+int psync_pagecache_have_all_pages_in_cache(uint64_t hash, uint64_t size);
+int psync_pagecache_copy_all_pages_from_cache_to_file_locked(psync_openfile_t *of, uint64_t hash, uint64_t size);
+int psync_pagecache_lock_pages_in_cache();
+void psync_pagecache_unlock_pages_from_cache();
 
 #endif
