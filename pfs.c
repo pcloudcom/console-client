@@ -326,8 +326,13 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
   psync_tree_added_at(&openfiles, tr, &of->tree);
 }
 
+#define folderid_to_inode(folderid) ((folderid)*3)
+#define fileid_to_inode(fileid) ((fileid)*3+1)
+#define taskid_to_inode(taskid) ((taskid)*3+2)
+
 static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
   memset(stbuf, 0, sizeof(struct stat));
+  stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
@@ -349,6 +354,7 @@ static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
 
 static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
   uint64_t size;
+  stbuf->st_ino=fileid_to_inode(psync_get_number(row[4]));
   size=psync_get_number(row[1]);
   memset(stbuf, 0, sizeof(struct stat));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
@@ -372,6 +378,10 @@ static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
 
 static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *stbuf){
   memset(stbuf, 0, sizeof(struct stat));
+  if (mk->folderid>=0)
+    stbuf->st_ino=folderid_to_inode(mk->folderid);
+  else
+    stbuf->st_ino=taskid_to_inode(-mk->folderid);    
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=mk->ctime;
   stbuf->st_ctime=mk->mtime;
@@ -472,6 +482,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
       return -EIO;
   }*/
   memset(stbuf, 0, sizeof(struct stat));
+  stbuf->st_ino=taskid_to_inode(fileid);
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=st.st_birthtime;
   stbuf->st_ctime=st.st_ctime;
@@ -557,7 +568,7 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
       return 0;
     }
   }
-  res=psync_sql_query("SELECT name, size, ctime, mtime FROM file WHERE parentfolderid=? AND name=?");
+  res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, fpath->folderid);
   psync_sql_bind_string(res, 2, fpath->name);
   if ((row=psync_sql_fetch_row(res)))
@@ -602,10 +613,10 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     filler(buf, "..", NULL, 0);
   folder=psync_fstask_get_folder_tasks_locked(folderid);
   if (folderid>=0){
-    res=psync_sql_query("SELECT name, permissions, ctime, mtime, subdircnt FROM folder WHERE parentfolderid=?");
+    res=psync_sql_query("SELECT id, permissions, ctime, mtime, subdircnt, name FROM folder WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
-      name=psync_get_string(row[0]);
+      name=psync_get_string(row[5]);
       if (!name || !name[0])
         continue;
       if (folder && (psync_fstask_find_rmdir(folder, name, 0) || psync_fstask_find_mkdir(folder, name, 0)))
@@ -1296,6 +1307,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   index_record rec;
   int ret;
   of=fh_to_openfile(fi->fh);
+  debug(D_NOTICE, "write %s off=%lu size=%lu", of->currentname, (unsigned long)offset, (unsigned long)size);
   pthread_mutex_lock(&of->mutex);
   psync_fs_inc_writeid_locked(of);
 retry:
@@ -1682,6 +1694,7 @@ retry:
     }
   }
   pthread_mutex_unlock(&of->mutex);
+  debug(D_NOTICE, "ftruncate %s %lu=%d", path, (unsigned long)size, ret);
   return ret;
 }
 

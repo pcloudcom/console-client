@@ -1177,12 +1177,6 @@ static int psync_cancel_task_creat(fsupload_task_t *task){
     psync_sql_bind_int(res, 2, -task->id);
     psync_sql_run_free(res);
   }
-  else{
-    debug(D_NOTICE, "cancelled creat task %lu for file %s, deleting unlink tasks", (unsigned long)task->id, task->text1);
-    res=psync_sql_prep_statement("DELETE FROM fstask WHERE fileid=? AND type="NTO_STR(PSYNC_FS_TASK_UNLINK));
-    psync_sql_bind_int(res, 1, -task->id);
-    psync_sql_run_free(res);
-  }
   return 0;
 }
 
