@@ -2114,7 +2114,7 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
   HANDLE ret;
   if (flags&P_O_EXCL)
     cdis=CREATE_NEW;
-  else if (flags&(P_O_CREAT|P_O_TRUNC))
+  else if ((flags&(P_O_CREAT|P_O_TRUNC))==(P_O_CREAT|P_O_TRUNC))
     cdis=CREATE_ALWAYS;
   else if (flags&P_O_CREAT)
     cdis=OPEN_ALWAYS;

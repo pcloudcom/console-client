@@ -1059,6 +1059,7 @@ static psync_int_t check_page_in_database_by_hash(uint64_t hash, uint64_t pageid
   psync_sql_res *res;
   psync_variant_row row;
   size_t dsize;
+  ssize_t readret;
   psync_int_t ret;
   uint64_t pagecacheid;
   ret=-1;
@@ -1078,8 +1079,10 @@ static psync_int_t check_page_in_database_by_hash(uint64_t hash, uint64_t pageid
   }
   psync_sql_free_result(res);
   if (ret!=-1){
-    if (psync_file_pread(readcache, buff, size, pagecacheid*PSYNC_FS_PAGE_SIZE+off)!=size){
-      debug(D_ERROR, "failed to read %lu bytes from cache file at offset %lu", (unsigned long)size, (unsigned long)(pagecacheid*PSYNC_FS_PAGE_SIZE+off));
+    readret=psync_file_pread(readcache, buff, size, pagecacheid*PSYNC_FS_PAGE_SIZE+off);
+    if (readret!=size){
+      debug(D_ERROR, "failed to read %lu bytes from cache file at offset %lu, read returned %ld, errno=%ld",
+            (unsigned long)size, (unsigned long)(pagecacheid*PSYNC_FS_PAGE_SIZE+off), (long)readret, (long)psync_fs_err());
       res=psync_sql_prep_statement("UPDATE pagecache SET type="NTO_STR(PAGE_TYPE_FREE)", pageid=NULL, hash=NULL WHERE id=?");
       psync_sql_bind_uint(res, 1, pagecacheid);
       psync_sql_run_free(res);
@@ -2009,8 +2012,10 @@ static void delete_extra_pages(){
     psync_sql_run_free(res);
     db_cache_max_page=db_cache_in_pages;
     if (!psync_fstat(readcache, &st) && psync_stat_size(&st)>db_cache_in_pages*PSYNC_FS_PAGE_SIZE){
-      if (likely_log(psync_file_seek(readcache, db_cache_in_pages*PSYNC_FS_PAGE_SIZE, P_SEEK_SET)!=-1))
+      if (likely_log(psync_file_seek(readcache, db_cache_in_pages*PSYNC_FS_PAGE_SIZE, P_SEEK_SET)!=-1)){
         assertw(psync_file_truncate(readcache)==0);
+        debug(D_NOTICE, "shrunk cache to %lu pages (%lu bytes)", (unsigned long)db_cache_in_pages, (unsigned long)db_cache_in_pages*PSYNC_FS_PAGE_SIZE);
+      }
     }
   }
   pthread_mutex_unlock(&flush_cache_mutex);
