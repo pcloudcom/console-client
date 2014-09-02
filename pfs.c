@@ -1411,6 +1411,26 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
   return ret;
 }
 
+#if defined(FUSE_HAS_CAN_UNLINK)
+static int psync_fs_can_rmdir(const char *path){
+  psync_fspath_t *fpath;
+  int ret;
+  debug(D_NOTICE, "can_rmdir %s", path);
+  psync_sql_lock();
+  fpath=psync_fsfolder_resolve_path(path);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_DELETE))
+    ret=-EACCES;
+  else
+    ret=psync_fstask_can_rmdir(fpath->folderid, fpath->name);
+  psync_sql_unlock();
+  psync_free(fpath);
+  debug(D_NOTICE, "can_rmdir %s=%d", path, ret);
+  return ret;
+}
+#endif
+
 static int psync_fs_rmdir(const char *path){
   psync_fspath_t *fpath;
   int ret;
@@ -1428,6 +1448,26 @@ static int psync_fs_rmdir(const char *path){
   debug(D_NOTICE, "rmdir %s=%d", path, ret);
   return ret;
 }
+
+#if defined(FUSE_HAS_CAN_UNLINK)
+static int psync_fs_can_unlink(const char *path){
+  psync_fspath_t *fpath;
+  int ret;
+  debug(D_NOTICE, "can_unlink %s", path);
+  psync_sql_lock();
+  fpath=psync_fsfolder_resolve_path(path);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_DELETE))
+    ret=-EACCES;
+  else
+    ret=psync_fstask_can_unlink(fpath->folderid, fpath->name);
+  psync_sql_unlock();
+  psync_free(fpath);
+  debug(D_NOTICE, "can_unlink %s=%d", path, ret);
+  return ret;
+}
+#endif
 
 static int psync_fs_unlink(const char *path){
   psync_fspath_t *fpath;
@@ -2007,6 +2047,11 @@ int psync_fs_start(){
   psync_oper.getxattr = psync_fs_getxattr;
   psync_oper.listxattr= psync_fs_listxattr;
   psync_oper.removexattr=psync_fs_removexattr;
+  
+#if defined(FUSE_HAS_CAN_UNLINK)
+  psync_oper.can_unlink=psync_fs_can_unlink;
+  psync_oper.can_rmdir=psync_fs_can_rmdir;
+#endif
 
 #if defined(P_OS_POSIX)
   myuid=getuid();
@@ -2030,6 +2075,7 @@ int psync_fs_start(){
   psync_current_mountpoint=mp;
   started=1;
   pthread_mutex_unlock(&start_mutex);
+  fuse_opt_free_args(&args);
   psync_run_thread("fuse", psync_fuse_thread);
   return 0;
 err1:
@@ -2038,6 +2084,7 @@ err0:
   psync_free(mp);
 err00:
   pthread_mutex_unlock(&start_mutex);
+  fuse_opt_free_args(&args);
   return -1;
 }
 

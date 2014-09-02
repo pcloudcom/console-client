@@ -333,6 +333,74 @@ int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
   return 0;
 }
 
+int psync_fstask_can_rmdir(psync_fsfolderid_t folderid, const char *name){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_str_row srow;
+  psync_fstask_folder_t *folder, *cfolder;
+  psync_fstask_mkdir_t *mk;
+  psync_fsfolderid_t cfolderid;
+  size_t len;
+  len=strlen(name);
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder && (mk=psync_fstask_find_mkdir(folder, name, 0)))
+    cfolderid=mk->folderid;
+  else{
+    res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_lstring(res, 2, name, len);
+    row=psync_sql_fetch_rowint(res);
+    if (!row || (folder && psync_fstask_find_rmdir(folder, name, 0))){
+      psync_sql_free_result(res);
+      psync_fstask_release_folder_tasks_locked(folder);
+      return -ENOENT;
+    }
+    cfolderid=row[0];
+    psync_sql_free_result(res);
+  }
+  cfolder=psync_fstask_get_folder_tasks_locked(cfolderid);
+  if (cfolder && (cfolder->creats || cfolder->mkdirs)){
+    psync_fstask_release_folder_tasks_locked(cfolder);
+    if (folder)
+      psync_fstask_release_folder_tasks_locked(folder);
+    debug(D_NOTICE, "returning ENOTEMPTY for folder name %s", name);
+    return -ENOTEMPTY;
+  }
+  if (cfolderid>=0){
+    res=psync_sql_query("SELECT name FROM file WHERE parentfolderid=?");
+    psync_sql_bind_uint(res, 1, cfolderid);
+    while ((srow=psync_sql_fetch_rowstr(res)))
+      if (!cfolder || !psync_fstask_find_unlink(cfolder, srow[0], 0)){
+        psync_sql_free_result(res);
+        if (cfolder)
+          psync_fstask_release_folder_tasks_locked(cfolder);
+        if (folder)
+          psync_fstask_release_folder_tasks_locked(folder);
+        debug(D_NOTICE, "returning ENOTEMPTY for folder name %s", name);
+        return -ENOTEMPTY;
+      }
+    psync_sql_free_result(res);
+    res=psync_sql_query("SELECT name FROM folder WHERE parentfolderid=?");
+    psync_sql_bind_uint(res, 1, cfolderid);
+    while ((srow=psync_sql_fetch_rowstr(res)))
+      if (!cfolder || !psync_fstask_find_rmdir(cfolder, srow[0], 0)){
+        psync_sql_free_result(res);
+        if (cfolder)
+          psync_fstask_release_folder_tasks_locked(cfolder);
+        if (folder)
+          psync_fstask_release_folder_tasks_locked(folder);
+        debug(D_NOTICE, "returning ENOTEMPTY for folder name %s", name);
+        return -ENOTEMPTY;
+      }
+    psync_sql_free_result(res);
+  }
+  if (cfolder)
+    psync_fstask_release_folder_tasks_locked(cfolder);
+  if (folder)
+    psync_fstask_release_folder_tasks_locked(folder);
+  return 0;
+}
+
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name){
   psync_sql_res *res;
   psync_uint_row row;
@@ -570,6 +638,34 @@ void psync_fstask_stop_and_delete_file(psync_fsfileid_t fileid){
   res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE fileid=? AND status!=10");
   psync_sql_bind_int(res, 1, fileid);
   psync_sql_run_free(res);
+}
+
+int psync_fstask_can_unlink(psync_fsfolderid_t folderid, const char *name){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_fstask_folder_t *folder;
+  psync_fstask_creat_t *cr;
+  size_t len;
+  len=strlen(name);
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder && (cr=psync_fstask_find_creat(folder, name, 0)))
+    psync_fstask_release_folder_tasks_locked(folder);
+  else{
+    res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_lstring(res, 2, name, len);
+    row=psync_sql_fetch_rowint(res);
+    if (!row || (folder && psync_fstask_find_unlink(folder, name, 0))){
+      psync_sql_free_result(res);
+      if (folder)
+        psync_fstask_release_folder_tasks_locked(folder);
+      return -ENOENT;
+    }
+    psync_sql_free_result(res);
+    if (folder)
+      psync_fstask_release_folder_tasks_locked(folder);
+  }
+  return 0;
 }
 
 int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){

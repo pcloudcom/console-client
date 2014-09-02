@@ -113,10 +113,12 @@ psync_fstask_mkdir_t *psync_fstask_find_mkdir_by_folderid(psync_fstask_folder_t 
 psync_fstask_creat_t *psync_fstask_find_creat_by_fileid(psync_fstask_folder_t *folder, psync_fsfileid_t fileid);
 
 int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name);
+int psync_fstask_can_rmdir(psync_fsfolderid_t folderid, const char *name);
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name);
 psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name);
 void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat_t *cr);
 psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, uint64_t hash);
+int psync_fstask_can_unlink(psync_fsfolderid_t folderid, const char *name);
 int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name);
 int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name,  psync_fsfolderid_t to_folderid, const char *new_name);
 int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name,  psync_fsfolderid_t to_folderid, const char *new_name);
