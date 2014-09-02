@@ -1056,8 +1056,12 @@ void psync_fstask_file_created(psync_folderid_t parentfolderid, uint64_t taskid,
       psync_free(un);
       folder->taskscnt--;
     }
+    else
+      debug(D_NOTICE, "could not find unlink for file %s in folderid %lu", name, (unsigned long)parentfolderid);
     psync_fstask_release_folder_tasks_locked(folder);
   }
+  else
+    debug(D_NOTICE, "could not find unlink for file %s in folderid %lu", name, (unsigned long)parentfolderid);
   if (!folder || !cr)
     psync_fstask_look_for_creat_in_db(parentfolderid, taskid, name, fileid);
 }

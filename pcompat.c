@@ -2242,8 +2242,12 @@ ssize_t psync_file_pread(psync_file_t fd, void *buf, size_t count, uint64_t offs
   ov.OffsetHigh=li.HighPart;
   if (ReadFile(fd, buf, count, &ret, &ov))
     return ret;
-  else
-    return -1;
+  else{
+    if (GetLastError()==ERROR_HANDLE_EOF)
+      return 0;
+    else
+      return -1;
+  }
 #else
 #error "Function not implemented for your operating system"
 #endif
