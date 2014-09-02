@@ -404,7 +404,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *st
 static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT name, size, ctime, mtime FROM file WHERE id=?");
+  res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE id=?");
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_file_stat(row, stbuf);
@@ -1221,8 +1221,10 @@ static int psync_fs_fsyncdir(const char *path, int datasync, struct fuse_file_in
 
 static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
   ssize_t br=psync_file_pread(of->datafile, buf, size, offset);
-  if (br==-1)
+  if (br==-1){
+    debug(D_NOTICE, "error reading from new file offset %lu, size %lu, error %d", (unsigned long)offset, (unsigned long)size, (int)psync_fs_err());
     return -EIO;
+  }
   else
     return br;
 }
