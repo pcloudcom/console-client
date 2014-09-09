@@ -40,5 +40,6 @@ int psync_pagecache_have_all_pages_in_cache(uint64_t hash, uint64_t size);
 int psync_pagecache_copy_all_pages_from_cache_to_file_locked(psync_openfile_t *of, uint64_t hash, uint64_t size);
 int psync_pagecache_lock_pages_in_cache();
 void psync_pagecache_unlock_pages_from_cache();
+void psync_pagecache_resize_cache();
 
 #endif

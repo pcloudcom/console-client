@@ -48,6 +48,7 @@
 #include "pstatus.h"
 #include "pssl.h"
 #include "pfolder.h"
+#include "pnetlibs.h"
 
 #if defined(P_OS_POSIX)
 #include <signal.h>
@@ -1312,6 +1313,18 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   debug(D_NOTICE, "write %s off=%lu size=%lu", of->currentname, (unsigned long)offset, (unsigned long)size);
   pthread_mutex_lock(&of->mutex);
   psync_fs_inc_writeid_locked(of);
+  if (of->writeid%256==0 && of->currentsize<=offset){
+    int64_t freespc=psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)));
+    if (likely_log(freespc!=-1)){
+      if (freespc>=psync_setting_get_uint(_PS(minlocalfreespace)))
+        psync_set_local_full(0);
+      else{
+        psync_set_local_full(1);
+        pthread_mutex_unlock(&of->mutex);
+        return -ENOSPC;
+      }
+    }
+  }
 retry:
   if (of->newfile){
     bw=psync_file_pwrite(of->datafile, buf, size, offset);

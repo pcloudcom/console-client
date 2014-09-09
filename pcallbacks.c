@@ -34,7 +34,7 @@
 
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
-static uint32_t statuschanges=0;
+static int statuschanges=0;
 static int statusthreadrunning=0;
 
 static pthread_mutex_t eventmutex=PTHREAD_MUTEX_INITIALIZER;
@@ -55,8 +55,10 @@ static void status_change_thread(void *ptr){
     // Maximum 10 updates/sec
     psync_milisleep(100);
     pthread_mutex_lock(&statusmutex);
-    while (!statuschanges)
+    while (!statuschanges<=0){
+      statuschanges=-1;
       pthread_cond_wait(&statuscond, &statusmutex);
+    }
     statuschanges=0;
     pthread_mutex_unlock(&statusmutex);
     if (!psync_do_run)
@@ -75,9 +77,11 @@ void psync_set_status_callback(pstatus_change_callback_t callback){
 void psync_send_status_update(){
   if (statusthreadrunning){
     pthread_mutex_lock(&statusmutex);
-    statuschanges++;
+    if (++statuschanges==0){
+      statuschanges++;
+      pthread_cond_signal(&statuscond);
+    }
     pthread_mutex_unlock(&statusmutex);
-    pthread_cond_signal(&statuscond);
   }
 }
 
@@ -161,8 +165,8 @@ void psync_send_event_by_path(psync_eventtype_t eventid, psync_syncid_t syncid, 
     event->freedata=0;
     pthread_mutex_lock(&eventmutex);
     psync_list_add_tail(&eventlist, &event->list);
-    pthread_mutex_unlock(&eventmutex);
     pthread_cond_signal(&eventcond);
+    pthread_mutex_unlock(&eventmutex);
   }
 }
 
@@ -175,8 +179,8 @@ void psync_send_eventid(psync_eventtype_t eventid){
     event->freedata=0;    
     pthread_mutex_lock(&eventmutex);
     psync_list_add_tail(&eventlist, &event->list);
-    pthread_mutex_unlock(&eventmutex);
     pthread_cond_signal(&eventcond);
+    pthread_mutex_unlock(&eventmutex);
   }
 }
 
@@ -189,8 +193,8 @@ void psync_send_eventdata(psync_eventtype_t eventid, void *eventdata){
     event->freedata=1;
     pthread_mutex_lock(&eventmutex);
     psync_list_add_tail(&eventlist, &event->list);
-    pthread_mutex_unlock(&eventmutex);
     pthread_cond_signal(&eventcond);
+    pthread_mutex_unlock(&eventmutex);
   }
   else
     psync_free(eventdata);

@@ -839,6 +839,33 @@ static int cmp_flush_pages(const psync_list *p1, const psync_list *p2){
     return 0;
 }
 
+static int check_disk_full(){
+  int64_t filesize, freespace;
+  uint64_t minlocal, maxpage;
+  psync_sql_res *res;
+  db_cache_max_page=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
+  filesize=psync_file_size(readcache);
+  if (unlikely_log(filesize==-1) || filesize>=db_cache_max_page*PSYNC_FS_PAGE_SIZE)
+    return 0;
+  freespace=psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)));
+  minlocal=psync_setting_get_uint(_PS(minlocalfreespace));
+  if (unlikely_log(freespace==-1) || minlocal+db_cache_max_page*PSYNC_FS_PAGE_SIZE-filesize<=freespace){
+    psync_set_local_full(0);
+    return 0;
+  }
+  psync_set_local_full(1);
+  if (minlocal>=freespace)
+    maxpage=filesize/PSYNC_FS_PAGE_SIZE;
+  else
+    maxpage=(filesize+freespace-minlocal)/PSYNC_FS_PAGE_SIZE;
+  res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
+  psync_sql_bind_uint(res, 1, maxpage);
+  psync_sql_run_free(res);
+  free_db_pages=psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0);
+  db_cache_max_page=maxpage;
+  return 1;
+}
+
 static int flush_pages(int nosleep){
   static time_t lastflush=0;
   psync_sql_res *res;
@@ -848,9 +875,10 @@ static int flush_pages(int nosleep){
   psync_uint_t i, updates, pagecnt;
   time_t ctime;
   uint32_t cpih;
-  int ret;
+  int ret, diskfull;
   flushedbetweentimers=1;
   pthread_mutex_lock(&flush_cache_mutex);
+  diskfull=check_disk_full();
   updates=0;
   pagecnt=0;
   ctime=psync_timer_time();
@@ -923,7 +951,7 @@ break2:
     pthread_mutex_lock(&cache_mutex);
   }  
   psync_sql_start_transaction();
-  if (db_cache_max_page<db_cache_in_pages && cache_pages_in_hash){
+  if (db_cache_max_page<db_cache_in_pages && cache_pages_in_hash && !diskfull){
     i=0;
     res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
     while (db_cache_max_page+i<db_cache_in_pages && i<CACHE_PAGES && i<cache_pages_in_hash){
@@ -2002,8 +2030,10 @@ void psync_pagecache_unlock_pages_from_cache(){
   pthread_mutex_unlock(&clean_cache_mutex);
 }
 
-static void delete_extra_pages(){
+void psync_pagecache_resize_cache(){
   pthread_mutex_lock(&flush_cache_mutex);
+  db_cache_in_pages=psync_setting_get_uint(_PS(fscachesize))/PSYNC_FS_PAGE_SIZE;
+  db_cache_max_page=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
   if (db_cache_max_page>db_cache_in_pages){
     psync_sql_res *res;
     psync_stat_t st;
@@ -2077,8 +2107,11 @@ void psync_pagecache_init(){
   readcache=psync_file_open(cache_file, P_O_RDWR, P_O_CREAT);
   psync_free(cache_file);
   if (db_cache_max_page>db_cache_in_pages)
-    delete_extra_pages();
+    psync_pagecache_resize_cache();
   free_db_pages=psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0);
+  pthread_mutex_lock(&flush_cache_mutex);
+  check_disk_full();
+  pthread_mutex_unlock(&flush_cache_mutex);
   psync_sql_lock();
   if (psync_sql_cellint("SELECT COUNT(*) FROM pagecachetask", 0)){
     psync_run_thread("upload to cache", psync_pagecache_upload_to_cache);

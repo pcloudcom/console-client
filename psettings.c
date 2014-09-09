@@ -30,6 +30,7 @@
 #include "ptimer.h"
 #include "pp2p.h"
 #include "pfs.h"
+#include "ppagecache.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -65,7 +66,7 @@ static psync_setting_t settings[]={
   {"p2psync", psync_p2p_change, NULL, {PSYNC_P2P_SYNC_DEFAULT}, PSYNC_TBOOL},
   {"fsroot", fsroot_change, NULL, {0}, PSYNC_TSTRING},
   {"autostartfs", NULL, NULL, {PSYNC_AUTOSTARTFS_DEFAULT}, PSYNC_TBOOL},
-  {"fscachesize", fsroot_change, NULL, {PSYNC_FS_DEFAULT_CACHE_SIZE}, PSYNC_TNUMBER},
+  {"fscachesize", psync_pagecache_resize_cache, NULL, {PSYNC_FS_DEFAULT_CACHE_SIZE}, PSYNC_TNUMBER},
   {"fscachepath", NULL, NULL, {0}, PSYNC_TSTRING}
 };
 
