@@ -59,6 +59,12 @@
 #include <sys/mount.h>
 #endif
 
+#if IS_DEBUG
+#define psync_fs_set_thread_name() do {psync_thread_name=__FUNCTION__;} while (0)
+#else
+#define psync_fs_set_thread_name() do {} while (0)
+#endif
+
 #define fh_to_openfile(x) ((psync_openfile_t *)((uintptr_t)x))
 #define openfile_to_fh(x) ((uintptr_t)x)
 
@@ -562,6 +568,7 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
   psync_fstask_folder_t *folder;
   psync_fstask_creat_t *cr;
   int crr;
+  psync_fs_set_thread_name();
 //  debug(D_NOTICE, "getattr %s", path);
   if (path[0]=='/' && path[1]==0)
     return psync_fs_getrootattr(stbuf);
@@ -632,6 +639,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   psync_tree *trel;
   const char *name;
   struct stat st;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
   psync_sql_lock();
   folderid=psync_fsfolderid_by_path(path);
@@ -849,6 +857,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   psync_fstask_folder_t *folder;
   psync_openfile_t *of;
   int ret, status, type;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "open %s", path);
   fileid=writeid=hash=size=0;
   psync_sql_lock();
@@ -1055,6 +1064,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
   psync_fstask_creat_t *cr;
   psync_openfile_t *of;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "creat %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1191,6 +1201,7 @@ void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of){
 }
 
 static int psync_fs_release(const char *path, struct fuse_file_info *fi){
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "release %s", path);
   psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
   return 0;
@@ -1198,6 +1209,7 @@ static int psync_fs_release(const char *path, struct fuse_file_info *fi){
 
 static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
   psync_openfile_t *of;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "flush %s", path);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
@@ -1233,6 +1245,7 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
 
 static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info *fi){
   psync_openfile_t *of;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "fsync %s", path);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
@@ -1347,6 +1360,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   uint64_t ioff;
   index_record rec;
   int ret;
+  psync_fs_set_thread_name();
   of=fh_to_openfile(fi->fh);
   debug(D_NOTICE, "write %s off=%lu size=%lu", of->currentname, (unsigned long)offset, (unsigned long)size);
   pthread_mutex_lock(&of->mutex);
@@ -1461,6 +1475,7 @@ retry:
 static int psync_fs_mkdir(const char *path, mode_t mode){
   psync_fspath_t *fpath;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "mkdir %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1480,6 +1495,7 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
 static int psync_fs_can_rmdir(const char *path){
   psync_fspath_t *fpath;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "can_rmdir %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1499,6 +1515,7 @@ static int psync_fs_can_rmdir(const char *path){
 static int psync_fs_rmdir(const char *path){
   psync_fspath_t *fpath;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "rmdir %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1518,6 +1535,7 @@ static int psync_fs_rmdir(const char *path){
 static int psync_fs_can_unlink(const char *path){
   psync_fspath_t *fpath;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "can_unlink %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1537,6 +1555,7 @@ static int psync_fs_can_unlink(const char *path){
 static int psync_fs_unlink(const char *path){
   psync_fspath_t *fpath;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "unlink %s", path);
   psync_sql_lock();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1592,6 +1611,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   psync_fileorfolderid_t fid;
   uint32_t targetperms;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "rename %s to %s", old_path, new_path);
   folder=NULL;
   psync_sql_lock();
@@ -1703,6 +1723,7 @@ err_enoent:
 
 static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
   uint64_t q, uq;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "statfs %s", path);
 /* TODO:
    return -ENOENT if path is invalid if fuse does not call getattr first
@@ -1721,16 +1742,19 @@ static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
 }
 
 static int psync_fs_chmod(const char *path, mode_t mode){
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "chmod %s %u", path, (unsigned)mode);
   return 0;
 }
 
 int psync_fs_chown(const char *path, uid_t uid, gid_t gid){
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "chown %s %u %u", path, (unsigned)uid, (unsigned)gid);
   return 0;
 }
 
 static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "utimens %s", path);
   return 0;
 }
@@ -1738,6 +1762,7 @@ static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
 static int psync_fs_ftruncate(const char *path, off_t size, struct fuse_file_info *fi){
   psync_openfile_t *of;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
@@ -1794,6 +1819,7 @@ retry:
 static int psync_fs_truncate(const char *path, off_t size){
   struct fuse_file_info fi;
   int ret;
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "truncate %s %lu", path, (unsigned long)size);
   memset(&fi, 0, sizeof(fi));
   ret=psync_fs_open(path, &fi);

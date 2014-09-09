@@ -55,7 +55,7 @@ static void status_change_thread(void *ptr){
     // Maximum 10 updates/sec
     psync_milisleep(100);
     pthread_mutex_lock(&statusmutex);
-    while (!statuschanges<=0){
+    while (statuschanges<=0){
       statuschanges=-1;
       pthread_cond_wait(&statuscond, &statusmutex);
     }
