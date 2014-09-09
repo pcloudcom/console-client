@@ -81,11 +81,13 @@ typedef struct {
   unsigned char modified;
   unsigned char newfile;
   unsigned char releasedforupload;
+  unsigned char deleted;
 } psync_openfile_t;
 
 int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size);
 //void psync_fs_uploading_openfile(uint64_t taskid);
 int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t folderid, const char *name);
+void psync_fs_mark_openfile_deleted(uint64_t taskid);
 int64_t psync_fs_get_file_writeid(uint64_t taskid);
 int64_t psync_fs_load_interval_tree(psync_file_t fd, uint64_t size, psync_interval_tree_t **tree);
 int psync_fs_remount();

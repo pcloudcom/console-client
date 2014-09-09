@@ -258,6 +258,36 @@ static int psync_fs_relock_fileid(psync_fsfileid_t fileid){
   return 0;
 }
 
+void psync_fs_mark_openfile_deleted(uint64_t taskid){
+  psync_sql_res *res;
+  psync_openfile_t *fl;
+  psync_tree *tr;
+  int64_t d;
+  psync_fsfileid_t fileid;
+  fileid=-taskid;
+  psync_sql_lock();
+  tr=openfiles;
+  while (tr){
+    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    if (d<0)
+      tr=tr->left;
+    else if (d>0)
+      tr=tr->right;
+    else{
+      fl=psync_tree_element(tr, psync_openfile_t, tree);
+      debug(D_NOTICE, "file being deleted %s is still open, marking as deleted", fl->currentname);
+      pthread_mutex_lock(&fl->mutex);
+      fl->deleted=1;
+      pthread_mutex_unlock(&fl->mutex);
+      res=psync_sql_prep_statement("UPDATE fstask SET status=12 WHERE id=?");
+      psync_sql_bind_uint(res, 1, taskid);
+      psync_sql_run_free(res);
+      break;
+    }
+  }
+  psync_sql_unlock();
+}
+
 int64_t psync_fs_get_file_writeid(uint64_t taskid){
   psync_openfile_t *fl;
   psync_tree *tr;
@@ -1095,6 +1125,14 @@ void psync_fs_inc_of_refcnt(psync_openfile_t *of){
 
 static void psync_fs_free_openfile(psync_openfile_t *of){
   debug(D_NOTICE, "releasing file %s", of->currentname);
+  if (of->deleted && of->fileid<0){
+    psync_sql_res *res;
+    debug(D_NOTICE, "file %s marked for deletion, releasing cancel tasks", of->currentname);
+    res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE id=? AND status=12");
+    psync_sql_bind_uint(res, 1, -of->fileid);
+    psync_sql_run_free(res);
+    psync_fsupload_wake();
+  }
   pthread_mutex_destroy(&of->mutex);
   if (of->datafile!=INVALID_HANDLE_VALUE)
     psync_file_close(of->datafile);

@@ -663,8 +663,10 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
   if (unlikely(fd==INVALID_HANDLE_VALUE)){
     err=psync_fs_err();
     debug(D_WARNING, "can not open %s", indexname);
-    if (err==P_NOENT)
+    if (err==P_NOENT){
+      perm_fail_upload_task(taskid);
       return 0;
+    }
     else
       return -1;
   }
@@ -706,8 +708,10 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
     debug(D_WARNING, "can not open %s", filename);
     psync_apipool_release(api);
     psync_interval_tree_free(tree);
-    if (err==P_NOENT)
+    if (err==P_NOENT){
+      perm_fail_upload_task(taskid);
       return 0;
+    }
     else
       return -1;
   }

@@ -638,6 +638,7 @@ void psync_fstask_stop_and_delete_file(psync_fsfileid_t fileid){
   res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE fileid=? AND status!=10");
   psync_sql_bind_int(res, 1, fileid);
   psync_sql_run_free(res);
+  psync_fs_mark_openfile_deleted(-fileid);
 }
 
 int psync_fstask_can_unlink(psync_fsfolderid_t folderid, const char *name){
@@ -1440,6 +1441,8 @@ void psync_fstask_init(){
   psync_sql_res *res;
   psync_variant_row row;
   res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE status IN (1, 2)");
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE status=12");
   psync_sql_run_free(res);
   res=psync_sql_query("SELECT id, type, folderid, fileid, text1, text2, int1, int2, sfolderid FROM fstask ORDER BY id");
   while ((row=psync_sql_fetch_row(res))){

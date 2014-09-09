@@ -280,7 +280,7 @@ typedef DWORD psync_fs_err_t;
 #define P_CONNRESET  WSAECONNRESET
 #define P_INTR       WSAEINTR
 
-#define P_NOENT      ERROR_PATH_NOT_FOUND
+#define P_NOENT      ERROR_FILE_NOT_FOUND
 #define P_EXIST      ERROR_ALREADY_EXISTS
 #define P_NOSPC      ERROR_HANDLE_DISK_FULL
 #define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
