@@ -34,9 +34,13 @@
 
 #define PSYNC_LIB_VERSION "1.1.0"
 
-#define PSYNC_API_HOST     "binapi.pcloud.com"
+#define PSYNC_API_HOST     "api70.pcloud.com"
+#define PSYNC_API_PORT     8398
+#define PSYNC_API_PORT_SSL 8399
+
+/*#define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
-#define PSYNC_API_PORT_SSL 443
+#define PSYNC_API_PORT_SSL 443*/
 
 #define PSYNC_API_AHOST     "api.pcloud.com"
 #define PSYNC_API_APORT     8398
@@ -131,6 +135,11 @@
 #define PSYNC_P2P_SLEEP_WAIT_DOWNLOAD  20000
 
 #define PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS 20000
+#define PSYNC_CRYPTO_PBKDF2_SALT_LEN   64
+#define PSYNC_CRYPTO_RSA_SIZE          4096
+
+#define PSYNC_CRYPTO_TYPE_RSA4096_64BYTESALT_20000IT 0
+#define PSYNC_CRYPTO_PUB_TYPE_RSA4096                0
 
 #define PSYNC_HTTP_RESP_BUFFER 4000
 

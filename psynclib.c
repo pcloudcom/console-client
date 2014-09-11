@@ -48,6 +48,7 @@
 #include "plocalnotify.h"
 #include "pcache.h"
 #include "pfileops.h"
+#include "pcloudcrypto.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -1226,3 +1227,10 @@ void psync_run_new_version(psync_new_version_t *ver){
   exit(0);
 }
 
+int psync_crypto_setup(const char *password){
+  return psync_cloud_crypto_setup(password);
+}
+
+int psync_crypto_start(const char *password){
+  return psync_cloud_crypto_start(password);
+}

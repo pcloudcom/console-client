@@ -25,27 +25,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "pssl.h"
-#include "psynclib.h"
-#include <string.h>
+#ifndef _PCLOUD_CRYPTO_H
+#define _PCLOUD_CRYPTO_H
 
-static void psync_ssl_free_psync_encrypted_data_t(psync_encrypted_data_t e){
-  psync_ssl_memclean(e->data, e->datalen);
-  psync_free(e);
-}
+int psync_cloud_crypto_setup(const char *password);
+int psync_cloud_crypto_start(const char *password);
 
-void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin){
-  psync_ssl_free_psync_encrypted_data_t(bin);
-}
-
-void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
-  psync_ssl_memclean(key->key, key->keylen);
-  psync_free(key);
-}
-
-psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len){
-  psync_encrypted_symmetric_key_t ret;
-  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
-  ret->datalen=len;
-  return ret;
-}
+#endif

@@ -161,6 +161,9 @@ char *psync_strnormalize_filename(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1)
 char *psync_strndup(const char *str, size_t len) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
 
+unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size_t *ret_length);
+unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size_t *ret_length);
+
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
 void psync_sql_close();
 int psync_sql_reopen(const char *path);

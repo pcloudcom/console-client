@@ -200,6 +200,25 @@ typedef struct {
 #define PSYNC_PERM_ALL (PSYNC_PERM_READ|PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 #define PSYNC_PERM_WRITE (PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 
+#define PSYNC_CRYPTO_SETUP_SUCCESS       0
+#define PSYNC_CRYPTO_SETUP_NOT_SUPPORTED -1
+#define PSYNC_CRYPTO_SETUP_KEYGEN_FAILED 1
+#define PSYNC_CRYPTO_SETUP_CANT_CONNECT  2
+#define PSYNC_CRYPTO_SETUP_NOT_LOGGED_IN 3
+#define PSYNC_CRYPTO_SETUP_ALREADY_SETUP 4
+#define PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR 5
+
+#define PSYNC_CRYPTO_START_SUCCESS         0
+#define PSYNC_CRYPTO_START_NOT_SUPPORTED   -1
+#define PSYNC_CRYPTO_START_ALREADY_STARTED 1 
+#define PSYNC_CRYPTO_START_CANT_CONNECT    2
+#define PSYNC_CRYPTO_START_NOT_LOGGED_IN   3
+#define PSYNC_CRYPTO_START_NOT_SETUP       4
+#define PSYNC_CRYPTO_START_UNKNOWN_KEY_FORMAT 5
+#define PSYNC_CRYPTO_START_BAD_PASSWORD    6
+#define PSYNC_CRYPTO_START_KEYS_DONT_MATCH 7
+#define PSYNC_CRYPTO_START_UNKNOWN_ERROR   8
+
 typedef struct {
   const char *localname;
   const char *localpath;
@@ -731,6 +750,17 @@ void psync_run_new_version(psync_new_version_t *ver);
 int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
+
+/*
+ * Crypto functions.
+ * 
+ * psync_crypto_setup() - setups crypto with a given password
+ * psync_crypto_start() - starts crypto with a given password
+ * 
+ */
+
+int psync_crypto_setup(const char *password);
+int psync_crypto_start(const char *password);
 
 #if defined(P_OS_WINDOWS)
 char psync_getMountPoint();

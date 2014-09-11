@@ -278,7 +278,7 @@ void psync_ssl_rand_strong(unsigned char *buf, int num){
   int ret;
   if (seeds<2){
     unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
-    psync_get_random_seed(seed, NULL, 0);
+    psync_get_random_seed(seed, buf, num);
     RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
     seeds++;
   }
@@ -390,6 +390,14 @@ psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rs
   return ret;
 }
 
+psync_rsa_publickey_t psync_ssl_rsa_load_public(const unsigned char *keydata, size_t keylen){
+  return d2i_RSAPublicKey(NULL, &keydata, keylen);
+}
+
+psync_rsa_privatekey_t psync_ssl_rsa_load_private(const unsigned char *keydata, size_t keylen){
+  return d2i_RSAPrivateKey(NULL, &keydata, keylen);
+}
+
 psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
   const unsigned char *p=bin->data;
   return d2i_RSAPublicKey(NULL, &p, bin->datalen);
@@ -400,11 +408,11 @@ psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bi
   return d2i_RSAPrivateKey(NULL, &p, bin->datalen);
 }
 
-psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen, const char *salt, size_t saltlen){
+psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen, const unsigned char *salt, size_t saltlen, size_t iterations){
   psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
   key->keylen=keylen;
-  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), (const unsigned char *)salt, 
-                                saltlen, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS, keylen, key->key);
+  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), salt, 
+                                saltlen, iterations, keylen, key->key);
   return key;
 }
 
