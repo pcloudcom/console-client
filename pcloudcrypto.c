@@ -275,10 +275,10 @@ static int psync_cloud_crypto_download_keys(unsigned char **rsapriv, size_t *rsa
         goto def2;
       *rsaprivlen=rsaprivstructlen-offsetof(priv_key_ver1, key);
       *rsapriv=(unsigned char *)psync_malloc(*rsaprivlen);
-      memcpy(*rsapriv, rsapubstruct+offsetof(priv_key_ver1, key), *rsaprivlen);
+      memcpy(*rsapriv, rsaprivstruct+offsetof(priv_key_ver1, key), *rsaprivlen);
       *saltlen=PSYNC_CRYPTO_PBKDF2_SALT_LEN;
       *salt=(unsigned char *)psync_malloc(PSYNC_CRYPTO_PBKDF2_SALT_LEN);
-      memcpy(*salt, rsapubstruct+offsetof(priv_key_ver1, salt), PSYNC_CRYPTO_PBKDF2_SALT_LEN);
+      memcpy(*salt, rsaprivstruct+offsetof(priv_key_ver1, salt), PSYNC_CRYPTO_PBKDF2_SALT_LEN);
       *iterations=PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS;
       break;
     default:
@@ -359,7 +359,7 @@ int psync_cloud_crypto_start(const char *password){
       load_str_to(&row[1], &salt, &saltlen);
     else{
       assert(!strcmp(id, "crypto_private_iter"));
-      iterations=psync_get_number(row[1]);
+      iterations=atoi(psync_get_string(row[1]));
     }
   }
   psync_sql_free_result(res);
@@ -432,5 +432,32 @@ int psync_cloud_crypto_start(const char *password){
   psync_free(rsapriv);
   psync_free(rsapub);
   psync_free(salt);
+  debug(D_NOTICE, "crypto successfully started");
   return PSYNC_CRYPTO_START_SUCCESS;
+}
+
+int psync_cloud_crypto_stop(){
+  crypto_started_un=0;
+  pthread_rwlock_wrlock(&crypto_lock);
+  if (!crypto_started_l){
+    pthread_rwlock_unlock(&crypto_lock);
+    return PSYNC_CRYPTO_STOP_NOT_STARTED;
+  }
+  crypto_started_l=0;
+  psync_ssl_rsa_free_public(crypto_pubkey);
+  crypto_pubkey=PSYNC_INVALID_RSA;
+  psync_ssl_rsa_free_private(crypto_privkey);
+  crypto_privkey=PSYNC_INVALID_RSA;
+  pthread_rwlock_unlock(&crypto_lock);
+  pthread_rwlock_unlock(&crypto_lock);
+  debug(D_NOTICE, "stopped crypto");
+  return PSYNC_CRYPTO_STOP_SUCCESS;
+}
+
+int psync_cloud_crypto_isstarted(){
+  int ret;
+  pthread_rwlock_rdlock(&crypto_lock);
+  ret=crypto_started_l;
+  pthread_rwlock_unlock(&crypto_lock);
+  return ret;
 }

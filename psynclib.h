@@ -219,6 +219,10 @@ typedef struct {
 #define PSYNC_CRYPTO_START_KEYS_DONT_MATCH 7
 #define PSYNC_CRYPTO_START_UNKNOWN_ERROR   8
 
+#define PSYNC_CRYPTO_STOP_SUCCESS          0
+#define PSYNC_CRYPTO_STOP_NOT_SUPPORTED    -1
+#define PSYNC_CRYPTO_STOP_NOT_STARTED      1 
+
 typedef struct {
   const char *localname;
   const char *localpath;
@@ -761,6 +765,8 @@ void psync_fs_stop();
 
 int psync_crypto_setup(const char *password);
 int psync_crypto_start(const char *password);
+int psync_crypto_stop();
+int psync_crypto_isstarted();
 
 #if defined(P_OS_WINDOWS)
 char psync_getMountPoint();

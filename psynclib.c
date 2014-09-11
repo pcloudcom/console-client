@@ -1234,3 +1234,12 @@ int psync_crypto_setup(const char *password){
 int psync_crypto_start(const char *password){
   return psync_cloud_crypto_start(password);
 }
+
+int psync_crypto_stop(){
+  return psync_cloud_crypto_stop();
+}
+
+int psync_crypto_isstarted(){
+  return psync_cloud_crypto_isstarted();
+}
+
