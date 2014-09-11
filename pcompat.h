@@ -280,7 +280,7 @@ typedef DWORD psync_fs_err_t;
 #define P_CONNRESET  WSAECONNRESET
 #define P_INTR       WSAEINTR
 
-#define P_NOENT      ERROR_PATH_NOT_FOUND
+#define P_NOENT      ERROR_FILE_NOT_FOUND
 #define P_EXIST      ERROR_ALREADY_EXISTS
 #define P_NOSPC      ERROR_HANDLE_DISK_FULL
 #define P_DQUOT      ERROR_HANDLE_DISK_FULL // is there such error?
@@ -360,6 +360,9 @@ typedef struct {
 #define INVALID_HANDLE_VALUE -1
 #endif
 
+#define PSYNC_SOCKET_ERROR      -1
+#define PSYNC_SOCKET_WOULDBLOCK -2
+
 #if !defined(__socklen_t_defined) && !defined(HAVE_SOCKET_LEN_T) && !defined(socklen_t)
 #if defined(P_OS_WINDOWS)
   typedef int socklen_t;
@@ -405,6 +408,7 @@ int psync_socket_pendingdata_buf_thread(psync_socket *sock);
 int psync_socket_readable(psync_socket *sock);
 int psync_socket_writable(psync_socket *sock);
 int psync_socket_read(psync_socket *sock, void *buff, int num);
+int psync_socket_read_noblock(psync_socket *sock, void *buff, int num);
 int psync_socket_read_thread(psync_socket *sock, void *buff, int num);
 int psync_socket_write(psync_socket *sock, const void *buff, int num);
 int psync_socket_readall(psync_socket *sock, void *buff, int num);
@@ -455,6 +459,6 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result);
 
 int psync_run_update_file(const char *path);
 int psync_invalidate_os_cache_needed();
-int psync_invalidate_os_cache();
+int psync_invalidate_os_cache(const char *path);
 
 #endif

@@ -157,7 +157,7 @@ void psync_status_recalc_to_upload(){
   psync_uint_row row;
   psync_stat_t st;
   uint64_t bytestou;
-  uint32_t filestou, ofilestou;
+  uint32_t filestou;
   
   res=psync_sql_query("SELECT COUNT(*), SUM(f.size) FROM task t, localfile f WHERE t.type=? AND t.localitemid=f.id");
   psync_sql_bind_uint(res, 1, PSYNC_UPLOAD_FILE);
@@ -184,13 +184,11 @@ void psync_status_recalc_to_upload(){
     psync_free(filename);
   }
   psync_sql_free_result(res);
-  ofilestou=psync_status.filestoupload;
   psync_status.filestoupload=filestou;
   psync_status.bytestoupload=bytestou;
   if (!filestou)
     psync_status.uploadspeed=0;
-  if (ofilestou!=filestou)
-    psync_status.status=psync_calc_status();
+  psync_status.status=psync_calc_status();
 }
 
 static void psync_status_recalc_to_upload_async_thread(){

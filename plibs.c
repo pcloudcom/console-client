@@ -289,7 +289,16 @@ void psync_sql_lock(){
     struct timespec start, end;
     unsigned long msec;
     psync_nanotime(&start);
+#if defined(P_OS_LINUX)
+    memcpy(&end, &start, sizeof(end));
+    end.tv_sec+=30;
+    if (pthread_mutex_timedlock(&psync_db_mutex, &end)){
+      debug(D_BUG, "sql mutex timed out");
+      abort();
+    }
+#else
     pthread_mutex_lock(&psync_db_mutex);
+#endif
     psync_nanotime(&end);
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)

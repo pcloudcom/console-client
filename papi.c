@@ -398,10 +398,55 @@ binresult *get_result_thread(psync_socket *sock){
   return res;
 }
 
-binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres){
+void async_result_reader_init(async_result_reader *reader){
+  reader->state=0;
+  reader->bytesread=0;
+  reader->bytestoread=sizeof(uint32_t);
+  reader->data=(unsigned char *)&reader->respsize;
+}
+
+void async_result_reader_destroy(async_result_reader *reader){
+  if (reader->state==1)
+    psync_free(reader->data);
+}
+
+int get_result_async(psync_socket *sock, async_result_reader *reader){
+  int rd;
+again:
+  rd=psync_socket_read_noblock(sock, reader->data+reader->bytesread, reader->bytestoread-reader->bytesread);
+  if (rd==PSYNC_SOCKET_WOULDBLOCK)
+    return ASYNC_RES_NEEDMORE;
+  else if (rd==PSYNC_SOCKET_ERROR || rd==0){
+    if (reader->state==1)
+      psync_free(reader->data);
+    async_result_reader_init(reader);
+    reader->result=NULL;
+    return ASYNC_RES_READY;
+  }
+  reader->bytesread+=rd;
+  if (reader->bytesread==reader->bytestoread){
+    if (reader->state==0){
+      reader->state=1;
+      reader->bytesread=0;
+      reader->bytestoread=reader->respsize;
+      reader->data=(unsigned char *)psync_malloc(reader->respsize);
+      goto again;
+    }
+    else{
+      assert(reader->state==1);
+      reader->result=parse_result(reader->data, reader->respsize);
+      psync_free(reader->data);
+      async_result_reader_init(reader);
+      return ASYNC_RES_READY;
+    }
+  }
+  else
+    return ASYNC_RES_NEEDMORE;
+}
+
+unsigned char *do_prepare_command(const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, size_t additionalalloc, size_t *retlen){
   size_t i, plen;
-  unsigned char *data;
-  void *sdata;
+  unsigned char *data, *sdata;
   /* 2 byte len (not included), 1 byte cmdlen, 1 byte paramcnt, cmdlen bytes cmd*/
   plen=cmdlen+2;
   if (datalen!=-1)
@@ -415,7 +460,7 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
       plen+=params[i].paramnamelen+2;
   if (unlikely_log(plen>0xffff))
     return NULL;
-  sdata=data=(unsigned char *)psync_malloc(plen+2);
+  sdata=data=(unsigned char *)psync_malloc(plen+2+additionalalloc);
   memcpy(data, &plen, 2);
   data+=2;
   if (datalen!=-1){
@@ -446,6 +491,16 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
       *data++=params[i].num&1;
   }
   plen+=2;
+  *retlen=plen;
+  return sdata;
+}
+
+binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres){
+  unsigned char *sdata;
+  size_t plen;
+  sdata=do_prepare_command(command, cmdlen, params, paramcnt, datalen, 0, &plen);
+  if (!sdata)
+    return NULL;
   if (readres&2){
     if (unlikely_log(psync_socket_writeall_thread(sock, sdata, plen)!=plen)){
       psync_free(sdata);

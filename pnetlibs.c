@@ -142,6 +142,21 @@ psync_socket *psync_apipool_get_from_cache(){
   return ret;
 }
 
+void psync_apipool_prepare(){
+  if (psync_cache_has(API_CACHE_KEY))
+    return;
+  else{
+    psync_socket *ret;
+    ret=psync_get_api();
+    if (unlikely_log(!ret))
+      psync_timer_notify_exception();
+    else{
+      debug(D_NOTICE, "prepared api connection");
+      psync_apipool_release(ret);
+    }
+  }
+}
+
 void psync_apipool_release(psync_socket *api){
   psync_cache_add(API_CACHE_KEY, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
 }
@@ -212,7 +227,7 @@ int psync_handle_api_result(uint64_t result){
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
   }
-  else if (result==2003 || result==2009 || result==2005 || result==2029)
+  else if (result==2003 || result==2009 || result==2005 || result==2029 || result==2067)
     return PSYNC_NET_PERMFAIL;
   else if (result==2007){
     debug(D_ERROR, "trying to delete root folder");
@@ -1996,6 +2011,9 @@ int psync_net_scan_upload_for_blocks(psync_socket *api, psync_list *rlist, psync
 static int is_revision_local(const unsigned char *localhashhex, uint64_t filesize, psync_fileid_t fileid){
   psync_sql_res *res;
   psync_uint_row row;
+  // listrevisions does not return zero sized revisions, so do we
+  if (filesize==0)
+    return 1;
   res=psync_sql_query("SELECT f.fileid FROM filerevision f, hashchecksum h WHERE f.fileid=? AND f.hash=h.hash AND h.size=? AND h.checksum=?");
   psync_sql_bind_uint(res, 1, fileid);
   psync_sql_bind_uint(res, 2, filesize);
@@ -2011,7 +2029,7 @@ static int download_file_revisions(psync_fileid_t fileid){
   binresult *res;
   const binresult *revs, *meta;
   psync_sql_res *fr, *hc;
-  uint64_t result, hash;
+  uint64_t result, hash, size;
   uint32_t i;
   api=psync_apipool_get();
   if (unlikely(!api))
@@ -2034,16 +2052,18 @@ static int download_file_revisions(psync_fileid_t fileid){
   revs=psync_find_result(res, "revisions", PARAM_ARRAY);
   meta=psync_find_result(res, "metadata", PARAM_HASH);
   psync_sql_start_transaction();
-  fr=psync_sql_prep_statement("REPLACE INTO filerevision (fileid, hash, ctime) VALUES (?, ?, ?)");
-  psync_sql_bind_uint(fr, 1, fileid);
+  fr=psync_sql_prep_statement("REPLACE INTO filerevision (fileid, hash, ctime, size) VALUES (?, ?, ?, ?)");
   hc=psync_sql_prep_statement("REPLACE INTO hashchecksum (hash, size, checksum) VALUES (?, ?, ?)");
   for (i=0; i<revs->length; i++){
     hash=psync_find_result(revs->array[i], "hash", PARAM_NUM)->num;
+    size=psync_find_result(revs->array[i], "size", PARAM_NUM)->num;
+    psync_sql_bind_uint(fr, 1, fileid);
     psync_sql_bind_uint(fr, 2, hash);
     psync_sql_bind_uint(fr, 3, psync_find_result(revs->array[i], "created", PARAM_NUM)->num);
+    psync_sql_bind_uint(fr, 4, size);
     psync_sql_run(fr);
     psync_sql_bind_uint(hc, 1, hash);
-    psync_sql_bind_uint(hc, 2, psync_find_result(revs->array[i], "size", PARAM_NUM)->num);
+    psync_sql_bind_uint(hc, 2, size);
     psync_sql_bind_lstring(hc, 3, psync_find_result(revs->array[i], PSYNC_CHECKSUM, PARAM_STR)->str, PSYNC_HASH_DIGEST_HEXLEN);
     psync_sql_run(hc);
   }

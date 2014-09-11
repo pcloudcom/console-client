@@ -43,6 +43,10 @@ static inline psync_interval_tree_t *psync_interval_tree_get_first(psync_interva
   return psync_interval_tree_element(psync_tree_get_first(&tree->tree));
 }
 
+static inline psync_interval_tree_t *psync_interval_tree_get_last(psync_interval_tree_t *tree){
+  return psync_interval_tree_element(psync_tree_get_last(&tree->tree));
+}
+
 static inline psync_interval_tree_t *psync_interval_tree_get_next(psync_interval_tree_t *tree){
   return psync_interval_tree_element(psync_tree_get_next(&tree->tree));
 }
@@ -51,10 +55,16 @@ static inline void psync_interval_tree_del(psync_interval_tree_t **tree, psync_i
   *tree=psync_interval_tree_element(psync_tree_get_del(&(*tree)->tree, &node->tree));
 }
 
-static inline psync_interval_tree_t *psync_interval_tree_first_interval_after(psync_interval_tree_t *tree, uint64_t point){
+static inline psync_interval_tree_t *psync_interval_tree_first_interval_containing_or_after(psync_interval_tree_t *tree, uint64_t point){
   while (tree){
-    if (point>=tree->to && point>tree->from)
-      tree=psync_interval_tree_element(tree->tree.right);
+    if (point>=tree->to){
+      if (tree->tree.right)
+        tree=psync_interval_tree_element(tree->tree.right);
+      else{
+        tree=psync_interval_tree_get_next(tree);
+        break;
+      }
+    }
     else if (point>=tree->from || !tree->tree.left)
       break;
     else

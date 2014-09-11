@@ -121,6 +121,22 @@ void *psync_cache_get(const char *key){
   return NULL;
 }
 
+int psync_cache_has(const char *key){
+  hash_element *he;
+  psync_uint_t h;
+  int ret;
+  h=hash_func(key);
+  ret=0;
+  pthread_mutex_lock(&cache_mutexes[h%CACHE_LOCKS]);
+  psync_list_for_each_element (he, &cache_hash[h], hash_element, list)
+    if (!strcmp(key, he->key)){
+      ret=1;
+      break;
+    }
+  pthread_mutex_unlock(&cache_mutexes[h%CACHE_LOCKS]);
+  return ret;
+}
+
 static void cache_timer(psync_timer_t timer, void *ptr){
   hash_element *he=(hash_element *)ptr;
   pthread_mutex_lock(&cache_mutexes[he->hash%CACHE_LOCKS]);

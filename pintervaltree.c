@@ -67,6 +67,7 @@ static psync_interval_tree_t *psync_interval_tree_get_add(psync_interval_tree_t 
     psync_interval_tree_t *e, *e2;
     e=tree;
     while (1){
+      assert(from<=to);
       if (e->from<=from && e->to>=from){
         if (e->to>=to)
           return tree;
@@ -81,7 +82,6 @@ static psync_interval_tree_t *psync_interval_tree_get_add(psync_interval_tree_t 
           return tree;
         }
         else{
-          assert(e->from>to);
           e2=psync_interval_new(from, to);
           return psync_interval_tree_consume_intervals(psync_interval_tree_element(psync_tree_get_add_before(&tree->tree, &e->tree, &e2->tree)), e2);
         }

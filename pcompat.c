@@ -1201,6 +1201,43 @@ int psync_socket_read(psync_socket *sock, void *buff, int num){
     return psync_socket_read_plain(sock, buff, num);
 }
 
+static int psync_socket_read_noblock_ssl(psync_socket *sock, void *buff, int num){
+  int r;
+  r=psync_ssl_read(sock->ssl, buff, num);
+  if (r==PSYNC_SSL_FAIL){
+    sock->pending=0;
+    if (likely_log(psync_ssl_errno==PSYNC_SSL_ERR_WANT_READ || psync_ssl_errno==PSYNC_SSL_ERR_WANT_WRITE))
+      return PSYNC_SOCKET_WOULDBLOCK;
+    else{
+      psync_sock_set_err(P_CONNRESET);
+      return -1;
+    }
+  }
+  else
+    return r;
+}
+
+static int psync_socket_read_noblock_plain(psync_socket *sock, void *buff, int num){
+  int r;
+  r=psync_read_socket(sock->sock, buff, num);
+  if (r==SOCKET_ERROR){
+    sock->pending=0;
+    if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+      return PSYNC_SOCKET_WOULDBLOCK;
+    else
+      return -1;
+  }
+  else
+    return r;
+}
+
+int psync_socket_read_noblock(psync_socket *sock, void *buff, int num){
+  if (sock->ssl)
+    return psync_socket_read_noblock_ssl(sock, buff, num);
+  else
+    return psync_socket_read_noblock_plain(sock, buff, num);
+}
+
 static int psync_socket_read_ssl_thread(psync_socket *sock, void *buff, int num){
   int r;
   if (!psync_ssl_pendingdata(sock->ssl) && !sock->pending && psync_wait_socket_read_timeout(sock->sock))
@@ -2079,7 +2116,7 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
   HANDLE ret;
   if (flags&P_O_EXCL)
     cdis=CREATE_NEW;
-  else if (flags&(P_O_CREAT|P_O_TRUNC))
+  else if ((flags&(P_O_CREAT|P_O_TRUNC))==(P_O_CREAT|P_O_TRUNC))
     cdis=CREATE_ALWAYS;
   else if (flags&P_O_CREAT)
     cdis=OPEN_ALWAYS;
@@ -2207,8 +2244,12 @@ ssize_t psync_file_pread(psync_file_t fd, void *buf, size_t count, uint64_t offs
   ov.OffsetHigh=li.HighPart;
   if (ReadFile(fd, buf, count, &ret, &ov))
     return ret;
-  else
-    return -1;
+  else{
+    if (GetLastError()==ERROR_HANDLE_EOF)
+      return 0;
+    else
+      return -1;
+  }
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -2444,20 +2485,28 @@ int psync_run_update_file(const char *path){
 }
 
 int psync_invalidate_os_cache_needed(){
-#if defined(P_OS_MACOSX)
+#if defined(P_OS_WINDOWS)
   return 1;
 #else
   return 0;
 #endif
 }
 
-int psync_invalidate_os_cache(){
-#if defined(P_OS_MACOSX)
+int psync_invalidate_os_cache(const char *path){
+#if defined(P_OS_WINDOWS)
+  wchar_t *wpath;
+  debug(D_NOTICE, "got invalidate for path %s", path);
+  wpath=utf8_to_wchar(path);
+  SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH, wpath, NULL);
+  psync_free(wpath);
+  return 0;
+#elif defined(P_OS_MACOSX)
   int pfds[2];
   pid_t pid;
   debug(D_NOTICE, "running osascript to refresh finder");
   if (unlikely(pipe(pfds))){
     debug(D_ERROR, "pipe failed");
+    return -1;
   }
   pid=fork();
   if (unlikely(pid==-1)){
@@ -2471,7 +2520,7 @@ int psync_invalidate_os_cache(){
   repeat with i from 1 to count of Finder windows\n\
     tell window i\n\
       try\n\
-        update every item with necessity\n\
+        update every item in every folder with necessity\n\
       end try\n\
     end tell\n\
   end repeat\n\
@@ -2479,15 +2528,14 @@ end tell\n";
     int status;
     close(pfds[0]);
     status=strlen(cmd);
-    if (write(pfds[1], cmd, status)!=status){
+    if (write(pfds[1], cmd, status)!=status || close(pfds[1])!=0){
       debug(D_ERROR, "write to pipe failed");
       kill(pid, SIGKILL);
       waitpid(pid, &status, 0);
       return -1;
     }
-    close(pfds[1]);
     if (waitpid(pid, &status, 0)==0 && WIFEXITED(status) && WEXITSTATUS(status)==0){
-      debug(D_ERROR, "execution of osascript succeded");
+      debug(D_NOTICE, "execution of osascript succeded");
       return 0;
     }
     else{

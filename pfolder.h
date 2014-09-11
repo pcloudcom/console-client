@@ -37,6 +37,7 @@
 psync_folderid_t psync_get_folderid_by_path(const char *path) PSYNC_NONNULL(1) PSYNC_PURE;
 psync_folderid_t psync_get_folderid_by_path_or_create(const char *path) PSYNC_NONNULL(1);
 char *psync_get_path_by_folderid(psync_folderid_t folderid, size_t *retlen);
+char *psync_get_path_by_folderid_sep(psync_folderid_t folderid, const char *sep, size_t *retlen);
 char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen);
 char *psync_local_path_for_local_folder(psync_folderid_t localfolderid, psync_syncid_t syncid, size_t *retlen);
 char *psync_local_path_for_local_file(psync_fileid_t localfileid, size_t *retlen);

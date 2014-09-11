@@ -266,7 +266,7 @@ psync_tree *psync_tree_get_del(psync_tree *tree, psync_tree *node){
     return psync_tree_replace_me_with(tree, node, node->left);
   else {
     psync_tree *el, *parent, **addr;
-    if (psync_tree_height(node->left)>psync_tree_height(node->right)){
+    if (node->left->height>node->right->height){
       el=node->left;
       addr=&node->left;
       while (el->right){

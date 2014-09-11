@@ -35,74 +35,95 @@
 #include "pdownload.h"
 #include "pstatus.h"
 #include "pcallbacks.h"
+#include "ptree.h"
 #include <string.h>
 
-static psync_folderid_t *synced_down_folders[PSYNC_DIR_HASH_SIZE];
-static uint32_t synced_down_folders_cnt[PSYNC_DIR_HASH_SIZE];
+typedef struct {
+  psync_tree tree;
+  psync_folderid_t folderid;
+} synced_down_folder;
+
+static psync_tree *synced_down_folders=PSYNC_TREE_EMPTY;
 
 static pthread_mutex_t sync_down_mutex=PTHREAD_MUTEX_INITIALIZER;
 
-void psync_add_folder_to_downloadlist(psync_folderid_t folderid){
-  psync_folderid_t *a;
-  size_t h;
-  uint32_t i, c;
-  h=folderid%PSYNC_DIR_HASH_SIZE;
-  pthread_mutex_lock(&sync_down_mutex);
-  c=synced_down_folders_cnt[h];
-  a=synced_down_folders[h];
-  for (i=0; i<c; i++)
-    if (unlikely(a[i]==folderid)){
-      pthread_mutex_unlock(&sync_down_mutex);
-      return;
+static psync_tree *psync_new_sd_folder(psync_folderid_t folderid){
+  synced_down_folder *f=psync_new(synced_down_folder);
+  f->folderid=folderid;
+  return &f->tree;
+}
+
+static void psync_add_folder_to_downloadlist_locked(psync_folderid_t folderid){
+  synced_down_folder *f;
+  if (!synced_down_folders){
+    psync_tree_add_after(&synced_down_folders, NULL, psync_new_sd_folder(folderid));
+    return;
+  }
+  f=psync_tree_element(synced_down_folders, synced_down_folder, tree);
+  while (1){
+    if (folderid<f->folderid){
+      if (f->tree.left)
+        f=psync_tree_element(f->tree.left, synced_down_folder, tree);
+      else{
+        f->tree.left=psync_new_sd_folder(folderid);
+        psync_tree_added_at(&synced_down_folders, &f->tree, f->tree.left);
+      }
     }
-  a=psync_realloc(a, sizeof(psync_folderid_t)*(c+1));
-  a[c]=folderid;
-  synced_down_folders_cnt[h]=c+1;
-  synced_down_folders[h]=a;
+    else if (folderid>f->folderid){
+      if (f->tree.right)
+        f=psync_tree_element(f->tree.right, synced_down_folder, tree);
+      else{
+        f->tree.right=psync_new_sd_folder(folderid);
+        psync_tree_added_at(&synced_down_folders, &f->tree, f->tree.right);
+      }
+    }
+    else
+      return;
+  }
+}
+
+void psync_add_folder_to_downloadlist(psync_folderid_t folderid){
+  pthread_mutex_lock(&sync_down_mutex);
+  psync_add_folder_to_downloadlist_locked(folderid);
   pthread_mutex_unlock(&sync_down_mutex);
 }
 
 void psync_del_folder_from_downloadlist(psync_folderid_t folderid){
-  psync_folderid_t *a, *b;
-  size_t h;
-  uint32_t i, c;
-  h=folderid%PSYNC_DIR_HASH_SIZE;
+  synced_down_folder *f;
   pthread_mutex_lock(&sync_down_mutex);
-  c=synced_down_folders_cnt[h];
-  a=synced_down_folders[h];
-  for (i=0; i<c; i++)
-    if (a[i]==folderid){
-      if (c==1)
-        b=NULL;
-      else{
-        b=psync_new_cnt(psync_folderid_t, c-1);
-        memcpy(b, a, sizeof(psync_folderid_t)*i);
-        memcpy(b+i, a+i+1, sizeof(psync_folderid_t)*(c-i-1));
-      }
-      synced_down_folders[h]=b;
-      synced_down_folders_cnt[h]=c-1;
-      psync_free(a);
-      pthread_mutex_unlock(&sync_down_mutex);
-      return;
+  f=psync_tree_element(synced_down_folders, synced_down_folder, tree);
+  while (f){
+    if (folderid<f->folderid)
+      f=psync_tree_element(f->tree.left, synced_down_folder, tree);
+    else if (folderid>f->folderid)
+      f=psync_tree_element(f->tree.right, synced_down_folder, tree);
+    else{
+      psync_tree_del(&synced_down_folders, &f->tree);
+      psync_free(f);
+      break;
     }
+  }
   pthread_mutex_unlock(&sync_down_mutex);
 }
 
 int psync_is_folder_in_downloadlist(psync_folderid_t folderid){
-  psync_folderid_t *a;
-  size_t h;
-  uint32_t i, c;
-  h=folderid%PSYNC_DIR_HASH_SIZE;
+  synced_down_folder *f;
+  int ret;
+  ret=0;
   pthread_mutex_lock(&sync_down_mutex);
-  c=synced_down_folders_cnt[h];
-  a=synced_down_folders[h];
-  for (i=0; i<c; i++)
-    if (a[i]==folderid){
-      pthread_mutex_unlock(&sync_down_mutex);
-      return 1;
+  f=psync_tree_element(synced_down_folders, synced_down_folder, tree);
+  while (f){
+    if (folderid<f->folderid)
+      f=psync_tree_element(f->tree.left, synced_down_folder, tree);
+    else if (folderid>f->folderid)
+      f=psync_tree_element(f->tree.right, synced_down_folder, tree);
+    else{
+      ret=1;
+      break;
     }
+  }
   pthread_mutex_unlock(&sync_down_mutex);
-  return 0;
+  return ret;
 }
 
 void psync_increase_local_folder_taskcnt(psync_folderid_t lfolderid){
@@ -372,11 +393,11 @@ void psync_syncer_check_delayed_syncs(){
 void psync_syncer_init(){
   psync_sql_res *res;
   psync_uint_row row;
-  memset(synced_down_folders, 0, sizeof(synced_down_folders));
-  memset(synced_down_folders_cnt, 0, sizeof(synced_down_folders_cnt));
   res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY));
+  pthread_mutex_lock(&sync_down_mutex);
   while ((row=psync_sql_fetch_rowint(res)))
-    psync_add_folder_to_downloadlist(row[0]);
+    psync_add_folder_to_downloadlist_locked(row[0]);
+  pthread_mutex_unlock(&sync_down_mutex);
   psync_sql_free_result(res);
   psync_run_thread("syncer", psync_syncer_thread);
 }

@@ -91,6 +91,7 @@ void psync_netlibs_init();
 
 psync_socket *psync_apipool_get();
 psync_socket *psync_apipool_get_from_cache();
+void psync_apipool_prepare();
 void psync_apipool_release(psync_socket *api);
 void psync_apipool_release_bad(psync_socket *api);
 

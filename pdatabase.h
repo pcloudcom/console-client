@@ -43,20 +43,22 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 3
+#define PSYNC_DATABASE_VERSION 6
 
 #define PSYNC_DATABASE_CONFIG \
 "\
 PRAGMA journal_mode=WAL;\
 PRAGMA synchronous=1;\
 PRAGMA locking_mode=EXCLUSIVE;\
+PRAGMA cache_size=8000;\
+PRAGMA foreign_keys=ON;\
 "
 
 #define PSYNC_DATABASE_STRUCTURE \
 "\
-BEGIN;\
 PRAGMA page_size=4096;\
 PRAGMA cache_size=8000;\
+BEGIN;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
   name VARCHAR(1024), ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0, subdircnt INTEGER DEFAULT 0);\
@@ -86,7 +88,7 @@ CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
 CREATE INDEX IF NOT EXISTS klocalfilefileid ON localfile(fileid);\
 CREATE INDEX IF NOT EXISTS klocalfilechecksum ON localfile(checksum);\
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfilerpsn ON localfile(syncid, localparentfolderid, name);\
-CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id), uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS syncedfolder (syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, folderid INTEGER, localfolderid INTEGER, synctype INTEGER,\
   PRIMARY KEY (syncid, folderid));\
 CREATE INDEX IF NOT EXISTS ksyncedfolderdownfolderid ON syncedfolder(folderid);\
@@ -114,8 +116,9 @@ CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
 CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, dependfstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE,\
 PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
-CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
-CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id), uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER, oldhash INTEGER);\
+CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS fstaskfileid (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, fileid INTEGER, PRIMARY KEY (fstaskid, fileid)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
@@ -144,6 +147,19 @@ COMMIT;\
   "BEGIN;\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
 UPDATE setting SET value=3 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+ALTER TABLE pagecachetask ADD oldhash INTEGER;\
+UPDATE setting SET value=4 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+DROP TABLE IF EXISTS localfileupload;\
+CREATE TABLE IF NOT EXISTS localfileupload (localfileid INTEGER REFERENCES localfile(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (localfileid, uploadid)) " P_SQL_WOWROWID ";\
+UPDATE setting SET value=5 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+CREATE TABLE IF NOT EXISTS fstaskfileid (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, fileid INTEGER, PRIMARY KEY (fstaskid, fileid)) " P_SQL_WOWROWID ";\
+UPDATE setting SET value=6 WHERE id='dbversion';\
 COMMIT;"
 };
 

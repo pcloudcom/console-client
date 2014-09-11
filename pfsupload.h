@@ -33,5 +33,6 @@
 void psync_fsupload_init();
 void psync_fsupload_wake();
 void psync_fsupload_stop_upload_locked(uint64_t taskid);
+int psync_fsupload_in_current_small_uploads_batch_locked(uint64_t taskid);
 
 #endif
