@@ -709,9 +709,6 @@ static int psync_wait_socket_readable_microsec(psync_socket_t sock, long sec, lo
 
 static psync_socket_t connect_res(struct addrinfo *res){
   psync_socket_t sock;
-#if defined(P_OS_WINDOWS)
-  static const unsigned long non_blocking_mode=1;
-#endif
 #if defined(SOCK_NONBLOCK)
 #if defined(SOCK_CLOEXEC)
 #define PSOCK_TYPE_OR (SOCK_NONBLOCK|SOCK_CLOEXEC)
@@ -727,8 +724,10 @@ static psync_socket_t connect_res(struct addrinfo *res){
     if (likely_log(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
-      unsigned long mode = non_blocking_mode;
+      unsigned long mode=1;
+      int bufsize=PSYNC_SOCK_WIN_SNDBUF;
       ioctlsocket(sock, FIONBIO, &mode);
+      setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(bufsize));
 #elif defined(P_OS_POSIX)
       fcntl(sock, F_SETFD, FD_CLOEXEC);
       fcntl(sock, F_SETFL, fcntl(sock, F_GETFL)|O_NONBLOCK);
