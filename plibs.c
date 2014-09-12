@@ -758,7 +758,7 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
 
 psync_sql_res *psync_sql_query(const char *sql){
   psync_sql_res *ret;
-  ret=psync_cache_get(sql);
+  ret=(psync_sql_res *)psync_cache_get(sql);
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     psync_sql_lock();

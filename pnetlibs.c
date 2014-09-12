@@ -641,7 +641,7 @@ int psync_set_default_sendbuf(psync_socket *sock){
 int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
   psync_int_t uplspeed, writebytes, wr, wwr;
   psync_uint_t thissec;
-    uplspeed=psync_setting_get_int(_PS(maxuploadspeed));
+  uplspeed=psync_setting_get_int(_PS(maxuploadspeed));
   if (uplspeed==0){
     writebytes=0;
     while (num){
