@@ -57,6 +57,7 @@ typedef struct {
   psync_folderid_t folderid;
   uint8_t cansyncup;
   uint8_t cansyncdown;
+  uint8_t canshare;
 } pfolder_t;
 
 typedef struct {
@@ -470,6 +471,7 @@ psuggested_folders_t *psync_get_sync_suggestions();
 pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
+pentry_t *psync_stat_path(const char *remotepath);
 int psync_is_name_to_ignore(const char *name);
 
 /* Returns the code of the last error that occured when calling psync_* functions

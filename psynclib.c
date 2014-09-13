@@ -630,6 +630,10 @@ pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, 
   return psync_list_remote_folder(folderid, listtype);
 }
 
+pentry_t *psync_stat_path(const char *remotepath){
+  return psync_folder_stat_path(remotepath);
+}
+
 int psync_is_name_to_ignore(const char *name){
   const char *ign, *sc, *pt;
   char *namelower;
