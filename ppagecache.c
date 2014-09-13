@@ -1471,7 +1471,7 @@ static void psync_pagecache_read_unmodified_readahead(psync_openfile_t *of, uint
       readahead=size_round_up_to_page(of->currentspeed*4);
     }
   }
-  if (of->runningreads>=3 && !range)
+  if (of->runningreads>=6 && !range)
     return;
   if (offset==0 && (size<PSYNC_FS_MIN_READAHEAD_START) && readahead<PSYNC_FS_MIN_READAHEAD_START-size)
     readahead=PSYNC_FS_MIN_READAHEAD_START-size;

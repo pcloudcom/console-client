@@ -42,6 +42,10 @@ int psync_fs_start(){
 void psync_fs_stop(){
 }
 
+char *psync_fs_getmountpoint(){
+  return NULL;
+}
+
 void psync_fs_refresh(){
 }
 

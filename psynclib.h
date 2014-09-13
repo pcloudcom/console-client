@@ -57,6 +57,7 @@ typedef struct {
   psync_folderid_t folderid;
   uint8_t cansyncup;
   uint8_t cansyncdown;
+  uint8_t canshare;
 } pfolder_t;
 
 typedef struct {
@@ -493,6 +494,7 @@ psuggested_folders_t *psync_get_sync_suggestions();
 pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
+pentry_t *psync_stat_path(const char *remotepath);
 int psync_is_name_to_ignore(const char *name);
 
 /* Returns the code of the last error that occured when calling psync_* functions
@@ -748,12 +750,15 @@ void psync_run_new_version(psync_new_version_t *ver);
  * psync_fs_start() - starts the filesystem
  * psync_fs_isstarted() - returns 1 if the filesystem is started and 0 otherwise
  * psync_fs_stop() - stops the filesystem
+ * psync_fs_getmountpoint() - returns current mountpoint of the filesystem, or NULL if the filesystem is not mounted,
+ *                            you are supposed to free the returned pointer
  * 
  */
 
 int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
+char *psync_fs_getmountpoint();
 
 /*
  * Crypto functions.
@@ -767,10 +772,6 @@ int psync_crypto_setup(const char *password);
 int psync_crypto_start(const char *password);
 int psync_crypto_stop();
 int psync_crypto_isstarted();
-
-#if defined(P_OS_WINDOWS)
-char psync_getMountPoint();
-#endif
 
 #ifdef __cplusplus
 }

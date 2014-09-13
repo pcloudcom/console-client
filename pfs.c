@@ -1986,11 +1986,6 @@ ready:
   return mp;
 }
 
-char psync_getMountPoint()
-{
-    return mount_point;
-}
-
 #else
 
 static char *psync_fuse_get_mountpoint(){
@@ -2005,6 +2000,17 @@ static char *psync_fuse_get_mountpoint(){
 }
 
 #endif
+
+char *psync_fs_getmountpoint(){
+  char *ret;
+  pthread_mutex_lock(&start_mutex);
+  if (started==1)
+    ret=psync_strdup(psync_current_mountpoint);
+  else
+    ret=NULL;
+  pthread_mutex_unlock(&start_mutex);
+  return ret;
+}
 
 static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");
