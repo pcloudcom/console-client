@@ -727,16 +727,15 @@ void psync_run_new_version(psync_new_version_t *ver);
  * psync_fs_start() - starts the filesystem
  * psync_fs_isstarted() - returns 1 if the filesystem is started and 0 otherwise
  * psync_fs_stop() - stops the filesystem
+ * psync_fs_getmountpoint() - returns current mountpoint of the filesystem, or NULL if the filesystem is not mounted,
+ *                            you are supposed to free the returned pointer
  * 
  */
 
 int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
-
-#if defined(P_OS_WINDOWS)
-char psync_getMountPoint();
-#endif
+char *psync_fs_getmountpoint();
 
 #ifdef __cplusplus
 }
