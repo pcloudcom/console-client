@@ -1668,7 +1668,7 @@ found:
       while (!pwt->ready){
         debug(D_NOTICE, "waiting for page #%lu to be read", (unsigned long)pwt->waiting_for->pageid);
         pthread_cond_wait(&pwt->cond, &wait_page_mutexes[waiter_mutex_by_hash(hash)]);
-        debug(D_NOTICE, "waited for page #%lu", (unsigned long)pwt->waiting_for->pageid);
+        debug(D_NOTICE, "waited for page"); // not safe to use pwt->waiting_for here
       }
       if (pwt->error)
         ret=pwt->error;

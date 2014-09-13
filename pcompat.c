@@ -725,7 +725,9 @@ static psync_socket_t connect_res(struct addrinfo *res){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
       unsigned long mode=1;
+      int bufsize=PSYNC_SOCK_WIN_SNDBUF;
       ioctlsocket(sock, FIONBIO, &mode);
+      setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(bufsize));
 #elif defined(P_OS_POSIX)
       fcntl(sock, F_SETFD, FD_CLOEXEC);
       fcntl(sock, F_SETFL, fcntl(sock, F_GETFL)|O_NONBLOCK);
