@@ -73,7 +73,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
 int psync_ssl_connect_finish(void *sslconn, const char *hostname);
 void psync_ssl_free(void *sslconn);
 int psync_ssl_shutdown(void *sslconn);
-int psync_ssl_pendingdata(void *sslconn) PSYNC_PURE;
+int psync_ssl_pendingdata(void *sslconn);
 int psync_ssl_read(void *sslconn, void *buf, int num);
 int psync_ssl_write(void *sslconn, const void *buf, int num);
 
@@ -98,6 +98,7 @@ psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password
 psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len);
 void psync_ssl_free_symmetric_key(psync_symmetric_key_t key);
 
+psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t rsa, const unsigned char *data, size_t datalen);
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key);
 psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t rsa, const psync_encrypted_symmetric_key_t enckey);
 

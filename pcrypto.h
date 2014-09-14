@@ -60,6 +60,7 @@ typedef struct {
 
 #define PSYNC_CRYPTO_INVALID_ENCODER NULL
 
+psync_symmetric_key_t psync_crypto_aes256_gen_key_len(size_t len);
 psync_symmetric_key_t psync_crypto_aes256_ctr_gen_key();
 psync_crypto_aes256_ctr_encoder_decoder_t psync_crypto_aes256_ctr_encoder_decoder_create(psync_symmetric_key_t key);
 void psync_crypto_aes256_ctr_encoder_decoder_free(psync_crypto_aes256_ctr_encoder_decoder_t enc);

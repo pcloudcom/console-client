@@ -222,7 +222,14 @@ typedef struct {
 
 #define PSYNC_CRYPTO_STOP_SUCCESS          0
 #define PSYNC_CRYPTO_STOP_NOT_SUPPORTED    -1
-#define PSYNC_CRYPTO_STOP_NOT_STARTED      1 
+#define PSYNC_CRYPTO_STOP_NOT_STARTED      1
+
+#define PSYNC_CRYPTO_SUCCESS               0
+#define PSYNC_CRYPTO_NOT_STARTED           -1
+#define PSYNC_CRYPTO_RSA_ERROR             -2
+#define PSYNC_CRYPTO_FOLDER_NOT_FOUND      -3
+#define PSYNC_CRYPTO_INVALID_KEY           -4
+#define PSYNC_CRYPTO_CANT_CONNECT          -5
 
 typedef struct {
   const char *localname;
@@ -763,15 +770,23 @@ char *psync_fs_getmountpoint();
 /*
  * Crypto functions.
  * 
- * psync_crypto_setup() - setups crypto with a given password
- * psync_crypto_start() - starts crypto with a given password
- * 
+ * psync_crypto_setup() - setups crypto with a given password, on error returns one of PSYNC_CRYPTO_SETUP_* errors
+ * psync_crypto_start() - starts crypto with a given password, on error returns one of PSYNC_CRYPTO_START_* errors
+ * psync_crypto_stop() - stops crypto, on error returns one of PSYNC_CRYPTO_STOP_* errors
+ * psync_crypto_isstarted() - returns 1 if crypto is started and 0 otherwise
+ * psync_crypto_mkdir() - creates encrypted folder with name in folderid. If the parent 
+ *                        folder is not encrypted itself the folder name will be stored in plaintext
+ *                        and only the contents will be encrypted. Returns 0 for success, or non-zero
+ *                        on error. Negative error values are local and positive error values are API
+ *                        error codes. If err is not null it is set to point to an static error string
+ *                        message that you do NOT have to free.
  */
 
 int psync_crypto_setup(const char *password);
 int psync_crypto_start(const char *password);
 int psync_crypto_stop();
 int psync_crypto_isstarted();
+int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err);
 
 #ifdef __cplusplus
 }

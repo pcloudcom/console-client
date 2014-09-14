@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 6
+#define PSYNC_DATABASE_VERSION 7
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -122,6 +122,8 @@ CREATE TABLE IF NOT EXISTS fstaskfileid (fstaskid INTEGER REFERENCES fstask(id) 
 CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, created INTEGER, family INTEGER, socktype INTEGER, protocol INTEGER,\
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
+CREATE TABLE IF NOT EXISTS cryptofolderkey (folderid INTEGER PRIMARY KEY REFERENCES folder(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
+CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
@@ -160,6 +162,11 @@ COMMIT;",
   "BEGIN;\
 CREATE TABLE IF NOT EXISTS fstaskfileid (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, fileid INTEGER, PRIMARY KEY (fstaskid, fileid)) " P_SQL_WOWROWID ";\
 UPDATE setting SET value=6 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+CREATE TABLE IF NOT EXISTS cryptofolderkey (folderid INTEGER PRIMARY KEY REFERENCES folder(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
+CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
+UPDATE setting SET value=7 WHERE id='dbversion';\
 COMMIT;"
 };
 

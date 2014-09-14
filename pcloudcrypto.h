@@ -32,5 +32,6 @@ int psync_cloud_crypto_setup(const char *password);
 int psync_cloud_crypto_start(const char *password);
 int psync_cloud_crypto_stop();
 int psync_cloud_crypto_isstarted();
+int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err);
 
 #endif

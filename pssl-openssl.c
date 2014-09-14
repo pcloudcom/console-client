@@ -55,8 +55,7 @@ void openssl_locking_callback(int mode, int type, const char *file, int line){
 }
 
 void openssl_thread_id(CRYPTO_THREADID *id){
-  static PSYNC_THREAD int i;
-  CRYPTO_THREADID_set_pointer(id, &i);
+  CRYPTO_THREADID_set_pointer(id, &psync_ssl_errno);
 }
 
 static void openssl_thread_setup(){
@@ -414,6 +413,19 @@ psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password
   PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), salt, 
                                 saltlen, iterations, keylen, key->key);
   return key;
+}
+
+psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t rsa, const unsigned char *data, size_t datalen){
+  psync_encrypted_symmetric_key_t ret;
+  int len;
+  ret=(psync_encrypted_symmetric_key_t)psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+RSA_size(rsa));
+  len=RSA_public_encrypt(datalen, data, ret->data, rsa, RSA_PKCS1_OAEP_PADDING);
+  if (unlikely_log(len==-1)){
+    psync_free(ret);
+    return PSYNC_INVALID_ENC_SYM_KEY;
+  }
+  ret->datalen=len;
+  return ret;
 }
 
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
