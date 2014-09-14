@@ -28,12 +28,16 @@
 #include "pfileops.h"
 #include "plibs.h"
 #include "pdiff.h"
+#include "pfolder.h"
 
 void psync_ops_create_folder_in_db(const binresult *meta){
   psync_sql_res *res;
   const binresult *name;
-  uint64_t userid, perms;
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
+  uint64_t userid, perms, flags;
+  flags=0;
+  if ((name=psync_check_result(meta, "encrypted", PARAM_BOOL)) && name->num)
+    flags|=PSYNC_FOLDER_FLAG_ENCRYPTED;
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
     userid=psync_my_userid;
     perms=PSYNC_PERM_ALL;
@@ -50,6 +54,7 @@ void psync_ops_create_folder_in_db(const binresult *meta){
   psync_sql_bind_lstring(res, 5, name->str, name->length);
   psync_sql_bind_uint(res, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(res, 7, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_bind_uint(res, 8, flags);
   psync_sql_run_free(res);
 }
 
