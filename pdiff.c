@@ -259,7 +259,7 @@ static void process_createfolder(const binresult *entry){
   static psync_sql_res *st=NULL, *st2=NULL;
   psync_sql_res *res, *stmt, *stmt2;
   const binresult *meta, *name;
-  uint64_t userid, perms, mtime;
+  uint64_t userid, perms, mtime, flags;
   psync_uint_row row;
   psync_folderid_t parentfolderid, folderid, localfolderid;
 //  char *localname;
@@ -276,7 +276,7 @@ static void process_createfolder(const binresult *entry){
     return;
   }
   if (!st){
-    st=psync_sql_prep_statement("REPLACE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime, subdircnt) VALUES (?, ?, ?, ?, ?, ?, ?, 0)");
+    st=psync_sql_prep_statement("INSERT OR IGNORE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime, flags, subdircnt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)");
     if (!st)
       return;
     st2=psync_sql_prep_statement("UPDATE folder SET subdircnt=subdircnt+1, mtime=? WHERE id=?");
@@ -284,6 +284,9 @@ static void process_createfolder(const binresult *entry){
       return;
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
+  flags=0;
+  if ((name=psync_check_result(meta, "encrypted", PARAM_BOOL)) && name->num)
+    flags|=PSYNC_FOLDER_FLAG_ENCRYPTED;
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
     userid=psync_my_userid;
     perms=PSYNC_PERM_ALL;
@@ -303,7 +306,20 @@ static void process_createfolder(const binresult *entry){
   psync_sql_bind_lstring(st, 5, name->str, name->length);
   psync_sql_bind_uint(st, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(st, 7, mtime);
+  psync_sql_bind_uint(st, 8, flags);
   psync_sql_run(st);
+  if (!psync_sql_affected_rows()){
+    res=psync_sql_prep_statement("UPDATE folder SET parentfolderid=?, userid=?, permissions=?, name=?, ctime=?, mtime=?, flags=? WHERE id=?");
+    psync_sql_bind_uint(res, 1, parentfolderid);
+    psync_sql_bind_uint(res, 2, userid);
+    psync_sql_bind_uint(res, 3, perms);
+    psync_sql_bind_lstring(res, 4, name->str, name->length);
+    psync_sql_bind_uint(res, 5, psync_find_result(meta, "created", PARAM_NUM)->num);
+    psync_sql_bind_uint(res, 6, mtime);
+    psync_sql_bind_uint(res, 7, flags);
+    psync_sql_bind_uint(res, 8, folderid);
+    psync_sql_run_free(res);
+  }
   psync_sql_bind_uint(st2, 1, mtime);
   psync_sql_bind_uint(st2, 2, parentfolderid);
   psync_sql_run(st2);
@@ -381,7 +397,7 @@ static void process_modifyfolder(const binresult *entry){
   psync_sql_res *res;
   psync_full_result_int *fres1, *fres2;
   const binresult *meta, *name;
-  uint64_t userid, perms, mtime;
+  uint64_t userid, perms, mtime, flags;
   psync_variant_row vrow;
   psync_uint_row row;
   psync_folderid_t parentfolderid, folderid, oldparentfolderid, localfolderid;
@@ -398,11 +414,14 @@ static void process_modifyfolder(const binresult *entry){
     return;
   }
   if (!st){
-    st=psync_sql_prep_statement("REPLACE INTO folder (id, parentfolderid, userid, permissions, name, ctime, mtime) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    st=psync_sql_prep_statement("UPDATE folder SET parentfolderid=?, userid=?, permissions=?, name=?, ctime=?, mtime=?, flags=? WHERE id=?");
     if (!st)
       return;
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
+  flags=0;
+  if ((name=psync_check_result(meta, "encrypted", PARAM_BOOL)) && name->num)
+    flags|=PSYNC_FOLDER_FLAG_ENCRYPTED;
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
     userid=psync_my_userid;
     perms=PSYNC_PERM_ALL;
@@ -429,13 +448,14 @@ static void process_modifyfolder(const binresult *entry){
   }
   psync_sql_free_result(res);
   mtime=psync_find_result(meta, "modified", PARAM_NUM)->num;
-  psync_sql_bind_uint(st, 1, folderid);
-  psync_sql_bind_uint(st, 2, parentfolderid);
-  psync_sql_bind_uint(st, 3, userid);
-  psync_sql_bind_uint(st, 4, perms);
-  psync_sql_bind_lstring(st, 5, name->str, name->length);
-  psync_sql_bind_uint(st, 6, psync_find_result(meta, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(st, 7, mtime);
+  psync_sql_bind_uint(st, 1, parentfolderid);
+  psync_sql_bind_uint(st, 2, userid);
+  psync_sql_bind_uint(st, 3, perms);
+  psync_sql_bind_lstring(st, 4, name->str, name->length);
+  psync_sql_bind_uint(st, 5, psync_find_result(meta, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(st, 6, mtime);
+  psync_sql_bind_uint(st, 7, flags);
+  psync_sql_bind_uint(st, 8, folderid);
   psync_sql_run(st);
   if (oldparentfolderid!=parentfolderid){
     res=psync_sql_prep_statement("UPDATE folder SET subdircnt=subdircnt-1, mtime=? WHERE id=?");
@@ -629,7 +649,7 @@ static void check_for_deletedfileid(const binresult *meta){
       psync_sql_bind_null(res, off++);\
   } while (0)
   
-static void bind_meta(psync_sql_res *res, const binresult *meta, int off){
+static int bind_meta(psync_sql_res *res, const binresult *meta, int off){
   const binresult *br;
   bind_num("created");
   bind_num("modified");
@@ -651,6 +671,7 @@ static void bind_meta(psync_sql_res *res, const binresult *meta, int off){
   bind_opt_num("audiobitrate");
   bind_opt_num("audiosamplerate");
   bind_opt_num("rotate");
+  return off;
 }
 
 static void insert_revision(psync_fileid_t fileid, uint64_t hash, uint64_t ctime, uint64_t size){
@@ -690,7 +711,7 @@ static void process_createfile(const binresult *entry){
     return;
   }
   if (!st)
-    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+    st=psync_sql_prep_statement("INSERT OR IGNORE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
                                 "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
                                 "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
@@ -714,6 +735,21 @@ static void process_createfile(const binresult *entry){
   psync_sql_bind_lstring(st, 6, name->str, name->length);
   bind_meta(st, meta, 7);
   psync_sql_run(st);
+  if (!psync_sql_affected_rows()){
+    int off;
+    res=psync_sql_prep_statement("UPDATE file SET id=?, parentfolderid=?, userid=?, size=?, hash=?, name=?, ctime=?, mtime=?, category=?, thumb=?, icon=?, "
+                                "artist=?, album=?, title=?, genre=?, trackno=?, width=?, height=?, duration=?, fps=?, videocodec=?, audiocodec=?, videobitrate=?, "
+                                "audiobitrate=?, audiosamplerate=?, rotate=? WHERE id=?");
+    psync_sql_bind_uint(res, 1, fileid);
+    psync_sql_bind_uint(res, 2, parentfolderid);
+    psync_sql_bind_uint(res, 3, userid);
+    psync_sql_bind_uint(res, 4, size);
+    psync_sql_bind_uint(res, 5, hash);
+    psync_sql_bind_lstring(res, 6, name->str, name->length);
+    off=bind_meta(res, meta, 7);
+    psync_sql_bind_uint(res, off, fileid);
+    psync_sql_run_free(res);
+  }
   insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num, size);
   if (psync_is_folder_in_downloadlist(parentfolderid) && !psync_is_name_to_ignore(name->str)){
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
@@ -784,9 +820,9 @@ static void process_modifyfile(const binresult *entry){
   if (psync_get_number(row[1])==psync_my_userid)
     used_quota-=oldsize;
   if (!st)
-    st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
-                                "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
-                                "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    st=psync_sql_prep_statement("UPDATE file SET id=?, parentfolderid=?, userid=?, size=?, hash=?, name=?, ctime=?, mtime=?, category=?, thumb=?, icon=?, "
+                                "artist=?, album=?, title=?, genre=?, trackno=?, width=?, height=?, duration=?, fps=?, videocodec=?, audiocodec=?, videobitrate=?, "
+                                "audiobitrate=?, audiosamplerate=?, rotate=? WHERE id=?");
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
   parentfolderid=psync_find_result(meta, "parentfolderid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
@@ -803,7 +839,8 @@ static void process_modifyfile(const binresult *entry){
   psync_sql_bind_uint(st, 4, size);
   psync_sql_bind_uint(st, 5, hash);
   psync_sql_bind_lstring(st, 6, name->str, name->length);
-  bind_meta(st, meta, 7);
+  i=bind_meta(st, meta, 7);
+  psync_sql_bind_uint(st, i, fileid);
   psync_sql_run(st);
   insert_revision(fileid, hash, psync_find_result(meta, "modified", PARAM_NUM)->num, size);
   oldparentfolderid=psync_get_number(row[0]);
@@ -916,7 +953,7 @@ void psync_diff_create_file(const binresult *meta){
   psync_sql_res *st;
   const binresult *name;
   uint64_t userid, fileid, hash, size;
-  st=psync_sql_prep_statement("REPLACE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
+  st=psync_sql_prep_statement("INSERT OR IGNORE INTO file (id, parentfolderid, userid, size, hash, name, ctime, mtime, category, thumb, icon, "
                                 "artist, album, title, genre, trackno, width, height, duration, fps, videocodec, audiocodec, videobitrate, "
                                 "audiobitrate, audiosamplerate, rotate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   name=psync_find_result(meta, "name", PARAM_STR);

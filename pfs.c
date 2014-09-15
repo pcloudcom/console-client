@@ -1264,6 +1264,7 @@ static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info 
 }
 
 static int psync_fs_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi){
+  psync_fs_set_thread_name();
   debug(D_NOTICE, "fsyncdir %s", path);
   if (unlikely_log(psync_sql_sync()))
     return -EIO;
@@ -1284,6 +1285,7 @@ static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, ui
 static int psync_fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
   time_t currenttime;
+  psync_fs_set_thread_name();
   of=fh_to_openfile(fi->fh);
   currenttime=psync_timer_time();
   pthread_mutex_lock(&of->mutex);
@@ -1984,11 +1986,6 @@ ready:
   return mp;
 }
 
-char psync_getMountPoint()
-{
-    return mount_point;
-}
-
 #else
 
 static char *psync_fuse_get_mountpoint(){
@@ -2003,6 +2000,17 @@ static char *psync_fuse_get_mountpoint(){
 }
 
 #endif
+
+char *psync_fs_getmountpoint(){
+  char *ret;
+  pthread_mutex_lock(&start_mutex);
+  if (started==1)
+    ret=psync_strdup(psync_current_mountpoint);
+  else
+    ret=NULL;
+  pthread_mutex_unlock(&start_mutex);
+  return ret;
+}
 
 static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");

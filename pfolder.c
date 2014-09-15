@@ -613,36 +613,33 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
   uint64_t perms;
   list=folder_list_init();
   if (listtype&PLIST_FOLDERS){
-    res=psync_sql_query("SELECT id, permissions, name FROM folder WHERE parentfolderid=? ORDER BY name");
-    if (res){
-      psync_sql_bind_uint(res, 1, folderid);
-      while ((row=psync_sql_fetch_row(res))){
-        entry.folder.folderid=psync_get_number(row[0]);
-        perms=psync_get_number(row[1]);
-        entry.name=psync_get_lstring(row[2], &namelen);
-        entry.namelen=namelen;
-        entry.isfolder=1;
-        entry.folder.cansyncup=((perms&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE);
-        entry.folder.cansyncdown=((perms&PSYNC_PERM_READ)==PSYNC_PERM_READ);
-        folder_list_add(list, &entry);
-      }
-      psync_sql_free_result(res);
+    res=psync_sql_query("SELECT id, permissions, name, userid FROM folder WHERE parentfolderid=? ORDER BY name");
+    psync_sql_bind_uint(res, 1, folderid);
+    while ((row=psync_sql_fetch_row(res))){
+      entry.folder.folderid=psync_get_number(row[0]);
+      perms=psync_get_number(row[1]);
+      entry.folder.cansyncup=((perms&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE);
+      entry.folder.cansyncdown=((perms&PSYNC_PERM_READ)==PSYNC_PERM_READ);
+      entry.folder.canshare=(psync_my_userid==psync_get_number(row[3]));
+      entry.name=psync_get_lstring(row[2], &namelen);
+      entry.namelen=namelen;
+      entry.isfolder=1;
+      folder_list_add(list, &entry);
     }
+    psync_sql_free_result(res);
   }  
   if (listtype&PLIST_FILES){
-    res=psync_sql_query("SELECT id, size, name FROM file WHERE parentfolderid=?");
-    if (res){
-      psync_sql_bind_uint(res, 1, folderid);
-      while ((row=psync_sql_fetch_row(res))){
-        entry.file.fileid=psync_get_number(row[0]);
-        entry.file.size=psync_get_number(row[1]);
-        entry.name=psync_get_lstring(row[2], &namelen);
-        entry.namelen=namelen;
-        entry.isfolder=0;
-        folder_list_add(list, &entry);
-      }
-      psync_sql_free_result(res);
+    res=psync_sql_query("SELECT id, size, name FROM file WHERE parentfolderid=? ORDER BY name");
+    psync_sql_bind_uint(res, 1, folderid);
+    while ((row=psync_sql_fetch_row(res))){
+      entry.file.fileid=psync_get_number(row[0]);
+      entry.file.size=psync_get_number(row[1]);
+      entry.name=psync_get_lstring(row[2], &namelen);
+      entry.namelen=namelen;
+      entry.isfolder=0;
+      folder_list_add(list, &entry);
     }
+    psync_sql_free_result(res);
   }  
   return folder_list_finalize(list);
 }
@@ -679,6 +676,75 @@ pfolder_list_t *psync_list_local_folder(const char *path, psync_listtype_t listt
   }
   else
     return folder_list_finalize(ft.folderlist);
+}
+
+pentry_t *psync_folder_stat_path(const char *remotepath){
+  psync_folderid_t folderid;
+  psync_sql_res *res;
+  psync_uint_row row;
+  pentry_t *ret;
+  char *cremotepath;
+  size_t len, olen;
+  if (remotepath[0]!='/')
+    return NULL;
+  if (remotepath[1]==0){
+    ret=psync_new(pentry_t);
+    ret->name="/";
+    ret->namelen=1;
+    ret->isfolder=1;
+    ret->folder.folderid=0;
+    ret->folder.cansyncup=1;
+    ret->folder.cansyncdown=1;
+    ret->folder.canshare=0;
+  }
+  olen=len=strlen(remotepath);
+  while (remotepath[--len]!='/');
+  if (len==0)
+    folderid=0;
+  else{
+    cremotepath=psync_new_cnt(char, len+1);
+    memcpy(cremotepath, remotepath, len+1);
+    cremotepath[len]=0;
+    folderid=psync_get_folderid_by_path(cremotepath);
+    psync_free(cremotepath);
+    if (folderid==PSYNC_INVALID_FOLDERID)
+      return NULL;
+  }
+  len++;
+  olen-=len;
+  res=psync_sql_query("SELECT id, permissions, userid FROM folder WHERE parentfolderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_lstring(res, 2, remotepath+len, olen);
+  if ((row=psync_sql_fetch_rowint(res))){
+    ret=(pentry_t *)psync_malloc(sizeof(pentry_t)+olen+1);
+    ret->folder.folderid=row[0];
+    ret->folder.cansyncup=((row[1]&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE);
+    ret->folder.cansyncdown=((row[1]&PSYNC_PERM_READ)==PSYNC_PERM_READ);
+    ret->folder.canshare=(psync_my_userid==row[2]);
+    ret->name=(char *)(ret+1);
+    ret->namelen=olen;
+    ret->isfolder=1;
+    memcpy(ret+1, remotepath+len, olen+1);
+    psync_sql_free_result(res);
+    return ret;
+  }
+  psync_sql_free_result(res);
+  res=psync_sql_query("SELECT id, size FROM file WHERE parentfolderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_lstring(res, 2, remotepath+len, olen);
+  if ((row=psync_sql_fetch_rowint(res))){
+    ret=(pentry_t *)psync_malloc(sizeof(pentry_t)+olen+1);
+    ret->file.fileid=row[0];
+    ret->file.size=row[1];
+    ret->name=(char *)(ret+1);
+    ret->namelen=olen;
+    ret->isfolder=0;
+    memcpy(ret+1, remotepath+len, olen+1);
+    psync_sql_free_result(res);
+    return ret;
+  }
+  psync_sql_free_result(res);
+  return NULL;
 }
 
 typedef struct {
