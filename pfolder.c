@@ -33,6 +33,7 @@
 #include "plist.h"
 #include "pnetlibs.h"
 #include "papi.h"
+#include "pcloudcrypto.h"
 
 #define INITIAL_NAME_BUFF 2000
 #define INITIAL_ENTRY_CNT 128
@@ -226,6 +227,66 @@ static int psync_add_path_to_list(psync_list *lst, psync_folderid_t folderid){
   return -1;
 }
 
+static string_list *str_list_decode(psync_folderid_t folderid, string_list *e){
+  psync_crypto_aes256_text_decoder_t dec;
+  char *fn;
+  dec=psync_cloud_crypto_get_folder_decoder(folderid);
+  if (psync_crypto_is_error(dec)){
+    psync_free(e);
+    return NULL;
+  }
+  fn=psync_cloud_crypto_decode_filename(dec, e->str);
+  psync_cloud_crypto_release_folder_decoder(folderid, dec);
+  psync_free(e);
+  if (!fn)
+    return NULL;
+  e=str_to_list_element(fn, strlen(fn));
+  psync_free(fn);
+  return e;
+}
+
+static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folderid){
+  string_list *e;
+  psync_sql_res *res;
+  psync_variant_row row;
+  const char *str;
+  size_t len;
+  uint32_t flags;
+  e=NULL;
+  while (1){
+    if (folderid==0){
+      if (e)
+        psync_list_add_head(lst, &e->list);
+      e=(string_list *)psync_malloc(sizeof(string_list));
+      e->str=(char *)e;
+      e->len=0;
+      psync_list_add_head(lst, &e->list);
+      return 0;
+    }
+    res=psync_sql_query("SELECT parentfolderid, name, flags FROM folder WHERE id=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    row=psync_sql_fetch_row(res);
+    if (unlikely(!row))
+      break;
+    folderid=psync_get_number(row[0]);
+    str=psync_get_lstring(row[1], &len);
+    flags=psync_get_number(row[2]);
+    if (e){
+      if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+        e=str_list_decode(folderid, e);
+        if (!e)
+          break;
+      }
+      psync_list_add_head(lst, &e->list);
+    }
+    e=str_to_list_element(str, len);
+    psync_sql_free_result(res);
+  }
+  psync_sql_free_result(res);
+  debug(D_ERROR, "folder %lu not found in database", (unsigned long)folderid);
+  return -1;
+}
+
 char *psync_join_string_list(const char *sep, psync_list *lst, size_t *retlen){
   size_t slen, seplen, cnt;
   string_list *e;
@@ -281,7 +342,7 @@ char *psync_get_path_by_folderid_sep(psync_folderid_t folderid, const char *sep,
   int res;
   psync_list_init(&folderlist);
   psync_sql_lock();
-  res=psync_add_path_to_list(&folderlist, folderid);
+  res=psync_add_path_to_list_decode(&folderlist, folderid);
   psync_sql_unlock();
   if (unlikely_log(res)){
     psync_free_string_list(&folderlist);

@@ -40,10 +40,11 @@ typedef struct {
   psync_fsfolderid_t folderid;
   const char *name;
   uint32_t permissions;
+  uint32_t flags;
 } psync_fspath_t;
 
 psync_fspath_t *psync_fsfolder_resolve_path(const char *path);
-psync_fsfolderid_t psync_fsfolderid_by_path(const char *path);
+psync_fsfolderid_t psync_fsfolderid_by_path(const char *path, uint32_t *pflags);
 
 
 #endif

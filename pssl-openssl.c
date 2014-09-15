@@ -92,7 +92,7 @@ int psync_ssl_init(){
       }
     }
     do {
-      psync_get_random_seed(seed, NULL, 0);
+      psync_get_random_seed(seed, NULL, 0, 0);
       RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
     } while (!RAND_status());
     return 0;
@@ -277,7 +277,7 @@ void psync_ssl_rand_strong(unsigned char *buf, int num){
   int ret;
   if (seeds<2){
     unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
-    psync_get_random_seed(seed, buf, num);
+    psync_get_random_seed(seed, buf, num, 1);
     RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
     seeds++;
   }
@@ -287,7 +287,7 @@ void psync_ssl_rand_strong(unsigned char *buf, int num){
     psync_uint_t cnt;
     cnt=0;
     while (ret==0 && cnt++<20){
-      psync_get_random_seed(seed, NULL, 0);
+      psync_get_random_seed(seed, NULL, 0, 0);
       RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
       ret=RAND_bytes(buf, num);
     }
@@ -313,7 +313,7 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
   RSA *rsa;
   BIGNUM *bn;
   unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
-  psync_get_random_seed(seed, seed, sizeof(seed));
+  psync_get_random_seed(seed, seed, sizeof(seed), 0);
   RAND_seed(seed, PSYNC_LHASH_DIGEST_LEN);
   rsa=RSA_new();
   if (unlikely_log(!rsa))
@@ -425,6 +425,19 @@ psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t
     return PSYNC_INVALID_ENC_SYM_KEY;
   }
   ret->datalen=len;
+  return ret;
+}
+
+psync_symmetric_key_t psync_ssl_rsa_decrypt_data(psync_rsa_privatekey_t rsa, const unsigned char *data, size_t datalen){
+  unsigned char buff[2048];
+  psync_symmetric_key_t ret;
+  int len;
+  len=RSA_private_decrypt(datalen, data, buff, rsa, RSA_PKCS1_OAEP_PADDING);
+  if (unlikely_log(len==-1))
+    return PSYNC_INVALID_SYM_KEY;
+  ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
+  ret->keylen=len;
+  memcpy(ret->key, buff, len);
   return ret;
 }
 

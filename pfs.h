@@ -46,6 +46,9 @@
 #define psync_fs_need_per_folder_refresh_const() 1
 #endif
 
+extern char *psync_fake_prefix;
+extern size_t psync_fake_prefix_len;
+
 typedef struct {
   uint64_t frompage;
   uint64_t topage;
@@ -84,6 +87,7 @@ typedef struct {
   unsigned char deleted;
 } psync_openfile_t;
 
+int psync_fs_crypto_err_to_errno(int cryptoerr);
 int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size);
 //void psync_fs_uploading_openfile(uint64_t taskid);
 int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t folderid, const char *name);

@@ -73,11 +73,21 @@ static const uint32_t requiredstatuses[]={
 };
 
 static int psync_send_task_mkdir(psync_socket *api, fsupload_task_t *task){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp")};
-  if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
-    return 0;
-  else
-    return -1;
+  if (task->text2){
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp"),
+                       P_BOOL("encrypted", 1), P_STR("key", task->text2)};
+    if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
+      return 0;
+    else
+      return -1;
+  }
+  else{
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp")};
+    if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
+      return 0;
+    else
+      return -1;
+  }
 }
 
 static void handle_mkdir_api_error(uint64_t result, fsupload_task_t *task){
@@ -115,6 +125,19 @@ static int psync_process_task_mkdir(fsupload_task_t *task){
   psync_ops_create_folder_in_db(meta);
   psync_fstask_folder_created(task->folderid, task->id, folderid, task->text1);
   psync_fs_task_to_folder(task->id, folderid);
+  if (task->text2 && psync_find_result(task->res, "created", PARAM_BOOL)->num){
+    psync_sql_res *res;
+    unsigned char *enckey;
+    size_t enckeylen;
+    enckey=psync_base64_decode((const unsigned char *)task->text2, strlen(task->text2), &enckeylen);
+    if (likely_log(enckey)){
+      res=psync_sql_prep_statement("REPLACE INTO cryptofolderkey (folderid, enckey) VALUES (?, ?)");
+      psync_sql_bind_uint(res, 1, folderid);
+      psync_sql_bind_blob(res, 2, (char *)enckey, enckeylen);
+      psync_sql_run_free(res);
+      psync_free(enckey);
+    }
+  }
   debug(D_NOTICE, "folder %lu/%s created", (unsigned long)task->folderid, task->text1);
   return 0;
 }

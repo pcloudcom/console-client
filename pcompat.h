@@ -133,6 +133,7 @@ typedef unsigned long psync_uint_t;
 #include <unistd.h>
 
 #define P_PRI_U64 PRIu64
+#define P_PRI_D64 PRId64
 
 #define psync_stat stat
 #define psync_fstat fstat
@@ -227,16 +228,22 @@ typedef int psync_file_t;
 #include <ws2tcpip.h>
 #include <winsock2.h>
 #include <BaseTsd.h>
-#if defined(__GNUC__)
-#define psync_def_var_arr(name, type, size) type name[size]
-#define P_PRI_U64 "I64u"
-#else
-#include <malloc.h>
-#define psync_def_var_arr(name, type, size) type *name = (type *)alloca(sizeof(type)*size)
-#define P_PRI_U64 "llu"
 
+#define P_PRI_U64 "I64u"
+#define P_PRI_D64 "I64d"
+
+#if defined(__GNUC__)
+
+#define psync_def_var_arr(name, type, size) type name[size]
+
+#else
+
+#include <malloc.h>
+
+#define psync_def_var_arr(name, type, size) type *name=(type *)alloca(sizeof(type)*size)
 #define atoll _atoi64
 #define snprintf _snprintf
+
 #endif
 
 #if !defined(_SSIZE_T_)
@@ -393,7 +400,7 @@ time_t psync_time();
 void psync_nanotime(struct timespec *tm);
 void psync_yield_cpu();
 
-void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen);
+void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen, int fast);
 
 psync_socket_t psync_create_socket(int domain, int type, int protocol);
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);

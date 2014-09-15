@@ -230,6 +230,7 @@ typedef struct {
 #define PSYNC_CRYPTO_FOLDER_NOT_FOUND      -3
 #define PSYNC_CRYPTO_INVALID_KEY           -4
 #define PSYNC_CRYPTO_CANT_CONNECT          -5
+#define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -6
 
 typedef struct {
   const char *localname;

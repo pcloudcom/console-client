@@ -49,6 +49,7 @@
 #include "pssl.h"
 #include "pfolder.h"
 #include "pnetlibs.h"
+#include "pcloudcrypto.h"
 
 #if defined(P_OS_POSIX)
 #include <signal.h>
@@ -83,8 +84,8 @@ typedef struct {
 static struct fuse_chan *psync_fuse_channel=NULL;
 static struct fuse *psync_fuse=NULL;
 static char *psync_current_mountpoint=NULL;
-static char *psync_fake_prefix=NULL;
-static size_t psync_fake_prefix_len=0;
+char *psync_fake_prefix=NULL;
+size_t psync_fake_prefix_len=0;
 static int64_t psync_fake_fileid=INT64_MIN;
 
 static pthread_mutex_t start_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -551,6 +552,18 @@ static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf
     return psync_creat_local_to_file_stat(cr, stbuf);
 }
 
+int psync_fs_crypto_err_to_errno(int cryptoerr){
+  switch (cryptoerr){
+    case PSYNC_CRYPTO_NOT_STARTED:          return EACCES;
+    case PSYNC_CRYPTO_RSA_ERROR:            return EIO;
+    case PSYNC_CRYPTO_FOLDER_NOT_FOUND:     return ENOENT;
+    case PSYNC_CRYPTO_INVALID_KEY:          return EIO;
+    case PSYNC_CRYPTO_CANT_CONNECT:         return ENOTCONN;
+    case PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED: return EINVAL;
+    default:                                return EINVAL;
+  }
+}
+
 static int psync_fs_getrootattr(struct stat *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
@@ -631,6 +644,21 @@ static int psync_fs_getattr(const char *path, struct stat *stbuf){
   return -ENOENT;
 }
 
+static int filler_decoded(psync_crypto_aes256_text_decoder_t dec, fuse_fill_dir_t filler, void *buf, const char *name, struct stat *st, off_t off){
+  if (dec){
+    char *namedec;
+    int ret;
+    namedec=psync_cloud_crypto_decode_filename(dec, name);
+    if (!namedec)
+      return 0;
+    ret=filler(buf, namedec, st, off);
+    psync_free(namedec);
+    return ret;
+  }
+  else
+    return filler(buf, name, st, off);
+}
+
 static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi){
   psync_sql_res *res;
   psync_variant_row row;
@@ -638,15 +666,26 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   psync_fstask_folder_t *folder;
   psync_tree *trel;
   const char *name;
+  psync_crypto_aes256_text_decoder_t dec;
+  uint32_t flags;
   struct stat st;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
   psync_sql_lock();
-  folderid=psync_fsfolderid_by_path(path);
+  folderid=psync_fsfolderid_by_path(path, &flags);
   if (unlikely_log(folderid==PSYNC_INVALID_FSFOLDERID)){
     psync_sql_unlock();
     return -ENOENT;
   }
+  if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+    dec=psync_cloud_crypto_get_folder_decoder(folderid);
+    if (psync_crypto_is_error(dec)){
+      psync_sql_unlock();
+      return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(dec));
+    }
+  }
+  else
+    dec=NULL;
   filler(buf, ".", NULL, 0);
   if (folderid!=0)
     filler(buf, "..", NULL, 0);
@@ -661,7 +700,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       if (folder && (psync_fstask_find_rmdir(folder, name, 0) || psync_fstask_find_mkdir(folder, name, 0)))
         continue;
       psync_row_to_folder_stat(row, &st);
-      filler(buf, name, &st, 0);
+      filler_decoded(dec, filler, buf, name, &st, 0);
     }
     psync_sql_free_result(res);
     res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=?");
@@ -673,22 +712,24 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       if (folder && psync_fstask_find_unlink(folder, name, 0))
         continue;
       psync_row_to_file_stat(row, &st);
-      filler(buf, name, &st, 0);
+      filler_decoded(dec, filler, buf, name, &st, 0);
     }
     psync_sql_free_result(res);
   }
   if (folder){
     psync_tree_for_each(trel, folder->mkdirs){
       psync_mkdir_to_folder_stat(psync_tree_element(trel, psync_fstask_mkdir_t, tree), &st);
-      filler(buf, psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name, &st, 0);
+      filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name, &st, 0);
     }
     psync_tree_for_each(trel, folder->creats){
       if (!psync_creat_to_file_stat(psync_tree_element(trel, psync_fstask_creat_t, tree), &st))
-        filler(buf, psync_tree_element(trel, psync_fstask_creat_t, tree)->name, &st, 0);
+        filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_creat_t, tree)->name, &st, 0);
     }
     psync_fstask_release_folder_tasks_locked(folder);
   }
   psync_sql_unlock();
+  if (dec)
+    psync_cloud_crypto_release_folder_decoder(folderid, dec);
   return 0;
 }
 
@@ -1485,8 +1526,9 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_CREATE))
     ret=-EACCES;
-  else
-    ret=psync_fstask_mkdir(fpath->folderid, fpath->name);
+  else{
+    ret=psync_fstask_mkdir(fpath->folderid, fpath->name, fpath->flags);
+  }
   psync_sql_unlock();
   psync_free(fpath);
   debug(D_NOTICE, "mkdir %s=%d", path, ret);
@@ -1573,29 +1615,29 @@ static int psync_fs_unlink(const char *path){
   return ret;
 }
 
-static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t src_permissions,
-                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
+static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions, uint32_t srcflags,
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, uint32_t targetflags){
   if (parentfolderid==to_folderid){
-    assertw(targetperms==src_permissions);
-    if (!(src_permissions&PSYNC_PERM_MODIFY))
+    assertw(targetperms==srcpermissions);
+    if (!(srcpermissions&PSYNC_PERM_MODIFY))
       return -EACCES;
   }
   else{
-    if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
+    if (!(srcpermissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
       return -EACCES;
   }
   return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
 }
 
-static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t src_permissions,
-                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
+static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions, uint32_t srcflags,
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, uint32_t targetflags){
   if (parentfolderid==to_folderid){
-    assertw(targetperms==src_permissions);
-    if (!(src_permissions&PSYNC_PERM_MODIFY))
+    assertw(targetperms==srcpermissions);
+    if (!(srcpermissions&PSYNC_PERM_MODIFY))
       return -EACCES;
   }
   else{
-    if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
+    if (!(srcpermissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
       return -EACCES;
   }
   return psync_fstask_rename_file(fileid, parentfolderid, name, to_folderid, new_name);
@@ -1611,7 +1653,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   psync_uint_row row;
   const char *new_name;
   psync_fileorfolderid_t fid;
-  uint32_t targetperms;
+  uint32_t targetperms, targetflags, srcflags;
   int ret;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "rename %s to %s", old_path, new_path);
@@ -1623,6 +1665,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
     if (fold_path && new_path[1]==0 && new_path[0]=='/'){
       to_folderid=0;
       targetperms=PSYNC_PERM_ALL;
+      targetflags=0;
       new_name=NULL;
       goto move_to_root;
     }
@@ -1632,31 +1675,37 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   if (folder && (mkdir=psync_fstask_find_mkdir(folder, fnew_path->name, 0))){
     to_folderid=mkdir->folderid;
     if (mkdir->folderid>0){
-      res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
+      res=psync_sql_query("SELECT permissions, flags FROM folder WHERE id=?");
       psync_sql_bind_uint(res, 1, mkdir->folderid);
-      if ((row=psync_sql_fetch_rowint(res)))
+      if ((row=psync_sql_fetch_rowint(res))){
         targetperms=row[0]&fnew_path->permissions;
+        targetflags=row[1];
+      }
       psync_sql_free_result(res);
       if (!row)
         goto err_enoent;
     }
-    else
+    else{
       targetperms=fnew_path->permissions;
+      targetflags=mkdir->flags;
+    }
     new_name=NULL;
   }
   else if (fnew_path->folderid>=0){
-    res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
+    res=psync_sql_query("SELECT id, permissions, flags FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fnew_path->folderid);
     psync_sql_bind_string(res, 2, fnew_path->name);
     row=psync_sql_fetch_rowint(res);
     if (row && (!folder || !psync_fstask_find_rmdir(folder, fnew_path->name, 0))){
       to_folderid=row[0];
       targetperms=row[1]&fnew_path->permissions;
+      targetflags=row[2];
       new_name=NULL;
     }
     else{
       to_folderid=fnew_path->folderid;
       targetperms=fnew_path->permissions;
+      targetflags=fnew_path->flags;
       new_name=fnew_path->name;
     }
     psync_sql_free_result(res);
@@ -1664,31 +1713,42 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   else{
     to_folderid=fnew_path->folderid;
     targetperms=fnew_path->permissions;
+    targetflags=fnew_path->flags;
     new_name=fnew_path->name;
   }
-  if (folder)
+  if (folder){
     psync_fstask_release_folder_tasks_locked(folder);
+    folder=NULL;
+  }
+  if ((fold_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)!=(targetflags&PSYNC_FOLDER_FLAG_ENCRYPTED)){
+    ret=-EXDEV;
+    goto finish;
+  }
 move_to_root:
   folder=psync_fstask_get_folder_tasks_locked(fold_path->folderid);
   if (folder){
     if ((mkdir=psync_fstask_find_mkdir(folder, fold_path->name, 0))){
-      ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, mkdir->flags,
+                                 to_folderid, new_name, targetperms, targetflags);
       goto finish;
     }
     else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
-      ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, fold_path->flags,
+                               to_folderid, new_name, targetperms, targetflags);
       goto finish;
     }
   }
   if (!folder || !psync_fstask_find_rmdir(folder, fold_path->name, 0)){
     // even if we don't use permissions, it is probably better to use same query as above
-    res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
+    res=psync_sql_query("SELECT id, permissions, flags FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fold_path->folderid);
     psync_sql_bind_string(res, 2, fold_path->name);
     if ((row=psync_sql_fetch_rowint(res))){
       fid=row[0];
+      srcflags=row[2];
       psync_sql_free_result(res);
-      ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, srcflags,
+                                 to_folderid, new_name, targetperms, targetflags);
       goto finish;
     }
     psync_sql_free_result(res);
@@ -1700,7 +1760,8 @@ move_to_root:
     if ((row=psync_sql_fetch_rowint(res))){
       fid=row[0];
       psync_sql_free_result(res);
-      ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, fold_path->flags,
+                               to_folderid, new_name, targetperms, targetflags);
       goto finish;
     }
     psync_sql_free_result(res);

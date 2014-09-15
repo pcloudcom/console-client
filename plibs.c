@@ -164,6 +164,73 @@ char *psync_strcat(const char *str, ...){
   return ptr3;
 }
 
+unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size_t *ret_length){
+  static const unsigned char *table=(const unsigned char *)"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  unsigned char *result;
+  unsigned char *p;
+  uint32_t bits, buff;
+  
+  result=(unsigned char *)psync_malloc(((length+4)/5)*8+1);
+  p=result;
+  
+  bits=0;
+  buff=0; // don't really have to initialize this one, but a compiler that will detect that this is safe is yet to be born
+  
+  while (length){
+    if (bits<5){
+      buff=(buff<<8)|(*str++);
+      length--;
+      bits+=8;
+    }
+    bits-=5;
+    *p++=table[0x1f&(buff>>bits)];
+  }
+
+  while (bits){
+    if (bits<5){
+      buff<<=(5-bits);
+      bits=5;
+    }
+    bits-=5;
+    *p++=table[0x1f&(buff>>bits)];
+  }
+  
+  *ret_length=p-result;
+  *p=0;
+  return result;
+}
+
+unsigned char *psync_base32_decode(const unsigned char *str, size_t length, size_t *ret_length){
+  unsigned char *result, *p;
+  uint32_t bits, buff;
+  unsigned char ch;
+  result=(unsigned char *)psync_malloc((length+7)/8*5+1);
+  p=result;
+  bits=0;
+  buff=0;
+  while (length){
+    ch=*str++;
+    length--;
+    if (ch>='A' && ch<='Z')
+      ch=(ch&0x1f)-1;
+    else if (ch>='2'&&ch<='7')
+      ch-='2'-26;
+    else{
+      psync_free(result);
+      return NULL;
+    }
+    buff=(buff<<5)+ch;
+    bits+=5;
+    if (bits>=8){
+      bits-=8;
+      *p++=buff>>bits;
+    }
+  }
+  *p=0;
+  *ret_length=p-result;
+  return result;
+}
+
 unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size_t *ret_length){
   const unsigned char *current = str;
   unsigned char *p;
@@ -202,7 +269,7 @@ unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size
   size_t i=0, j=0;
   ssize_t ch;
 
-  result=(unsigned char *)psync_malloc(length+1);
+  result=(unsigned char *)psync_malloc((length+3)/4*3+1);
 
   while (length-- > 0){
     ch=base64_reverse_table[*current++];

@@ -435,6 +435,7 @@ static void psync_get_random_seed_linux(psync_lhash_ctx *hctx){
 
 static void psync_get_random_seed_from_query(psync_lhash_ctx *hctx, psync_sql_res *res){
   psync_variant_row row;
+  struct timespec tm;
   int i;
   while ((row=psync_sql_fetch_row(res))){
     for (i=0; i<res->column_count; i++)
@@ -443,12 +444,16 @@ static void psync_get_random_seed_from_query(psync_lhash_ctx *hctx, psync_sql_re
     psync_lhash_update(hctx, row, sizeof(psync_variant)*res->column_count);
   }
   psync_sql_free_result(res);
+  psync_nanotime(&tm);
+  psync_lhash_update(hctx, &tm, sizeof(&tm));
 }
 
 static void psync_get_random_seed_from_db(psync_lhash_ctx *hctx){
   psync_sql_res *res;
   struct timespec tm;
   unsigned char rnd[PSYNC_LHASH_DIGEST_LEN];
+  psync_nanotime(&tm);
+  psync_lhash_update(hctx, &tm, sizeof(&tm));
   res=psync_sql_query("SELECT * FROM setting ORDER BY RANDOM()");
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM filerevision ORDER BY RANDOM() LIMIT 50");
@@ -465,8 +470,6 @@ static void psync_get_random_seed_from_db(psync_lhash_ctx *hctx){
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM hashchecksum ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);
-  psync_nanotime(&tm);
-  psync_lhash_update(hctx, &tm, sizeof(&tm));
   psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('random', RANDOM())");
   psync_nanotime(&tm);
   psync_lhash_update(hctx, &tm, sizeof(&tm));
@@ -515,7 +518,7 @@ static void psync_store_seed_in_db(const unsigned char *seed){
   psync_sql_run_free(res);
 }
 
-void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen){
+void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen, int fast){
   static unsigned char lastseed[PSYNC_LHASH_DIGEST_LEN];
   psync_lhash_ctx hctx;
   struct timespec tm;
@@ -642,9 +645,11 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
       psync_lhash_update(&hctx, &st, sizeof(st));
     psync_free(home);
   }
-  debug(D_NOTICE, "db in");
-  psync_get_random_seed_from_db(&hctx);
-  debug(D_NOTICE, "db out");
+  if (!fast){
+    debug(D_NOTICE, "db in");
+    psync_get_random_seed_from_db(&hctx);
+    debug(D_NOTICE, "db out");
+  }
   if (aelen)
     psync_lhash_update(&hctx, addent, aelen);
   debug(D_NOTICE, "adding bulk data");
@@ -653,7 +658,7 @@ void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen
     for (j=0; j<PSYNC_LHASH_DIGEST_LEN; j++)
       lsc[i][j]^=(unsigned char)i;
   }
-  for (j=0; j<100; j++){
+  for (j=fast?98:0; j<100; j++){
     for (i=0; i<100; i++){
       psync_lhash_update(&hctx, &i, sizeof(i));
       psync_lhash_update(&hctx, &j, sizeof(j));

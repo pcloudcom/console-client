@@ -32,7 +32,9 @@
 #include "pfsupload.h"
 #include "psettings.h"
 #include "pcache.h"
+#include "pfolder.h"
 #include "pfs.h"
+#include "pcloudcrypto.h"
 #include <string.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -272,13 +274,14 @@ static uint32_t psync_fstask_depend_on_name(uint64_t taskid, psync_fsfolderid_t 
   return psync_sql_affected_rows();
 }
 
-int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
+int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name, uint32_t folderflags){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fstask_folder_t *folder;
   psync_fstask_mkdir_t *task;
   uint64_t taskid;
-  size_t len;
+  char *key;
+  size_t len, klen;
   time_t ctime;
   uint32_t depend;
   folder=psync_fstask_get_or_create_folder_tasks_locked(folderid);
@@ -299,12 +302,25 @@ int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
     return -EEXIST;
   }
   ctime=psync_timer_time();
+  if (folderflags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+    key=psync_cloud_crypto_get_new_encoded_key(PSYNC_CRYPTO_SYM_FLAG_ISDIR, &klen);
+    if (psync_crypto_is_error(key)){
+      psync_fstask_release_folder_tasks_locked(folder);
+      return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(key));
+    }
+  }
+  else
+    key=NULL;
   psync_sql_start_transaction();
-  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1, int1) VALUES ("NTO_STR(PSYNC_FS_TASK_MKDIR)", 0, ?, ?, ?, ?)");
+  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1, text2, int1) VALUES ("NTO_STR(PSYNC_FS_TASK_MKDIR)", 0, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(res, 1, folderid);
   psync_sql_bind_int(res, 2, folderid);
   psync_sql_bind_lstring(res, 3, name, len);
-  psync_sql_bind_uint(res, 4, ctime);
+  if (key)
+    psync_sql_bind_lstring(res, 4, key, klen);
+  else
+    psync_sql_bind_null(res, 4);
+  psync_sql_bind_uint(res, 5, ctime);
   psync_sql_run_free(res);
   taskid=psync_sql_insertid();
   if (folderid<0){
@@ -324,6 +340,7 @@ int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
   task->ctime=task->mtime=ctime;
   task->folderid=-taskid;
   task->subdircnt=0;
+  task->flags=folderflags&PSYNC_FOLDER_FLAG_ENCRYPTED;
   memcpy(task->name, name, len);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &task->tree);
   folder->taskscnt++;
@@ -1207,6 +1224,7 @@ static void psync_init_task_mkdir(psync_variant_row row){
   task->ctime=task->mtime=ctime;
   task->folderid=-taskid;
   task->subdircnt=0;
+  task->flags=psync_is_null(row[5])?0:PSYNC_FOLDER_FLAG_ENCRYPTED;
   memcpy(task->name, name, len);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &task->tree);
   folder->taskscnt++;

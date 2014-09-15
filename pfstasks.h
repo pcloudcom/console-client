@@ -51,6 +51,7 @@ typedef struct {
   time_t ctime;
   time_t mtime;
   uint32_t subdircnt;
+  uint32_t flags;
   char name[];
 } psync_fstask_mkdir_t;
 
@@ -112,7 +113,7 @@ psync_fstask_unlink_t *psync_fstask_find_unlink(psync_fstask_folder_t *folder, c
 psync_fstask_mkdir_t *psync_fstask_find_mkdir_by_folderid(psync_fstask_folder_t *folder, psync_fsfolderid_t folderid);
 psync_fstask_creat_t *psync_fstask_find_creat_by_fileid(psync_fstask_folder_t *folder, psync_fsfileid_t fileid);
 
-int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name);
+int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name, uint32_t folderflags);
 int psync_fstask_can_rmdir(psync_fsfolderid_t folderid, const char *name);
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name);
 psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name);
