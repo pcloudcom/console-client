@@ -486,6 +486,7 @@ int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name){
     depend++;
   }
   psync_sql_free_result(res);
+  psync_fstask_depend_on_name(taskid, folderid, name, len);
   if (unlikely_log(psync_sql_commit_transaction())){
     psync_fstask_release_folder_tasks_locked(folder);
     return -EIO;
@@ -726,6 +727,7 @@ int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){
     psync_fstask_depend(taskid, depend);
   if (revoffileid<0)
     psync_fstask_depend(taskid, -revoffileid);
+  psync_fstask_depend_on_name(taskid, folderid, name, len);
   if (unlikely_log(psync_sql_commit_transaction())){
     psync_fstask_release_folder_tasks_locked(folder);
     return -EIO;
@@ -805,6 +807,8 @@ int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentf
     if (row[0]!=ftaskid && row[0]!=ttaskid)
       psync_fstask_depend(ttaskid, row[0]);
   psync_sql_free_result(res);
+  psync_fstask_depend_on_name(ttaskid, parentfolderid, name, nlen);
+  psync_fstask_depend_on_name(ttaskid, to_folderid, new_name, nnlen);
   if (psync_sql_commit_transaction())
     return -EIO;
   psync_fs_rename_openfile_locked(fileid, to_folderid, new_name);
@@ -822,8 +826,16 @@ int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentf
   psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_unlink_t, name), &rm->tree);
   folder->taskscnt++;
   psync_fstask_release_folder_tasks_locked(folder);
+
   folder=psync_fstask_get_or_create_folder_tasks_locked(to_folderid);
   nnlen++;
+  cr=psync_fstask_find_creat(folder, new_name, 0);
+  if (cr){
+    debug(D_NOTICE, "renaming over creat of file %s(%ld) in folder %lu", new_name, (long)cr->fileid, (unsigned long)to_folderid);
+    psync_tree_del(&folder->creats, &cr->tree);
+    psync_free(cr);
+    folder->taskscnt--;
+  }
   cr=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+nnlen);
   cr->taskid=ttaskid;
   cr->fileid=fileid;
@@ -908,6 +920,8 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
     if (row[0]!=ftaskid && row[0]!=ttaskid)
       psync_fstask_depend(ttaskid, row[0]);
   psync_sql_free_result(res);
+  psync_fstask_depend_on_name(ttaskid, parentfolderid, name, nlen);
+  psync_fstask_depend_on_name(ttaskid, folderid, new_name, nnlen);
   if (psync_sql_commit_transaction())
     return -EIO;
   folder=psync_fstask_get_or_create_folder_tasks_locked(parentfolderid);
