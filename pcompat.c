@@ -1751,11 +1751,13 @@ int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec){
 }
 
 #if defined(P_OS_WINDOWS)
+#if !defined(gmtime_r)
 struct tm *gmtime_r(const time_t *timep, struct tm *result){
   struct tm *res=gmtime(timep);
   *result=*res;
   return result;
 }
+#endif
 
 static wchar_t *utf8_to_wchar(const char *str){
   int len;
