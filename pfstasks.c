@@ -807,7 +807,7 @@ int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentf
     if (row[0]!=ftaskid && row[0]!=ttaskid)
       psync_fstask_depend(ttaskid, row[0]);
   psync_sql_free_result(res);
-  psync_fstask_depend_on_name(ttaskid, parentfolderid, name, nlen);
+  psync_fstask_depend_on_name(ftaskid, parentfolderid, name, nlen);
   psync_fstask_depend_on_name(ttaskid, to_folderid, new_name, nnlen);
   if (psync_sql_commit_transaction())
     return -EIO;
@@ -925,7 +925,7 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
     if (row[0]!=ftaskid && row[0]!=ttaskid)
       psync_fstask_depend(ttaskid, row[0]);
   psync_sql_free_result(res);
-  psync_fstask_depend_on_name(ttaskid, parentfolderid, name, nlen);
+  psync_fstask_depend_on_name(ftaskid, parentfolderid, name, nlen);
   psync_fstask_depend_on_name(ttaskid, folderid, new_name, nnlen);
   if (psync_sql_commit_transaction())
     return -EIO;
