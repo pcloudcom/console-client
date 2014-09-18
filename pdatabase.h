@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRI
 UPDATE setting SET value=3 WHERE id='dbversion';\
 COMMIT;",
   "BEGIN;\
-CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER, oldhash INTEGER);\
+CREATE TABLE IF NOT EXISTS pagecachetask(id INTEGER PRIMARY KEY, type INTEGER, taskid INTEGER, hash INTEGER);\
 ALTER TABLE pagecachetask ADD oldhash INTEGER;\
 UPDATE setting SET value=4 WHERE id='dbversion';\
 COMMIT;",
