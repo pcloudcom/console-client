@@ -171,6 +171,14 @@ CREATE TABLE IF NOT EXISTS pagecache (id INTEGER PRIMARY KEY, hash INTEGER, page
   lastuse INTEGER, usecnt INTEGER, size INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS kpagecachehashpageid ON pagecache(hash, pageid);\
 CREATE INDEX IF NOT EXISTS kpagecachetype ON pagecache(type);\
+CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, folderid INTEGER, sfolderid INTEGER, fileid INTEGER,\
+  text1 TEXT, text2 TEXT, int1 INTEGER, int2 INTEGER);\
+CREATE INDEX IF NOT EXISTS kfstaskfolderid ON fstask(folderid);\
+CREATE INDEX IF NOT EXISTS kfstasksfolderid ON fstask(sfolderid);\
+CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
+CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, dependfstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE,\
+PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
+CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
 UPDATE setting SET value=7 WHERE id='dbversion';\
 COMMIT;"
 };
