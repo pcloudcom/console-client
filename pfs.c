@@ -982,8 +982,6 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     }
     psync_sql_free_result(res);
   }
-  else
-    row=NULL;
   if (fi->flags&O_TRUNC || (fi->flags&O_CREAT && !row)){
     debug(D_NOTICE, "truncating file %s", path);
     cr=psync_fstask_add_creat(folder, fpath->name);
