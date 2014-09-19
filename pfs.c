@@ -88,6 +88,7 @@ static size_t psync_fake_prefix_len=0;
 static int64_t psync_fake_fileid=INT64_MIN;
 
 static pthread_mutex_t start_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t start_cond=PTHREAD_COND_INITIALIZER;
 static int started=0;
 static int initonce=0;
 
@@ -1854,7 +1855,7 @@ static int fsrefreshtimerscheduled=0;
 static void psync_invalidate_os_cache_noret(){
   char *path;
   pthread_mutex_lock(&start_mutex);
-  if (started)
+  if (started==1)
     path=psync_strdup(psync_current_mountpoint);
   else
     path=NULL;
@@ -2011,15 +2012,21 @@ char *psync_fs_getmountpoint(){
 }
 
 static void psync_fs_do_stop(void){
+  struct timespec ts;
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
   if (started==1){
-    debug(D_NOTICE, "running fuse_unmount");
-    fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
-    debug(D_NOTICE, "fuse_unmount exited");
-    psync_free(psync_current_mountpoint);
+    debug(D_NOTICE, "running fuse_exit");
+    fuse_exit(psync_fuse);
+    debug(D_NOTICE, "fuse_exit exited");
     started=2;
-    psync_pagecache_flush();
+    debug(D_NOTICE, "waiting for fuse to exit");
+    psync_nanotime(&ts);
+    ts.tv_sec+=30;
+    if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
+      debug(D_NOTICE, "timeouted waiting for fuse to exit");
+    else
+      debug(D_NOTICE, "waited for fuse to exit");
   }
   pthread_mutex_unlock(&start_mutex);
 }
@@ -2090,7 +2097,10 @@ static void psync_fuse_thread(){
   debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
   fuse_destroy(psync_fuse);
   debug(D_NOTICE, "fuse_destroy exited");
+  psync_pagecache_flush();
+  psync_free(psync_current_mountpoint);
   started=0;
+  pthread_cond_broadcast(&start_cond);
   pthread_mutex_unlock(&start_mutex);
 }
 
