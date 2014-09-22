@@ -59,7 +59,7 @@
 #define P_OS_BSD
 #elif defined(__unix__)
 #define P_OS_POSIX
-#elif defined(_WIN32) || defined(WIN32)
+#elif defined(_WIN32) || defined(WIN32) || defined(Q_OS_WIN)
 #define P_OS_WINDOWS
 #endif
 #endif
@@ -246,7 +246,7 @@ typedef int psync_file_t;
 
 #endif
 
-#if !defined(_SSIZE_T_)
+#if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED)
 typedef SSIZE_T ssize_t;
 #endif
 
@@ -460,7 +460,7 @@ int psync_file_truncate(psync_file_t fd);
 int64_t psync_file_size(psync_file_t fd) PSYNC_PURE;
 char *psync_deviceid();
 
-#if defined(P_OS_WINDOWS)
+#if defined(P_OS_WINDOWS) && !defined(gmtime_r)
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
 #endif
 

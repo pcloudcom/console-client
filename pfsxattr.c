@@ -24,6 +24,10 @@ enum
 };
 #endif
 
+#ifndef ENODATA
+#define ENODATA 61
+#endif
+
 #ifndef ENOATTR
 #define ENOATTR ENODATA
 #endif
