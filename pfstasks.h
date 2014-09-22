@@ -116,7 +116,7 @@ psync_fstask_creat_t *psync_fstask_find_creat_by_fileid(psync_fstask_folder_t *f
 int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name, uint32_t folderflags);
 int psync_fstask_can_rmdir(psync_fsfolderid_t folderid, const char *name);
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, const char *name);
-psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name);
+psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name, const char *encsymkey, size_t encsymkeylen);
 void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat_t *cr);
 psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, uint64_t hash);
 int psync_fstask_can_unlink(psync_fsfolderid_t folderid, const char *name);

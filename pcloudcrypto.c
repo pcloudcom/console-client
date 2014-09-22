@@ -1017,11 +1017,39 @@ char *psync_cloud_crypto_get_new_encoded_key(uint32_t flags, size_t *keylen){
   }
   encsym=psync_ssl_rsa_encrypt_data(crypto_pubkey, (unsigned char *)&sym, sizeof(sym));
   pthread_rwlock_unlock(&crypto_lock);
-  psync_ssl_memclean(&sym, sizeof(sym));
   if (encsym==PSYNC_INVALID_ENC_SYM_KEY){
     debug(D_ERROR, "RSA encryption failed");
     return (char *)err_to_ptr(PSYNC_CRYPTO_RSA_ERROR);
   }
+  psync_ssl_memclean(&sym, sizeof(sym));
+  ret=(char *)psync_base64_encode(encsym->data, encsym->datalen, keylen);
+  psync_free(encsym);
+  return ret;
+}
+
+char *psync_cloud_crypto_get_new_encoded_and_plain_key(uint32_t flags, size_t *keylen, psync_symmetric_key_t *deckey){
+  psync_encrypted_symmetric_key_t encsym;
+  sym_key_ver1 sym;
+  char *ret;
+  if (!crypto_started_un)
+    return (char *)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
+  sym.type=PSYNC_CRYPTO_SYM_AES256_64BYTE_HMAC;
+  sym.flags=PSYNC_CRYPTO_SYM_FLAG_ISDIR;
+  psync_ssl_rand_strong(sym.hmackey, PSYNC_CRYPTO_HMAC_SHA1_KEY_LEN);
+  psync_ssl_rand_strong(sym.aeskey, PSYNC_AES256_KEY_SIZE);
+  pthread_rwlock_rdlock(&crypto_lock);
+  if (!crypto_started_l){
+    pthread_rwlock_unlock(&crypto_lock);
+    return (char *)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
+  }
+  encsym=psync_ssl_rsa_encrypt_data(crypto_pubkey, (unsigned char *)&sym, sizeof(sym));
+  pthread_rwlock_unlock(&crypto_lock);
+  if (encsym==PSYNC_INVALID_ENC_SYM_KEY){
+    debug(D_ERROR, "RSA encryption failed");
+    return (char *)err_to_ptr(PSYNC_CRYPTO_RSA_ERROR);
+  }
+  *deckey=psync_crypto_sym_key_ver1_to_sym_key(&sym);
+  psync_ssl_memclean(&sym, sizeof(sym));
   ret=(char *)psync_base64_encode(encsym->data, encsym->datalen, keylen);
   psync_free(encsym);
   return ret;

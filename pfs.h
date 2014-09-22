@@ -36,6 +36,7 @@
 #include "pfsfolder.h"
 #include "pfstasks.h"
 #include "pcompat.h"
+#include "pcrypto.h"
 #include <pthread.h>
 
 #if defined(P_OS_POSIX)
@@ -85,6 +86,12 @@ typedef struct {
   unsigned char newfile;
   unsigned char releasedforupload;
   unsigned char deleted;
+  unsigned char encrypted;
+  /*
+   * for non-encrypted files only offsetof(psync_openfile_t, encoder) bytes are allocated
+   * keep all fields for encryption after encoder
+   */
+  psync_crypto_aes256_sector_encoder_decoder_t encoder;
 } psync_openfile_t;
 
 int psync_fs_crypto_err_to_errno(int cryptoerr);

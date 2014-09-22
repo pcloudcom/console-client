@@ -49,6 +49,7 @@ void psync_cloud_crypto_release_folder_encoder(psync_fsfolderid_t folderid, psyn
 char *psync_cloud_crypto_encode_filename(psync_crypto_aes256_text_encoder_t encoder, const char *name);
 
 char *psync_cloud_crypto_get_new_encoded_key(uint32_t flags, size_t *keylen);
+char *psync_cloud_crypto_get_new_encoded_and_plain_key(uint32_t flags, size_t *keylen, psync_symmetric_key_t *deckey);
 
 static inline int psync_crypto_is_error(const void *ptr){
   return (uintptr_t)ptr<512;
