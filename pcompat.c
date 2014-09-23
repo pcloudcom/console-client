@@ -949,30 +949,25 @@ static psync_socket_t connect_socket(const char *host, const char *port){
   }
   if (likely(sock!=INVALID_SOCKET)){
     int sock_opt=1;
-#if defined(TCP_NODELAY) && defined(SOL_TCP)
-    setsockopt(sock, SOL_TCP, TCP_NODELAY, (char*)&sock_opt, sizeof(sock_opt));
-#endif
-#if defined(TCP_NODELAY) && defined(IPPROTO_TCP)
-    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char*)&sock_opt, sizeof(sock_opt));
-#endif
-#if defined(SO_KEEPALIVE) && defined(SOL_SOCKET)
-    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
-#endif
-#if defined(TCP_KEEPALIVE) && defined(IPPROTO_TCP)
+#if defined(P_OS_LINUX)
+    setsockopt(sock, SOL_TCP, TCP_NODELAY, (char *)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&sock_opt, sizeof(sock_opt));
+#else
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char  *)&sock_opt, sizeof(sock_opt));
     setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(SOL_TCP)
 #if defined(TCP_KEEPCNT)
     sock_opt=3;
-    setsockopt(sock, SOL_TCP, TCP_KEEPCNT, (char*)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_TCP, TCP_KEEPCNT, (char *)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(TCP_KEEPIDLE)
     sock_opt=60;
-    setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, (char*)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, (char *)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(TCP_KEEPINTVL)
     sock_opt=20;
-    setsockopt(sock, SOL_TCP, TCP_KEEPINTVL, (char*)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_TCP, TCP_KEEPINTVL, (char *)&sock_opt, sizeof(sock_opt));
 #endif
 #endif
   }
