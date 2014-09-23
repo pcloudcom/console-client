@@ -179,6 +179,7 @@ CREATE INDEX IF NOT EXISTS kfstaskfileid ON fstask(fileid);\
 CREATE TABLE IF NOT EXISTS fstaskdepend (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, dependfstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE,\
 PRIMARY KEY (fstaskid, dependfstaskid)) " P_SQL_WOWROWID ";\
 CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfstaskid);\
+CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 UPDATE setting SET value=7 WHERE id='dbversion';\
 COMMIT;"
 };
