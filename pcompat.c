@@ -1781,14 +1781,18 @@ int psync_stat(const char *path, psync_stat_t *st){
   wchar_t *wpath;
   HANDLE fd;
   BOOL ret;
-  DWORD flag = FILE_ATTRIBUTE_NORMAL, attr;
+  DWORD flag, attr;
   wpath=utf8_to_wchar(path);
 retry:
-  attr = GetFileAttributesW(wpath);
-  if (attr != INVALID_FILE_ATTRIBUTES && attr & FILE_ATTRIBUTE_DIRECTORY)
-    flag = FILE_FLAG_BACKUP_SEMANTICS;
-  if (attr == INVALID_FILE_ATTRIBUTES)
-      return -1;
+  attr=GetFileAttributesW(wpath);
+  if (attr==INVALID_FILE_ATTRIBUTES){
+    psync_free(wpath);
+    return -1;
+  }
+  if (attr&FILE_ATTRIBUTE_DIRECTORY)
+    flag=FILE_FLAG_BACKUP_SEMANTICS;
+  else
+    flag=FILE_ATTRIBUTE_NORMAL;
 
   fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
@@ -2125,6 +2129,8 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
     cdis=OPEN_EXISTING;
   wpath=utf8_to_wchar(path);
   ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (ret==INVALID_HANDLE_VALUE)
+    debug(D_WARNING, "could not open file %s, error %d", path, (int)GetLastError());
   psync_free(wpath);
   return ret;
 #else

@@ -2013,6 +2013,7 @@ char *psync_fs_getmountpoint(){
 
 static void psync_fs_do_stop(void){
   struct timespec ts;
+  psync_stat_t st;
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
   if (started==1){
@@ -2021,6 +2022,7 @@ static void psync_fs_do_stop(void){
     debug(D_NOTICE, "fuse_exit exited");
     started=2;
     debug(D_NOTICE, "waiting for fuse to exit");
+    psync_stat(psync_current_mountpoint, &st);
     psync_nanotime(&ts);
     ts.tv_sec+=30;
     if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
@@ -2093,15 +2095,16 @@ static void psync_fuse_thread(){
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
   fuse_loop_mt(psync_fuse);
+  fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
   pthread_mutex_lock(&start_mutex);
   debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
   fuse_destroy(psync_fuse);
   debug(D_NOTICE, "fuse_destroy exited");
-#if defined(P_OS_MACOSX)
+/*#if defined(P_OS_MACOSX)
   debug(D_NOTICE, "calling unmount");
   unmount(psync_current_mountpoint, MNT_FORCE);
   debug(D_NOTICE, "unmount exited");
-#endif
+#endif*/
   psync_pagecache_flush();
   psync_free(psync_current_mountpoint);
   started=0;
