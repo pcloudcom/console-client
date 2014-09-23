@@ -2097,6 +2097,11 @@ static void psync_fuse_thread(){
   debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
   fuse_destroy(psync_fuse);
   debug(D_NOTICE, "fuse_destroy exited");
+#if defined(P_OS_MACOSX)
+  debug(D_NOTICE, "calling unmount");
+  unmount(psync_current_mountpoint, MNT_FORCE);
+  debug(D_NOTICE, "unmount exited");
+#endif
   psync_pagecache_flush();
   psync_free(psync_current_mountpoint);
   started=0;
