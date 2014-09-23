@@ -2013,21 +2013,26 @@ char *psync_fs_getmountpoint(){
 
 static void psync_fs_do_stop(void){
   struct timespec ts;
-  psync_stat_t st;
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
   if (started==1){
     debug(D_NOTICE, "running fuse_exit");
     fuse_exit(psync_fuse);
-    debug(D_NOTICE, "fuse_exit exited, running fuse_unmount");
-    fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
     started=2;
-    debug(D_NOTICE, "fuse_unmount exit, waiting for fuse to exit");
-    psync_stat(psync_current_mountpoint, &st);
+    debug(D_NOTICE, "fuse_exit exited, waiting for fuse to exit");
     psync_nanotime(&ts);
-    ts.tv_sec+=30;
-    if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
-      debug(D_NOTICE, "timeouted waiting for fuse to exit");
+    ts.tv_sec+=5;
+    if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts)){
+      debug(D_NOTICE, "timeouted waiting for fuse to exit, running fuse_unmount");
+      fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
+      debug(D_NOTICE, "fuse_unmount exit, waiting for fuse to exit");
+      psync_nanotime(&ts);
+      ts.tv_sec+=30;
+      if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
+        debug(D_NOTICE, "timeouted waiting for fuse to exit");
+      else
+        debug(D_NOTICE, "waited for fuse to exit");
+    }
     else
       debug(D_NOTICE, "waited for fuse to exit");
   }
