@@ -50,6 +50,10 @@
 #include "pfolder.h"
 #include "pnetlibs.h"
 
+#ifndef FUSE_STAT
+#define FUSE_STAT stat
+#endif
+
 #if defined(P_OS_POSIX)
 #include <signal.h>
 #endif
@@ -368,8 +372,8 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 #define fileid_to_inode(fileid) ((fileid)*3+1)
 #define taskid_to_inode(taskid) ((taskid)*3+2)
 
-static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
-  memset(stbuf, 0, sizeof(struct stat));
+static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=psync_get_number(row[2]);
@@ -390,11 +394,11 @@ static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
   stbuf->st_gid=mygid;
 }
 
-static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
+static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
   uint64_t size;
   stbuf->st_ino=fileid_to_inode(psync_get_number(row[4]));
   size=psync_get_number(row[1]);
-  memset(stbuf, 0, sizeof(struct stat));
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
@@ -414,8 +418,8 @@ static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
   stbuf->st_gid=mygid;
 }
 
-static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *stbuf){
-  memset(stbuf, 0, sizeof(struct stat));
+static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STAT *stbuf){
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   if (mk->folderid>=0)
     stbuf->st_ino=folderid_to_inode(mk->folderid);
   else
@@ -439,7 +443,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *st
   stbuf->st_gid=mygid;
 }
 
-static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf){
+static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
   res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE id=?");
@@ -452,9 +456,9 @@ static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf
   return row?0:-1;
 }
 
-static int psync_creat_stat_fake_file(struct stat *stbuf){
+static int psync_creat_stat_fake_file(struct FUSE_STAT *stbuf){
   time_t ctime;
-  memset(stbuf, 0, sizeof(struct stat));
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   ctime=psync_timer_time();
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=ctime;
@@ -476,7 +480,7 @@ static int psync_creat_stat_fake_file(struct stat *stbuf){
   return 0;
 }
 
-static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
+static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf){
   psync_stat_t st;
   psync_fsfileid_t fileid;
   uint64_t size;
@@ -519,7 +523,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
     if (stret!=sizeof(osize))
       return -EIO;
   }*/
-  memset(stbuf, 0, sizeof(struct stat));
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=taskid_to_inode(fileid);
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=st.st_birthtime;
@@ -544,7 +548,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   return 0;
 }
 
-static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
+static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf){
   debug(D_NOTICE, "getting stat from creat for file %s fileid %ld taskid %lu", cr->name, (long)cr->fileid, (unsigned long)cr->taskid);
   if (cr->fileid>=0)
     return psync_creat_db_to_file_stat(cr->fileid, stbuf);
@@ -552,7 +556,7 @@ static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf
     return psync_creat_local_to_file_stat(cr, stbuf);
 }
 
-static int psync_fs_getrootattr(struct stat *stbuf){
+static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
   res=psync_sql_query("SELECT 0, 0, 0, 0, subdircnt FROM folder WHERE id=0");
@@ -562,7 +566,7 @@ static int psync_fs_getrootattr(struct stat *stbuf){
   return 0;
 }
 
-static int psync_fs_getattr(const char *path, struct stat *stbuf){
+static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
   psync_fspath_t *fpath;
@@ -639,7 +643,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   psync_fstask_folder_t *folder;
   psync_tree *trel;
   const char *name;
-  struct stat st;
+  struct FUSE_STAT st;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
   psync_sql_lock();
