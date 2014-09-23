@@ -2019,9 +2019,10 @@ static void psync_fs_do_stop(void){
   if (started==1){
     debug(D_NOTICE, "running fuse_exit");
     fuse_exit(psync_fuse);
-    debug(D_NOTICE, "fuse_exit exited");
+    debug(D_NOTICE, "fuse_exit exited, running fuse_unmount");
+    fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
     started=2;
-    debug(D_NOTICE, "waiting for fuse to exit");
+    debug(D_NOTICE, "fuse_unmount exit, waiting for fuse to exit");
     psync_stat(psync_current_mountpoint, &st);
     psync_nanotime(&ts);
     ts.tv_sec+=30;
@@ -2095,7 +2096,6 @@ static void psync_fuse_thread(){
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
   fuse_loop_mt(psync_fuse);
-  fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
   pthread_mutex_lock(&start_mutex);
   debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
   fuse_destroy(psync_fuse);
