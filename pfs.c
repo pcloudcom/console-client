@@ -383,6 +383,7 @@ static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *st
   stbuf->st_ctime=psync_get_number(row[2]);
   stbuf->st_mtime=psync_get_number(row[3]);
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=psync_get_number(row[4])+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -407,6 +408,7 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
   stbuf->st_ctime=psync_get_number(row[2]);
   stbuf->st_mtime=psync_get_number(row[3]);
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   stbuf->st_size=size;
@@ -432,6 +434,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
   stbuf->st_ctime=mk->ctime;
   stbuf->st_mtime=mk->mtime;
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=mk->subdircnt+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -462,12 +465,10 @@ static int psync_creat_stat_fake_file(struct FUSE_STAT *stbuf){
   ctime=psync_timer_time();
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=ctime;
-  stbuf->st_ctime=ctime;
-  stbuf->st_mtime=ctime;
-#else
-  stbuf->st_ctime=ctime;
-  stbuf->st_mtime=ctime;
 #endif
+  stbuf->st_ctime=ctime;
+  stbuf->st_mtime=ctime;
+  stbuf->st_atime=ctime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   stbuf->st_size=0;
@@ -533,6 +534,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   stbuf->st_ctime=psync_stat_ctime(&st);
   stbuf->st_mtime=psync_stat_mtime(&st);
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   size=psync_stat_size(&st);
