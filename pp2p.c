@@ -228,6 +228,7 @@ static void psync_p2p_process_packet(const char *packet, size_t plen){
       break;
     case P2P_CHECK:
       psync_p2p_check((packet_check *)packet);
+      debug(D_NOTICE, "processed P2P packed");
       break;
     default:
       debug(D_BUG, "handler for packet type %u not implemented", (unsigned)type);
