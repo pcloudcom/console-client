@@ -129,6 +129,7 @@ static psync_socket *get_connected_socket(){
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }
+    psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
     saveauth=psync_setting_get_bool(_PS(saveauth));
     sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
     if (unlikely_log(!sock)){
@@ -1569,6 +1570,7 @@ static void psync_diff_thread(){
 restart:
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   sock=get_connected_socket();
+  debug(D_NOTICE, "connected");
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
   diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
   if (diffid==0)
