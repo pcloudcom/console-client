@@ -30,8 +30,7 @@
 
 #include "pssl.h"
 
-#define PSYNC_AES256_SECTOR_SIZE 4096
-#define PSYNC_AES256_ENC_SECTOR_SIZE (PSYNC_AES256_SECTOR_SIZE+PSYNC_AES256_BLOCK_SIZE)
+#define PSYNC_CRYPTO_AUTH_SIZE PSYNC_AES256_BLOCK_SIZE
 
 typedef struct {
   psync_aes256_encoder encoder;
@@ -59,6 +58,7 @@ typedef struct {
 #define psync_crypto_aes256_sector_gen_key psync_crypto_aes256_ctr_gen_key
 
 #define PSYNC_CRYPTO_INVALID_ENCODER NULL
+#define PSYNC_CRYPTO_INVALID_REVISIONID ((uint32_t)-1)
 
 psync_symmetric_key_t psync_crypto_aes256_gen_key_len(size_t len);
 psync_symmetric_key_t psync_crypto_aes256_ctr_gen_key();

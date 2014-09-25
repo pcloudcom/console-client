@@ -92,6 +92,9 @@ typedef struct {
    * keep all fields for encryption after encoder
    */
   psync_crypto_aes256_sector_encoder_decoder_t encoder;
+  psync_file_t logfile;
+  psync_file_t authfile;
+  uint32_t logoffset;
 } psync_openfile_t;
 
 int psync_fs_crypto_err_to_errno(int cryptoerr);

@@ -25,41 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PCLOUD_CRYPTO_H
-#define _PCLOUD_CRYPTO_H
+#ifndef _PSYNC_FSCRYPTO_H
+#define _PSYNC_FSCRYPTO_H
 
-#include "pcompiler.h"
 #include "pfs.h"
-#include "pcrypto.h"
 
-#define PSYNC_CRYPTO_SYM_FLAG_ISDIR 1
-
-#define PSYNC_CRYPTO_SECTOR_SIZE 4096
-
-int psync_cloud_crypto_setup(const char *password);
-int psync_cloud_crypto_start(const char *password);
-int psync_cloud_crypto_stop();
-int psync_cloud_crypto_isstarted();
-int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err);
-
-psync_crypto_aes256_text_decoder_t psync_cloud_crypto_get_folder_decoder(psync_fsfolderid_t folderid);
-void psync_cloud_crypto_release_folder_decoder(psync_fsfolderid_t folderid, psync_crypto_aes256_text_decoder_t decoder);
-char *psync_cloud_crypto_decode_filename(psync_crypto_aes256_text_decoder_t decoder, const char *name);
-
-psync_crypto_aes256_text_encoder_t psync_cloud_crypto_get_folder_encoder(psync_fsfolderid_t folderid);
-void psync_cloud_crypto_release_folder_encoder(psync_fsfolderid_t folderid, psync_crypto_aes256_text_encoder_t encoder);
-char *psync_cloud_crypto_encode_filename(psync_crypto_aes256_text_encoder_t encoder, const char *name);
-
-char *psync_cloud_crypto_get_new_encoded_key(uint32_t flags, size_t *keylen);
-char *psync_cloud_crypto_get_new_encoded_and_plain_key(uint32_t flags, size_t *keylen, psync_symmetric_key_t *deckey);
-
-static inline int psync_crypto_is_error(const void *ptr){
-  return (uintptr_t)ptr<512;
-}
-
-static inline int psync_crypto_to_error(const void *ptr){
-  return -((int)(uintptr_t)ptr);
-}
-
+int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset);
 
 #endif

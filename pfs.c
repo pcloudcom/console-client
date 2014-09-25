@@ -50,6 +50,7 @@
 #include "pfolder.h"
 #include "pnetlibs.h"
 #include "pcloudcrypto.h"
+#include "pfscrypto.h"
 
 #if defined(P_OS_POSIX)
 #include <signal.h>
@@ -801,6 +802,8 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
   if (encoder!=PSYNC_CRYPTO_INVALID_ENCODER){
     fl->encrypted=1;
     fl->encoder=encoder;
+    fl->logfile=INVALID_HANDLE_VALUE;
+    fl->authfile=INVALID_HANDLE_VALUE;
   }
   if (lock)
     pthread_mutex_lock(&fl->mutex);
@@ -879,7 +882,7 @@ static int open_write_files(psync_openfile_t *of, int trunc){
     of->datafile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|(trunc?P_O_TRUNC:0));
     psync_free(filename);
     if (of->datafile==INVALID_HANDLE_VALUE){
-      debug(D_ERROR, "could not open cache file %s", filename);
+      debug(D_ERROR, "could not open cache file for fileid %ld", (long)of->fileid);
       return -EIO;
     }
   }
@@ -889,12 +892,34 @@ static int open_write_files(psync_openfile_t *of, int trunc){
     of->indexfile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|(trunc?P_O_TRUNC:0));
     psync_free(filename);
     if (of->indexfile==INVALID_HANDLE_VALUE){
-      debug(D_ERROR, "could not open cache file %s", filename);
+      debug(D_ERROR, "could not open cache index file for fileid %ld", (long)of->fileid);
       return -EIO;
     }
     if (load_interval_tree(of)){
-      debug(D_ERROR, "could not load cache file %s to interval tree", filename);
+      debug(D_ERROR, "could not load cache file for fileid %ld to interval tree", (long)of->fileid);
       return -EIO;
+    }
+  }
+  if (of->encrypted){
+    if (of->authfile==INVALID_HANDLE_VALUE){
+      fileidhex[sizeof(psync_fsfileid_t)]='a';
+      filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+      of->authfile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|(trunc?P_O_TRUNC:0));
+      psync_free(filename);
+      if (of->authfile==INVALID_HANDLE_VALUE){
+        debug(D_ERROR, "could not open auth file for fileid %ld", (long)of->fileid);
+        return -EIO;
+      }
+    }
+    if (of->logfile==INVALID_HANDLE_VALUE){
+      fileidhex[sizeof(psync_fsfileid_t)]='l';
+      filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+      of->logfile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|P_O_TRUNC);
+      psync_free(filename);
+      if (of->logfile==INVALID_HANDLE_VALUE){
+        debug(D_ERROR, "could not open auth file for fileid %ld", (long)of->fileid);
+        return -EIO;
+      }
     }
   }
   return 0;
@@ -1037,7 +1062,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   }
   if (fi->flags&O_TRUNC || (fi->flags&O_CREAT && !row)){
     debug(D_NOTICE, "truncating file %s", path);
-    cr=psync_fstask_add_creat(folder, fpath->name);
+    cr=psync_fstask_add_creat(folder, fpath->name, NULL, 0);
     if (unlikely_log(!cr)){
       ret=-EIO;
       goto ex0;
@@ -1211,6 +1236,11 @@ void psync_fs_inc_of_refcnt(psync_openfile_t *of){
   pthread_mutex_unlock(&of->mutex);
 }
 
+static void close_if_valid(psync_file_t fd){
+  if (fd!=INVALID_HANDLE_VALUE)
+    psync_file_close(fd);
+}
+
 static void psync_fs_free_openfile(psync_openfile_t *of){
   debug(D_NOTICE, "releasing file %s", of->currentname);
   if (of->deleted && of->fileid<0){
@@ -1221,14 +1251,14 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
     psync_sql_run_free(res);
     psync_fsupload_wake();
   }
-  pthread_mutex_destroy(&of->mutex);
   if (of->encrypted){
     psync_crypto_aes256_sector_encoder_decoder_free(of->encoder);
+    close_if_valid(of->logfile);
+    close_if_valid(of->authfile);
   }
-  if (of->datafile!=INVALID_HANDLE_VALUE)
-    psync_file_close(of->datafile);
-  if (of->indexfile!=INVALID_HANDLE_VALUE)
-    psync_file_close(of->indexfile);
+  pthread_mutex_destroy(&of->mutex);
+  close_if_valid(of->datafile);
+  close_if_valid(of->indexfile);
   if (of->writeintervals)
     psync_interval_tree_free(of->writeintervals);
   if (unlikely(psync_fs_need_per_folder_refresh_const() && of->fileid<psync_fake_fileid)){
@@ -1462,6 +1492,8 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   }
 retry:
   if (of->newfile){
+    if (of->encrypted)
+      return psync_fs_crypto_write_newfile_locked(of, buf, size, offset);
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
     if (of->currentsize<offset+size && bw!=-1)
       of->currentsize=offset+size;
@@ -1472,6 +1504,10 @@ retry:
       return bw;
   }
   else{
+    if (of->encrypted){
+      debug(D_ERROR, "not implemented");
+      return -ENOSYS;
+    }
     if (unlikely(!of->modified)){
       psync_fstask_creat_t *cr;
       debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
@@ -1488,7 +1524,7 @@ retry:
       if (of->currentsize==0 || (of->currentsize<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE && 
             psync_pagecache_have_all_pages_in_cache(of->hash, of->currentsize) && !psync_pagecache_lock_pages_in_cache())){
         debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
-        cr=psync_fstask_add_creat(of->currentfolder, of->currentname);
+        cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
         if (unlikely_log(!cr)){
           psync_sql_unlock();
           pthread_mutex_unlock(&of->mutex);
