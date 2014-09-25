@@ -2022,23 +2022,21 @@ static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
   if (started==1){
+#if defined(P_OS_MACOSX)
+    debug(D_NOTICE, "running unmount");
+    unmount(psync_current_mountpoint, MNT_FORCE);
+    debug(D_NOTICE, "unmount exited");
+#endif
     debug(D_NOTICE, "running fuse_exit");
     fuse_exit(psync_fuse);
     started=2;
-    debug(D_NOTICE, "fuse_exit exited, waiting for fuse to exit");
+    debug(D_NOTICE, "fuse_exit exited, flushing cache");
+    psync_pagecache_flush();
+    debug(D_NOTICE, "cache flushed, waiting for fuse to exit");
     psync_nanotime(&ts);
-    ts.tv_sec+=5;
-    if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts)){
-      debug(D_NOTICE, "timeouted waiting for fuse to exit, running fuse_unmount");
-      fuse_unmount(psync_current_mountpoint, psync_fuse_channel);
-      debug(D_NOTICE, "fuse_unmount exit, waiting for fuse to exit");
-      psync_nanotime(&ts);
-      ts.tv_sec+=30;
-      if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
-        debug(D_NOTICE, "timeouted waiting for fuse to exit");
-      else
-        debug(D_NOTICE, "waited for fuse to exit");
-    }
+    ts.tv_sec+=2;
+    if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
+      debug(D_NOTICE, "timeouted waiting for fuse to exit");
     else
       debug(D_NOTICE, "waited for fuse to exit");
   }
@@ -2116,14 +2114,13 @@ static void psync_fuse_thread(){
   unmount(psync_current_mountpoint, MNT_FORCE);
   debug(D_NOTICE, "unmount exited");
 #endif*/
-  psync_pagecache_flush();
   psync_free(psync_current_mountpoint);
   started=0;
   pthread_cond_broadcast(&start_cond);
   pthread_mutex_unlock(&start_mutex);
 }
 
-int psync_fs_start(){
+static int psync_fs_do_start(){
   char *mp;
   struct fuse_operations psync_oper;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
@@ -2215,12 +2212,41 @@ err00:
   return -1;
 }
 
+static void psync_fs_wait_start(){
+  debug(D_NOTICE, "waiting for online status");
+  psync_wait_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING|PSTATUS_ONLINE_ONLINE);
+  if (psync_do_run){
+    debug(D_NOTICE, "starting fs");
+    psync_fs_do_start();
+  }
+}
+
+int psync_fs_start(){
+  uint32_t status;
+  int ret;
+  pthread_mutex_lock(&start_mutex);
+  if (started)
+    ret=-1;
+  else
+    ret=0;
+  pthread_mutex_unlock(&start_mutex);
+  if (ret)
+    return ret;
+  status=psync_status_get(PSTATUS_TYPE_AUTH);
+  if (status==PSTATUS_AUTH_PROVIDED)
+    return psync_fs_do_start();
+  else{
+    psync_run_thread("fs wait login", psync_fs_wait_start);
+    return 0;
+  }
+}
+
 int psync_fs_isstarted(){
   int s;
   pthread_mutex_lock(&start_mutex);
   s=started;
   pthread_mutex_unlock(&start_mutex);
-  return s;
+  return s==1;
 }
 
 int psync_fs_remount(){
