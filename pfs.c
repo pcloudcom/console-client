@@ -2233,6 +2233,7 @@ int psync_fs_start(){
   if (ret)
     return ret;
   status=psync_status_get(PSTATUS_TYPE_AUTH);
+  debug(D_NOTICE, "auth status=%u", status);
   if (status==PSTATUS_AUTH_PROVIDED)
     return psync_fs_do_start();
   else{
