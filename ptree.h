@@ -57,7 +57,7 @@ typedef struct _psync_tree {
     ___tmpa=psync_tree_get_first(l);\
     ___tmpe=psync_tree_element(___tmpa, t, n);\
     while (___tmpe){\
-      __tmpb=psync_tree_get_next(__tmpa);\
+      ___tmpb=psync_tree_get_next(___tmpa);\
       c(___tmpe);\
       ___tmpa=___tmpb;\
       ___tmpe=psync_tree_element(___tmpa, t, n);\

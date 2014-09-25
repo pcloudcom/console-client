@@ -41,13 +41,14 @@ static void psync_fs_crypto_set_sector_log_offset(psync_openfile_t *of, psync_cr
   psync_sector_inlog_t *tr, *ntr;
   psync_tree **pe;
   tr=psync_tree_element(of->sectorsinlog, psync_sector_inlog_t, tree);
+  pe=&of->sectorsinlog;
   while (tr){
     d=sectorid-tr->sectorid;
     if (d<0){
       if (tr->tree.left)
         tr=psync_tree_element(tr->tree.left, psync_sector_inlog_t, tree);
       else{
-        *pe=&tr->tree.left;
+        pe=&tr->tree.left;
         break;
       }
     }
@@ -55,7 +56,7 @@ static void psync_fs_crypto_set_sector_log_offset(psync_openfile_t *of, psync_cr
       if (tr->tree.right)
         tr=psync_tree_element(tr->tree.right, psync_sector_inlog_t, tree);
       else{
-        *pe=&tr->tree.right;
+        pe=&tr->tree.right;
         break;
       }
     }
@@ -96,6 +97,7 @@ static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const
   }
   psync_fs_crypto_set_sector_log_offset(of, sectorid, of->logoffset);
   of->logoffset+=len;
+  return 0;
 }
 
 static int psync_fs_crypto_write_newfile_partial_sector(psync_openfile_t *of, const char *buf, psync_crypto_sectorid_t sectorid, size_t size, off_t offset){

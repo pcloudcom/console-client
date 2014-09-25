@@ -1862,7 +1862,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   fnew_path=psync_fsfolder_resolve_path(new_path);
   if (!fold_path || !fnew_path)
     goto err_enoent;
-  if ((fold_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)!=(targetflags&PSYNC_FOLDER_FLAG_ENCRYPTED)){
+  if ((fold_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)!=(fnew_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)){
     ret=-EXDEV;
     goto finish;
   }

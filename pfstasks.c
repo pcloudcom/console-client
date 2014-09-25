@@ -290,7 +290,7 @@ static uint32_t psync_fstask_depend_on_name2(uint64_t taskid, uint64_t taskid2,p
   return psync_sql_affected_rows();
 }
 
-int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name){
+int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name, uint32_t folderflags){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fstask_folder_t *folder;
