@@ -52,6 +52,10 @@
 #include "pcloudcrypto.h"
 #include "pfscrypto.h"
 
+#ifndef FUSE_STAT
+#define FUSE_STAT stat
+#endif
+
 #if defined(P_OS_POSIX)
 #include <signal.h>
 #endif
@@ -370,8 +374,8 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 #define fileid_to_inode(fileid) ((fileid)*3+1)
 #define taskid_to_inode(taskid) ((taskid)*3+2)
 
-static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
-  memset(stbuf, 0, sizeof(struct stat));
+static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=psync_get_number(row[2]);
@@ -381,6 +385,7 @@ static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
   stbuf->st_ctime=psync_get_number(row[2]);
   stbuf->st_mtime=psync_get_number(row[3]);
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=psync_get_number(row[4])+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -392,11 +397,11 @@ static void psync_row_to_folder_stat(psync_variant_row row, struct stat *stbuf){
   stbuf->st_gid=mygid;
 }
 
-static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
+static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
   uint64_t size;
   stbuf->st_ino=fileid_to_inode(psync_get_number(row[4]));
   size=psync_get_number(row[1]);
-  memset(stbuf, 0, sizeof(struct stat));
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
@@ -405,6 +410,7 @@ static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
   stbuf->st_ctime=psync_get_number(row[2]);
   stbuf->st_mtime=psync_get_number(row[3]);
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   stbuf->st_size=size;
@@ -416,8 +422,8 @@ static void psync_row_to_file_stat(psync_variant_row row, struct stat *stbuf){
   stbuf->st_gid=mygid;
 }
 
-static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *stbuf){
-  memset(stbuf, 0, sizeof(struct stat));
+static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STAT *stbuf){
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   if (mk->folderid>=0)
     stbuf->st_ino=folderid_to_inode(mk->folderid);
   else
@@ -430,6 +436,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *st
   stbuf->st_ctime=mk->ctime;
   stbuf->st_mtime=mk->mtime;
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=mk->subdircnt+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -441,7 +448,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct stat *st
   stbuf->st_gid=mygid;
 }
 
-static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf){
+static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
   res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE id=?");
@@ -454,18 +461,16 @@ static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct stat *stbuf
   return row?0:-1;
 }
 
-static int psync_creat_stat_fake_file(struct stat *stbuf){
+static int psync_creat_stat_fake_file(struct FUSE_STAT *stbuf){
   time_t ctime;
-  memset(stbuf, 0, sizeof(struct stat));
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   ctime=psync_timer_time();
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=ctime;
-  stbuf->st_ctime=ctime;
-  stbuf->st_mtime=ctime;
-#else
-  stbuf->st_ctime=ctime;
-  stbuf->st_mtime=ctime;
 #endif
+  stbuf->st_ctime=ctime;
+  stbuf->st_mtime=ctime;
+  stbuf->st_atime=ctime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   stbuf->st_size=0;
@@ -478,7 +483,7 @@ static int psync_creat_stat_fake_file(struct stat *stbuf){
   return 0;
 }
 
-static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
+static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf){
   psync_stat_t st;
   psync_fsfileid_t fileid;
   uint64_t size;
@@ -521,7 +526,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
     if (stret!=sizeof(osize))
       return -EIO;
   }*/
-  memset(stbuf, 0, sizeof(struct stat));
+  memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=taskid_to_inode(fileid);
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=st.st_birthtime;
@@ -531,6 +536,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   stbuf->st_ctime=psync_stat_ctime(&st);
   stbuf->st_mtime=psync_stat_mtime(&st);
 #endif
+  stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   size=psync_stat_size(&st);
@@ -546,7 +552,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct stat 
   return 0;
 }
 
-static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct stat *stbuf){
+static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf){
   debug(D_NOTICE, "getting stat from creat for file %s fileid %ld taskid %lu", cr->name, (long)cr->fileid, (unsigned long)cr->taskid);
   if (cr->fileid>=0)
     return psync_creat_db_to_file_stat(cr->fileid, stbuf);
@@ -566,7 +572,7 @@ int psync_fs_crypto_err_to_errno(int cryptoerr){
   }
 }
 
-static int psync_fs_getrootattr(struct stat *stbuf){
+static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
   res=psync_sql_query("SELECT 0, 0, 0, 0, subdircnt FROM folder WHERE id=0");
@@ -576,7 +582,7 @@ static int psync_fs_getrootattr(struct stat *stbuf){
   return 0;
 }
 
-static int psync_fs_getattr(const char *path, struct stat *stbuf){
+static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
   psync_fspath_t *fpath;
@@ -670,7 +676,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   const char *name;
   psync_crypto_aes256_text_decoder_t dec;
   uint32_t flags;
-  struct stat st;
+  struct FUSE_STAT st;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
   psync_sql_lock();
@@ -2154,13 +2160,19 @@ static void psync_fs_do_stop(void){
   debug(D_NOTICE, "stopping");
   pthread_mutex_lock(&start_mutex);
   if (started==1){
+#if defined(P_OS_MACOSX)
+    debug(D_NOTICE, "running unmount");
+    unmount(psync_current_mountpoint, MNT_FORCE);
+    debug(D_NOTICE, "unmount exited");
+#endif
     debug(D_NOTICE, "running fuse_exit");
     fuse_exit(psync_fuse);
-    debug(D_NOTICE, "fuse_exit exited");
     started=2;
-    debug(D_NOTICE, "waiting for fuse to exit");
+    debug(D_NOTICE, "fuse_exit exited, flushing cache");
+    psync_pagecache_flush();
+    debug(D_NOTICE, "cache flushed, waiting for fuse to exit");
     psync_nanotime(&ts);
-    ts.tv_sec+=30;
+    ts.tv_sec+=2;
     if (pthread_cond_timedwait(&start_cond, &start_mutex, &ts))
       debug(D_NOTICE, "timeouted waiting for fuse to exit");
     else
@@ -2235,14 +2247,18 @@ static void psync_fuse_thread(){
   debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
   fuse_destroy(psync_fuse);
   debug(D_NOTICE, "fuse_destroy exited");
-  psync_pagecache_flush();
+/*#if defined(P_OS_MACOSX)
+  debug(D_NOTICE, "calling unmount");
+  unmount(psync_current_mountpoint, MNT_FORCE);
+  debug(D_NOTICE, "unmount exited");
+#endif*/
   psync_free(psync_current_mountpoint);
   started=0;
   pthread_cond_broadcast(&start_cond);
   pthread_mutex_unlock(&start_mutex);
 }
 
-int psync_fs_start(){
+static int psync_fs_do_start(){
   char *mp;
   struct fuse_operations psync_oper;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
@@ -2334,12 +2350,42 @@ err00:
   return -1;
 }
 
+static void psync_fs_wait_start(){
+  debug(D_NOTICE, "waiting for online status");
+  psync_wait_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING|PSTATUS_ONLINE_ONLINE);
+  if (psync_do_run){
+    debug(D_NOTICE, "starting fs");
+    psync_fs_do_start();
+  }
+}
+
+int psync_fs_start(){
+  uint32_t status;
+  int ret;
+  pthread_mutex_lock(&start_mutex);
+  if (started)
+    ret=-1;
+  else
+    ret=0;
+  pthread_mutex_unlock(&start_mutex);
+  if (ret)
+    return ret;
+  status=psync_status_get(PSTATUS_TYPE_AUTH);
+  debug(D_NOTICE, "auth status=%u", status);
+  if (status==PSTATUS_AUTH_PROVIDED)
+    return psync_fs_do_start();
+  else{
+    psync_run_thread("fs wait login", psync_fs_wait_start);
+    return 0;
+  }
+}
+
 int psync_fs_isstarted(){
   int s;
   pthread_mutex_lock(&start_mutex);
   s=started;
   pthread_mutex_unlock(&start_mutex);
-  return s;
+  return s==1;
 }
 
 int psync_fs_remount(){

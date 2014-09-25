@@ -1745,6 +1745,7 @@ static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash){
   fd=psync_file_open(filename, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE){
     debug(D_ERROR, "could not open cache file %s for taskid %lu, skipping", filename, (unsigned long)taskid);
+    psync_file_delete(filename);
     psync_free(filename);
     return;
   }
@@ -1802,6 +1803,7 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
   if (unlikely(fd==INVALID_HANDLE_VALUE)){
     debug(D_ERROR, "could not open index of cache file %s for taskid %lu, skipping", indexname, (unsigned long)taskid);
     psync_file_delete(filename);
+    psync_file_delete(indexname);
     psync_free(filename);
     psync_free(indexname);
     return;

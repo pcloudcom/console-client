@@ -954,30 +954,25 @@ static psync_socket_t connect_socket(const char *host, const char *port){
   }
   if (likely(sock!=INVALID_SOCKET)){
     int sock_opt=1;
-#if defined(TCP_NODELAY) && defined(SOL_TCP)
-    setsockopt(sock, SOL_TCP, TCP_NODELAY, (char*)&sock_opt, sizeof(sock_opt));
-#endif
-#if defined(TCP_NODELAY) && defined(IPPROTO_TCP)
-    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char*)&sock_opt, sizeof(sock_opt));
-#endif
-#if defined(SO_KEEPALIVE) && defined(SOL_SOCKET)
-    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
-#endif
-#if defined(TCP_KEEPALIVE) && defined(IPPROTO_TCP)
+#if defined(P_OS_LINUX)
+    setsockopt(sock, SOL_TCP, TCP_NODELAY, (char *)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&sock_opt, sizeof(sock_opt));
+#else
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char  *)&sock_opt, sizeof(sock_opt));
     setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(SOL_TCP)
 #if defined(TCP_KEEPCNT)
     sock_opt=3;
-    setsockopt(sock, SOL_TCP, TCP_KEEPCNT, (char*)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_TCP, TCP_KEEPCNT, (char *)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(TCP_KEEPIDLE)
     sock_opt=60;
-    setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, (char*)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_TCP, TCP_KEEPIDLE, (char *)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(TCP_KEEPINTVL)
     sock_opt=20;
-    setsockopt(sock, SOL_TCP, TCP_KEEPINTVL, (char*)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_TCP, TCP_KEEPINTVL, (char *)&sock_opt, sizeof(sock_opt));
 #endif
 #endif
   }
@@ -1786,14 +1781,18 @@ int psync_stat(const char *path, psync_stat_t *st){
   wchar_t *wpath;
   HANDLE fd;
   BOOL ret;
-  DWORD flag = FILE_ATTRIBUTE_NORMAL, attr;
+  DWORD flag, attr;
   wpath=utf8_to_wchar(path);
 retry:
-  attr = GetFileAttributesW(wpath);
-  if (attr != INVALID_FILE_ATTRIBUTES && attr & FILE_ATTRIBUTE_DIRECTORY)
-    flag = FILE_FLAG_BACKUP_SEMANTICS;
-  if (attr == INVALID_FILE_ATTRIBUTES)
-      return -1;
+  attr=GetFileAttributesW(wpath);
+  if (attr==INVALID_FILE_ATTRIBUTES){
+    psync_free(wpath);
+    return -1;
+  }
+  if (attr&FILE_ATTRIBUTE_DIRECTORY)
+    flag=FILE_FLAG_BACKUP_SEMANTICS;
+  else
+    flag=FILE_ATTRIBUTE_NORMAL;
 
   fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
@@ -2130,6 +2129,8 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
     cdis=OPEN_EXISTING;
   wpath=utf8_to_wchar(path);
   ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (ret==INVALID_HANDLE_VALUE)
+    debug(D_WARNING, "could not open file %s, error %d", path, (int)GetLastError());
   psync_free(wpath);
   return ret;
 #else
