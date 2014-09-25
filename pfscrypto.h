@@ -30,6 +30,16 @@
 
 #include "pfs.h"
 
+#define PSYNC_CRYPTO_MAX_SECTORID UINT32_MAX
+typedef uint32_t psync_crypto_sectorid_t;
+typedef int32_t psync_crypto_sectorid_diff_t;
+
+typedef struct {
+  psync_tree tree;
+  psync_crypto_sectorid_t sectorid;
+  uint32_t logoffset;
+} psync_sector_inlog_t;
+
 int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset);
 
 #endif

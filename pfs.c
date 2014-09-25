@@ -1261,6 +1261,7 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
     psync_crypto_aes256_sector_encoder_decoder_free(of->encoder);
     close_if_valid(of->logfile);
     close_if_valid(of->authfile);
+    psync_tree_for_each_element_call(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
   }
   pthread_mutex_destroy(&of->mutex);
   close_if_valid(of->datafile);

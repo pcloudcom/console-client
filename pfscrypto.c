@@ -2,9 +2,6 @@
 #include "pfscrypto.h"
 #include "pcloudcrypto.h"
 
-#define PSYNC_CRYPTO_MAX_SECTORID UINT32_MAX
-typedef uint32_t psync_crypto_sectorid_t;
-
 #define PSYNC_CRYPTO_LOG_RECORD_DATASECTOR 0
 
 typedef struct {
@@ -28,6 +25,10 @@ typedef struct {
 typedef struct {
   psync_crypto_log_header header;
   unsigned char authdata[PSYNC_CRYPTO_AUTH_SIZE];
+} psync_crypto_log_header_auth;
+
+typedef struct {
+  psync_crypto_log_header_auth ha;
   unsigned char data[PSYNC_CRYPTO_SECTOR_SIZE];
 } psync_crypto_log_data_record;
 
@@ -35,9 +36,39 @@ static uint32_t psync_fs_crypto_get_next_sector_revision(psync_openfile_t *of, p
   return 0;
 }
 
-static int psync_fs_crypto_write_newfile_partial_sector(psync_openfile_t *of, const char *buf, psync_crypto_sectorid_t sectorid, size_t size, off_t offset){
-  assert(offset+size<=PSYNC_CRYPTO_SECTOR_SIZE);
-  return -ENOSYS;
+static void psync_fs_crypto_set_sector_log_offset(psync_openfile_t *of, psync_crypto_sectorid_t sectorid, uint32_t offset){
+  psync_crypto_sectorid_diff_t d;
+  psync_sector_inlog_t *tr, *ntr;
+  psync_tree **pe;
+  tr=psync_tree_element(of->sectorsinlog, psync_sector_inlog_t, tree);
+  while (tr){
+    d=sectorid-tr->sectorid;
+    if (d<0){
+      if (tr->tree.left)
+        tr=psync_tree_element(tr->tree.left, psync_sector_inlog_t, tree);
+      else{
+        *pe=&tr->tree.left;
+        break;
+      }
+    }
+    else if (d>0){
+      if (tr->tree.right)
+        tr=psync_tree_element(tr->tree.right, psync_sector_inlog_t, tree);
+      else{
+        *pe=&tr->tree.right;
+        break;
+      }
+    }
+    else{
+      tr->logoffset=offset;
+      return;
+    }
+  }
+  ntr=psync_new(psync_sector_inlog_t);
+  *pe=&ntr->tree;
+  ntr->sectorid=sectorid;
+  ntr->logoffset=offset;
+  psync_tree_added_at(&of->sectorsinlog, &tr->tree, &ntr->tree);
 }
 
 static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const char *buf, psync_crypto_sectorid_t sectorid, size_t size){
@@ -52,18 +83,24 @@ static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const
     if (revisionid==PSYNC_CRYPTO_INVALID_REVISIONID)
       return -EIO;
   }
-  psync_crypto_aes256_encode_sector(of->encoder, (const unsigned char *)buf, size, rec.data, rec.authdata, sectorid, revisionid);
-  memset(&rec.header, 0, sizeof(psync_crypto_log_header));
-  rec.header.type=PSYNC_CRYPTO_LOG_RECORD_DATASECTOR;
-  rec.header.length=size;
-  rec.header.sectorid=sectorid;
+  psync_crypto_aes256_encode_sector(of->encoder, (const unsigned char *)buf, size, rec.data, rec.ha.authdata, sectorid, revisionid);
+  memset(&rec.ha.header, 0, sizeof(psync_crypto_log_header));
+  rec.ha.header.type=PSYNC_CRYPTO_LOG_RECORD_DATASECTOR;
+  rec.ha.header.length=size;
+  rec.ha.header.sectorid=sectorid;
   len=offsetof(psync_crypto_log_data_record, data)+size;
   wrt=psync_file_pwrite(of->logfile, &rec, len, of->logoffset);
   if (unlikely(wrt!=len)){
     debug(D_ERROR, "write to log of %u bytes returned %d", (unsigned)len, (int)wrt);
     return -EIO;
   }
+  psync_fs_crypto_set_sector_log_offset(of, sectorid, of->logoffset);
   of->logoffset+=len;
+}
+
+static int psync_fs_crypto_write_newfile_partial_sector(psync_openfile_t *of, const char *buf, psync_crypto_sectorid_t sectorid, size_t size, off_t offset){
+  assert(offset+size<=PSYNC_CRYPTO_SECTOR_SIZE);
+  return -ENOSYS;
 }
 
 static int psync_fs_unlock_ret(psync_openfile_t *of, int ret){

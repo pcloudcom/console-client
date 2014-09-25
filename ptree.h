@@ -44,9 +44,25 @@ typedef struct _psync_tree {
 #define psync_tree_isempty(l) ((l)==NULL)
 #define psync_tree_element(a, t, n) ((t *)((char *)(a)-offsetof(t, n)))
 #define psync_tree_for_each(a, l) for (a=psync_tree_get_first(l); a!=NULL; a=psync_tree_get_next(a))
+#define psync_tree_for_each_safe(a, b, l) for (a=(l)->next, b=a->next; psync_prefetch(b), a!=(l); a=b, b=b->next)
+
 #define psync_tree_for_each_element(a, l, t, n) for (a=psync_tree_element(psync_tree_get_first(l), t, n);\
                                                      &a->n!=NULL;\
                                                      a=psync_tree_element(psync_tree_get_next(&a->n), t, n))
+
+#define psync_tree_for_each_element_call(l, t, n, c)\
+  do {\
+    psync_tree *___tmpa, *___tmpb;\
+    t *___tmpe;\
+    ___tmpa=psync_tree_get_first(l);\
+    ___tmpe=psync_tree_element(___tmpa, t, n);\
+    while (___tmpe){\
+      __tmpb=psync_tree_get_next(__tmpa);\
+      c(___tmpe);\
+      ___tmpa=___tmpb;\
+      ___tmpe=psync_tree_element(___tmpa, t, n);\
+    }\
+  } while (0)
 
 
 typedef int (*psync_tree_compare)(const psync_tree *, const psync_tree *);
