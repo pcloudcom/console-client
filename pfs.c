@@ -1606,17 +1606,133 @@ static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t pare
   return psync_fstask_rename_file(fileid, parentfolderid, name, to_folderid, new_name);
 }
 
+static int psync_fs_is_file(psync_fsfolderid_t folderid, const char *name){
+  psync_fstask_folder_t *folder;
+  psync_sql_res *res;
+  int ret;
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder){
+    if (psync_fstask_find_creat(folder, name, 0))
+      ret=2;
+    else if (psync_fstask_find_unlink(folder, name, 0))
+      ret=1;
+    else
+      ret=0;
+    psync_fstask_release_folder_tasks_locked(folder);
+    if (ret)
+      return ret-1;
+  }
+  res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_string(res, 2, name);
+  if (psync_sql_fetch_rowint(res))
+    ret=1;
+  else
+    ret=0;
+  psync_sql_free_result(res);
+  return ret;
+}
+
+static int psync_fs_is_folder(psync_fsfolderid_t folderid, const char *name){
+  psync_fstask_folder_t *folder;
+  psync_sql_res *res;
+  int ret;
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder){
+    if (psync_fstask_find_mkdir(folder, name, 0))
+      ret=2;
+    else if (psync_fstask_find_rmdir(folder, name, 0))
+      ret=1;
+    else
+      ret=0;
+    psync_fstask_release_folder_tasks_locked(folder);
+    if (ret)
+      return ret-1;
+  }
+  res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_string(res, 2, name);
+  if (psync_sql_fetch_rowint(res))
+    ret=1;
+  else
+    ret=0;
+  psync_sql_free_result(res);
+  return ret;
+}
+
+static int psync_fs_is_folder_nonempty(psync_fsfolderid_t folderid){
+  psync_fstask_folder_t *folder;
+  psync_sql_res *res;
+  psync_str_row row;
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder && (folder->creats || folder->mkdirs)){
+    psync_fstask_release_folder_tasks_locked(folder);
+    return 1;
+  }
+  if (folderid>=0){
+    res=psync_sql_query("SELECT name FROM file WHERE parentfolderid=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    while ((row=psync_sql_fetch_rowstr(res)))
+      if (!folder || !psync_fstask_find_unlink(folder, row[0], 0)){
+        psync_sql_free_result(res);
+        if (folder)
+          psync_fstask_release_folder_tasks_locked(folder);
+        return 1;
+      }
+    psync_sql_free_result(res);
+    res=psync_sql_query("SELECT name FROM folder WHERE parentfolderid=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    while ((row=psync_sql_fetch_rowstr(res)))
+      if (!folder || !psync_fstask_find_rmdir(folder, row[0], 0)){
+        psync_sql_free_result(res);
+        if (folder)
+          psync_fstask_release_folder_tasks_locked(folder);
+        return 1;
+      }
+    psync_sql_free_result(res);
+  }
+  if (folder)
+    psync_fstask_release_folder_tasks_locked(folder);
+  return 0;
+}
+
+static int psync_fs_is_nonempty_folder(psync_fsfolderid_t folderid, const char *name){
+  psync_fstask_folder_t *folder;
+  psync_fstask_mkdir_t *mk;
+  psync_sql_res *res;
+  psync_uint_row row;
+  int ret;
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder){
+    if ((mk=psync_fstask_find_mkdir(folder, name, 0)))
+      ret=psync_fs_is_folder_nonempty(mk->folderid)+1;
+    else if (psync_fstask_find_rmdir(folder, name, 0))
+      ret=1;
+    else
+      ret=0;
+    psync_fstask_release_folder_tasks_locked(folder);
+    if (ret)
+      return ret-1;
+  }
+  res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_string(res, 2, name);
+  if ((row=psync_sql_fetch_rowint(res)))
+    ret=psync_fs_is_folder_nonempty(row[0]);
+  else
+    ret=0;
+  psync_sql_free_result(res);
+  return ret;
+}
+
 static int psync_fs_rename(const char *old_path, const char *new_path){
   psync_fspath_t *fold_path, *fnew_path;
   psync_sql_res *res;
   psync_fstask_folder_t *folder;
   psync_fstask_mkdir_t *mkdir;
   psync_fstask_creat_t *creat;
-  psync_fsfolderid_t to_folderid;
   psync_uint_row row;
-  const char *new_name;
   psync_fileorfolderid_t fid;
-  uint32_t targetperms;
   int ret;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "rename %s to %s", old_path, new_path);
@@ -1624,76 +1740,40 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   psync_sql_lock();
   fold_path=psync_fsfolder_resolve_path(old_path);
   fnew_path=psync_fsfolder_resolve_path(new_path);
-  if (!fold_path || !fnew_path){
-    if (fold_path && new_path[1]==0 && new_path[0]=='/'){
-      to_folderid=0;
-      targetperms=PSYNC_PERM_ALL;
-      new_name=NULL;
-      goto move_to_root;
-    }
+  if (!fold_path || !fnew_path)
     goto err_enoent;
-  }
-  folder=psync_fstask_get_folder_tasks_locked(fnew_path->folderid);
-  if (folder && (mkdir=psync_fstask_find_mkdir(folder, fnew_path->name, 0))){
-    to_folderid=mkdir->folderid;
-    if (mkdir->folderid>0){
-      res=psync_sql_query("SELECT permissions FROM folder WHERE id=?");
-      psync_sql_bind_uint(res, 1, mkdir->folderid);
-      if ((row=psync_sql_fetch_rowint(res)))
-        targetperms=row[0]&fnew_path->permissions;
-      psync_sql_free_result(res);
-      if (!row)
-        goto err_enoent;
-    }
-    else
-      targetperms=fnew_path->permissions;
-    new_name=NULL;
-  }
-  else if (fnew_path->folderid>=0){
-    res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
-    psync_sql_bind_uint(res, 1, fnew_path->folderid);
-    psync_sql_bind_string(res, 2, fnew_path->name);
-    row=psync_sql_fetch_rowint(res);
-    if (row && (!folder || !psync_fstask_find_rmdir(folder, fnew_path->name, 0))){
-      to_folderid=row[0];
-      targetperms=row[1]&fnew_path->permissions;
-      new_name=NULL;
-    }
-    else{
-      to_folderid=fnew_path->folderid;
-      targetperms=fnew_path->permissions;
-      new_name=fnew_path->name;
-    }
-    psync_sql_free_result(res);
-  }
-  else{
-    to_folderid=fnew_path->folderid;
-    targetperms=fnew_path->permissions;
-    new_name=fnew_path->name;
-  }
-  if (folder)
-    psync_fstask_release_folder_tasks_locked(folder);
-move_to_root:
   folder=psync_fstask_get_folder_tasks_locked(fold_path->folderid);
   if (folder){
     if ((mkdir=psync_fstask_find_mkdir(folder, fold_path->name, 0))){
-      ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
+        ret=-ENOTDIR;
+      else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name))
+        ret=-ENOTEMPTY;
+      else
+        ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
       goto finish;
     }
     else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
-      ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
+        ret=-EISDIR;
+      else
+        ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
       goto finish;
     }
   }
   if (!folder || !psync_fstask_find_rmdir(folder, fold_path->name, 0)){
-    // even if we don't use permissions, it is probably better to use same query as above
-    res=psync_sql_query("SELECT id, permissions FROM folder WHERE parentfolderid=? AND name=?");
+    res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fold_path->folderid);
     psync_sql_bind_string(res, 2, fold_path->name);
     if ((row=psync_sql_fetch_rowint(res))){
       fid=row[0];
       psync_sql_free_result(res);
-      ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
+        ret=-ENOTDIR;
+      else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name))
+        ret=-ENOTEMPTY;
+      else
+        ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
       goto finish;
     }
     psync_sql_free_result(res);
@@ -1705,7 +1785,10 @@ move_to_root:
     if ((row=psync_sql_fetch_rowint(res))){
       fid=row[0];
       psync_sql_free_result(res);
-      ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, to_folderid, new_name, targetperms);
+      if (psync_fs_is_folder(fnew_path->folderid, fnew_path->name))
+        ret=-EISDIR;
+      else
+        ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
       goto finish;
     }
     psync_sql_free_result(res);

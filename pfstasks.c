@@ -132,6 +132,10 @@ psync_fstask_folder_t *psync_fstask_get_folder_tasks_locked(psync_fsfolderid_t f
 }
 
 void psync_fstask_release_folder_tasks_locked(psync_fstask_folder_t *folder){
+#if IS_DEBUG
+  if ((!!folder->taskscnt)!=(folder->creats || folder->mkdirs || folder->rmdirs || folder->unlinks))
+    debug(D_ERROR, "taskcnt=%u, c=%p, m=%p, r=%p, u=%p", (unsigned)folder->taskscnt, folder->creats, folder->mkdirs, folder->rmdirs, folder->unlinks);
+#endif
   if (--folder->refcnt==0 && !folder->taskscnt){
     debug(D_NOTICE, "releasing folder id %ld", (long int)folder->folderid);
     psync_tree_del(&folders, &folder->tree);
@@ -268,6 +272,18 @@ static uint32_t psync_fstask_depend_on_name(uint64_t taskid, psync_fsfolderid_t 
   psync_sql_bind_int(res, 2, folderid);
   psync_sql_bind_lstring(res, 3, name, len);
   psync_sql_bind_uint(res, 4, taskid);
+  psync_sql_run_free(res);
+  return psync_sql_affected_rows();
+}
+
+static uint32_t psync_fstask_depend_on_name2(uint64_t taskid, uint64_t taskid2,psync_fsfolderid_t folderid, const char *name, size_t len){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO fstaskdepend (fstaskid, dependfstaskid) SELECT ?, id FROM fstask WHERE folderid=? AND text1=? AND id NOT IN (?, ?)");
+  psync_sql_bind_uint(res, 1, taskid);
+  psync_sql_bind_int(res, 2, folderid);
+  psync_sql_bind_lstring(res, 3, name, len);
+  psync_sql_bind_uint(res, 4, taskid);
+  psync_sql_bind_uint(res, 5, taskid2);
   psync_sql_run_free(res);
   return psync_sql_affected_rows();
 }
@@ -761,7 +777,6 @@ static void add_history_record(psync_fileid_t fileid, psync_folderid_t folderid,
 
 int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, psync_fsfolderid_t to_folderid, const char *new_name){
   psync_sql_res *res;
-  psync_uint_row row;
   psync_fstask_folder_t *folder;
   psync_fstask_creat_t *cr;
   psync_fstask_unlink_t *rm;
@@ -800,24 +815,22 @@ int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentf
     psync_fstask_depend(ttaskid, -parentfolderid);
   if (to_folderid<0 && to_folderid!=parentfolderid)
     psync_fstask_depend(ttaskid, -to_folderid);
-  res=psync_sql_query("SELECT id FROM fstask WHERE folderid=? AND text1=?");
-  psync_sql_bind_int(res, 1, to_folderid);
-  psync_sql_bind_lstring(res, 2, new_name, nnlen);
-  while ((row=psync_sql_fetch_rowint(res)))
-    if (row[0]!=ftaskid && row[0]!=ttaskid)
-      psync_fstask_depend(ttaskid, row[0]);
-  psync_sql_free_result(res);
-  psync_fstask_depend_on_name(ftaskid, parentfolderid, name, nlen);
+  psync_fstask_depend_on_name2(ttaskid, ftaskid, parentfolderid, name, nlen);
   psync_fstask_depend_on_name(ttaskid, to_folderid, new_name, nnlen);
-  if (psync_sql_commit_transaction())
-    return -EIO;
-  psync_fs_rename_openfile_locked(fileid, to_folderid, new_name);
   folder=psync_fstask_get_or_create_folder_tasks_locked(parentfolderid);
-  if ((cr=psync_fstask_find_creat(folder, name, 0))){
+  cr=psync_fstask_find_creat(folder, name, 0);
+  if (cr)
+    psync_fstask_depend(ttaskid, cr->taskid);
+  if (unlikely_log(psync_sql_commit_transaction())){
+    psync_fstask_release_folder_tasks_locked(folder);
+    return -EIO;
+  }
+  if (cr){
     psync_tree_del(&folder->creats, &cr->tree);
     psync_free(cr);
     folder->taskscnt--;
   }
+  psync_fs_rename_openfile_locked(fileid, to_folderid, new_name);
   nlen++;
   rm=(psync_fstask_unlink_t *)psync_malloc(offsetof(psync_fstask_unlink_t, name)+nlen);
   rm->taskid=ftaskid;
@@ -878,14 +891,61 @@ static void fill_mkdir_data(psync_fsfolderid_t folderid, psync_fstask_mkdir_t *m
   }
 }
 
+static uint64_t psync_fstask_delete_folder_if_ex(psync_fsfolderid_t folderid, const char *name){
+  psync_sql_res *res;
+  psync_fstask_folder_t *folder;
+  psync_fstask_mkdir_t *mk;
+  psync_fsfolderid_t cfolderid;
+  psync_uint_row row;
+  uint64_t depend, taskid;
+  size_t len;
+  cfolderid=0;
+  depend=0;
+  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  if (folder){
+    if ((mk=psync_fstask_find_mkdir(folder, name, 0))){
+      cfolderid=mk->folderid;
+      depend=mk->taskid;
+    }
+    else if (psync_fstask_find_rmdir(folder, name, 0)){
+      psync_fstask_release_folder_tasks_locked(folder);
+      return 0;
+    }
+    psync_fstask_release_folder_tasks_locked(folder);
+  }
+  len=strlen(name);
+  if (cfolderid==0){
+    if (folderid<0)
+      return 0;
+    res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_lstring(res, 2, name, len);
+    if ((row=psync_sql_fetch_rowint(res)))
+      cfolderid=row[0];
+    psync_sql_free_result(res);
+    if (cfolderid==0)
+      return 0;
+  }
+  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1) VALUES ("NTO_STR(PSYNC_FS_TASK_RMDIR)", 0, ?, ?, ?)");
+  psync_sql_bind_int(res, 1, folderid);
+  psync_sql_bind_int(res, 2, cfolderid);
+  psync_sql_bind_lstring(res, 3, name, len);
+  psync_sql_run_free(res);
+  taskid=psync_sql_insertid();
+  if (depend)
+    psync_fstask_depend(taskid, depend);
+  if (cfolderid<0)
+    psync_fstask_depend(taskid, -cfolderid);
+  return taskid;
+}
+
 int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name,  psync_fsfolderid_t to_folderid, const char *new_name){
   psync_sql_res *res;
-  psync_uint_row row;
   psync_fstask_folder_t *folder;
   psync_fstask_mkdir_t *mk;
   psync_fstask_rmdir_t *rm;
   size_t nlen, nnlen;
-  uint64_t ftaskid, ttaskid;
+  uint64_t ftaskid, ttaskid, rmtask;
   nlen=strlen(name);
   if (new_name)
     nnlen=strlen(new_name);
@@ -894,6 +954,7 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
     nnlen=nlen;
   }
   psync_sql_start_transaction();
+  rmtask=psync_fstask_delete_folder_if_ex(to_folderid, new_name);
   res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1) VALUES ("NTO_STR(PSYNC_FS_TASK_RENFOLDER_FROM)", 10, ?, ?, ?)");
   psync_sql_bind_int(res, 1, parentfolderid);
   psync_sql_bind_int(res, 2, folderid);
@@ -914,23 +975,23 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
     psync_sql_run_free(res);
     psync_fstask_depend(ttaskid, -folderid);
   }
+  if (rmtask)
+    psync_fstask_depend(ttaskid, rmtask);
   if (parentfolderid<0)
     psync_fstask_depend(ttaskid, -parentfolderid);
   if (to_folderid<0 && to_folderid!=parentfolderid)
     psync_fstask_depend(ttaskid, -to_folderid);
-  res=psync_sql_query("SELECT id FROM fstask WHERE folderid=? AND text1=?");
-  psync_sql_bind_int(res, 1, to_folderid);
-  psync_sql_bind_lstring(res, 2, new_name, nnlen);
-  while ((row=psync_sql_fetch_rowint(res)))
-    if (row[0]!=ftaskid && row[0]!=ttaskid)
-      psync_fstask_depend(ttaskid, row[0]);
-  psync_sql_free_result(res);
-  psync_fstask_depend_on_name(ftaskid, parentfolderid, name, nlen);
+  psync_fstask_depend_on_name2(ttaskid, ftaskid, parentfolderid, name, nlen);
   psync_fstask_depend_on_name(ttaskid, folderid, new_name, nnlen);
-  if (psync_sql_commit_transaction())
-    return -EIO;
   folder=psync_fstask_get_or_create_folder_tasks_locked(parentfolderid);
-  if ((mk=psync_fstask_find_mkdir(folder, name, 0))){
+  mk=psync_fstask_find_mkdir(folder, name, 0);
+  if (mk)
+    psync_fstask_depend(ttaskid, mk->taskid);
+  if (unlikely_log(psync_sql_commit_transaction())){
+    psync_fstask_release_folder_tasks_locked(folder);
+    return -EIO;
+  }
+  if (mk){
     psync_tree_del(&folder->mkdirs, &mk->tree);
     psync_free(mk);
     folder->taskscnt--;
@@ -944,14 +1005,26 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
   folder->taskscnt++;
   psync_fstask_release_folder_tasks_locked(folder);
   folder=psync_fstask_get_or_create_folder_tasks_locked(to_folderid);
+  mk=psync_fstask_find_mkdir(folder, name, 0);
+  if (mk){
+    debug(D_NOTICE, "renaming over mkdir %s", name);
+    psync_tree_del(&folder->mkdirs, &mk->tree);
+    psync_free(mk);
+    folder->taskscnt--;
+  }
   nnlen++;
+  rm=(psync_fstask_rmdir_t *)psync_malloc(offsetof(psync_fstask_rmdir_t, name)+nnlen);
+  rm->taskid=ttaskid;
+  rm->folderid=folderid;
+  memcpy(rm->name, new_name, nnlen);
+  psync_fstask_insert_into_tree(&folder->rmdirs, offsetof(psync_fstask_rmdir_t, name), &rm->tree);
   mk=(psync_fstask_mkdir_t *)psync_malloc(offsetof(psync_fstask_mkdir_t, name)+nnlen);
   mk->taskid=ttaskid;
   mk->folderid=folderid;
   memcpy(mk->name, new_name, nnlen);
   fill_mkdir_data(folderid, mk);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &mk->tree);
-  folder->taskscnt++;
+  folder->taskscnt+=2;
   psync_fstask_release_folder_tasks_locked(folder);
   psync_fsupload_wake();
   return 0;
@@ -1186,6 +1259,12 @@ void psync_fstask_folder_renamed(psync_folderid_t parentfolderid, uint64_t taski
       psync_free(mk);
       folder->taskscnt--;
     }
+    rm=psync_fstask_find_rmdir(folder, name, taskid);
+    if (rm){
+      psync_tree_del(&folder->rmdirs, &rm->tree);
+      psync_free(rm);
+      folder->taskscnt--;
+    }
     psync_fstask_release_folder_tasks_locked(folder);
   }
   res=psync_sql_query("SELECT id, folderid, text1 FROM fstask WHERE id=?");
@@ -1415,18 +1494,28 @@ static void psync_init_task_renfolder_from(psync_variant_row row){
 static void psync_init_task_renfolder_to(psync_variant_row row){
   const char *name;
   psync_fstask_mkdir_t *mk;
+  psync_fstask_rmdir_t *rm;
   psync_fstask_folder_t *folder;
+  psync_fsfolderid_t folderid;
+  uint64_t taskid;
   size_t len;
   name=psync_get_lstring(row[4], &len);
   folder=psync_fstask_get_or_create_folder_tasks_locked(psync_get_number(row[2]));
   len++;
+  taskid=psync_get_number(row[0]);
+  folderid=psync_get_snumber(row[8]);
+  rm=(psync_fstask_rmdir_t *)psync_malloc(offsetof(psync_fstask_rmdir_t, name)+len);
+  rm->taskid=taskid;
+  rm->folderid=folderid;
+  memcpy(rm->name, name, len);
+  psync_fstask_insert_into_tree(&folder->rmdirs, offsetof(psync_fstask_rmdir_t, name), &rm->tree);
   mk=(psync_fstask_mkdir_t *)psync_malloc(offsetof(psync_fstask_mkdir_t, name)+len);
-  mk->taskid=psync_get_number(row[0]);
-  mk->folderid=psync_get_snumber(row[8]);
+  mk->taskid=taskid;
+  mk->folderid=folderid;
   memcpy(mk->name, name, len);
   fill_mkdir_data(mk->folderid, mk);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &mk->tree);
-  folder->taskscnt++;
+  folder->taskscnt+=2;
   psync_fstask_release_folder_tasks_locked(folder);
 }
 
