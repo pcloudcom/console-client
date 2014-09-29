@@ -1371,7 +1371,6 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   of=fh_to_openfile(fi->fh);
   debug(D_NOTICE, "write %s off=%lu size=%lu", of->currentname, (unsigned long)offset, (unsigned long)size);
   pthread_mutex_lock(&of->mutex);
-  psync_fs_inc_writeid_locked(of);
   if (of->writeid%256==0 && of->currentsize<=offset){
     int64_t freespc=psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)));
     if (likely_log(freespc!=-1)){
@@ -1384,6 +1383,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
       }
     }
   }
+  psync_fs_inc_writeid_locked(of);
 retry:
   if (of->newfile){
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
