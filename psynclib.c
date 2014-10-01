@@ -273,6 +273,7 @@ void psync_logout(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
+  psync_fs_stop();
   psync_stop_all_download();
   psync_stop_all_upload();
   psync_cache_clean_all();
@@ -282,10 +283,11 @@ void psync_logout(){
 void psync_unlink(){
   debug(D_NOTICE, "unlink");
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
+  psync_fs_stop();
   psync_stop_all_download();
   psync_stop_all_upload();
-  psync_status_recalc_to_download();//<----
-  psync_status_recalc_to_upload();//<----
+  psync_status_recalc_to_download();
+  psync_status_recalc_to_upload();
   psync_timer_notify_exception();
   psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
