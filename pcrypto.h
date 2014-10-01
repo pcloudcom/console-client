@@ -32,6 +32,19 @@
 
 #define PSYNC_CRYPTO_AUTH_SIZE PSYNC_AES256_BLOCK_SIZE
 
+#define PSYNC_CRYPTO_MAX_HASH_TREE_LEVEL 6
+
+typedef struct {
+  uint64_t masterauthoff;
+  uint64_t plainsize;
+  uint64_t lastauthsectoroff[PSYNC_CRYPTO_MAX_HASH_TREE_LEVEL];
+  uint16_t lastauthsectorlen[PSYNC_CRYPTO_MAX_HASH_TREE_LEVEL];
+  uint8_t treelevels;
+  uint8_t needmasterauth;
+} psync_crypto_offsets_t;
+
+typedef unsigned char psync_crypto_sector_auth_t[PSYNC_CRYPTO_AUTH_SIZE];
+
 typedef struct {
   psync_aes256_encoder encoder;
   union {
@@ -76,8 +89,8 @@ unsigned char *psync_crypto_aes256_decode_text(psync_crypto_aes256_text_decoder_
 psync_crypto_aes256_sector_encoder_decoder_t psync_crypto_aes256_sector_encoder_decoder_create(psync_symmetric_key_t key);
 void psync_crypto_aes256_sector_encoder_decoder_free(psync_crypto_aes256_sector_encoder_decoder_t enc);
 void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
-                                       unsigned char *out, unsigned char *authout, uint64_t sectorid, uint32_t revisionid);
+                                       unsigned char *out, pcloud_crypto_sector_auth_t authout, uint64_t sectorid, uint32_t revisionid);
 int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
-                                       unsigned char *out, const unsigned char *auth, uint64_t sectorid, uint32_t *revisionid);
-
+                                       unsigned char *out, const pcloud_crypto_sector_auth_t auth, uint64_t sectorid, uint32_t *revisionid);
+void psync_crypto_sign_auth_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, pcloud_crypto_sector_auth_t authout);
 #endif

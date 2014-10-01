@@ -434,7 +434,7 @@ static int memcmp_const(const unsigned char *s1, const unsigned char *s2, size_t
 }
 
 void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
-                                       unsigned char *out, unsigned char *authout, uint64_t sectorid, uint32_t revisionid){
+                                       unsigned char *out, pcloud_crypto_sector_auth_t authout, uint64_t sectorid, uint32_t revisionid){
   psync_hmac_sha1_ctx ctx;
   unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
   unsigned char *aessrc, *aesdst, *hmac;
@@ -500,7 +500,7 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
 }
 
 int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
-                                      unsigned char *out, const unsigned char *auth, uint64_t sectorid, uint32_t *revisionid){
+                                      unsigned char *out, const pcloud_crypto_sector_auth_t auth, uint64_t sectorid, uint32_t *revisionid){
   psync_hmac_sha1_ctx ctx;
   unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
   unsigned char *aessrc, *aesdst, *hmac, *oout;
@@ -561,4 +561,14 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
   hmacsha1bin[0]=(hmacsha1bin[0]&0xfc)|revsize;
   memcpy_const(hmacsha1bin+1, (unsigned char *)revisionid, revsize, 3);
   return -memcmp_const(hmacsha1bin, hmac, PSYNC_AES256_BLOCK_SIZE);
+}
+
+void psync_crypto_sign_auth_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, pcloud_crypto_sector_auth_t authout){
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*2+PSYNC_SHA1_DIGEST_LEN];
+  unsigned char *aessrc, *aesdst;
+  aesdst=ALIGN_PTR_A256_BS(buff);
+  aessrc=aesdst+PSYNC_AES256_BLOCK_SIZE;
+  psync_hmac_sha1(data, datalen, enc->iv, enc->ivlen, aessrc);
+  psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+  memcpy(authout, aesdst, PSYNC_CRYPTO_AUTH_SIZE);
 }

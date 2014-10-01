@@ -809,7 +809,6 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
     fl->encrypted=1;
     fl->encoder=encoder;
     fl->logfile=INVALID_HANDLE_VALUE;
-    fl->authfile=INVALID_HANDLE_VALUE;
   }
   if (lock)
     pthread_mutex_lock(&fl->mutex);
@@ -878,6 +877,7 @@ static int open_write_files(psync_openfile_t *of, int trunc){
   const char *cachepath;
   char *filename;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  int ret;
   fileid=-of->fileid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
   fileidhex[sizeof(psync_fsfileid_t)]='d';
@@ -907,24 +907,19 @@ static int open_write_files(psync_openfile_t *of, int trunc){
     }
   }
   if (of->encrypted){
-    if (of->authfile==INVALID_HANDLE_VALUE){
-      fileidhex[sizeof(psync_fsfileid_t)]='a';
-      filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-      of->authfile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|(trunc?P_O_TRUNC:0));
-      psync_free(filename);
-      if (of->authfile==INVALID_HANDLE_VALUE){
-        debug(D_ERROR, "could not open auth file for fileid %ld", (long)of->fileid);
-        return -EIO;
-      }
-    }
     if (of->logfile==INVALID_HANDLE_VALUE){
       fileidhex[sizeof(psync_fsfileid_t)]='l';
       filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
       of->logfile=psync_file_open(filename, P_O_RDWR, P_O_CREAT|P_O_TRUNC);
       psync_free(filename);
       if (of->logfile==INVALID_HANDLE_VALUE){
-        debug(D_ERROR, "could not open auth file for fileid %ld", (long)of->fileid);
+        debug(D_ERROR, "could not open log file for fileid %ld", (long)of->fileid);
         return -EIO;
+      }
+      ret=psync_fs_crypto_init_log(of);
+      if (ret){
+        debug(D_ERROR, "could not init log file for fileid %ld", (long)of->fileid);
+        return ret;
       }
     }
   }
@@ -1260,7 +1255,6 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
   if (of->encrypted){
     psync_crypto_aes256_sector_encoder_decoder_free(of->encoder);
     close_if_valid(of->logfile);
-    close_if_valid(of->authfile);
     psync_tree_for_each_element_call(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
   }
   pthread_mutex_destroy(&of->mutex);

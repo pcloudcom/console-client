@@ -332,6 +332,7 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 }
 
 int psync_sql_connect(const char *db){
+  static int initmutex=1;
   pthread_mutexattr_t mattr;
   psync_stat_t st;
   uint64_t dbver;
@@ -347,10 +348,13 @@ int psync_sql_connect(const char *db){
 
   code=sqlite3_open(db, &psync_db);
   if (likely(code==SQLITE_OK)){
-    pthread_mutexattr_init(&mattr);
-    pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&psync_db_mutex, &mattr);
-    pthread_mutexattr_destroy(&mattr);
+    if (initmutex){
+      pthread_mutexattr_init(&mattr);
+      pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutex_init(&psync_db_mutex, &mattr);
+      pthread_mutexattr_destroy(&mattr);
+      initmutex=0;
+    }
     if (IS_DEBUG)
       sqlite3_config(SQLITE_CONFIG_LOG, psync_sql_err_callback, NULL);
     sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
