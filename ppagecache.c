@@ -434,6 +434,7 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
     result=psync_find_result(ret, "result", PARAM_NUM)->num;
     if (unlikely(result!=0)){
       debug(D_WARNING, "getfilelink returned error %lu", result);
+      psync_free(ret);
       mark_shared_api_bad(api);
       psync_apipool_release_bad(api);
       break;
@@ -1259,7 +1260,7 @@ static int psync_pagecache_read_range_from_sock(psync_request_t *request, psync_
   len=range->length/PSYNC_FS_PAGE_SIZE;
   rb=psync_http_next_request(sock);
   if (unlikely(rb)){
-    if (rb==410 || rb==404){
+    if (rb==410 || rb==404 || rb==-1){
       debug(D_WARNING, "got %d from psync_http_next_request, freeing URLs and requesting retry", rb);
       return 1;
     }
@@ -1395,8 +1396,14 @@ err_api0:
   path=psync_find_result(urls->urls, "path", PARAM_STR)->str;
   psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list){
     debug(D_NOTICE, "sending request for offset %lu, size %lu", (unsigned long)range->offset, (unsigned long)range->length);
-    if (psync_http_request(sock, host, path, range->offset, range->offset+range->length-1))
-      goto err1;
+    if (psync_http_request(sock, host, path, range->offset, range->offset+range->length-1)){
+      if (tries++<5){
+        psync_http_close(sock);
+        goto retry;
+      }
+      else
+        goto err1;
+    }
   }
   psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list)
     if ((err=psync_pagecache_read_range_from_sock(request, range, sock))){

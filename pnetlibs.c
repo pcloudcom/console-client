@@ -1083,8 +1083,10 @@ psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const ch
           break;
         }
       }
-      if (!sock)
+      if (!sock){
+        psync_timer_notify_exception();
         return NULL;
+      }
     }
   }
   hsock=(psync_http_socket *)psync_malloc(offsetof(psync_http_socket, cachekey)+cl);
