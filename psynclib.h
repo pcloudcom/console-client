@@ -228,9 +228,11 @@ typedef struct {
 #define PSYNC_CRYPTO_NOT_STARTED           -1
 #define PSYNC_CRYPTO_RSA_ERROR             -2
 #define PSYNC_CRYPTO_FOLDER_NOT_FOUND      -3
-#define PSYNC_CRYPTO_INVALID_KEY           -4
-#define PSYNC_CRYPTO_CANT_CONNECT          -5
-#define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -6
+#define PSYNC_CRYPTO_FILE_NOT_FOUND        -4
+#define PSYNC_CRYPTO_INVALID_KEY           -5
+#define PSYNC_CRYPTO_CANT_CONNECT          -6
+#define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -7
+#define PSYNC_CRYPTO_INTERNAL_ERROR        -8
 
 typedef struct {
   const char *localname;

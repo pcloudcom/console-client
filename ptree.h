@@ -53,14 +53,11 @@ typedef struct _psync_tree {
 #define psync_tree_for_each_element_call(l, t, n, c)\
   do {\
     psync_tree *___tmpa, *___tmpb;\
-    t *___tmpe;\
     ___tmpa=psync_tree_get_first(l);\
-    ___tmpe=psync_tree_element(___tmpa, t, n);\
-    while (___tmpe){\
+    while (___tmpa){\
       ___tmpb=psync_tree_get_next(___tmpa);\
-      c(___tmpe);\
+      c(psync_tree_element(___tmpa, t, n));\
       ___tmpa=___tmpb;\
-      ___tmpe=psync_tree_element(___tmpa, t, n);\
     }\
   } while (0)
 

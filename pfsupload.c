@@ -1485,7 +1485,7 @@ static void psync_fsupload_thread(){
 
 void psync_fsupload_init(){
   psync_timer_exception_handler(psync_fsupload_wake);
-  psync_run_thread("fsupload main", psync_fsupload_thread);
+//  psync_run_thread("fsupload main", psync_fsupload_thread);
 }
 
 void psync_fsupload_wake(){

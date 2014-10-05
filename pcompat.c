@@ -957,7 +957,10 @@ static psync_socket_t connect_socket(const char *host, const char *port){
 #if defined(P_OS_LINUX)
     setsockopt(sock, SOL_TCP, TCP_NODELAY, (char *)&sock_opt, sizeof(sock_opt));
     setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&sock_opt, sizeof(sock_opt));
-#else
+#elif defined(P_OS_WINDOWS)
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&sock_opt, sizeof(sock_opt));
+#elif defined(P_OS_MACOSX) || defined(P_OS_BSD)
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char  *)&sock_opt, sizeof(sock_opt));
     setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
 #endif

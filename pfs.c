@@ -483,7 +483,35 @@ static int psync_creat_stat_fake_file(struct FUSE_STAT *stbuf){
   return 0;
 }
 
-static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf){
+static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *stbuf){
+  psync_openfile_t *fl;
+  psync_tree *tr;
+  psync_stat_t st;
+  int64_t d;
+  psync_sql_lock();
+  tr=openfiles;
+  while (tr){
+    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    if (d<0)
+      tr=tr->left;
+    else if (d>0)
+      tr=tr->right;
+    else{
+      fl=psync_tree_element(tr, psync_openfile_t, tree);
+      pthread_mutex_lock(&fl->mutex);
+      stbuf->st_size=fl->currentsize;
+      if (!psync_fstat(fl->logfile, &st))
+        stbuf->st_mtime=psync_stat_mtime(&st);
+      pthread_mutex_unlock(&fl->mutex);
+      psync_sql_unlock();
+      return 1;
+    }
+  }
+  psync_sql_unlock();
+  return 0;
+}
+
+static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf, uint32_t folderflags){
   psync_stat_t st;
   psync_fsfileid_t fileid;
   uint64_t size;
@@ -539,10 +567,18 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
-  size=psync_stat_size(&st);
-//  if (osize>size)
-//    size=osize;
-  stbuf->st_size=size;
+  if (folderflags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+    if (fill_stat_from_open_file(cr->fileid, stbuf))
+      size=stbuf->st_size;
+    else{
+      size=psync_fs_crypto_plain_size(psync_stat_size(&st));
+      stbuf->st_size=size;
+    }
+  }
+  else{
+    size=psync_stat_size(&st);
+    stbuf->st_size=size;
+  }
 #if defined(P_OS_POSIX)
   stbuf->st_blocks=(size+511)/512;
   stbuf->st_blksize=FS_BLOCK_SIZE;
@@ -552,12 +588,12 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   return 0;
 }
 
-static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf){
+static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf, uint32_t folderflags){
   debug(D_NOTICE, "getting stat from creat for file %s fileid %ld taskid %lu", cr->name, (long)cr->fileid, (unsigned long)cr->taskid);
   if (cr->fileid>=0)
     return psync_creat_db_to_file_stat(cr->fileid, stbuf);
   else
-    return psync_creat_local_to_file_stat(cr, stbuf);
+    return psync_creat_local_to_file_stat(cr, stbuf, folderflags);
 }
 
 int psync_fs_crypto_err_to_errno(int cryptoerr){
@@ -565,9 +601,11 @@ int psync_fs_crypto_err_to_errno(int cryptoerr){
     case PSYNC_CRYPTO_NOT_STARTED:          return EACCES;
     case PSYNC_CRYPTO_RSA_ERROR:            return EIO;
     case PSYNC_CRYPTO_FOLDER_NOT_FOUND:     return ENOENT;
+    case PSYNC_CRYPTO_FILE_NOT_FOUND:       return ENOENT;
     case PSYNC_CRYPTO_INVALID_KEY:          return EIO;
     case PSYNC_CRYPTO_CANT_CONNECT:         return ENOTCONN;
     case PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED: return EINVAL;
+    case PSYNC_CRYPTO_INTERNAL_ERROR:       return EINVAL;
     default:                                return EINVAL;
   }
 }
@@ -637,7 +675,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
     if (psync_fstask_find_unlink(folder, fpath->name, 0))
       row=NULL;
     if (!row && (cr=psync_fstask_find_creat(folder, fpath->name, 0)))
-      crr=psync_creat_to_file_stat(cr, stbuf);
+      crr=psync_creat_to_file_stat(cr, stbuf, fpath->flags);
     else
       crr=-1;
     psync_fstask_release_folder_tasks_locked(folder);
@@ -730,7 +768,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name, &st, 0);
     }
     psync_tree_for_each(trel, folder->creats){
-      if (!psync_creat_to_file_stat(psync_tree_element(trel, psync_fstask_creat_t, tree), &st))
+      if (!psync_creat_to_file_stat(psync_tree_element(trel, psync_fstask_creat_t, tree), &st, flags))
         filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_creat_t, tree)->name, &st, 0);
     }
     psync_fstask_release_folder_tasks_locked(folder);
@@ -877,6 +915,7 @@ static int open_write_files(psync_openfile_t *of, int trunc){
   const char *cachepath;
   char *filename;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  int64_t fs;
   int ret;
   fileid=-of->fileid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
@@ -892,6 +931,13 @@ static int open_write_files(psync_openfile_t *of, int trunc){
       return -EIO;
     }
   }
+  fs=psync_file_size(of->datafile);
+  if (unlikely_log(fs==-1))
+    return -EIO;
+  if (of->encrypted)
+    of->currentsize=psync_fs_crypto_plain_size(fs);
+  else
+    of->currentsize=fs;
   if (!of->newfile && of->indexfile==INVALID_HANDLE_VALUE){
     fileidhex[sizeof(psync_fsfileid_t)]='i';
     filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
@@ -935,6 +981,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   psync_fstask_creat_t *cr;
   psync_fstask_folder_t *folder;
   psync_openfile_t *of;
+  psync_crypto_aes256_sector_encoder_decoder_t encoder;
   int ret, status, type;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "open %s", path);
@@ -985,7 +1032,16 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       }
       if (type==PSYNC_FS_TASK_CREAT){
         fileid=cr->fileid;
-        of=psync_fs_create_file(fileid, 0, 0, 0, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name, PSYNC_CRYPTO_INVALID_ENCODER);
+        if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+          encoder=psync_cloud_crypto_get_file_encoder(fileid);
+          if (unlikely_log(psync_crypto_is_error(encoder))){
+            ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
+            goto ex0;
+          }
+        }
+        else
+          encoder=PSYNC_CRYPTO_INVALID_ENCODER;
+        of=psync_fs_create_file(fileid, 0, 0, 0, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name, encoder);
         psync_fstask_release_folder_tasks_locked(folder);
         psync_sql_unlock();
         debug(D_NOTICE, "opening new file %ld %s", (long)fileid, fpath->name);
@@ -993,8 +1049,6 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
         of->newfile=1;
         of->releasedforupload=status!=1;
         ret=open_write_files(of, fi->flags&O_TRUNC);
-        if (!ret)
-          of->currentsize=psync_file_size(of->datafile);
         pthread_mutex_unlock(&of->mutex);
         fi->fh=openfile_to_fh(of);
         if (unlikely_log(ret)){
@@ -1028,15 +1082,22 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
         ret=-EIO;
         goto ex0;
       }
-      of=psync_fs_create_file(cr->fileid, fileid, size, hash, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name, PSYNC_CRYPTO_INVALID_ENCODER);
+      if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+        encoder=psync_cloud_crypto_get_file_encoder(fileid);
+        if (unlikely_log(psync_crypto_is_error(encoder))){
+          ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
+          goto ex0;
+        }
+      }
+      else
+        encoder=PSYNC_CRYPTO_INVALID_ENCODER;
+      of=psync_fs_create_file(cr->fileid, fileid, size, hash, 1, writeid, psync_fstask_get_ref_locked(folder), fpath->name, encoder);
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();
       psync_free(fpath);
       of->newfile=0;
       of->releasedforupload=status!=1;
       ret=open_write_files(of, fi->flags&O_TRUNC);
-      if (!ret)
-        of->currentsize=psync_file_size(of->datafile);
       pthread_mutex_unlock(&of->mutex);
       fi->fh=openfile_to_fh(of);
       if (unlikely_log(ret)){
@@ -1068,7 +1129,16 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       ret=-EIO;
       goto ex0;
     }
-    of=psync_fs_create_file(cr->fileid, 0, 0, 0, 1, 0, psync_fstask_get_ref_locked(folder), fpath->name, PSYNC_CRYPTO_INVALID_ENCODER);
+    if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+      encoder=psync_cloud_crypto_get_file_encoder(fileid);
+      if (unlikely_log(psync_crypto_is_error(encoder))){
+        ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
+        goto ex0;
+      }
+    }
+    else
+      encoder=PSYNC_CRYPTO_INVALID_ENCODER;
+    of=psync_fs_create_file(cr->fileid, 0, 0, 0, 1, 0, psync_fstask_get_ref_locked(folder), fpath->name, encoder);
     psync_fstask_release_folder_tasks_locked(folder);
     psync_sql_unlock();
     of->newfile=1;
@@ -1079,7 +1149,16 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     return 0;
   }
   else if (row){
-    of=psync_fs_create_file(fileid, fileid, size, hash, 0, 0, psync_fstask_get_ref_locked(folder), fpath->name, PSYNC_CRYPTO_INVALID_ENCODER);
+    if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+      encoder=psync_cloud_crypto_get_file_encoder(fileid);
+      if (unlikely_log(psync_crypto_is_error(encoder))){
+        ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
+        goto ex0;
+      }
+    }
+    else
+      encoder=PSYNC_CRYPTO_INVALID_ENCODER;
+    of=psync_fs_create_file(fileid, fileid, size, hash, 0, 0, psync_fstask_get_ref_locked(folder), fpath->name, encoder);
     fi->fh=openfile_to_fh(of);
     ret=0;
   }
@@ -1194,6 +1273,8 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     encsymkeylen=0;
   }
   cr=psync_fstask_add_creat(folder, fpath->name, encsymkey, encsymkeylen);
+  if (encsymkey)
+    psync_free(encsymkey);
   if (unlikely_log(!cr)){
     psync_fstask_release_folder_tasks_locked(folder);
     psync_sql_unlock();
@@ -1220,6 +1301,8 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     psync_fs_dec_of_refcnt(of);
     psync_sql_unlock();
     psync_free(fpath);
+    if (encoder!=PSYNC_CRYPTO_INVALID_ENCODER)
+      psync_crypto_aes256_sector_encoder_decoder_free(encoder);
     return ret;
   }
   psync_free(fpath);
@@ -1235,6 +1318,25 @@ void psync_fs_inc_of_refcnt(psync_openfile_t *of){
   pthread_mutex_lock(&of->mutex);
   psync_fs_inc_of_refcnt_locked(of);
   pthread_mutex_unlock(&of->mutex);
+}
+
+static void delete_log_files(psync_openfile_t *of){
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  const char *cachepath;
+  char *filename;
+  psync_fsfileid_t fileid;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  fileid=-of->fileid;
+  psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
+  fileidhex[sizeof(psync_fsfileid_t)]='l';
+  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  psync_file_delete(filename);
+  psync_free(filename);
+  fileidhex[sizeof(psync_fsfileid_t)]='f';
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  psync_file_delete(filename);
+  psync_free(filename);
 }
 
 static void close_if_valid(psync_file_t fd){
@@ -1256,6 +1358,7 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
     psync_crypto_aes256_sector_encoder_decoder_free(of->encoder);
     close_if_valid(of->logfile);
     psync_tree_for_each_element_call(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
+    delete_log_files(of);
   }
   pthread_mutex_destroy(&of->mutex);
   close_if_valid(of->datafile);
@@ -1329,8 +1432,16 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
     psync_sql_res *res;
     uint64_t writeid;
     uint32_t aff;
+    int ret;
     writeid=of->writeid;
     of->releasedforupload=1;
+    if (of->encrypted){
+      ret=psync_fs_crypto_flush_file(of);
+      if (unlikely_log(ret)){
+        pthread_mutex_unlock(&of->mutex);
+        return ret;
+      }
+    }
     pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", path, (unsigned long)of->currentsize, (unsigned)of->writeid);
     res=psync_sql_prep_statement("UPDATE fstask SET status=0, int1=? WHERE id=? AND status=1");
@@ -1357,6 +1468,7 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
 
 static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info *fi){
   psync_openfile_t *of;
+  int ret;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "fsync %s", path);
   of=fh_to_openfile(fi->fh);
@@ -1364,6 +1476,13 @@ static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info 
   if (!of->modified){
     pthread_mutex_unlock(&of->mutex);
     return 0;
+  }
+  if (of->encrypted){
+    ret=psync_fs_crypto_flush_file(of);
+    if (unlikely_log(ret)){
+      pthread_mutex_unlock(&of->mutex);
+      return ret;
+    }
   }
   if (unlikely_log(psync_file_sync(of->datafile)) || unlikely_log(!of->newfile && psync_file_sync(of->indexfile))){
     pthread_mutex_unlock(&of->mutex);
@@ -1417,9 +1536,13 @@ static int psync_fs_read(const char *path, char *buf, size_t size, off_t offset,
     of->bytesthissec=size;
   }
   if (of->newfile){
-    int ret=psync_read_newfile(of, buf, size, offset);
-    pthread_mutex_unlock(&of->mutex);
-    return ret;
+    if (of->encrypted)
+      return psync_fs_crypto_read_newfile_locked(of, buf, size, offset);
+    else{
+      int ret=psync_read_newfile(of, buf, size, offset);
+      pthread_mutex_unlock(&of->mutex);
+      return ret;
+    }
   }
   if (of->modified)
     return psync_pagecache_read_modified_locked(of, buf, size, offset);
@@ -1476,7 +1599,6 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, off_t 
   int ret;
   psync_fs_set_thread_name();
   of=fh_to_openfile(fi->fh);
-  debug(D_NOTICE, "write %s off=%lu size=%lu", of->currentname, (unsigned long)offset, (unsigned long)size);
   pthread_mutex_lock(&of->mutex);
   if (of->writeid%256==0 && of->currentsize<=offset){
     int64_t freespc=psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)));
