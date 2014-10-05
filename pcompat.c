@@ -2066,18 +2066,13 @@ int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
 #if defined(P_OS_POSIX)
   return rename(oldpath, newpath);
 #elif defined(P_OS_WINDOWS) // should we just use rename() here?
-  {
+  else{
     wchar_t *oldwpath, *newwpath;
     int ret;
     oldwpath=utf8_to_wchar(oldpath);
     newwpath=utf8_to_wchar(newpath);
 retry:
-    if (!DeleteFileW(newwpath) && GetLastError()==ERROR_SHARING_VIOLATION){
-      debug(D_WARNING, "file %s is locked by another process, will retry after sleep", newwpath);
-      psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
-      goto retry;
-    }
-    ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
+    ret=psync_bool_to_zero(MoveFileExW(oldwpath, newwpath, MOVEFILE_COPY_ALLOWED|MOVEFILE_REPLACE_EXISTING));
     if (ret && GetLastError()==ERROR_SHARING_VIOLATION){
       debug(D_WARNING, "file %s is locked by another process, will retry after sleep", oldpath);
       psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
