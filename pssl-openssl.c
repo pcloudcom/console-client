@@ -410,8 +410,8 @@ psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bi
 psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen, const unsigned char *salt, size_t saltlen, size_t iterations){
   psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
   key->keylen=keylen;
-  PKCS5_PBKDF2_HMAC_SHA1(password, strlen(password), salt, 
-                                saltlen, iterations, keylen, key->key);
+  PKCS5_PBKDF2_HMAC(password, strlen(password), salt, 
+                                saltlen, iterations, EVP_sha512(), keylen, key->key);
   return key;
 }
 

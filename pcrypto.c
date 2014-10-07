@@ -31,55 +31,55 @@
 #include <string.h>
 
 typedef struct {
-  psync_sha1_ctx sha1ctx;
-  unsigned char final[PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN];
-} psync_hmac_sha1_ctx;
+  psync_sha512_ctx sha1ctx;
+  unsigned char final[PSYNC_SHA512_BLOCK_LEN+PSYNC_SHA512_DIGEST_LEN];
+} psync_hmac_sha512_ctx;
 
-static void psync_hmac_sha1_init(psync_hmac_sha1_ctx *ctx, const unsigned char *key, size_t keylen){
-  unsigned char keyxor[PSYNC_SHA1_BLOCK_LEN];
+static void psync_hmac_sha512_init(psync_hmac_sha512_ctx *ctx, const unsigned char *key, size_t keylen){
+  unsigned char keyxor[PSYNC_SHA512_BLOCK_LEN];
   size_t i;
-  if (keylen>PSYNC_SHA1_BLOCK_LEN)
-    keylen=PSYNC_SHA1_BLOCK_LEN;
-  memset(keyxor, 0x36, PSYNC_SHA1_BLOCK_LEN);
-  memset(ctx->final, 0x5c, PSYNC_SHA1_BLOCK_LEN);
+  if (keylen>PSYNC_SHA512_BLOCK_LEN)
+    keylen=PSYNC_SHA512_BLOCK_LEN;
+  memset(keyxor, 0x36, PSYNC_SHA512_BLOCK_LEN);
+  memset(ctx->final, 0x5c, PSYNC_SHA512_BLOCK_LEN);
   for (i=0; i<keylen; i++){
     keyxor[i]^=key[i];
     ctx->final[i]^=key[i];
   }
-  psync_sha1_init(&ctx->sha1ctx);
-  psync_sha1_update(&ctx->sha1ctx, keyxor, PSYNC_SHA1_BLOCK_LEN);
-  psync_ssl_memclean(keyxor, PSYNC_SHA1_BLOCK_LEN);
+  psync_sha512_init(&ctx->sha1ctx);
+  psync_sha512_update(&ctx->sha1ctx, keyxor, PSYNC_SHA512_BLOCK_LEN);
+  psync_ssl_memclean(keyxor, PSYNC_SHA512_BLOCK_LEN);
 }
 
-static void psync_hmac_sha1_update(psync_hmac_sha1_ctx *ctx, const void *data, size_t len){
-  psync_sha1_update(&ctx->sha1ctx, data, len);
+static void psync_hmac_sha512_update(psync_hmac_sha512_ctx *ctx, const void *data, size_t len){
+  psync_sha512_update(&ctx->sha1ctx, data, len);
 }
 
-static void psync_hmac_sha1_final(unsigned char *result, psync_hmac_sha1_ctx *ctx){
-  psync_sha1_final(ctx->final+PSYNC_SHA1_BLOCK_LEN, &ctx->sha1ctx);
-  psync_sha1(ctx->final, PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN, result);
-  psync_ssl_memclean(ctx->final, PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN);
+static void psync_hmac_sha512_final(unsigned char *result, psync_hmac_sha512_ctx *ctx){
+  psync_sha512_final(ctx->final+PSYNC_SHA512_BLOCK_LEN, &ctx->sha1ctx);
+  psync_sha512(ctx->final, PSYNC_SHA512_BLOCK_LEN+PSYNC_SHA512_DIGEST_LEN, result);
+  psync_ssl_memclean(ctx->final, PSYNC_SHA512_BLOCK_LEN+PSYNC_SHA512_DIGEST_LEN);
 }
 
-static void psync_hmac_sha1(const unsigned char *msg, size_t msglen, const unsigned char *key, size_t keylen, unsigned char *result){
-  psync_sha1_ctx sha1ctx;
-  unsigned char keyxor[PSYNC_SHA1_BLOCK_LEN], final[PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN];
+static void psync_hmac_sha512(const unsigned char *msg, size_t msglen, const unsigned char *key, size_t keylen, unsigned char *result){
+  psync_sha512_ctx sha1ctx;
+  unsigned char keyxor[PSYNC_SHA512_BLOCK_LEN], final[PSYNC_SHA512_BLOCK_LEN+PSYNC_SHA512_DIGEST_LEN];
   size_t i;
-  if (keylen>PSYNC_SHA1_BLOCK_LEN)
-    keylen=PSYNC_SHA1_BLOCK_LEN;
-  memset(keyxor, 0x36, PSYNC_SHA1_BLOCK_LEN);
-  memset(final, 0x5c, PSYNC_SHA1_BLOCK_LEN);
+  if (keylen>PSYNC_SHA512_BLOCK_LEN)
+    keylen=PSYNC_SHA512_BLOCK_LEN;
+  memset(keyxor, 0x36, PSYNC_SHA512_BLOCK_LEN);
+  memset(final, 0x5c, PSYNC_SHA512_BLOCK_LEN);
   for (i=0; i<keylen; i++){
     keyxor[i]^=key[i];
     final[i]^=key[i];
   }
-  psync_sha1_init(&sha1ctx);
-  psync_sha1_update(&sha1ctx, keyxor, PSYNC_SHA1_BLOCK_LEN);
-  psync_sha1_update(&sha1ctx, msg, msglen);
-  psync_sha1_final(final+PSYNC_SHA1_BLOCK_LEN, &sha1ctx);
-  psync_sha1(final, PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN, result);
-  psync_ssl_memclean(keyxor, PSYNC_SHA1_BLOCK_LEN);
-  psync_ssl_memclean(final, PSYNC_SHA1_BLOCK_LEN+PSYNC_SHA1_DIGEST_LEN);
+  psync_sha512_init(&sha1ctx);
+  psync_sha512_update(&sha1ctx, keyxor, PSYNC_SHA512_BLOCK_LEN);
+  psync_sha512_update(&sha1ctx, msg, msglen);
+  psync_sha512_final(final+PSYNC_SHA512_BLOCK_LEN, &sha1ctx);
+  psync_sha512(final, PSYNC_SHA512_BLOCK_LEN+PSYNC_SHA512_DIGEST_LEN, result);
+  psync_ssl_memclean(keyxor, PSYNC_SHA512_BLOCK_LEN);
+  psync_ssl_memclean(final, PSYNC_SHA512_BLOCK_LEN+PSYNC_SHA512_DIGEST_LEN);
 }
 
 #define ALIGN_A256_BS(n) ((((n)+PSYNC_AES256_BLOCK_SIZE-1)/PSYNC_AES256_BLOCK_SIZE)*PSYNC_AES256_BLOCK_SIZE)
@@ -239,7 +239,7 @@ static void copy_pad(unsigned char *dst, size_t cnt, const unsigned char **restr
 }
 
 void psync_crypto_aes256_encode_text(psync_crypto_aes256_text_encoder_t enc, const unsigned char *txt, size_t txtlen, unsigned char **out, size_t *outlen){
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*3+PSYNC_SHA1_DIGEST_LEN], *aessrc, *aesdst, *outptr, *hmac;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*3+PSYNC_SHA512_DIGEST_LEN], *aessrc, *aesdst, *outptr, *hmac;
   size_t ol;
   aessrc=ALIGN_PTR_A256_BS(buff);
   aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE;
@@ -250,11 +250,13 @@ void psync_crypto_aes256_encode_text(psync_crypto_aes256_text_encoder_t enc, con
   *outlen=ol;
   if (txtlen<=PSYNC_AES256_BLOCK_SIZE){
     copy_pad(aessrc, PSYNC_AES256_BLOCK_SIZE, &txt, &txtlen);
+    assert(enc->ivlen>=PSYNC_AES256_BLOCK_SIZE);
+    xor16_aligned_inplace(aessrc, enc->iv);
     psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
     copy_aligned(outptr, aesdst);
     return;
   }
-  psync_hmac_sha1(txt+PSYNC_AES256_BLOCK_SIZE, txtlen-PSYNC_AES256_BLOCK_SIZE, enc->iv, enc->ivlen, hmac);
+  psync_hmac_sha512(txt+PSYNC_AES256_BLOCK_SIZE, txtlen-PSYNC_AES256_BLOCK_SIZE, enc->iv, enc->ivlen, hmac);
   copy_unaligned(aessrc, txt);
   txt+=PSYNC_AES256_BLOCK_SIZE;
   txtlen-=PSYNC_AES256_BLOCK_SIZE;
@@ -285,6 +287,8 @@ unsigned char *psync_crypto_aes256_decode_text(psync_crypto_aes256_text_decoder_
   if (datalen==1){
     copy_unaligned(aessrc, data);
     psync_aes256_decode_block(enc->encoder, aessrc, aesdst);
+    assert(enc->ivlen>=PSYNC_AES256_BLOCK_SIZE);
+    xor16_aligned_inplace(aesdst, enc->iv);
     copy_aligned(outptr, aesdst);
     outptr+=PSYNC_AES256_BLOCK_SIZE;
     *outptr=0;
@@ -331,7 +335,7 @@ unsigned char *psync_crypto_aes256_decode_text(psync_crypto_aes256_text_decoder_
   }
   *outptr=0;
   len=strlen((char *)ret+PSYNC_AES256_BLOCK_SIZE);
-  psync_hmac_sha1(ret+PSYNC_AES256_BLOCK_SIZE, len, enc->iv, enc->ivlen, aessrc);
+  psync_hmac_sha512(ret+PSYNC_AES256_BLOCK_SIZE, len, enc->iv, enc->ivlen, aessrc);
   xor16_aligned_inplace(ret, aessrc);
   len+=PSYNC_AES256_BLOCK_SIZE+1;
   while (ret+len<outptr){
@@ -348,7 +352,7 @@ unsigned char *psync_crypto_aes256_decode_text(psync_crypto_aes256_text_decoder_
 psync_crypto_aes256_text_encoder_t psync_crypto_aes256_text_encoder_create(psync_symmetric_key_t key){
   psync_aes256_encoder enc;
   psync_crypto_aes256_text_encoder_t ret;
-  if (unlikely_log(key->keylen<PSYNC_AES256_KEY_SIZE))
+  if (unlikely_log(key->keylen<PSYNC_AES256_KEY_SIZE+PSYNC_AES256_BLOCK_SIZE))
     return PSYNC_CRYPTO_INVALID_ENCODER;
   enc=psync_ssl_aes256_create_encoder(key);
   if (unlikely_log(enc==PSYNC_INVALID_ENCODER))
@@ -369,7 +373,7 @@ void psync_crypto_aes256_text_encoder_free(psync_crypto_aes256_text_encoder_t en
 psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync_symmetric_key_t key){
   psync_aes256_encoder enc;
   psync_crypto_aes256_text_encoder_t ret;
-  if (unlikely_log(key->keylen<PSYNC_AES256_KEY_SIZE))
+  if (unlikely_log(key->keylen<PSYNC_AES256_KEY_SIZE+PSYNC_AES256_BLOCK_SIZE))
     return PSYNC_CRYPTO_INVALID_ENCODER;
   enc=psync_ssl_aes256_create_decoder(key);
   if (unlikely_log(enc==PSYNC_INVALID_ENCODER))
@@ -436,26 +440,28 @@ static int memcmp_const(const unsigned char *s1, const unsigned char *s2, size_t
 
 void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
                                        unsigned char *out, psync_crypto_sector_auth_t authout, uint64_t sectorid){
-  psync_hmac_sha1_ctx ctx;
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN], rnd[PSYNC_CRYPTO_AUTH_RANDOM_BYTES];
+  psync_hmac_sha512_ctx ctx;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*3], hmacsha1bin[PSYNC_SHA512_DIGEST_LEN], rnd[PSYNC_AES256_BLOCK_SIZE];
   unsigned char *aessrc, *aesdst, *tmp;
   uint32_t needsteal;
   aessrc=ALIGN_PTR_A256_BS(buff);
   aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE;
-  assert(PSYNC_CRYPTO_AUTH_RANDOM_BYTES<PSYNC_AES256_BLOCK_SIZE);
-  psync_ssl_rand_weak(rnd, PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
-  psync_hmac_sha1_init(&ctx, enc->iv, enc->ivlen);
-  psync_hmac_sha1_update(&ctx, data, datalen);
-  psync_hmac_sha1_update(&ctx, &sectorid, sizeof(sectorid));
-  psync_hmac_sha1_update(&ctx, rnd, PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
-  psync_hmac_sha1_final(hmacsha1bin, &ctx);
-  memcpy(aessrc, rnd, PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
-  memcpy(aessrc+PSYNC_CRYPTO_AUTH_RANDOM_BYTES, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE-PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
+  assert(PSYNC_CRYPTO_AUTH_SIZE==2*PSYNC_AES256_BLOCK_SIZE);
+  psync_ssl_rand_weak(rnd, PSYNC_AES256_BLOCK_SIZE);
+  psync_hmac_sha512_init(&ctx, enc->iv, enc->ivlen);
+  psync_hmac_sha512_update(&ctx, data, datalen);
+  psync_hmac_sha512_update(&ctx, &sectorid, sizeof(sectorid));
+  psync_hmac_sha512_update(&ctx, rnd, PSYNC_AES256_BLOCK_SIZE);
+  psync_hmac_sha512_final(hmacsha1bin, &ctx);
   if (unlikely(datalen<PSYNC_AES256_BLOCK_SIZE)){
-    memcpy(out, aessrc, datalen);
+    memcpy(out, rnd, datalen);
+    memcpy(aessrc, rnd, PSYNC_AES256_BLOCK_SIZE);
     xor_cnt_inplace(aessrc, data, datalen);
     psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
     memcpy(authout, aesdst, PSYNC_AES256_BLOCK_SIZE);
+    memcpy(aessrc, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE);
+    psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+    memcpy(authout+PSYNC_AES256_BLOCK_SIZE, aesdst, PSYNC_AES256_BLOCK_SIZE);
     return;
   }
   if (unlikely(datalen%16)){
@@ -464,13 +470,15 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
   }
   else
     needsteal=0;
+  memcpy(aessrc, rnd, PSYNC_AES256_BLOCK_SIZE/2);
+  memcpy(aessrc+PSYNC_AES256_BLOCK_SIZE/2, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE/2);
   psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
   memcpy(authout, aesdst, PSYNC_AES256_BLOCK_SIZE);
-  /* now switch places of the random bits and hmac bits for the IV, otherwise sectors
-   * that start with zero block will have the same first block cyphertext as the auth.
-   */
-  memcpy(aessrc, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE-PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
-  memcpy(aessrc+PSYNC_AES256_BLOCK_SIZE-PSYNC_CRYPTO_AUTH_RANDOM_BYTES, rnd, PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
+  memcpy(aessrc, rnd+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+  memcpy(aessrc+PSYNC_AES256_BLOCK_SIZE/2, hmacsha1bin+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+  psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
+  memcpy(authout+PSYNC_AES256_BLOCK_SIZE, aesdst, PSYNC_AES256_BLOCK_SIZE);
+  memcpy(aessrc, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE);
   if (IS_WORD_ALIGNED(data) && IS_WORD_ALIGNED(out))
     while (datalen){
       xor16_aligned_inplace(aessrc, data);
@@ -508,8 +516,8 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
 
 int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
                                       unsigned char *out, const psync_crypto_sector_auth_t auth, uint64_t sectorid){
-  psync_hmac_sha1_ctx ctx;
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*5], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
+  psync_hmac_sha512_ctx ctx;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*6], hmacsha1bin[PSYNC_SHA512_DIGEST_LEN];
   unsigned char *aessrc, *aesdst, *aesxor, *hmac, *oout, *tmp;
   size_t odatalen;
   uint32_t needsteal;
@@ -519,6 +527,8 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
   hmac=aessrc+PSYNC_AES256_BLOCK_SIZE*3;
   memcpy(aessrc, auth, PSYNC_AES256_BLOCK_SIZE);
   psync_aes256_decode_block(enc->decoder, aessrc, hmac);
+  memcpy(aessrc, auth+PSYNC_AES256_BLOCK_SIZE, PSYNC_AES256_BLOCK_SIZE);
+  psync_aes256_decode_block(enc->decoder, aessrc, hmac+PSYNC_AES256_BLOCK_SIZE);
   oout=out;
   odatalen=datalen;
   if (unlikely(datalen<PSYNC_AES256_BLOCK_SIZE)){
@@ -533,8 +543,10 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
     }
     else
       needsteal=0;
-    memcpy(aesxor+PSYNC_AES256_BLOCK_SIZE-PSYNC_CRYPTO_AUTH_RANDOM_BYTES, hmac, PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
-    memcpy(aesxor, hmac+PSYNC_CRYPTO_AUTH_RANDOM_BYTES, PSYNC_AES256_BLOCK_SIZE-PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
+    memcpy(aesxor, hmac+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+    memcpy(aesxor+PSYNC_AES256_BLOCK_SIZE/2, hmac+PSYNC_AES256_BLOCK_SIZE+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+    memcpy(hmac+PSYNC_AES256_BLOCK_SIZE/2, hmac+PSYNC_AES256_BLOCK_SIZE, PSYNC_AES256_BLOCK_SIZE/2);
+    memcpy(hmac+PSYNC_AES256_BLOCK_SIZE, aesxor, PSYNC_AES256_BLOCK_SIZE/2);
     if (IS_WORD_ALIGNED(data) && IS_WORD_ALIGNED(out))
       while (datalen){
         copy_aligned(aessrc, data);
@@ -572,12 +584,12 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
       copy_unaligned(out, aessrc);
     }
   }
-  psync_hmac_sha1_init(&ctx, enc->iv, enc->ivlen);
-  psync_hmac_sha1_update(&ctx, oout, odatalen);
-  psync_hmac_sha1_update(&ctx, &sectorid, sizeof(sectorid));
-  psync_hmac_sha1_update(&ctx, hmac, PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
-  psync_hmac_sha1_final(hmacsha1bin, &ctx);
-  return -memcmp_const(hmacsha1bin, hmac+PSYNC_CRYPTO_AUTH_RANDOM_BYTES, PSYNC_AES256_BLOCK_SIZE-PSYNC_CRYPTO_AUTH_RANDOM_BYTES);
+  psync_hmac_sha512_init(&ctx, enc->iv, enc->ivlen);
+  psync_hmac_sha512_update(&ctx, oout, odatalen);
+  psync_hmac_sha512_update(&ctx, &sectorid, sizeof(sectorid));
+  psync_hmac_sha512_update(&ctx, hmac, PSYNC_AES256_BLOCK_SIZE);
+  psync_hmac_sha512_final(hmacsha1bin, &ctx);
+  return -memcmp_const(hmacsha1bin, hmac+PSYNC_AES256_BLOCK_SIZE, PSYNC_AES256_BLOCK_SIZE);
 }
 
 /* the following is CTR based implementation of encode/decode sector
@@ -590,17 +602,17 @@ static uint32_t psync_crypto_get_time_32(){
 
 void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
                                        unsigned char *out, psync_crypto_sector_auth_t authout, uint64_t sectorid){
-  psync_hmac_sha1_ctx ctx;
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*3], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
+  psync_hmac_sha512_ctx ctx;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*3], hmacsha1bin[PSYNC_SHA512_DIGEST_LEN];
   unsigned char *aessrc, *aesdst;
   uint64_t *ctr;
   uint32_t u32time;
   u32time=psync_crypto_get_time_32();
-  psync_hmac_sha1_init(&ctx, enc->iv, enc->ivlen);
-  psync_hmac_sha1_update(&ctx, data, datalen);
-  psync_hmac_sha1_update(&ctx, &sectorid, sizeof(sectorid));
-  psync_hmac_sha1_update(&ctx, &u32time, sizeof(uint32_t));
-  psync_hmac_sha1_final(hmacsha1bin, &ctx);
+  psync_hmac_sha512_init(&ctx, enc->iv, enc->ivlen);
+  psync_hmac_sha512_update(&ctx, data, datalen);
+  psync_hmac_sha512_update(&ctx, &sectorid, sizeof(sectorid));
+  psync_hmac_sha512_update(&ctx, &u32time, sizeof(uint32_t));
+  psync_hmac_sha512_final(hmacsha1bin, &ctx);
   aessrc=ALIGN_PTR_A256_BS(buff);
   aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE;
   memcpy(aessrc+sizeof(uint32_t), hmacsha1bin, PSYNC_AES256_BLOCK_SIZE-sizeof(uint32_t));
@@ -652,8 +664,8 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
 
 int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
                                       unsigned char *out, const psync_crypto_sector_auth_t auth, uint64_t sectorid){
-  psync_hmac_sha1_ctx ctx;
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA1_DIGEST_LEN];
+  psync_hmac_sha512_ctx ctx;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*4], hmacsha1bin[PSYNC_SHA512_DIGEST_LEN];
   unsigned char *aessrc, *aesdst, *hmac, *oout;
   uint64_t *ctr;
   size_t odatalen;
@@ -699,22 +711,22 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
       memcpy(out, aesdst, datalen);
     }
   }
-  psync_hmac_sha1_init(&ctx, enc->iv, enc->ivlen);
-  psync_hmac_sha1_update(&ctx, oout, odatalen);
-  psync_hmac_sha1_update(&ctx, &sectorid, sizeof(sectorid));
-  psync_hmac_sha1_update(&ctx, hmac, sizeof(uint32_t));
-  psync_hmac_sha1_final(hmacsha1bin, &ctx);
+  psync_hmac_sha512_init(&ctx, enc->iv, enc->ivlen);
+  psync_hmac_sha512_update(&ctx, oout, odatalen);
+  psync_hmac_sha512_update(&ctx, &sectorid, sizeof(sectorid));
+  psync_hmac_sha512_update(&ctx, hmac, sizeof(uint32_t));
+  psync_hmac_sha512_final(hmacsha1bin, &ctx);
   return -memcmp_const(hmacsha1bin, hmac+sizeof(uint32_t), PSYNC_AES256_BLOCK_SIZE-sizeof(uint32_t));
 }
 
 */
 
 void psync_crypto_sign_auth_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, psync_crypto_sector_auth_t authout){
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*2+PSYNC_SHA1_DIGEST_LEN];
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*2+PSYNC_SHA512_DIGEST_LEN];
   unsigned char *aessrc, *aesdst;
   aesdst=ALIGN_PTR_A256_BS(buff);
   aessrc=aesdst+PSYNC_AES256_BLOCK_SIZE;
-  psync_hmac_sha1(data, datalen, enc->iv, enc->ivlen, aessrc);
+  psync_hmac_sha512(data, datalen, enc->iv, enc->ivlen, aessrc);
   psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
   memcpy(authout, aesdst, PSYNC_CRYPTO_AUTH_SIZE);
 }
