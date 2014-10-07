@@ -1036,7 +1036,8 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_uint(q, 2, psync_find_result(res, "userid", PARAM_NUM)->num);
   psync_sql_run(q);
   psync_sql_bind_string(q, 1, "quota");
-  psync_sql_bind_uint(q, 2, psync_find_result(res, "quota", PARAM_NUM)->num);
+  current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
+  psync_sql_bind_uint(q, 2, current_quota);
   psync_sql_run(q);
   u=psync_find_result(res, "premium", PARAM_BOOL)->num;
   psync_sql_bind_string(q, 1, "premium");
