@@ -55,7 +55,7 @@
 #endif
 
 #ifndef HAS_FUSE_OFF_T
-typedef fuse_off_t off_t
+typedef off_t fuse_off_t;
 #endif
 
 #if defined(P_OS_POSIX)
