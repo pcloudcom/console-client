@@ -63,6 +63,33 @@ static const uint8_t __hex_lookupl[513]={
   "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
 };
 
+static const char base64_table[]={
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+        'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+        'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'
+};
+
+static const char base64_reverse_table[256]={
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -1, -1, -2, -2, -1, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -1, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, 62, -2, 62, -2, 63,
+        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -2, -2, -2, -1, -2, -2,
+        -2,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -2, -2, -2, -2, 63,
+        -2, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
+        -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2
+};
+
 uint16_t const *__hex_lookup=(uint16_t *)__hex_lookupl;
 static char normalize_table[256];
 
@@ -137,6 +164,146 @@ char *psync_strcat(const char *str, ...){
   return ptr3;
 }
 
+unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size_t *ret_length){
+  static const unsigned char *table=(const unsigned char *)"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  unsigned char *result;
+  unsigned char *p;
+  uint32_t bits, buff;
+  
+  result=(unsigned char *)psync_malloc(((length+4)/5)*8+1);
+  p=result;
+  
+  bits=0;
+  buff=0; // don't really have to initialize this one, but a compiler that will detect that this is safe is yet to be born
+  
+  while (length){
+    if (bits<5){
+      buff=(buff<<8)|(*str++);
+      length--;
+      bits+=8;
+    }
+    bits-=5;
+    *p++=table[0x1f&(buff>>bits)];
+  }
+
+  while (bits){
+    if (bits<5){
+      buff<<=(5-bits);
+      bits=5;
+    }
+    bits-=5;
+    *p++=table[0x1f&(buff>>bits)];
+  }
+  
+  *ret_length=p-result;
+  *p=0;
+  return result;
+}
+
+unsigned char *psync_base32_decode(const unsigned char *str, size_t length, size_t *ret_length){
+  unsigned char *result, *p;
+  uint32_t bits, buff;
+  unsigned char ch;
+  result=(unsigned char *)psync_malloc((length+7)/8*5+1);
+  p=result;
+  bits=0;
+  buff=0;
+  while (length){
+    ch=*str++;
+    length--;
+    if (ch>='A' && ch<='Z')
+      ch=(ch&0x1f)-1;
+    else if (ch>='2'&&ch<='7')
+      ch-='2'-26;
+    else{
+      psync_free(result);
+      return NULL;
+    }
+    buff=(buff<<5)+ch;
+    bits+=5;
+    if (bits>=8){
+      bits-=8;
+      *p++=buff>>bits;
+    }
+  }
+  *p=0;
+  *ret_length=p-result;
+  return result;
+}
+
+unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size_t *ret_length){
+  const unsigned char *current = str;
+  unsigned char *p;
+  unsigned char *result;
+
+  result=(unsigned char *)psync_malloc(((length+2)/3)*4+1);
+  p=result;
+
+  while(length>2){
+    *p++=base64_table[current[0] >> 2];
+    *p++=base64_table[((current[0] & 0x03) << 4) + (current[1] >> 4)];
+    *p++=base64_table[((current[1] & 0x0f) << 2) + (current[2] >> 6)];
+    *p++=base64_table[current[2] & 0x3f];
+    current+=3;
+    length-=3;
+  }
+  
+  if (length!=0){
+    *p++=base64_table[current[0] >> 2];
+    if (length>1){
+      *p++=base64_table[((current[0] & 0x03) << 4) + (current[1] >> 4)];
+      *p++=base64_table[(current[1] & 0x0f) << 2];
+    }
+    else
+      *p++=base64_table[(current[0] & 0x03) << 4];
+  }
+  
+  *ret_length=p-result;
+  *p=0;
+  return result;
+}
+
+unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size_t *ret_length){
+  const unsigned char *current = str;
+  unsigned char *result;
+  size_t i=0, j=0;
+  ssize_t ch;
+
+  result=(unsigned char *)psync_malloc((length+3)/4*3+1);
+
+  while (length-- > 0){
+    ch=base64_reverse_table[*current++];
+    if (ch==-1)
+     continue;
+    else if (ch==-2) {
+      psync_free(result);
+      return NULL;
+    }
+    switch(i%4) {
+      case 0:
+        result[j]=ch<<2;
+        break;
+      case 1:
+        result[j++]|=ch>>4;
+        result[j]=(ch&0x0f)<<4;
+        break;
+      case 2:
+        result[j++]|=ch>>2;
+        result[j]=(ch&0x03)<<6;
+        break;
+      case 3:
+        result[j++]|=ch;
+        break;
+    }
+    i++;
+  }
+  *ret_length=j;
+  result[j]=0;
+  return result;
+}
+
+
+
 void psync_sql_err_callback(void *ptr, int code, const char *msg){
   debug(D_WARNING, "database warning %d: %s", code, msg);
 }
@@ -165,6 +332,7 @@ static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int nump
 }
 
 int psync_sql_connect(const char *db){
+  static int initmutex=1;
   pthread_mutexattr_t mattr;
   psync_stat_t st;
   uint64_t dbver;
@@ -180,10 +348,13 @@ int psync_sql_connect(const char *db){
 
   code=sqlite3_open(db, &psync_db);
   if (likely(code==SQLITE_OK)){
-    pthread_mutexattr_init(&mattr);
-    pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&psync_db_mutex, &mattr);
-    pthread_mutexattr_destroy(&mattr);
+    if (initmutex){
+      pthread_mutexattr_init(&mattr);
+      pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutex_init(&psync_db_mutex, &mattr);
+      pthread_mutexattr_destroy(&mattr);
+      initmutex=0;
+    }
     if (IS_DEBUG)
       sqlite3_config(SQLITE_CONFIG_LOG, psync_sql_err_callback, NULL);
     sqlite3_wal_hook(psync_db, psync_sql_wal_hook, NULL);
@@ -658,7 +829,7 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
 
 psync_sql_res *psync_sql_query(const char *sql){
   psync_sql_res *ret;
-  ret=psync_cache_get(sql);
+  ret=(psync_sql_res *)psync_cache_get(sql);
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     psync_sql_lock();

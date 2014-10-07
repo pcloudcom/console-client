@@ -71,6 +71,7 @@
 #define PSYNC_TNULL   4
 #define PSYNC_TBOOL   5
 
+#define psync_is_null(v) ((v).type==PSYNC_TNULL)
 #define psync_get_number(v) (likely((v).type==PSYNC_TNUMBER)?(v).num:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_snumber(v) (likely((v).type==PSYNC_TNUMBER)?(int64_t)((v).num):(int64_t)psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v)))
 #define psync_get_number_or_null(v) (((v).type==PSYNC_TNUMBER)?(v).num:(likely((v).type==PSYNC_TNULL)?0:psync_err_number_expected(__FILE__, __FUNCTION__, __LINE__, &(v))))
@@ -160,6 +161,12 @@ char *psync_strdup(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strnormalize_filename(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strndup(const char *str, size_t len) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
+
+unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size_t *ret_length);
+unsigned char *psync_base32_decode(const unsigned char *str, size_t length, size_t *ret_length);
+
+unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size_t *ret_length);
+unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size_t *ret_length);
 
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
 void psync_sql_close();

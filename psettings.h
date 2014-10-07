@@ -32,7 +32,7 @@
 #include "pcompiler.h"
 #include "pcompat.h"
 
-#define PSYNC_LIB_VERSION "1.1.0"
+#define PSYNC_LIB_VERSION "1.3.0"
 
 #define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
@@ -48,7 +48,7 @@
 
 #define PSYNC_P2P_RSA_SIZE 2048
 
-#define PSYNC_DIFF_LIMIT   50000
+#define PSYNC_DIFF_LIMIT   500000
 
 #define PSYNC_SOCK_CONNECT_TIMEOUT 20
 #define PSYNC_SOCK_READ_TIMEOUT    60
