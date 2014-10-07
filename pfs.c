@@ -54,6 +54,10 @@
 #define FUSE_STAT stat
 #endif
 
+#ifndef HAS_FUSE_OFF_T
+typedef fuse_off_t off_t
+#endif
+
 #if defined(P_OS_POSIX)
 #include <signal.h>
 #endif
@@ -638,7 +642,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   return -ENOENT;
 }
 
-static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi){
+static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, fuse_off_t offset, struct fuse_file_info *fi){
   psync_sql_res *res;
   psync_variant_row row;
   psync_fsfolderid_t folderid;
@@ -1287,7 +1291,7 @@ static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, ui
     return br;
 }
 
-static int psync_fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+static int psync_fs_read(const char *path, char *buf, size_t size, fuse_off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
   time_t currenttime;
   psync_fs_set_thread_name();
@@ -1361,7 +1365,7 @@ static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
   return 0;
 }
 
-static int psync_fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
+static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
   ssize_t bw;
   uint64_t ioff;
@@ -1766,7 +1770,7 @@ static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
   return 0;
 }
 
-static int psync_fs_ftruncate(const char *path, off_t size, struct fuse_file_info *fi){
+static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_file_info *fi){
   psync_openfile_t *of;
   int ret;
   psync_fs_set_thread_name();
@@ -1823,7 +1827,7 @@ retry:
   return ret;
 }
 
-static int psync_fs_truncate(const char *path, off_t size){
+static int psync_fs_truncate(const char *path, fuse_off_t size){
   struct fuse_file_info fi;
   int ret;
   psync_fs_set_thread_name();
