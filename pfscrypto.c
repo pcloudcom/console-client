@@ -40,12 +40,12 @@ typedef psync_crypto_sector_auth_t psync_crypto_auth_sector_t[PSYNC_CRYPTO_HASH_
 
 static const uint64_t max_level_size[PSYNC_CRYPTO_MAX_HASH_TREE_LEVEL+1]={
   0x1000,
-  0x101000,
-  0x10101000,
-  0x1010101000,
-  0x101010101000,
-  0x10101010101000,
-  0x1010101010101000
+  0x81000,
+  0x4081000,
+  0x204081000,
+  0x10204081000,
+  0x810204081000,
+  0x40810204081000
 };
 
 static uint64_t psync_fs_crypto_data_offset_by_sectorid(psync_crypto_sectorid_t sectorid){
@@ -434,6 +434,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         hdr.offset=psync_fs_crypto_auth_offset(level, oldsecd);
         sz=PSYNC_CRYPTO_SECTOR_SIZE;
       }
+      assert(hdr.offset+sz<=offsets->masterauthoff+PSYNC_CRYPTO_AUTH_SIZE);
       hdr.length=sz;
       psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)&autharr[level], sz, autharr[level+1][oldsecn]);
       wrt=psync_file_pwrite(of->logfile, &hdr, sizeof(hdr), of->logoffset);

@@ -274,7 +274,7 @@ void psync_crypto_aes256_encode_text(psync_crypto_aes256_text_encoder_t enc, con
 }
 
 unsigned char *psync_crypto_aes256_decode_text(psync_crypto_aes256_text_decoder_t enc, const unsigned char *data, size_t datalen){
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*3], *aessrc, *aesdst, *outptr, *ret;
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*2+PSYNC_SHA512_DIGEST_LEN], *aessrc, *aesdst, *outptr, *ret;
   size_t len;
   const unsigned char *xorptr;
   if (unlikely_log(datalen%PSYNC_AES256_BLOCK_SIZE || !datalen))
@@ -728,5 +728,7 @@ void psync_crypto_sign_auth_sector(psync_crypto_aes256_sector_encoder_decoder_t 
   aessrc=aesdst+PSYNC_AES256_BLOCK_SIZE;
   psync_hmac_sha512(data, datalen, enc->iv, enc->ivlen, aessrc);
   psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
-  memcpy(authout, aesdst, PSYNC_CRYPTO_AUTH_SIZE);
+  memcpy(authout, aesdst, PSYNC_AES256_BLOCK_SIZE);
+  psync_aes256_encode_block(enc->encoder, aessrc+PSYNC_AES256_BLOCK_SIZE, aesdst);
+  memcpy(authout+PSYNC_AES256_BLOCK_SIZE, aesdst, PSYNC_AES256_BLOCK_SIZE);
 }
