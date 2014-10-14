@@ -872,7 +872,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
 
 static int psync_sent_task_creat_upload_large(fsupload_task_t *task){
   psync_sql_res *res;
-  res=psync_sql_prep_statement("UPDATE fstask SET status=2 WHERE id=?");
+  res=psync_sql_prep_statement("UPDATE fstask SET status=2 WHERE id=? AND status=0");
   psync_sql_bind_uint(res, 1, task->id);
   //psync_fs_uploading_openfile(task->id);
   if (!large_upload_running){

@@ -1171,7 +1171,7 @@ static int psync_download_new_version(const binresult *res, char **lpath){
   }
   size=psync_find_result(res, "size", PARAM_NUM)->num;
   filename=psync_filename_from_res(res);
-  if (!unlikely_log(filename)){
+  if (unlikely_log(!filename)){
     psync_http_close(sock);
     return 1;
   }
