@@ -169,8 +169,10 @@ unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size
 unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size_t *ret_length);
 
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
-void psync_sql_close();
+int psync_sql_close();
 int psync_sql_reopen(const char *path);
+void psync_sql_checkpoint_lock();
+void psync_sql_checkpoint_unlock();
 int psync_sql_trylock();
 void psync_sql_lock();
 void psync_sql_unlock();

@@ -71,6 +71,11 @@ static uint32_t scan_wakes=0;
 static uint32_t restart_scan=0;
 static uint32_t scan_stoppers=0;
 
+static const uint32_t requiredstatuses[]={
+  PSTATUS_COMBINE(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED),
+  PSTATUS_COMBINE(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE)
+};
+
 #define SCAN_LIST_CNT 9
 
 #define SCAN_LIST_NEWFILES      0
@@ -612,6 +617,8 @@ restart:
     pthread_cond_wait(&scan_cond, &scan_mutex);
   restart_scan=0;
   pthread_mutex_unlock(&scan_mutex);
+  if (!psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses)))
+    return;
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_init(&scan_lists[i]);
   scanner_set_syncs_to_list(&slist);
@@ -743,6 +750,7 @@ static void scanner_thread(){
   time_t lastscan;
   int w;
   psync_milisleep(25);
+  psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
   psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
   scanner_scan(1);
   psync_set_status(PSTATUS_TYPE_LOCALSCAN, PSTATUS_LOCALSCAN_READY);
@@ -750,7 +758,7 @@ static void scanner_thread(){
   w=0;
   lastscan=0;
   while (psync_do_run){
-    psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
+    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     if (lastscan+2>=psync_current_time){
       psync_milisleep(600);
       pthread_mutex_lock(&scan_mutex);

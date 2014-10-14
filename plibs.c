@@ -105,7 +105,7 @@ pstatus_t psync_status;
 int psync_do_run=1;
 PSYNC_THREAD uint32_t psync_error=0;
 
-static pthread_mutex_t psync_db_checkpoint_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t psync_db_checkpoint_mutex;
 
 
 char *psync_strdup(const char *str){
@@ -353,6 +353,10 @@ int psync_sql_connect(const char *db){
       pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
       pthread_mutex_init(&psync_db_mutex, &mattr);
       pthread_mutexattr_destroy(&mattr);
+      pthread_mutexattr_init(&mattr);
+      pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutex_init(&psync_db_checkpoint_mutex, &mattr);
+      pthread_mutexattr_destroy(&mattr);
       initmutex=0;
     }
     if (IS_DEBUG)
@@ -388,7 +392,7 @@ int psync_sql_connect(const char *db){
   }
 }
 
-void psync_sql_close(){
+int psync_sql_close(){
   int code, tries;
   tries=0;
   while (1){
@@ -407,9 +411,13 @@ void psync_sql_close(){
     else
       break;
   }
-  if (unlikely(code!=SQLITE_OK))
-    debug(D_CRITICAL, "error when closing database: %d", code);
   psync_db=NULL;
+  if (unlikely(code!=SQLITE_OK)){
+    debug(D_CRITICAL, "error when closing database: %d", code);
+    return -1;
+  }
+  else
+    return 0;
 }
 
 int psync_sql_reopen(const char *path){
@@ -435,6 +443,14 @@ int psync_sql_reopen(const char *path){
     debug(D_CRITICAL, "could not open sqlite dabase %s: %d", path, code);
     return -1;
   }
+}
+
+void psync_sql_checkpoint_lock(){
+  pthread_mutex_lock(&psync_db_checkpoint_mutex);
+}
+
+void psync_sql_checkpoint_unlock(){
+  pthread_mutex_unlock(&psync_db_checkpoint_mutex);
 }
 
 #if IS_DEBUG
