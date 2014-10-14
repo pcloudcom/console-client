@@ -2046,8 +2046,8 @@ void psync_pagecache_resize_cache(){
   if (db_cache_max_page>db_cache_in_pages){
     psync_sql_res *res;
     psync_stat_t st;
-    res=psync_sql_prep_statement("DELETE FROM pagecache ORDER BY id DESC LIMIT ?");
-    psync_sql_bind_uint(res, 1, db_cache_in_pages-db_cache_max_page);
+    res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
+    psync_sql_bind_uint(res, 1, db_cache_in_pages);
     psync_sql_run_free(res);
     db_cache_max_page=db_cache_in_pages;
     if (!psync_fstat(readcache, &st) && psync_stat_size(&st)>db_cache_in_pages*PSYNC_FS_PAGE_SIZE){
