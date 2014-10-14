@@ -92,14 +92,15 @@ typedef struct {
 #define PSTATUS_DOWNLOADINGANDUPLOADING 3
 #define PSTATUS_LOGIN_REQUIRED          4
 #define PSTATUS_BAD_LOGIN_DATA          5
-#define PSTATUS_ACCOUNT_FULL            6
-#define PSTATUS_DISK_FULL               7
-#define PSTATUS_PAUSED                  8
-#define PSTATUS_STOPPED                 9
-#define PSTATUS_OFFLINE                10
-#define PSTATUS_CONNECTING             11
-#define PSTATUS_SCANNING               12
-#define PSTATUS_USER_MISMATCH          13
+#define PSTATUS_BAD_LOGIN_TOKEN         6
+#define PSTATUS_ACCOUNT_FULL            7
+#define PSTATUS_DISK_FULL               8
+#define PSTATUS_PAUSED                  9
+#define PSTATUS_STOPPED                10
+#define PSTATUS_OFFLINE                11
+#define PSTATUS_CONNECTING             12
+#define PSTATUS_SCANNING               13
+#define PSTATUS_USER_MISMATCH          14
 
 typedef struct {
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */

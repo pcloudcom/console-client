@@ -162,7 +162,10 @@ static psync_socket *get_connected_socket(){
       psync_socket_close(sock);
       psync_free(res);
       if (result==2000){
-        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
+        if (user && pass)
+          psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
+        else
+          psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADTOKEN);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       }
       else if (result==4000)
