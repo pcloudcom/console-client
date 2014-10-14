@@ -151,7 +151,7 @@ static int upload_to_cache_thread_run=0;
 static uint64_t db_cache_in_pages;
 static uint64_t db_cache_max_page;
 
-static psync_file_t readcache;
+static psync_file_t readcache=INVALID_HANDLE_VALUE;
 
 static psync_tree *url_cache_tree=PSYNC_TREE_EMPTY;
 
@@ -2128,5 +2128,25 @@ void psync_pagecache_init(){
   }
   psync_sql_unlock();
   psync_timer_register(psync_pagecache_flush_timer, PSYNC_FS_DISK_FLUSH_SEC, NULL);
+}
+
+void clean_cache_del(void *delcache, psync_pstat *st){
+  int ret;
+  if (!psync_stat_isfolder(&st->stat) && (delcache || psync_filename_cmp(st->name, PSYNC_DEFAULT_READ_CACHE_FILE))){
+    ret=psync_file_delete(st->path);
+    debug(D_NOTICE, "delete of %s=%d", st->path, ret);
+  }
+}
+
+void psync_pagecache_clean_cache(){
+  const char *cache_dir;
+  cache_dir=psync_setting_get_string(_PS(fscachepath));
+  if (readcache!=INVALID_HANDLE_VALUE){
+    psync_file_seek(readcache, 0, P_SEEK_SET);
+    psync_file_truncate(readcache);
+    psync_list_dir(cache_dir, clean_cache_del, NULL);
+  }
+  else
+    psync_list_dir(cache_dir, clean_cache_del, (void *)1);
 }
 

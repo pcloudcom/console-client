@@ -48,6 +48,7 @@
 #include "plocalnotify.h"
 #include "pcache.h"
 #include "pfileops.h"
+#include "ppagecache.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -303,6 +304,7 @@ void psync_unlink(){
     debug(D_ERROR, "failed to close database, exiting");
     exit(1);
   }
+  psync_pagecache_clean_cache();
   psync_sql_connect(psync_database);
   /*
     psync_sql_res *res;

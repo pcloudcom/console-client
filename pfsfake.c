@@ -67,3 +67,6 @@ void psync_fs_refresh_folder(psync_folderid_t folderid){
 
 void psync_pagecache_resize_cache(){
 }
+
+void psync_pagecache_clean_cache(){
+}
