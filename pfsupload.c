@@ -908,6 +908,8 @@ int psync_fsupload_in_current_small_uploads_batch_locked(uint64_t taskid){
       fileidhex[sizeof(psync_fsfileid_t)+1]=0;
       filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
       stret=psync_stat(filename, &st);
+      if (stret)
+        debug(D_WARNING, "can not stat %s", filename);
       psync_free(filename);
       if (stret)
         return 1;
@@ -1361,6 +1363,10 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     while (get_result_async(api, &reader)==ASYNC_RES_READY){
       if (unlikely_log(!reader.result))
         goto err0;
+      while (rtask->needprocessing){
+        rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
+        assert(rtask!=tasks);
+      }
       rtask->res=reader.result;
       rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
     }
