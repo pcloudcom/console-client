@@ -2238,7 +2238,6 @@ static int psync_fs_do_start(){
     
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
-  fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-oauto_unmount");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
 #endif
