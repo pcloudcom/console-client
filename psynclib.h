@@ -731,6 +731,9 @@ void psync_run_new_version(psync_new_version_t *ver);
  * psync_fs_stop() - stops the filesystem
  * psync_fs_getmountpoint() - returns current mountpoint of the filesystem, or NULL if the filesystem is not mounted,
  *                            you are supposed to free the returned pointer
+ * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
+ *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
+ *                            pointer.
  * 
  */
 
@@ -738,6 +741,7 @@ int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
 char *psync_fs_getmountpoint();
+char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 
 #ifdef __cplusplus
 }

@@ -46,6 +46,10 @@ char *psync_fs_getmountpoint(){
   return NULL;
 }
 
+char *psync_fs_get_path_by_folderid(psync_folderid_t folderid){
+  return NULL;
+}
+
 void psync_fs_refresh(){
 }
 

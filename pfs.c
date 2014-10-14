@@ -2104,6 +2104,27 @@ char *psync_fs_getmountpoint(){
   return ret;
 }
 
+char *psync_fs_get_path_by_folderid(psync_folderid_t folderid){
+  char *mp, *path, *ret;
+  pthread_mutex_lock(&start_mutex);
+  if (started==1)
+    mp=psync_strdup(psync_current_mountpoint);
+  else
+    mp=NULL;
+  pthread_mutex_unlock(&start_mutex);
+  if (!mp || folderid==0)
+    return mp;
+  path=psync_get_path_by_folderid_sep(folderid, PSYNC_DIRECTORY_SEPARATOR, NULL);
+  if (path==PSYNC_INVALID_PATH){
+    psync_free(mp);
+    return NULL;
+  }
+  ret=psync_strcat(mp, path, NULL);
+  psync_free(mp);
+  psync_free(path);
+  return ret;
+}
+
 static void psync_fs_do_stop(void){
   struct timespec ts;
   debug(D_NOTICE, "stopping");
