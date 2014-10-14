@@ -374,6 +374,7 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
 
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
   psync_sql_res *res;
+  char *syncmp;
   psync_uint_row row;
   psync_str_row srow;
   uint64_t perms;
@@ -390,6 +391,15 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
     md=5;
   if (unlikely_log(!psync_stat_mode_ok(&st, md)))
     return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  syncmp=psync_fs_getmountpoint();
+  if (syncmp){
+    if (!psync_filename_cmpn(syncmp, localpath, strlen(syncmp))){
+      debug(D_NOTICE, "local path %s is on pCloudDrive mounted as %s, rejecting sync", localpath, syncmp);
+      psync_free(syncmp);
+    }
+    psync_free(syncmp);
+    return PERROR_LOCAL_IS_ON_PDRIVE;
+  }
   res=psync_sql_query("SELECT localpath FROM syncfolder");
   if (unlikely_log(!res))
     return_isyncid(PERROR_DATABASE_ERROR);
