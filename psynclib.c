@@ -396,9 +396,9 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
     if (!psync_filename_cmpn(syncmp, localpath, strlen(syncmp))){
       debug(D_NOTICE, "local path %s is on pCloudDrive mounted as %s, rejecting sync", localpath, syncmp);
       psync_free(syncmp);
+	  return_isyncid(PERROR_LOCAL_IS_ON_PDRIVE);
     }
     psync_free(syncmp);
-    return PERROR_LOCAL_IS_ON_PDRIVE;
   }
   res=psync_sql_query("SELECT localpath FROM syncfolder");
   if (unlikely_log(!res))
