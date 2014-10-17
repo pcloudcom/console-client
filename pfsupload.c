@@ -1008,7 +1008,7 @@ static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *ta
 }
 
 static int handle_unlink_api_error(uint64_t result, fsupload_task_t *task){
-  debug(D_ERROR, "deletefile returned error %u", (unsigned)result);
+  debug(D_ERROR, "deletefile returned error %u for fileid %lu", (unsigned)result, (unsigned long)task->fileid);
   switch (result){
     case 2009: /* file does not exist, kind of success */
       //psync_ops_delete_file_from_db(task->fileid);
