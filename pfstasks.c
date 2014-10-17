@@ -743,6 +743,8 @@ int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){
     psync_fstask_depend(taskid, depend);
   if (revoffileid<0)
     psync_fstask_depend(taskid, -revoffileid);
+  if (fileid<0 && -fileid!=depend)
+    psync_fstask_depend(taskid, -fileid);
   psync_fstask_depend_on_name(taskid, folderid, name, len);
   if (unlikely_log(psync_sql_commit_transaction())){
     psync_fstask_release_folder_tasks_locked(folder);
