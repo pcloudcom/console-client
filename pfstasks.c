@@ -646,8 +646,10 @@ static psync_fsfileid_t get_file_at_old_location(psync_fsfileid_t fileid){
 void psync_fstask_stop_and_delete_file(psync_fsfileid_t fileid){
   psync_sql_res *res;
   debug(D_NOTICE, "trying to stop upload of task %lu", (unsigned long)-fileid);
-  if (psync_fsupload_in_current_small_uploads_batch_locked(-fileid))
+  if (psync_fsupload_in_current_small_uploads_batch_locked(-fileid)){
+    debug(D_NOTICE, "file is in current small uploads batch");
     return;
+  }
   psync_fsupload_stop_upload_locked(-fileid);
   res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE id=?");
   psync_sql_bind_uint(res, 1, -fileid);
