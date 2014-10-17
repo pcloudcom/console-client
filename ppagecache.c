@@ -1505,6 +1505,8 @@ static void psync_pagecache_read_unmodified_readahead(psync_openfile_t *of, uint
   if (offset+size+readahead>initialsize)
     readahead=size_round_up_to_page(initialsize-offset-size);
   rto=of->streams[streamid].requestedto;
+  if (of->streams[streamid].lastuse<ctime-30)
+    rto=0;
   if (rto<offset+size+readahead)
     of->streams[streamid].requestedto=offset+size+readahead;
 //  debug(D_NOTICE, "rto=%lu", rto);

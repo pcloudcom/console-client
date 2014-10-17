@@ -1365,7 +1365,7 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
         goto err0;
       while (rtask->needprocessing){
         rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
-        assert(rtask!=tasks);
+        assert(&rtask->list!=tasks);
       }
       rtask->res=reader.result;
       rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);

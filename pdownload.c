@@ -91,6 +91,7 @@ static int task_mkdir(const char *path){
       psync_set_local_full(0);
       return 0;
     }
+    debug(D_WARNING, "mkdir of %s failed, errno=%d", path, (int)psync_fs_err());
     if (psync_fs_err()==P_NOSPC || psync_fs_err()==P_DQUOT){
       psync_set_local_full(1);
       psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
