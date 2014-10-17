@@ -201,9 +201,9 @@ char *psync_get_pcloud_path(){
   char *path;
   psync_stat_t st;
   path=psync_get_pcloud_path_nc();
-  if (!path)
+  if (unlikely_log(!path))
     return NULL;
-  if (psync_stat(path, &st) && psync_mkdir(path)){
+  if (psync_stat(path, &st) && unlikely_log(psync_mkdir(path))){
     psync_free(path);
     return NULL;
   }
