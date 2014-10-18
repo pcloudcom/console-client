@@ -98,6 +98,69 @@ static int psync_gids_cnt;
 PSYNC_THREAD const char *psync_thread_name="no name";
 static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
 
+#if defined(P_OS_WINDOWS)
+#if !defined(gmtime_r)
+struct tm *gmtime_r(const time_t *timep, struct tm *result){
+  struct tm *res=gmtime(timep);
+  *result=*res;
+  return result;
+}
+#endif
+
+static wchar_t *utf8_to_wchar(const char *str){
+  int len;
+  wchar_t *ret;
+  len=MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+  ret=psync_new_cnt(wchar_t, len);
+  MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+  return ret;
+}
+
+static char *wchar_to_utf8(const wchar_t *str){
+  int len;
+  char *ret;
+  len=WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
+  ret=psync_new_cnt(char, len);
+  WideCharToMultiByte(CP_UTF8, 0, str, -1, ret, len, NULL, NULL);
+  return ret;
+}
+
+int psync_stat(const char *path, psync_stat_t *st){
+  wchar_t *wpath;
+  HANDLE fd;
+  BOOL ret;
+  DWORD flag, attr;
+  wpath=utf8_to_wchar(path);
+retry:
+  attr=GetFileAttributesW(wpath);
+  if (attr==INVALID_FILE_ATTRIBUTES){
+    psync_free(wpath);
+    return -1;
+  }
+  if (attr&FILE_ATTRIBUTE_DIRECTORY)
+    flag=FILE_FLAG_BACKUP_SEMANTICS;
+  else
+    flag=FILE_ATTRIBUTE_NORMAL;
+
+  fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
+  if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
+    if (GetLastError()==ERROR_SHARING_VIOLATION){
+      debug(D_WARNING, "file %s is locked by another process, will retry after sleep", path);
+      psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
+      goto retry;
+    }
+    else
+      debug(D_NOTICE, "could not open file %s, error %d", path, (int)GetLastError());
+    psync_free(wpath);
+    return -1;
+  }
+  psync_free(wpath);
+  ret=GetFileInformationByHandle(fd, st);
+  CloseHandle(fd);
+  return psync_bool_to_zero(ret);
+}
+#endif
+
 void psync_compat_init(){
 #if defined(P_OS_POSIX)
   struct rlimit limit;
@@ -180,18 +243,22 @@ static char *psync_get_pcloud_path_nc(){
   }
   return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_POSIX_DIR, NULL);
 #elif defined(P_OS_WINDOWS)
-  char path[MAX_PATH];
-  const char *dir;
-  if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA|CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, path)==S_OK)
-    dir=path;
+  wchar_t path[MAX_PATH], *wdir;
+  char *dir, *ret;
+  if (SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA|CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, path)==S_OK)
+    wdir=path;
   else{
-    dir=getenv("LOCALAPPDATA");
-    if (!dir)
-      dir=getenv("APPDATA");
-    if (unlikely_log(!dir))
-      return NULL;
+    wdir=_wgetenv(L"LOCALAPPDATA");
+    if (!wdir){
+      wdir=_wgetenv(L"APPDATA");
+      if (unlikely_log(!wdir))
+        return NULL;    
+    }  
   }
-  return psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_WINDOWS_DIR, NULL);
+  dir=wchar_to_utf8(wdir);
+  ret=psync_strcat(dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_WINDOWS_DIR, NULL);
+  psync_free(dir);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -1747,70 +1814,6 @@ int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec){
     psync_sock_set_err(P_TIMEDOUT);
   return SOCKET_ERROR;
 }
-
-#if defined(P_OS_WINDOWS)
-#if !defined(gmtime_r)
-struct tm *gmtime_r(const time_t *timep, struct tm *result){
-  struct tm *res=gmtime(timep);
-  *result=*res;
-  return result;
-}
-#endif
-
-static wchar_t *utf8_to_wchar(const char *str){
-  int len;
-  wchar_t *ret;
-  len=MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
-  ret=psync_new_cnt(wchar_t, len);
-  MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
-  return ret;
-}
-
-static char *wchar_to_utf8(const wchar_t *str){
-  int len;
-  char *ret;
-  len=WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
-  ret=psync_new_cnt(char, len);
-  WideCharToMultiByte(CP_UTF8, 0, str, -1, ret, len, NULL, NULL);
-  return ret;
-}
-
-int psync_stat(const char *path, psync_stat_t *st){
-  wchar_t *wpath;
-  HANDLE fd;
-  BOOL ret;
-  DWORD flag, attr;
-  wpath=utf8_to_wchar(path);
-retry:
-  attr=GetFileAttributesW(wpath);
-  if (attr==INVALID_FILE_ATTRIBUTES){
-    psync_free(wpath);
-    return -1;
-  }
-  if (attr&FILE_ATTRIBUTE_DIRECTORY)
-    flag=FILE_FLAG_BACKUP_SEMANTICS;
-  else
-    flag=FILE_ATTRIBUTE_NORMAL;
-
-  fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
-  if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
-    if (GetLastError()==ERROR_SHARING_VIOLATION){
-      debug(D_WARNING, "file %s is locked by another process, will retry after sleep", path);
-      psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
-      goto retry;
-    }
-    else
-      debug(D_NOTICE, "could not open file %s, error %d", path, (int)GetLastError());
-    psync_free(wpath);
-    return -1;
-  }
-  psync_free(wpath);
-  ret=GetFileInformationByHandle(fd, st);
-  CloseHandle(fd);
-  return psync_bool_to_zero(ret);
-}
-
-#endif
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr){
 #if defined(P_OS_POSIX)
