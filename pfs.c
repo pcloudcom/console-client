@@ -566,7 +566,7 @@ static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *
 static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT 0, 0, 0, 0, subdircnt FROM folder WHERE id=0");
+  res=psync_sql_query("SELECT 0, 0, s.value*1, f.mtime, f.subdircnt FROM folder f, setting s WHERE f.id=0 AND s.id='registered'");
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_folder_stat(row, stbuf);
   psync_sql_free_result(res);
