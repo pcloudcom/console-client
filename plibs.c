@@ -388,7 +388,7 @@ int psync_sql_connect(const char *db){
   }
 }
 
-void psync_sql_close(){
+int psync_sql_close(){
   int code, tries;
   tries=0;
   while (1){
@@ -407,9 +407,13 @@ void psync_sql_close(){
     else
       break;
   }
-  if (unlikely(code!=SQLITE_OK))
-    debug(D_CRITICAL, "error when closing database: %d", code);
   psync_db=NULL;
+  if (unlikely(code!=SQLITE_OK)){
+    debug(D_CRITICAL, "error when closing database: %d", code);
+    return -1;
+  }
+  else
+    return 0;
 }
 
 int psync_sql_reopen(const char *path){

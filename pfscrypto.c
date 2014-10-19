@@ -3,7 +3,7 @@
 #include "pcloudcrypto.h"
 
 // this is only for debug, adds needless checks of tree for local files
-//#define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
+#define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
 
 #define PSYNC_CRYPTO_LOG_HEADER 0
 #define PSYNC_CRYPTO_LOG_DATA   1
