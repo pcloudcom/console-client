@@ -46,6 +46,10 @@ char *psync_fs_getmountpoint(){
   return NULL;
 }
 
+char *psync_fs_get_path_by_folderid(psync_folderid_t folderid){
+  return NULL;
+}
+
 void psync_fs_refresh(){
 }
 
@@ -70,4 +74,10 @@ void psync_pagecache_resize_cache(){
 
 int psync_cloud_crypto_setup(const char *password){
   return PSYNC_CRYPTO_SETUP_NOT_SUPPORTED;
+}
+
+void psync_pagecache_clean_cache(){
+}
+
+void psync_fs_pause_until_login(){
 }

@@ -49,6 +49,7 @@
 #include "pcache.h"
 #include "pfileops.h"
 #include "pcloudcrypto.h"
+#include "ppagecache.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -273,17 +274,17 @@ void psync_logout(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
-  psync_fs_stop();
+  psync_fs_pause_until_login();
   psync_stop_all_download();
   psync_stop_all_upload();
   psync_cache_clean_all();
+  psync_restart_localscan();
   psync_timer_notify_exception();
 }
 
 void psync_unlink(){
+  int ret;
   debug(D_NOTICE, "unlink");
-  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
-  psync_fs_stop();
   psync_stop_all_download();
   psync_stop_all_upload();
   psync_status_recalc_to_download();
@@ -291,11 +292,21 @@ void psync_unlink(){
   psync_timer_notify_exception();
   psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
+  psync_stop_localscan();
+  psync_sql_checkpoint_lock();
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_sql_lock();
   debug(D_NOTICE, "clearing database, locked");
   psync_cache_clean_all();
-  psync_sql_close();
+  ret=psync_sql_close();
   psync_file_delete(psync_database);
+  if (ret){
+    debug(D_ERROR, "failed to close database, exiting");
+    exit(1);
+  }
+  psync_pagecache_clean_cache();
   psync_sql_connect(psync_database);
   /*
     psync_sql_res *res;
@@ -344,13 +355,16 @@ void psync_unlink(){
   psync_my_userid=0;
   pthread_mutex_unlock(&psync_my_auth_mutex);
   debug(D_NOTICE, "clearing database, finished");
+  psync_fs_pause_until_login();
   psync_sql_unlock();
+  psync_sql_checkpoint_unlock();
   psync_settings_reset();
   psync_cache_clean_all();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
+  psync_resume_localscan();
 }
 
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype){
@@ -363,6 +377,7 @@ psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotep
 
 psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_t folderid, psync_synctype_t synctype){
   psync_sql_res *res;
+  char *syncmp;
   psync_uint_row row;
   psync_str_row srow;
   uint64_t perms;
@@ -379,6 +394,15 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
     md=5;
   if (unlikely_log(!psync_stat_mode_ok(&st, md)))
     return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
+  syncmp=psync_fs_getmountpoint();
+  if (syncmp){
+    if (!psync_filename_cmpn(syncmp, localpath, strlen(syncmp))){
+      debug(D_NOTICE, "local path %s is on pCloudDrive mounted as %s, rejecting sync", localpath, syncmp);
+      psync_free(syncmp);
+	  return_isyncid(PERROR_LOCAL_IS_ON_PDRIVE);
+    }
+    psync_free(syncmp);
+  }
   res=psync_sql_query("SELECT localpath FROM syncfolder");
   if (unlikely_log(!res))
     return_isyncid(PERROR_DATABASE_ERROR);
@@ -1150,7 +1174,7 @@ static int psync_download_new_version(const binresult *res, char **lpath){
   }
   size=psync_find_result(res, "size", PARAM_NUM)->num;
   filename=psync_filename_from_res(res);
-  if (!unlikely_log(filename)){
+  if (unlikely_log(!filename)){
     psync_http_close(sock);
     return 1;
   }

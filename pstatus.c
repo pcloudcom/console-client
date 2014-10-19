@@ -55,6 +55,8 @@ static uint32_t psync_calc_status(){
       return PSTATUS_USER_MISMATCH;
     else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_BADLOGIN)
       return PSTATUS_BAD_LOGIN_DATA;
+    else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_BADTOKEN)
+      return PSTATUS_BAD_LOGIN_TOKEN;
     else {
       debug(D_BUG, "invalid PSTATUS_TYPE_AUTH %d", statuses[PSTATUS_TYPE_AUTH]);
       return -1;

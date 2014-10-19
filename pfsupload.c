@@ -72,6 +72,12 @@ static const uint32_t requiredstatuses[]={
   PSTATUS_COMBINE(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK)
 };
 
+static const uint32_t requiredstatusesnooverquota[]={
+  PSTATUS_COMBINE(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED),
+  PSTATUS_COMBINE(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN),
+  PSTATUS_COMBINE(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE)
+};
+
 static int psync_send_task_mkdir(psync_socket *api, fsupload_task_t *task){
   if (task->text2){
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp"),
@@ -933,7 +939,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
 
 static int psync_sent_task_creat_upload_large(fsupload_task_t *task){
   psync_sql_res *res;
-  res=psync_sql_prep_statement("UPDATE fstask SET status=2 WHERE id=?");
+  res=psync_sql_prep_statement("UPDATE fstask SET status=2 WHERE id=? AND status=0");
   psync_sql_bind_uint(res, 1, task->id);
   //psync_fs_uploading_openfile(task->id);
   if (!large_upload_running){
@@ -969,6 +975,8 @@ int psync_fsupload_in_current_small_uploads_batch_locked(uint64_t taskid){
       fileidhex[sizeof(psync_fsfileid_t)+1]=0;
       filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
       stret=psync_stat(filename, &st);
+      if (stret)
+        debug(D_WARNING, "can not stat %s", filename);
       psync_free(filename);
       if (stret)
         return 1;
@@ -1069,7 +1077,7 @@ static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *ta
 }
 
 static int handle_unlink_api_error(uint64_t result, fsupload_task_t *task){
-  debug(D_ERROR, "deletefile returned error %u", (unsigned)result);
+  debug(D_ERROR, "deletefile returned error %u for fileid %lu", (unsigned)result, (unsigned long)task->fileid);
   switch (result){
     case 2009: /* file does not exist, kind of success */
       //psync_ops_delete_file_from_db(task->fileid);
@@ -1424,6 +1432,10 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     while (get_result_async(api, &reader)==ASYNC_RES_READY){
       if (unlikely_log(!reader.result))
         goto err0;
+      while (rtask->needprocessing){
+        rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
+        assert(&rtask->list!=tasks);
+      }
       rtask->res=reader.result;
       rtask=psync_list_element(rtask->list.next, fsupload_task_t, list);
     }
@@ -1467,8 +1479,14 @@ static void psync_fsupload_check_tasks(){
   uint32_t cnt;
   psync_list_init(&tasks);
   cnt=0;
-  res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
-                      " WHERE d.fstaskid IS NULL AND status IN (0, 11) ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
+  if (psync_status_get(PSTATUS_TYPE_ACCFULL)==PSTATUS_ACCFULL_QUOTAOK)
+    res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f"
+                        " LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
+                        " WHERE d.fstaskid IS NULL AND status IN (0, 11) ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
+  else
+    res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f"
+                        " LEFT JOIN fstaskdepend d ON f.id=d.fstaskid WHERE d.fstaskid IS NULL AND status IN (0, 11) AND f.type NOT IN ("NTO_STR(PSYNC_FS_TASK_CREAT)
+                        ", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   while ((row=psync_sql_fetch_row(res))){
     cnt++;
     size=sizeof(fsupload_task_t);
@@ -1517,7 +1535,7 @@ static void psync_fsupload_check_tasks(){
 
 static void psync_fsupload_thread(){
   while (psync_do_run){
-    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
+    psync_wait_statuses_array(requiredstatusesnooverquota, ARRAY_SIZE(requiredstatusesnooverquota));
     // it is better to sleep a bit to give a chance to events to accumulate
     psync_milisleep(10);
     psync_fsupload_check_tasks();

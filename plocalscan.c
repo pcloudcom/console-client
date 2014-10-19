@@ -71,6 +71,11 @@ static uint32_t scan_wakes=0;
 static uint32_t restart_scan=0;
 static uint32_t scan_stoppers=0;
 
+static const uint32_t requiredstatuses[]={
+  PSTATUS_COMBINE(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED),
+  PSTATUS_COMBINE(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE)
+};
+
 #define SCAN_LIST_CNT 9
 
 #define SCAN_LIST_NEWFILES      0
@@ -95,15 +100,21 @@ static void scanner_set_syncs_to_list(psync_list *lst){
   psync_variant_row row;
   const char *lp;
   sync_list *l;
+  char *syncmp;
   size_t lplen;
   psync_stat_t st;
   psync_deviceid_t deviceid;
   psync_list_init(lst);
+  syncmp=psync_fs_getmountpoint();
   res=psync_sql_query("SELECT id, folderid, localpath, synctype, deviceid FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   while ((row=psync_sql_fetch_row(res))){
     lp=psync_get_lstring(row[2], &lplen);
     if (unlikely(psync_stat(lp, &st))){
       debug(D_WARNING, "could not stat local folder %s, ignoring sync", lp);
+      continue;
+    }
+    if (unlikely(syncmp && !psync_filename_cmpn(syncmp, lp, strlen(syncmp)))){
+      debug(D_WARNING, "folder %s is on pCloudDrive mounted as %s, ignoring sync", lp, syncmp);
       continue;
     }
     deviceid=psync_get_number(row[4]);
@@ -120,6 +131,7 @@ static void scanner_set_syncs_to_list(psync_list *lst){
     psync_list_add_tail(lst, &l->list);
   }
   psync_sql_free_result(res);
+  psync_free(syncmp);
 }
 
 static void scanner_local_entry_to_list(void *ptr, psync_pstat *st){
@@ -612,6 +624,8 @@ restart:
     pthread_cond_wait(&scan_cond, &scan_mutex);
   restart_scan=0;
   pthread_mutex_unlock(&scan_mutex);
+  if (!psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses)))
+    return;
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_init(&scan_lists[i]);
   scanner_set_syncs_to_list(&slist);
@@ -743,6 +757,7 @@ static void scanner_thread(){
   time_t lastscan;
   int w;
   psync_milisleep(25);
+  psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
   psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
   scanner_scan(1);
   psync_set_status(PSTATUS_TYPE_LOCALSCAN, PSTATUS_LOCALSCAN_READY);
@@ -750,7 +765,7 @@ static void scanner_thread(){
   w=0;
   lastscan=0;
   while (psync_do_run){
-    psync_wait_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN|PSTATUS_RUN_PAUSE);
+    psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
     if (lastscan+2>=psync_current_time){
       psync_milisleep(600);
       pthread_mutex_lock(&scan_mutex);

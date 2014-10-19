@@ -162,7 +162,10 @@ static psync_socket *get_connected_socket(){
       psync_socket_close(sock);
       psync_free(res);
       if (result==2000){
-        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
+        if (user && pass)
+          psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
+        else
+          psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADTOKEN);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       }
       else if (result==4000)
@@ -1036,7 +1039,8 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_uint(q, 2, psync_find_result(res, "userid", PARAM_NUM)->num);
   psync_sql_run(q);
   psync_sql_bind_string(q, 1, "quota");
-  psync_sql_bind_uint(q, 2, psync_find_result(res, "quota", PARAM_NUM)->num);
+  current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
+  psync_sql_bind_uint(q, 2, current_quota);
   psync_sql_run(q);
   u=psync_find_result(res, "premium", PARAM_BOOL)->num;
   psync_sql_bind_string(q, 1, "premium");

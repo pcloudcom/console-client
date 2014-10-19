@@ -947,8 +947,11 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
       do {
         psync_milisleep((psync_stat_mtime(&st)+PSYNC_UPLOAD_OLDER_THAN_SEC-ctime)*1000+500);
         ctime=psync_timer_time();
-        if (psync_stat(localpath, &st))
-          break;
+        if (psync_stat(localpath, &st)){
+          debug(D_NOTICE, "can not stat %s anymore, failing for now", localpath);
+          psync_free(localpath);
+          return -1;
+        }
       } while (psync_stat_mtime(&st)>=psync_timer_time()-PSYNC_UPLOAD_OLDER_THAN_SEC && ++ret<=10);
       if (ret==10){
         debug(D_NOTICE, "file %s kept changing %d times, skipping for now", localpath, ret);

@@ -92,14 +92,15 @@ typedef struct {
 #define PSTATUS_DOWNLOADINGANDUPLOADING 3
 #define PSTATUS_LOGIN_REQUIRED          4
 #define PSTATUS_BAD_LOGIN_DATA          5
-#define PSTATUS_ACCOUNT_FULL            6
-#define PSTATUS_DISK_FULL               7
-#define PSTATUS_PAUSED                  8
-#define PSTATUS_STOPPED                 9
-#define PSTATUS_OFFLINE                10
-#define PSTATUS_CONNECTING             11
-#define PSTATUS_SCANNING               12
-#define PSTATUS_USER_MISMATCH          13
+#define PSTATUS_BAD_LOGIN_TOKEN         6
+#define PSTATUS_ACCOUNT_FULL            7
+#define PSTATUS_DISK_FULL               8
+#define PSTATUS_PAUSED                  9
+#define PSTATUS_STOPPED                10
+#define PSTATUS_OFFLINE                11
+#define PSTATUS_CONNECTING             12
+#define PSTATUS_SCANNING               13
+#define PSTATUS_USER_MISMATCH          14
 
 typedef struct {
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */
@@ -188,6 +189,7 @@ typedef struct {
 #define PERROR_OFFLINE                 11
 #define PERROR_INVALID_SYNCID          12
 #define PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING 13
+#define PERROR_LOCAL_IS_ON_PDRIVE      14
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
@@ -762,6 +764,9 @@ void psync_run_new_version(psync_new_version_t *ver);
  * psync_fs_stop() - stops the filesystem
  * psync_fs_getmountpoint() - returns current mountpoint of the filesystem, or NULL if the filesystem is not mounted,
  *                            you are supposed to free the returned pointer
+ * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
+ *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
+ *                            pointer.
  * 
  */
 
@@ -769,6 +774,7 @@ int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
 char *psync_fs_getmountpoint();
+char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 
 /*
  * Crypto functions.
