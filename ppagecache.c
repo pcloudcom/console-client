@@ -897,7 +897,7 @@ static int flush_pages(int nosleep){
   ctime=psync_timer_time();
   psync_list_init(&pages_to_flush);
   pthread_mutex_lock(&cache_mutex);
-  if (diskfull && psync_list_isempty(&free_pages)){
+  if (diskfull && psync_list_isempty(&free_pages) && psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0)==0){
     debug(D_NOTICE, "disk is full, discarding some pages");
     for (i=0; i<CACHE_HASH; i++)
       psync_list_for_each_element(page, &cache_hash[i], psync_cache_page_t, list)
