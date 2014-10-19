@@ -840,6 +840,18 @@ static int cmp_flush_pages(const psync_list *p1, const psync_list *p2){
     return 0;
 }
 
+static int cmp_discard_pages(const psync_list *p1, const psync_list *p2){
+  const psync_cache_page_t *page1, *page2;
+  page1=psync_list_element(p1, const psync_cache_page_t, flushlist);
+  page2=psync_list_element(p2, const psync_cache_page_t, flushlist);
+  if (page1->lastuse<page2->lastuse)
+    return -1;
+  else if (page1->lastuse>page2->lastuse)
+    return 1;
+  else
+    return 0;
+}
+
 static int check_disk_full(){
   int64_t filesize, freespace;
   uint64_t minlocal, maxpage;
@@ -885,6 +897,26 @@ static int flush_pages(int nosleep){
   ctime=psync_timer_time();
   psync_list_init(&pages_to_flush);
   pthread_mutex_lock(&cache_mutex);
+  if (diskfull && psync_list_isempty(&free_pages)){
+    debug(D_NOTICE, "disk is full, discarding some pages");
+    for (i=0; i<CACHE_HASH; i++)
+      psync_list_for_each_element(page, &cache_hash[i], psync_cache_page_t, list)
+        if (page->type==PAGE_TYPE_READ)
+          psync_list_add_tail(&pages_to_flush, &page->flushlist);
+    pthread_mutex_unlock(&cache_mutex);
+    psync_list_sort(&pages_to_flush, cmp_discard_pages);
+    pthread_mutex_lock(&cache_mutex);
+    i=0;
+    psync_list_for_each_element(page, &pages_to_flush, psync_cache_page_t, flushlist){
+      psync_list_del(&page->list);
+      psync_list_add_head(&free_pages, &page->list);
+      cache_pages_in_hash--;
+      if (++i>=CACHE_PAGES/2)
+        break;
+    }
+    debug(D_NOTICE, "discarded %u pages", (unsigned)i);
+    psync_list_init(&pages_to_flush);
+  }
   if (cache_pages_in_hash){
     debug(D_NOTICE, "flushing cache");
     for (i=0; i<CACHE_HASH; i++)
