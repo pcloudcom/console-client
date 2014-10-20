@@ -840,6 +840,18 @@ static int cmp_flush_pages(const psync_list *p1, const psync_list *p2){
     return 0;
 }
 
+static int cmp_discard_pages(const psync_list *p1, const psync_list *p2){
+  const psync_cache_page_t *page1, *page2;
+  page1=psync_list_element(p1, const psync_cache_page_t, flushlist);
+  page2=psync_list_element(p2, const psync_cache_page_t, flushlist);
+  if (page1->lastuse<page2->lastuse)
+    return -1;
+  else if (page1->lastuse>page2->lastuse)
+    return 1;
+  else
+    return 0;
+}
+
 static int check_disk_full(){
   int64_t filesize, freespace;
   uint64_t minlocal, maxpage;
@@ -854,6 +866,7 @@ static int check_disk_full(){
     psync_set_local_full(0);
     return 0;
   }
+  debug(D_NOTICE, "local disk is full, freespace=%lu, minfreespace=%lu", (unsigned long)freespace, (unsigned long)minlocal);
   psync_set_local_full(1);
   if (minlocal>=freespace)
     maxpage=filesize/PSYNC_FS_PAGE_SIZE;
@@ -864,6 +877,7 @@ static int check_disk_full(){
   psync_sql_run_free(res);
   free_db_pages=psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0);
   db_cache_max_page=maxpage;
+  debug(D_NOTICE, "free_db_pages=%u, db_cache_max_page=%lu", (unsigned)free_db_pages, (unsigned long)db_cache_max_page);
   return 1;
 }
 
@@ -885,6 +899,26 @@ static int flush_pages(int nosleep){
   ctime=psync_timer_time();
   psync_list_init(&pages_to_flush);
   pthread_mutex_lock(&cache_mutex);
+  if (diskfull && psync_list_isempty(&free_pages) && free_db_pages==0){
+    debug(D_NOTICE, "disk is full, discarding some pages");
+    for (i=0; i<CACHE_HASH; i++)
+      psync_list_for_each_element(page, &cache_hash[i], psync_cache_page_t, list)
+        if (page->type==PAGE_TYPE_READ)
+          psync_list_add_tail(&pages_to_flush, &page->flushlist);
+    pthread_mutex_unlock(&cache_mutex);
+    psync_list_sort(&pages_to_flush, cmp_discard_pages);
+    pthread_mutex_lock(&cache_mutex);
+    i=0;
+    psync_list_for_each_element(page, &pages_to_flush, psync_cache_page_t, flushlist){
+      psync_list_del(&page->list);
+      psync_list_add_head(&free_pages, &page->list);
+      cache_pages_in_hash--;
+      if (++i>=CACHE_PAGES/2)
+        break;
+    }
+    debug(D_NOTICE, "discarded %u pages", (unsigned)i);
+    psync_list_init(&pages_to_flush);
+  }
   if (cache_pages_in_hash){
     debug(D_NOTICE, "flushing cache");
     for (i=0; i<CACHE_HASH; i++)
@@ -895,6 +929,7 @@ static int flush_pages(int nosleep){
         }
     cache_pages_in_hash=pagecnt;
     pthread_mutex_unlock(&cache_mutex);
+    debug(D_NOTICE, "cache_pages_in_hash=%u", (unsigned)pagecnt);
     psync_list_sort(&pages_to_flush, cmp_flush_pages);
     res=psync_sql_query("SELECT id FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE)" ORDER BY id LIMIT ?");
     psync_sql_bind_uint(res, 1, pagecnt);
@@ -924,17 +959,19 @@ static int flush_pages(int nosleep){
 break2:
     psync_sql_free_result(res);
     pthread_mutex_unlock(&cache_mutex);*/
+    i=0;
     psync_list_for_each_element(page, &pages_to_flush, psync_cache_page_t, flushlist){
       if (psync_file_pwrite(readcache, page->page, PSYNC_FS_PAGE_SIZE, (uint64_t)page->flushpageid*PSYNC_FS_PAGE_SIZE)!=PSYNC_FS_PAGE_SIZE){
         debug(D_ERROR, "write to cache file failed");
         pthread_mutex_unlock(&flush_cache_mutex);
         return -1;
       }
+      i++;
     }
-    i=0;
-    debug(D_NOTICE, "cache data written");
+    debug(D_NOTICE, "cache data of %u pages written", (unsigned)i);
     /* if we can afford it, wait a while before calling fsync() as at least on Linux this blocks reads from the same file until it returns */
     if (!nosleep){
+      i=0;
       pthread_mutex_lock(&cache_mutex);
       while (cache_pages_free>=CACHE_PAGES*5/100 && i++<200){
         pthread_mutex_unlock(&cache_mutex);
@@ -964,6 +1001,7 @@ break2:
     db_cache_max_page+=i;
     debug(D_NOTICE, "inserted %lu new free pages to database, db_cache_in_pages=%lu, db_cache_max_page=%lu", 
                     (unsigned long)i, (unsigned long)db_cache_in_pages, (unsigned long)db_cache_max_page);
+    updates++;
   }
   cpih=cache_pages_in_hash;
   if (!psync_list_isempty(&pages_to_flush)){

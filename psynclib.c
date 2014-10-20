@@ -273,7 +273,7 @@ void psync_logout(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
-  psync_fs_stop();
+  psync_fs_pause_until_login();
   psync_stop_all_download();
   psync_stop_all_upload();
   psync_cache_clean_all();
@@ -284,8 +284,6 @@ void psync_logout(){
 void psync_unlink(){
   int ret;
   debug(D_NOTICE, "unlink");
-  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
-  psync_fs_stop();
   psync_stop_all_download();
   psync_stop_all_upload();
   psync_status_recalc_to_download();
@@ -295,6 +293,9 @@ void psync_unlink(){
   psync_milisleep(20);
   psync_stop_localscan();
   psync_sql_checkpoint_lock();
+  psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
+  psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_sql_lock();
   debug(D_NOTICE, "clearing database, locked");
   psync_cache_clean_all();
@@ -353,6 +354,7 @@ void psync_unlink(){
   psync_my_userid=0;
   pthread_mutex_unlock(&psync_my_auth_mutex);
   debug(D_NOTICE, "clearing database, finished");
+  psync_fs_pause_until_login();
   psync_sql_unlock();
   psync_sql_checkpoint_unlock();
   psync_settings_reset();

@@ -99,6 +99,7 @@ static pthread_mutex_t start_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t start_cond=PTHREAD_COND_INITIALIZER;
 static int started=0;
 static int initonce=0;
+static int waitingforlogin=0;
 
 static uid_t myuid=0;
 static gid_t mygid=0;
@@ -565,12 +566,20 @@ static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *
 static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT 0, 0, 0, 0, subdircnt FROM folder WHERE id=0");
+  res=psync_sql_query("SELECT 0, 0, s.value*1, f.mtime, f.subdircnt FROM folder f, setting s WHERE f.id=0 AND s.id='registered'");
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_folder_stat(row, stbuf);
   psync_sql_free_result(res);
   return 0;
 }
+
+#define CHECK_LOGIN_LOCKED() do {\
+  if (unlikely(waitingforlogin)){\
+    psync_sql_unlock();\
+    debug(D_NOTICE, "returning EACCES for not logged in");\
+    return -EACCES;\
+  }\
+} while (0)
 
 static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   psync_sql_res *res;
@@ -584,6 +593,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   if (path[0]=='/' && path[1]==0)
     return psync_fs_getrootattr(stbuf);
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
     psync_sql_unlock();
@@ -653,6 +663,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   folderid=psync_fsfolderid_by_path(path);
   if (unlikely_log(folderid==PSYNC_INVALID_FSFOLDERID)){
     psync_sql_unlock();
@@ -872,6 +883,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   debug(D_NOTICE, "open %s", path);
   fileid=writeid=hash=size=0;
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
     debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
@@ -1076,6 +1088,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
   psync_fs_set_thread_name();
   debug(D_NOTICE, "creat %s", path);
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
     debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
@@ -1489,6 +1502,7 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
   psync_fs_set_thread_name();
   debug(D_NOTICE, "mkdir %s", path);
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath)
     ret=-ENOENT;
@@ -1529,6 +1543,7 @@ static int psync_fs_rmdir(const char *path){
   psync_fs_set_thread_name();
   debug(D_NOTICE, "rmdir %s", path);
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath)
     ret=-ENOENT;
@@ -1569,6 +1584,7 @@ static int psync_fs_unlink(const char *path){
   psync_fs_set_thread_name();
   debug(D_NOTICE, "unlink %s", path);
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath)
     ret=-ENOENT;
@@ -1742,6 +1758,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   debug(D_NOTICE, "rename %s to %s", old_path, new_path);
   folder=NULL;
   psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
   fold_path=psync_fsfolder_resolve_path(old_path);
   fnew_path=psync_fsfolder_resolve_path(new_path);
   if (!fold_path || !fnew_path)
@@ -1819,6 +1836,8 @@ static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
   uint64_t q, uq;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "statfs %s", path);
+  if (waitingforlogin)
+    return -EACCES;
 /* TODO:
    return -ENOENT if path is invalid if fuse does not call getattr first
    */
@@ -2321,11 +2340,30 @@ err00:
 
 static void psync_fs_wait_start(){
   debug(D_NOTICE, "waiting for online status");
-  psync_wait_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING|PSTATUS_ONLINE_ONLINE);
+  psync_wait_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   if (psync_do_run){
     debug(D_NOTICE, "starting fs");
     psync_fs_do_start();
   }
+}
+
+static void psync_fs_wait_login(){
+  debug(D_NOTICE, "waiting for online status");
+  psync_wait_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  debug(D_NOTICE, "waited for online status");
+  psync_sql_lock();
+  waitingforlogin=0;
+  psync_sql_unlock();
+}
+
+void psync_fs_pause_until_login(){
+  psync_sql_lock();
+  if (waitingforlogin==0){
+    waitingforlogin=1;
+    debug(D_NOTICE, "stopping fs until login");
+    psync_run_thread("fs wait login", psync_fs_wait_login);
+  }
+  psync_sql_unlock();  
 }
 
 int psync_fs_start(){

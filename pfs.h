@@ -101,4 +101,6 @@ void psync_fs_refresh();
 int psync_fs_need_per_folder_refresh_f();
 void psync_fs_refresh_folder(psync_folderid_t folderid);
 
+void psync_fs_pause_until_login();
+
 #endif
