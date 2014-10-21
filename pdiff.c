@@ -180,6 +180,7 @@ static psync_socket *get_connected_socket(){
     strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
     if (luserid){
       if (unlikely_log(luserid!=userid)){
+        debug(D_NOTICE, "user mistmatch, db userid=%lu, connected userid=%lu", (unsigned long)luserid, (unsigned long)userid);
         psync_socket_close(sock);
         psync_free(res);
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_MISMATCH);
