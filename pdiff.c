@@ -1601,6 +1601,7 @@ restart:
     entries=psync_find_result(res, "entries", PARAM_ARRAY);
     if (entries->length){
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
+      debug(D_NOTICE, "processing diff with %u entries", (unsigned)entries->length);
       diffid=process_entries(entries, newdiffid);
       psync_diff_refresh_fs(entries);
       debug(D_NOTICE, "got diff with %u entries, new diffid %lu", (unsigned)entries->length, (unsigned long)diffid);

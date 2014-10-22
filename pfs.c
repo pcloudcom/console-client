@@ -2262,7 +2262,7 @@ static int psync_fs_do_start(){
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
-  fuse_opt_add_arg(&args, "-ovolname=pCloudDrive");
+  fuse_opt_add_arg(&args, "-ovolname=pCloud Drive");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
   fuse_opt_add_arg(&args, "-olocal");
   fuse_opt_add_arg(&args, "-oallow_root");
