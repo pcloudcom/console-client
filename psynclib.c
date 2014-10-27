@@ -288,7 +288,6 @@ void psync_unlink(){
   psync_stop_all_upload();
   psync_status_recalc_to_download();
   psync_status_recalc_to_upload();
-  psync_timer_notify_exception();
   psync_invalidate_auth(psync_my_auth);
   psync_milisleep(20);
   psync_stop_localscan();
@@ -297,6 +296,7 @@ void psync_unlink(){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_STOP);
   psync_sql_lock();
+  psync_timer_notify_exception();
   debug(D_NOTICE, "clearing database, locked");
   psync_cache_clean_all();
   ret=psync_sql_close();

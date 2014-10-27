@@ -1476,7 +1476,9 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, char ex){
       psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED ||
       psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
     psync_socket_close(*sock);
+    debug(D_NOTICE, "waiting for new socket");
     *sock=get_connected_socket();
+    debug(D_NOTICE, "got new socket");
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
     psync_syncer_check_delayed_syncs();
     *diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
