@@ -177,9 +177,10 @@ static psync_socket *get_connected_socket(){
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
-    strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
+    psync_sql_start_transaction();
     if (luserid){
       if (unlikely_log(luserid!=userid)){
+        psync_sql_rollback_transaction();
         debug(D_NOTICE, "user mistmatch, db userid=%lu, connected userid=%lu", (unsigned long)luserid, (unsigned long)userid);
         psync_socket_close(sock);
         psync_free(res);
@@ -196,7 +197,6 @@ static psync_socket *get_connected_socket(){
     else{
       used_quota=0;
       q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-      psync_sql_start_transaction();
       psync_sql_bind_string(q, 1, "userid");
       psync_sql_bind_uint(q, 2, userid);
       psync_sql_run(q);
@@ -234,10 +234,18 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_string(q, 2, psync_my_auth);
         psync_sql_run(q);
       }
-      psync_sql_commit_transaction();
       psync_sql_free_result(q);
     }
+    if (psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED){
+      psync_sql_rollback_transaction();
+      psync_socket_close(sock);
+      psync_free(res);
+      psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+      continue;
+    }
+    psync_sql_commit_transaction();
     pthread_mutex_lock(&psync_my_auth_mutex);
+    strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
     if (psync_my_pass){
       memset(psync_my_pass, 'X', strlen(psync_my_pass));
       q=psync_sql_prep_statement("UPDATE setting SET value=? WHERE id='pass'");
