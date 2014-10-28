@@ -47,6 +47,7 @@
 
 #define PSYNC_DATABASE_CONFIG \
 "\
+PRAGMA page_size=4096;\
 PRAGMA journal_mode=WAL;\
 PRAGMA synchronous=1;\
 PRAGMA locking_mode=EXCLUSIVE;\
