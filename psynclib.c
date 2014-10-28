@@ -279,6 +279,8 @@ void psync_logout(){
   psync_cache_clean_all();
   psync_restart_localscan();
   psync_timer_notify_exception();
+  if (psync_fs_need_per_folder_refresh())
+    psync_fs_refresh_folder(0);
 }
 
 void psync_unlink(){
@@ -366,6 +368,8 @@ void psync_unlink(){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_REQUIRED);
   psync_set_status(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN);
   psync_resume_localscan();
+  if (psync_fs_need_per_folder_refresh())
+    psync_fs_refresh_folder(0);
 }
 
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype){
