@@ -178,6 +178,7 @@ static psync_socket *get_connected_socket(){
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     psync_sql_start_transaction();
+    strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
     if (luserid){
       if (unlikely_log(luserid!=userid)){
         psync_sql_rollback_transaction();
@@ -245,7 +246,6 @@ static psync_socket *get_connected_socket(){
     }
     psync_sql_commit_transaction();
     pthread_mutex_lock(&psync_my_auth_mutex);
-    strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
     if (psync_my_pass){
       memset(psync_my_pass, 'X', strlen(psync_my_pass));
       q=psync_sql_prep_statement("UPDATE setting SET value=? WHERE id='pass'");
