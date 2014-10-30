@@ -79,6 +79,10 @@ typedef off_t fuse_off_t;
 #define FS_BLOCK_SIZE 4096
 #define FS_MAX_WRITE  16*1024*1024
 
+#if defined(P_OS_MACOSX)
+#define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
+#endif
+
 typedef struct {
   uint64_t offset;
   uint64_t length;
@@ -659,6 +663,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   psync_fstask_folder_t *folder;
   psync_tree *trel;
   const char *name;
+  size_t namelen;
   struct FUSE_STAT st;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
@@ -677,7 +682,11 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     res=psync_sql_query("SELECT id, permissions, ctime, mtime, subdircnt, name FROM folder WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
-      name=psync_get_string(row[5]);
+      name=psync_get_lstring(row[5], &namelen);
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(namelen>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       if (!name || !name[0])
         continue;
       if (folder && (psync_fstask_find_rmdir(folder, name, 0) || psync_fstask_find_mkdir(folder, name, 0)))
@@ -689,7 +698,11 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
-      name=psync_get_string(row[0]);
+      name=psync_get_lstring(row[0], &namelen);
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(namelen>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       if (!name || !name[0])
         continue;
       if (folder && psync_fstask_find_unlink(folder, name, 0))
@@ -701,10 +714,18 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   }
   if (folder){
     psync_tree_for_each(trel, folder->mkdirs){
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(strlen(psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name)>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       psync_mkdir_to_folder_stat(psync_tree_element(trel, psync_fstask_mkdir_t, tree), &st);
       filler(buf, psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name, &st, 0);
     }
     psync_tree_for_each(trel, folder->creats){
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(strlen(psync_tree_element(trel, psync_fstask_creat_t, tree)->name)>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       if (!psync_creat_to_file_stat(psync_tree_element(trel, psync_fstask_creat_t, tree), &st))
         filler(buf, psync_tree_element(trel, psync_fstask_creat_t, tree)->name, &st, 0);
     }
