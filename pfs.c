@@ -1865,6 +1865,8 @@ static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
   memset(stbuf, 0, sizeof(struct statvfs));
   q=psync_get_uint_value("quota");
   uq=psync_get_uint_value("usedquota");
+  if (uq>q)
+    uq=q;
   stbuf->f_bsize=FS_BLOCK_SIZE;
   stbuf->f_frsize=FS_BLOCK_SIZE;
   stbuf->f_blocks=q/FS_BLOCK_SIZE;
