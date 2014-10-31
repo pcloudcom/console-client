@@ -183,7 +183,7 @@ CREATE INDEX IF NOT EXISTS kfstaskdependdependfstaskid ON fstaskdepend(dependfst
 CREATE TABLE IF NOT EXISTS fstaskupload (fstaskid INTEGER REFERENCES fstask(id) ON DELETE CASCADE, uploadid INTEGER, PRIMARY KEY (fstaskid, uploadid)) " P_SQL_WOWROWID ";\
 UPDATE setting SET value=7 WHERE id='dbversion';\
 COMMIT;",
-  "BEGIN\
+  "BEGIN;\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 UPDATE setting SET value=8 WHERE id='dbversion';\
