@@ -62,7 +62,7 @@
 #endif
 
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
-#define assert(cond) do {if (D_CRITICAL<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_CRITICAL, "assertion %s failed, aborting", TO_STR(cond)); abort();}} while (0)
+#define assert(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion %s failed, aborting", TO_STR(cond)); abort();}} while (0)
 #define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion %s failed", TO_STR(cond));}} while (0)
 
 #define PSYNC_TNUMBER 1

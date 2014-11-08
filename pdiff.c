@@ -177,9 +177,12 @@ static psync_socket *get_connected_socket(){
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
+    psync_sql_start_transaction();
     strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
     if (luserid){
       if (unlikely_log(luserid!=userid)){
+        psync_sql_rollback_transaction();
+        debug(D_NOTICE, "user mistmatch, db userid=%lu, connected userid=%lu", (unsigned long)luserid, (unsigned long)userid);
         psync_socket_close(sock);
         psync_free(res);
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_MISMATCH);
@@ -195,7 +198,6 @@ static psync_socket *get_connected_socket(){
     else{
       used_quota=0;
       q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
-      psync_sql_start_transaction();
       psync_sql_bind_string(q, 1, "userid");
       psync_sql_bind_uint(q, 2, userid);
       psync_sql_run(q);
@@ -233,9 +235,16 @@ static psync_socket *get_connected_socket(){
         psync_sql_bind_string(q, 2, psync_my_auth);
         psync_sql_run(q);
       }
-      psync_sql_commit_transaction();
       psync_sql_free_result(q);
     }
+    if (psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED){
+      psync_sql_rollback_transaction();
+      psync_socket_close(sock);
+      psync_free(res);
+      psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+      continue;
+    }
+    psync_sql_commit_transaction();
     pthread_mutex_lock(&psync_my_auth_mutex);
     if (psync_my_pass){
       memset(psync_my_pass, 'X', strlen(psync_my_pass));
@@ -1407,6 +1416,10 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   oused_quota=used_quota;
   needdownload=0;
   psync_diff_lock();
+  if (psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED){
+    psync_diff_unlock();
+    return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+  }
   psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
     entry=entries->array[i];
@@ -1475,7 +1488,9 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, char ex){
       psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED ||
       psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
     psync_socket_close(*sock);
+    debug(D_NOTICE, "waiting for new socket");
     *sock=get_connected_socket();
+    debug(D_NOTICE, "got new socket");
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
     psync_syncer_check_delayed_syncs();
     *diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
@@ -1600,6 +1615,7 @@ restart:
     entries=psync_find_result(res, "entries", PARAM_ARRAY);
     if (entries->length){
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
+      debug(D_NOTICE, "processing diff with %u entries", (unsigned)entries->length);
       diffid=process_entries(entries, newdiffid);
       psync_diff_refresh_fs(entries);
       debug(D_NOTICE, "got diff with %u entries, new diffid %lu", (unsigned)entries->length, (unsigned long)diffid);

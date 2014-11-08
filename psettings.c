@@ -90,6 +90,7 @@ void psync_settings_reset(){
   settings[_PS(minlocalfreespace)].num=PSYNC_MIN_LOCAL_FREE_SPACE;
   settings[_PS(p2psync)].boolean=PSYNC_P2P_SYNC_DEFAULT;
   settings[_PS(fsroot)].str=defaultfs;
+  settings[_PS(fscachesize)].num=PSYNC_FS_DEFAULT_CACHE_SIZE;
   settings[_PS(fscachepath)].str=defaultcache;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){

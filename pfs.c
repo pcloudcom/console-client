@@ -81,6 +81,10 @@ typedef off_t fuse_off_t;
 #define FS_BLOCK_SIZE 4096
 #define FS_MAX_WRITE  16*1024*1024
 
+#if defined(P_OS_MACOSX)
+#define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
+#endif
+
 typedef struct {
   uint64_t offset;
   uint64_t length;
@@ -620,7 +624,7 @@ int psync_fs_crypto_err_to_errno(int cryptoerr){
 static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT 0, 0, s.value*1, f.mtime, f.subdircnt FROM folder f, setting s WHERE f.id=0 AND s.id='registered'");
+  res=psync_sql_query("SELECT 0, 0, IFNULL(s.value, 1414766136)*1, f.mtime, f.subdircnt FROM folder f LEFT JOIN setting s ON s.id='registered' WHERE f.id=0");
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_folder_stat(row, stbuf);
   psync_sql_free_result(res);
@@ -730,6 +734,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   const char *name;
   psync_crypto_aes256_text_decoder_t dec;
   uint32_t flags;
+  size_t namelen;
   struct FUSE_STAT st;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
@@ -757,7 +762,11 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     res=psync_sql_query("SELECT id, permissions, ctime, mtime, subdircnt, name FROM folder WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
-      name=psync_get_string(row[5]);
+      name=psync_get_lstring(row[5], &namelen);
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(namelen>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       if (!name || !name[0])
         continue;
       if (folder && (psync_fstask_find_rmdir(folder, name, 0) || psync_fstask_find_mkdir(folder, name, 0)))
@@ -769,7 +778,11 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
-      name=psync_get_string(row[0]);
+      name=psync_get_lstring(row[0], &namelen);
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(namelen>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       if (!name || !name[0])
         continue;
       if (folder && psync_fstask_find_unlink(folder, name, 0))
@@ -781,10 +794,18 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   }
   if (folder){
     psync_tree_for_each(trel, folder->mkdirs){
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(strlen(psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name)>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       psync_mkdir_to_folder_stat(psync_tree_element(trel, psync_fstask_mkdir_t, tree), &st);
       filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name, &st, 0);
     }
     psync_tree_for_each(trel, folder->creats){
+#if defined(FS_MAX_ACCEPTABLE_FILENAME_LEN)
+      if (unlikely_log(strlen(psync_tree_element(trel, psync_fstask_creat_t, tree)->name)>FS_MAX_ACCEPTABLE_FILENAME_LEN))
+        continue;
+#endif
       if (!psync_creat_to_file_stat(psync_tree_element(trel, psync_fstask_creat_t, tree), &st, flags))
         filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_creat_t, tree)->name, &st, 0);
     }
@@ -2087,6 +2108,8 @@ static int psync_fs_statfs(const char *path, struct statvfs *stbuf){
   memset(stbuf, 0, sizeof(struct statvfs));
   q=psync_get_uint_value("quota");
   uq=psync_get_uint_value("usedquota");
+  if (uq>q)
+    uq=q;
   stbuf->f_bsize=FS_BLOCK_SIZE;
   stbuf->f_frsize=FS_BLOCK_SIZE;
   stbuf->f_blocks=q/FS_BLOCK_SIZE;
@@ -2505,7 +2528,7 @@ static int psync_fs_do_start(){
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
-  fuse_opt_add_arg(&args, "-ovolname=pCloudDrive");
+  fuse_opt_add_arg(&args, "-ovolname=pCloud Drive");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
   fuse_opt_add_arg(&args, "-olocal");
   fuse_opt_add_arg(&args, "-oallow_root");

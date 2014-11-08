@@ -2107,13 +2107,23 @@ int psync_file_delete(const char *path){
 
 psync_file_t psync_file_open(const char *path, int access, int flags){
 #if defined(P_OS_POSIX)
+  int fd;
 #if defined(O_CLOEXEC)
   flags|=O_CLOEXEC;
 #endif
 #if defined(O_NOATIME)
   flags|=O_NOATIME;
 #endif
-  return open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
+  fd=open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
+  if (unlikely(fd==-1)){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while opening file");
+      fd=open(path, access|flags, PSYNC_DEFAULT_POSIX_FILE_MODE);
+      if (fd!=-1)
+        return fd;
+    }
+  }
+  return fd;
 #elif defined(P_OS_WINDOWS)
   DWORD cdis;
   wchar_t *wpath;
@@ -2151,7 +2161,17 @@ int psync_file_close(psync_file_t fd){
 
 int psync_file_sync(psync_file_t fd){
 #if defined(P_OS_POSIX)
-  return fsync(fd);
+  if (unlikely(fsync(fd))){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while fsyncing file");
+      if (!fsync(fd))
+        return 0;
+    }
+    debug(D_NOTICE, "got error %d", (int)errno);
+    return -1;
+  }
+  else
+    return 0;
 #elif defined(P_OS_WINDOWS)
   return psync_bool_to_zero(FlushFileBuffers(fd));
 #else
@@ -2225,7 +2245,18 @@ int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count){
 
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count){
 #if defined(P_OS_POSIX)
-  return read(fd, buf, count);
+  ssize_t ret;
+  ret=read(fd, buf, count);
+  if (unlikely(ret==-1)){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while writing to file");
+      ret=read(fd, buf, count);
+      if (ret!=-1)
+        return ret;
+    }
+    debug(D_NOTICE, "got error %d", (int)errno);
+  }
+  return ret;
 #elif defined(P_OS_WINDOWS)
   DWORD ret;
   if (ReadFile(fd, buf, count, &ret, NULL))
@@ -2239,7 +2270,18 @@ ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count){
 
 ssize_t psync_file_pread(psync_file_t fd, void *buf, size_t count, uint64_t offset){
 #if defined(P_OS_POSIX)
-  return pread(fd, buf, count, offset);
+  ssize_t ret;
+  ret=pread(fd, buf, count, offset);
+  if (unlikely(ret==-1)){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while writing to file");
+      ret=pread(fd, buf, count, offset);
+      if (ret!=-1)
+        return ret;
+    }
+    debug(D_NOTICE, "got error %d", (int)errno);
+  }
+  return ret;
 #elif defined(P_OS_WINDOWS)
   OVERLAPPED ov;
   LARGE_INTEGER li;
@@ -2263,7 +2305,19 @@ ssize_t psync_file_pread(psync_file_t fd, void *buf, size_t count, uint64_t offs
 
 ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count){
 #if defined(P_OS_POSIX)
-  return write(fd, buf, count);
+  ssize_t ret;
+  ret=write(fd, buf, count);
+  if (unlikely(ret==-1)){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while writing to file");
+      ret=write(fd, buf, count);
+      if (ret!=-1)
+        return ret;
+
+    }
+    debug(D_NOTICE, "got error %d", (int)errno);
+  }
+  return ret;
 #elif defined(P_OS_WINDOWS)
   DWORD ret;
   if (WriteFile(fd, buf, count, &ret, NULL))
@@ -2277,7 +2331,18 @@ ssize_t psync_file_write(psync_file_t fd, const void *buf, size_t count){
 
 ssize_t psync_file_pwrite(psync_file_t fd, const void *buf, size_t count, uint64_t offset){
 #if defined(P_OS_POSIX)
-  return pwrite(fd, buf, count, offset);
+  ssize_t ret;
+  ret=pwrite(fd, buf, count, offset);
+  if (unlikely(ret==-1)){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while writing to file");
+      ret=pwrite(fd, buf, count, offset);
+      if (ret!=-1)
+        return ret;
+    }
+    debug(D_NOTICE, "got error %d", (int)errno);
+  }
+  return ret;
 #elif defined(P_OS_WINDOWS)
   OVERLAPPED ov;
   LARGE_INTEGER li;
@@ -2315,8 +2380,19 @@ int psync_file_truncate(psync_file_t fd){
 #if defined(P_OS_POSIX)
   off_t off;
   off=lseek(fd, 0, SEEK_CUR);
-  if (likely_log(off!=(off_t)-1))
-    return ftruncate(fd, off);
+  if (likely_log(off!=(off_t)-1)){
+    if (unlikely_log(ftruncate(fd, off))){
+      while (errno==EINTR){
+        debug(D_NOTICE, "got EINTR while truncating file");
+        if (!ftruncate(fd, off))
+          return 0;
+      }
+      debug(D_NOTICE, "got error %d", (int)errno);
+      return -1;
+    }
+    else
+      return 0;
+  }
   else
     return -1;
 #elif defined(P_OS_WINDOWS)
