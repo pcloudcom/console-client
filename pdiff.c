@@ -1602,10 +1602,12 @@ restart:
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
       diffid=process_entries(entries, newdiffid);
       psync_diff_refresh_fs(entries);
+      debug(D_NOTICE, "got diff with %u entries, new diffid %lu", (unsigned)entries->length, (unsigned long)diffid);
     }
     result=entries->length;
     psync_free(res);
   } while (result);
+  debug(D_NOTICE, "initial sync finished");
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   initialdownload=0;

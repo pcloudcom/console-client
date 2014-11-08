@@ -402,10 +402,12 @@ static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *st
   stbuf->st_gid=mygid;
 }
 
-static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
+static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbuf, uint32_t flags){
   uint64_t size;
   stbuf->st_ino=fileid_to_inode(psync_get_number(row[4]));
   size=psync_get_number(row[1]);
+  if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED)
+    size=psync_fs_crypto_plain_size(size);
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
   stbuf->st_birthtime=psync_get_number(row[2]);
@@ -453,13 +455,13 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
   stbuf->st_gid=mygid;
 }
 
-static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct FUSE_STAT *stbuf){
+static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct FUSE_STAT *stbuf, uint32_t flags){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE id=?");
+  res=psync_sql_query("SELECT name, size, ctime, mtime, id, folderid FROM file WHERE id=?");
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res)))
-    psync_row_to_file_stat(row, stbuf);
+    psync_row_to_file_stat(row, stbuf, flags);
   else
     debug(D_NOTICE, "fileid %lu not found in database", (unsigned long)fileid);
   psync_sql_free_result(res);
@@ -596,7 +598,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
 static int psync_creat_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_STAT *stbuf, uint32_t folderflags){
   debug(D_NOTICE, "getting stat from creat for file %s fileid %ld taskid %lu", cr->name, (long)cr->fileid, (unsigned long)cr->taskid);
   if (cr->fileid>=0)
-    return psync_creat_db_to_file_stat(cr->fileid, stbuf);
+    return psync_creat_db_to_file_stat(cr->fileid, stbuf, folderflags);
   else
     return psync_creat_local_to_file_stat(cr, stbuf, folderflags);
 }
@@ -683,7 +685,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   psync_sql_bind_uint(res, 1, fpath->folderid);
   psync_sql_bind_string(res, 2, fpath->name);
   if ((row=psync_sql_fetch_row(res)))
-    psync_row_to_file_stat(row, stbuf);
+    psync_row_to_file_stat(row, stbuf, fpath->flags);
   psync_sql_free_result(res);
   if (folder){
     if (psync_fstask_find_unlink(folder, fpath->name, 0))
@@ -704,7 +706,6 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   return -ENOENT;
 }
 
-<<<<<<< HEAD
 static int filler_decoded(psync_crypto_aes256_text_decoder_t dec, fuse_fill_dir_t filler, void *buf, const char *name, struct stat *st, off_t off){
   if (dec){
     char *namedec;
@@ -773,7 +774,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         continue;
       if (folder && psync_fstask_find_unlink(folder, name, 0))
         continue;
-      psync_row_to_file_stat(row, &st);
+      psync_row_to_file_stat(row, &st, flags);
       filler_decoded(dec, filler, buf, name, &st, 0);
     }
     psync_sql_free_result(res);
@@ -841,6 +842,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
   else{
     fl=psync_new(psync_openfile_t);
     memset(fl, 0, sizeof(psync_openfile_t));
+    size=psync_fs_crypto_plain_size(size);
   }
   if (d<0)
     psync_tree_add_before(&openfiles, tr, &fl->tree);

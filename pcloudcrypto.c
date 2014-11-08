@@ -650,7 +650,7 @@ static psync_encrypted_symmetric_key_t psync_crypto_get_file_enc_key(psync_filei
   psync_variant_row row;
   const char *ckey;
   size_t ckeylen;
-  res=psync_sql_query("SELECT enckey FROM cryptofile WHERE folderid=?");
+  res=psync_sql_query("SELECT enckey FROM cryptofilekey WHERE fileid=?");
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res))){
     ckey=psync_get_lstring(row[0], &ckeylen);

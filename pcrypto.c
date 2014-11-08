@@ -474,8 +474,8 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
   memcpy(aessrc+PSYNC_AES256_BLOCK_SIZE/2, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE/2);
   psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
   memcpy(authout, aesdst, PSYNC_AES256_BLOCK_SIZE);
-  memcpy(aessrc, rnd+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
-  memcpy(aessrc+PSYNC_AES256_BLOCK_SIZE/2, hmacsha1bin+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+  memcpy(aessrc, hmacsha1bin+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+  memcpy(aessrc+PSYNC_AES256_BLOCK_SIZE/2, rnd+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
   psync_aes256_encode_block(enc->encoder, aessrc, aesdst);
   memcpy(authout+PSYNC_AES256_BLOCK_SIZE, aesdst, PSYNC_AES256_BLOCK_SIZE);
   memcpy(aessrc, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE);
@@ -543,10 +543,9 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
     }
     else
       needsteal=0;
-    memcpy(aesxor, hmac+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
-    memcpy(aesxor+PSYNC_AES256_BLOCK_SIZE/2, hmac+PSYNC_AES256_BLOCK_SIZE+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
-    memcpy(hmac+PSYNC_AES256_BLOCK_SIZE/2, hmac+PSYNC_AES256_BLOCK_SIZE, PSYNC_AES256_BLOCK_SIZE/2);
-    memcpy(hmac+PSYNC_AES256_BLOCK_SIZE, aesxor, PSYNC_AES256_BLOCK_SIZE/2);
+    memcpy(aesxor, hmac+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE);
+    memcpy(hmac+PSYNC_AES256_BLOCK_SIZE/2, hmac+PSYNC_AES256_BLOCK_SIZE+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
+    memcpy(hmac+PSYNC_AES256_BLOCK_SIZE, aesxor, PSYNC_AES256_BLOCK_SIZE);
     if (IS_WORD_ALIGNED(data) && IS_WORD_ALIGNED(out))
       while (datalen){
         copy_aligned(aessrc, data);
