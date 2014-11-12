@@ -59,7 +59,26 @@ typedef struct {
   char str[];
 } string_list;
 
+#if IS_DEBUG
+
+static psync_malloc_t psync_real_malloc=malloc;
+
+static void *debug_malloc(size_t sz){
+  void *ptr;
+  if (unlikely(sz>=PSYNC_DEBUG_LOG_ALLOC_OVER))
+    debug(D_WARNING, "allocating %lu bytes", (unsigned long)sz);
+  ptr=psync_real_malloc(sz);
+  if (likely_log(ptr))
+    memset(ptr, 0xfa, sz);
+  return ptr;
+}
+
+psync_malloc_t psync_malloc=debug_malloc;
+
+#else
 psync_malloc_t psync_malloc=malloc;
+#endif
+
 psync_realloc_t psync_realloc=realloc;
 psync_free_t psync_free=free;
 
@@ -80,7 +99,11 @@ void psync_set_database_path(const char *databasepath){
 }
 
 void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call){
+#if IS_DEBUG
+  psync_real_malloc=malloc_call;
+#else
   psync_malloc=malloc_call;
+#endif
   psync_realloc=realloc_call;
   psync_free=free_call;
 }
