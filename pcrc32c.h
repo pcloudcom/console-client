@@ -25,23 +25,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_PAGECACHE_H
-#define _PSYNC_PAGECACHE_H
+#ifndef _PSYNC_CRC32_H
+#define _PSYNC_CRC32_H
 
-#include "pfs.h"
+#include <stdint.h>
+#include <stddef.h>
 
-void psync_pagecache_init();
-int psync_pagecache_flush();
-int psync_pagecache_read_modified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
-int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
-int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
-void psync_pagecache_creat_to_pagecache(uint64_t taskid, uint64_t hash);
-void psync_pagecache_modify_to_pagecache(uint64_t taskid, uint64_t hash, uint64_t oldhash);
-int psync_pagecache_have_all_pages_in_cache(uint64_t hash, uint64_t size);
-int psync_pagecache_copy_all_pages_from_cache_to_file_locked(psync_openfile_t *of, uint64_t hash, uint64_t size);
-int psync_pagecache_lock_pages_in_cache();
-void psync_pagecache_unlock_pages_from_cache();
-void psync_pagecache_resize_cache();
-void psync_pagecache_clean_cache();
+#define PSYNC_CRC_INITIAL 0
+
+uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len);
 
 #endif

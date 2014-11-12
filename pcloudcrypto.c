@@ -690,11 +690,11 @@ static psync_symmetric_key_t psync_crypto_get_file_symkey_locked(psync_fileid_t 
   if (symkey)
     return symkey;
   enckey=psync_crypto_get_file_enc_key(fileid);
-  if (psync_crypto_is_error(enckey))
+  if (unlikely_log(psync_crypto_is_error(enckey)))
     return (psync_symmetric_key_t)enckey;
   symkey=psync_ssl_rsa_decrypt_symmetric_key(crypto_privkey, enckey);
   psync_free(enckey);
-  if (symkey==PSYNC_INVALID_SYM_KEY)
+  if (unlikely_log(symkey==PSYNC_INVALID_SYM_KEY))
     return (psync_symmetric_key_t)err_to_ptr(PSYNC_CRYPTO_INVALID_KEY);
   return symkey;
 }
@@ -1005,7 +1005,7 @@ static psync_crypto_aes256_sector_encoder_decoder_t psync_crypto_get_file_encode
   psync_symmetric_key_t symkey, realkey;
   sym_key_ver1 *skv1;
   symkey=psync_crypto_get_file_symkey_locked(fileid);
-  if (psync_crypto_is_error(symkey))
+  if (unlikely_log(psync_crypto_is_error(symkey)))
     return (psync_crypto_aes256_sector_encoder_decoder_t)symkey;
   skv1=(sym_key_ver1 *)symkey->key;
   switch (skv1->type){
@@ -1241,7 +1241,7 @@ char *psync_cloud_crypto_get_new_encoded_key(uint32_t flags, size_t *keylen){
   if (!crypto_started_un)
     return (char *)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
   sym.type=PSYNC_CRYPTO_SYM_AES256_1024BIT_HMAC;
-  sym.flags=PSYNC_CRYPTO_SYM_FLAG_ISDIR;
+  sym.flags=flags;
   psync_ssl_rand_strong(sym.hmackey, PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN);
   psync_ssl_rand_strong(sym.aeskey, PSYNC_AES256_KEY_SIZE);
   pthread_rwlock_rdlock(&crypto_lock);
@@ -1268,7 +1268,7 @@ char *psync_cloud_crypto_get_new_encoded_and_plain_key(uint32_t flags, size_t *k
   if (!crypto_started_un)
     return (char *)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
   sym.type=PSYNC_CRYPTO_SYM_AES256_1024BIT_HMAC;
-  sym.flags=PSYNC_CRYPTO_SYM_FLAG_ISDIR;
+  sym.flags=flags;
   psync_ssl_rand_strong(sym.hmackey, PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN);
   psync_ssl_rand_strong(sym.aeskey, PSYNC_AES256_KEY_SIZE);
   pthread_rwlock_rdlock(&crypto_lock);

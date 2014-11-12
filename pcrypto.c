@@ -576,8 +576,10 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
       copy_unaligned(aessrc, data);
       psync_aes256_decode_block(enc->decoder, aessrc, aesdst);
       xor_cnt_inplace(aesdst, data+PSYNC_AES256_BLOCK_SIZE, needsteal);
+      // can be done with less memcpy's, but this version supports inline decoding (e.g. data==out)
+      memcpy(aessrc, data+PSYNC_AES256_BLOCK_SIZE, needsteal);
       memcpy(out+PSYNC_AES256_BLOCK_SIZE, aesdst, needsteal);
-      memcpy(aesdst, data+PSYNC_AES256_BLOCK_SIZE, needsteal);
+      memcpy(aesdst, aessrc, needsteal);
       psync_aes256_decode_block(enc->decoder, aesdst, aessrc);
       xor16_aligned_inplace(aessrc, aesxor);
       copy_unaligned(out, aessrc);

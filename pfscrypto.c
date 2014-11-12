@@ -8,7 +8,6 @@
 #define PSYNC_CRYPTO_LOG_HEADER 0
 #define PSYNC_CRYPTO_LOG_DATA   1
 
-#define PSYNC_CRYPTO_HASH_TREE_SECTORS (PSYNC_CRYPTO_SECTOR_SIZE/PSYNC_CRYPTO_AUTH_SIZE)
 #define PSYNC_CRYPTO_HASH_TREE_SHIFT 8
 
 typedef struct {
@@ -35,8 +34,6 @@ typedef struct {
   psync_crypto_log_header header;
   unsigned char data[PSYNC_CRYPTO_SECTOR_SIZE];
 } psync_crypto_log_data_record;
-
-typedef psync_crypto_sector_auth_t psync_crypto_auth_sector_t[PSYNC_CRYPTO_HASH_TREE_SECTORS];
 
 static const uint64_t max_level_size[PSYNC_CRYPTO_MAX_HASH_TREE_LEVEL+1]={
   0x1000,
@@ -69,7 +66,7 @@ static uint64_t psync_fs_crypto_auth_offset(uint32_t level, uint32_t id){
   return ret;
 }
 
-static void psync_fs_crypto_offsets_by_plainsize(uint64_t size, psync_crypto_offsets_t *offsets){
+void psync_fs_crypto_offsets_by_plainsize(uint64_t size, psync_crypto_offsets_t *offsets){
   uint64_t off;
   psync_crypto_sectorid_t lastsectorid;
   uint32_t lastsectorsize, sz, level;
@@ -805,4 +802,27 @@ uint64_t psync_fs_crypto_plain_size(uint64_t cryptosize){
   psync_crypto_offsets_t offsets;
   psync_fs_crypto_offsets_by_cryptosize(cryptosize, &offsets);
   return offsets.plainsize;
+}
+
+void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint32_t level, psync_crypto_offsets_t *offsets,
+                                         uint64_t *offset, uint32_t *size, uint32_t *authid){
+  psync_crypto_sectorid_t sizesecd, secd;
+  uint32_t i, aid;
+  sizesecd=size_div_hash_tree_sectors(offsets->plainsize/PSYNC_CRYPTO_SECTOR_SIZE);
+  secd=sectorid/PSYNC_CRYPTO_SECTOR_SIZE;
+  aid=sectorid%PSYNC_CRYPTO_SECTOR_SIZE;
+  for (i=0; i<level; i++){
+    sizesecd=size_div_hash_tree_sectors(sizesecd);
+    aid=secd%PSYNC_CRYPTO_HASH_TREE_SECTORS;
+    secd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
+  }
+  if (secd==sizesecd){
+    *offset=offsets->lastauthsectoroff[level];
+    *size=offsets->lastauthsectorlen[level];
+  }
+  else{
+    *offset=psync_fs_crypto_auth_offset(level, secd);
+    *size=PSYNC_CRYPTO_SECTOR_SIZE;
+  }
+  *authid=aid;
 }

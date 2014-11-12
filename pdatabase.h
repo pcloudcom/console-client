@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 8
+#define PSYNC_DATABASE_VERSION 9
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS sharerequest (id INTEGER PRIMARY KEY, isincoming INTE
 CREATE TABLE IF NOT EXISTS sharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, permissions INTEGER,\
   userid INTEGER, mail TEXT, name VARCHAR(1024));\
 CREATE TABLE IF NOT EXISTS pagecache (id INTEGER PRIMARY KEY, hash INTEGER, pageid INTEGER, type INTEGER, flags INTEGER,\
-  lastuse INTEGER, usecnt INTEGER, size INTEGER);\
+  lastuse INTEGER, usecnt INTEGER, size INTEGER, crc INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS kpagecachehashpageid ON pagecache(hash, pageid);\
 CREATE INDEX IF NOT EXISTS kpagecachetype ON pagecache(type);\
 CREATE TABLE IF NOT EXISTS fstask (id INTEGER PRIMARY KEY, type INTEGER, status INTEGER, folderid INTEGER, sfolderid INTEGER, fileid INTEGER,\
@@ -187,6 +187,10 @@ COMMIT;",
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 UPDATE setting SET value=8 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+ALTER TABLE pagecache ADD crc INTEGER;\
+UPDATE setting SET value=9 WHERE id='dbversion';\
 COMMIT;"
 };
 

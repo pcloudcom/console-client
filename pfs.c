@@ -1587,8 +1587,12 @@ static int psync_fs_read(const char *path, char *buf, size_t size, fuse_off_t of
   }
   if (of->modified)
     return psync_pagecache_read_modified_locked(of, buf, size, offset);
-  else
-    return psync_pagecache_read_unmodified_locked(of, buf, size, offset);
+  else{
+    if (of->encrypted)
+      return psync_pagecache_read_unmodified_encrypted_locked(of, buf, size, offset);
+    else
+      return psync_pagecache_read_unmodified_locked(of, buf, size, offset);
+  }
 }
 
 static void psync_fs_inc_writeid_locked(psync_openfile_t *of){
