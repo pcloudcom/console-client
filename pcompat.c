@@ -62,6 +62,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <pwd.h>
+#include <grp.h>
 
 extern char **environ;
 
@@ -97,6 +98,26 @@ static int psync_gids_cnt;
 
 PSYNC_THREAD const char *psync_thread_name="no name";
 static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
+
+int psync_user_is_admin(){
+#if defined(P_OS_MACOSX)
+  struct group *ag;
+  int i;
+  if (psync_uid==0)
+    return 1;
+  else if (psync_gids_cnt==0)
+    return 0;
+  ag=getgrnam("admin");
+  if (!ag)
+    return 0;
+  for (i=0; i<psync_gids_cnt; i++)
+    if (ag->gr_gid==psync_gids[i])
+      return 1;
+  return 0;
+#else
+  return 0;
+#endif
+}
 
 #if defined(P_OS_WINDOWS)
 #if !defined(gmtime_r)
