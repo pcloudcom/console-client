@@ -425,10 +425,11 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
     return_isyncid(PERROR_LOCAL_FOLDER_ACC_DENIED);
   syncmp=psync_fs_getmountpoint();
   if (syncmp){
-    if (!psync_filename_cmpn(syncmp, localpath, strlen(syncmp))){
+    size_t len=strlen(syncmp);
+    if (!psync_filename_cmpn(syncmp, localpath, len) && (localpath[len]==0 || localpath[len]=='/' || localpath[len]=='\\')){
       debug(D_NOTICE, "local path %s is on pCloudDrive mounted as %s, rejecting sync", localpath, syncmp);
       psync_free(syncmp);
-	  return_isyncid(PERROR_LOCAL_IS_ON_PDRIVE);
+      return_isyncid(PERROR_LOCAL_IS_ON_PDRIVE);
     }
     psync_free(syncmp);
   }
