@@ -424,6 +424,7 @@ int psync_pipe_close(psync_socket_t pfd);
 int psync_pipe_read(psync_socket_t pfd, void *buff, int num);
 int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
 
+int psync_socket_is_broken(psync_socket_t sock);
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec);
 
 int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr);

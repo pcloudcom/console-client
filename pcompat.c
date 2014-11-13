@@ -1785,6 +1785,15 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
 #endif
 }
 
+int psync_socket_is_broken(psync_socket_t sock){
+  fd_set rfds;
+  struct timeval tv;
+  memset(&tv, 0, sizeof(tv));
+  FD_ZERO(&rfds);
+  FD_SET(sock, &rfds);
+  return select(sock+1, NULL, NULL, &rfds, &tv)==1;
+}
+
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec){
   fd_set rfds;
   struct timeval tv, *ptv;

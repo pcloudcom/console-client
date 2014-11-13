@@ -108,18 +108,17 @@ static void psync_ret_api(void *ptr){
 
 psync_socket *psync_apipool_get(){
   psync_socket *ret;
-  ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
-  if (ret){
-    while (unlikely_log(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
+  while (1){
+    ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
+    if (!ret)
+      break;
+    if (unlikely_log(psync_socket_is_broken(ret->sock) || psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl))))
       psync_ret_api(ret);
-      ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
-      if (!ret)
-        goto retnew;
+    else{
+      debug(D_NOTICE, "got api connection from cache");
+      return ret;
     }
-    debug(D_NOTICE, "got api connection from cache");
-    return ret;
   }
-retnew:
   ret=psync_get_api();
   if (unlikely_log(!ret))
     psync_timer_notify_exception();
@@ -128,18 +127,18 @@ retnew:
 
 psync_socket *psync_apipool_get_from_cache(){
   psync_socket *ret;
-  ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
-  if (!ret)
-    return NULL;
-  while (unlikely_log(psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
-    psync_ret_api(ret);
+  while (1){
     ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
     if (!ret)
       break;
+    if (unlikely_log(psync_socket_is_broken(ret->sock) || psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl))))
+      psync_ret_api(ret);
+    else{
+      debug(D_NOTICE, "got api connection from cache");
+      return ret;
+    }
   }
-  if (ret)
-    debug(D_NOTICE, "got api connection from cache");
-  return ret;
+  return NULL;
 }
 
 void psync_apipool_prepare(){
@@ -1060,9 +1059,15 @@ psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const ch
     cachekey[sizeof(cachekey)-1]=0;
     sock=(psync_socket *)psync_cache_get(cachekey);
     if (sock){
-      debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
-      *host=hosts->array[i]->str;
-      break;
+      if (unlikely_log(psync_socket_is_broken(sock->sock))){
+        psync_socket_close_bad(sock);
+        sock=NULL;
+      }
+      else{
+        debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
+        *host=hosts->array[i]->str;
+        break;
+      }
     }
   }
   if (!sock){
@@ -1114,9 +1119,15 @@ psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *host
     cachekey[sizeof(cachekey)-1]=0;
     sock=(psync_socket *)psync_cache_get(cachekey);
     if (sock){
-      debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
-      *host=hosts->array[i]->str;
-      break;
+      if (unlikely_log(psync_socket_is_broken(sock->sock))){
+        psync_socket_close_bad(sock);
+        sock=NULL;
+      }
+      else{
+        debug(D_NOTICE, "got socket to %s from cache", hosts->array[i]->str);
+        *host=hosts->array[i]->str;
+        break;
+      }
     }
   }
   if (!sock)
