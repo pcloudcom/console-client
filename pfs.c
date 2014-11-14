@@ -1589,7 +1589,7 @@ static int psync_fs_can_unlink(const char *path){
   if (!fpath)
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_DELETE))
-    ret=-EACCES;
+    ret=-EROFS;
   else
     ret=psync_fstask_can_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
@@ -1610,7 +1610,7 @@ static int psync_fs_unlink(const char *path){
   if (!fpath)
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_DELETE))
-    ret=-EACCES;
+    ret=-EROFS;
   else
     ret=psync_fstask_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
