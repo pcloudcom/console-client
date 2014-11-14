@@ -1624,11 +1624,11 @@ static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_
   if (parentfolderid==to_folderid){
     assertw(targetperms==src_permissions);
     if (!(src_permissions&PSYNC_PERM_MODIFY))
-      return -EACCES;
+      return -EROFS;
   }
   else{
     if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
-      return -EACCES;
+      return -EROFS;
   }
   return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
 }
@@ -1638,11 +1638,11 @@ static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t pare
   if (parentfolderid==to_folderid){
     assertw(targetperms==src_permissions);
     if (!(src_permissions&PSYNC_PERM_MODIFY))
-      return -EACCES;
+      return -EROFS;
   }
   else{
     if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
-      return -EACCES;
+      return -EROFS;
   }
   return psync_fstask_rename_file(fileid, parentfolderid, name, to_folderid, new_name);
 }
