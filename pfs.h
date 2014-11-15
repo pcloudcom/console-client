@@ -93,6 +93,7 @@ typedef struct {
    */
   psync_crypto_aes256_sector_encoder_decoder_t encoder;
   psync_tree *sectorsinlog;
+  psync_interval_tree_t *authenticatedints;
   psync_file_t logfile;
   uint32_t logoffset;
 } psync_openfile_t;

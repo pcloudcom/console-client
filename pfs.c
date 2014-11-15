@@ -151,6 +151,13 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
           fl->indexfile=INVALID_HANDLE_VALUE;
         }
         psync_tree_del(&openfiles, &fl->tree);
+        if (fl->encrypted){
+          if (fl->authenticatedints){
+            psync_interval_tree_free(fl->authenticatedints);
+            fl->authenticatedints=NULL;
+          }
+
+        }
         tr=openfiles;
         d=-1;
         while (tr){
@@ -1400,6 +1407,8 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
     close_if_valid(of->logfile);
     psync_tree_for_each_element_call(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
     delete_log_files(of);
+    if (of->authenticatedints)
+      psync_interval_tree_free(of->authenticatedints);
   }
   pthread_mutex_destroy(&of->mutex);
   close_if_valid(of->datafile);

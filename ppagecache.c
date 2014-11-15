@@ -126,11 +126,13 @@ typedef struct {
   uint32_t status;
 } psync_urls_t;
 
-typedef struct {
+typedef struct _psync_crypto_auth_page {
   psync_list list;
   psync_page_waiter_t *waiter;
+  struct _psync_crypto_auth_page *parent;
   uint64_t firstpageid;
-  uint32_t pagecnt;
+  uint32_t size;
+  uint32_t idinparent;
   uint32_t level;
   psync_crypto_auth_sector_t auth;
 } psync_crypto_auth_page;
@@ -817,15 +819,15 @@ static void clean_cache(){
       break;
     }
     do{
-      if (i>=cnt)
+      if (unlikely(i>=cnt))
         break;
       e=row[0];
-      if (row[3]!=PAGE_TYPE_READ)
-        continue;
-      entries[i].lastuse=row[1];
-      entries[i].id=row[0];
-      entries[i].usecnt=row[2];
-      i++;
+      if (likely(row[3]==PAGE_TYPE_READ)){
+        entries[i].lastuse=row[1];
+        entries[i].id=row[0];
+        entries[i].usecnt=row[2];
+        i++;
+      }
       row=psync_sql_fetch_rowint(res);
     } while (row);
     psync_sql_free_result(res);
@@ -1729,7 +1731,7 @@ found:
 int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
   uint64_t poffset, psize, first_page_id, initialsize, hash;
   psync_uint_t pageoff, pagecnt, i, copysize, copyoff;
-  psync_file_t fileid;
+  psync_fileid_t fileid;
   psync_int_t rb;
   char *pbuff;
   psync_page_waiter_t *pwt;
@@ -1871,22 +1873,79 @@ static void wait_waiter(psync_page_waiter_t *pwt, uint64_t hash, const char *pt)
     debug(D_WARNING, "reading of page failed with error %d", pwt->error);
 }
 
+static int request_auth_page(psync_crypto_auth_page *ap, psync_request_t *rq, psync_list *waiting, psync_fileid_t fileid, 
+                             uint64_t hash, uint64_t aoffset, uint32_t asize){
+  uint64_t apageid;
+  char *pbuff;
+  psync_uint_t apoff, apsize;
+  psync_int_t rb;
+  apageid=aoffset/PSYNC_FS_PAGE_SIZE;
+  if (aoffset%PSYNC_FS_PAGE_SIZE==0){
+    rb=check_page_in_memory_by_hash(hash, apageid, (char *)ap->auth, asize, 0);
+    if (rb==-1)
+      rb=check_page_in_database_by_hash(hash, apageid, (char *)ap->auth, asize, 0);
+    if (rb==-1)
+      ap->waiter=add_page_waiter(waiting, &rq->ranges, hash, apageid, fileid, (char *)ap->auth, 0, 0, asize);
+    else if (unlikely(rb!=asize)){
+      debug(D_WARNING, "expected auth sector size to be %u, got %u", (unsigned)asize, (unsigned)rb);
+      return -1;
+    }
+  }
+  else{
+    apoff=aoffset-apageid*PSYNC_FS_PAGE_SIZE;
+    apsize=PSYNC_FS_PAGE_SIZE-apoff;
+    if (apsize>asize)
+      apsize=asize;
+    rb=check_page_in_memory_by_hash(hash, apageid, (char *)ap->auth, apsize, apoff);
+    if (rb==-1)
+      rb=check_page_in_database_by_hash(hash, apageid, (char *)ap->auth, apsize, apoff);
+    if (rb==-1)
+      ap->waiter=add_page_waiter(waiting, &rq->ranges, hash, apageid, fileid, (char *)ap->auth, 0, apoff, apsize);
+    else if (unlikely(rb!=apsize)){
+      debug(D_WARNING, "expected auth sector size to be %u, got %u", (unsigned)asize, (unsigned)rb);
+      return -1;
+    }
+    if (apsize<asize){
+      pbuff=((char *)ap->auth)+apsize;
+      apageid++;
+      apsize=asize-apsize;
+      assert(apsize<PSYNC_FS_PAGE_SIZE);
+      rb=check_page_in_memory_by_hash(hash, apageid, pbuff, apsize, 0);
+      if (rb==-1)
+        rb=check_page_in_database_by_hash(hash, apageid, pbuff, apsize, 0);
+      if (rb==-1)
+        ap->waiter=add_page_waiter(waiting, &rq->ranges, hash, apageid, fileid, pbuff, 0, 0, apsize);
+      else if (unlikely(rb!=apsize)){
+        debug(D_WARNING, "expected auth sector size to be %u, got %u", (unsigned)asize, (unsigned)rb);
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
 int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
   psync_crypto_offsets_t offsets;
-  uint64_t initialsize, hash, poffset, psize, first_page_id, aoffset, apageid;
-  psync_uint_t i, pageoff, pagecnt, apoff, apsize;
+  uint64_t initialsize, hash, poffset, psize, first_page_id, aoffset, apageid, authupto;
+  psync_uint_t i, pageoff, pagecnt, apsize;
   psync_int_t rb;
   psync_request_t *rq;
   psync_crypto_auth_page *ap;
   psync_crypto_data_page *dp;
   char *pbuff;
+  psync_interval_tree_t *intv;
   psync_list auth_pages, waiting;
-  psync_file_t fileid;
+  psync_fileid_t fileid;
   uint32_t asize, aoff;
   int ret;
   initialsize=of->initialsize;
   hash=of->hash;
   fileid=of->remotefileid;
+  intv=psync_interval_tree_first_interval_containing_or_after(of->authenticatedints, offset);
+  if (!intv || intv->from>offset)
+    authupto=0;
+  else
+    authupto=intv->to;
   pthread_mutex_unlock(&of->mutex);
   assert(PSYNC_CRYPTO_SECTOR_SIZE==PSYNC_FS_PAGE_SIZE);
   psync_fs_crypto_offsets_by_plainsize(initialsize, &offsets);
@@ -1915,44 +1974,35 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
     psync_fs_crypto_get_auth_sector_off(first_page_id+i, 0, &offsets, &aoffset, &asize, &aoff);
     ap=psync_new(psync_crypto_auth_page);
     ap->waiter=NULL;
+    ap->parent=NULL;
     ap->firstpageid=(first_page_id+i)/PSYNC_CRYPTO_HASH_TREE_SECTORS*PSYNC_CRYPTO_HASH_TREE_SECTORS;
-    ap->pagecnt=asize/PSYNC_CRYPTO_AUTH_SIZE;
+    ap->size=asize;
+    ap->idinparent=0;
     ap->level=0;    
     psync_list_add_tail(&auth_pages, &ap->list);
     dp[i].authpage=ap;
-    apageid=aoffset/PSYNC_FS_PAGE_SIZE;
-    if (aoffset%PSYNC_FS_PAGE_SIZE==0){
-      rb=check_page_in_memory_by_hash(hash, apageid, (char *)ap->auth, asize, 0);
-      if (rb==-1)
-        rb=check_page_in_database_by_hash(hash, apageid, (char *)ap->auth, asize, 0);
-      if (rb==-1)
-        ap->waiter=add_page_waiter(&waiting, &rq->ranges, hash, apageid, fileid, (char *)ap->auth, 0, 0, asize);
-      else if (unlikely(rb!=asize))
-        goto err0;
-    }
-    else{
-      apoff=aoffset-apageid*PSYNC_FS_PAGE_SIZE;
-      apsize=PSYNC_FS_PAGE_SIZE-apoff;
-      if (apsize>asize)
-        apsize=asize;
-      rb=check_page_in_memory_by_hash(hash, apageid, (char *)ap->auth, apsize, apoff);
-      if (rb==-1)
-        rb=check_page_in_database_by_hash(hash, apageid, (char *)ap->auth, apsize, apoff);
-      if (rb==-1)
-        ap->waiter=add_page_waiter(&waiting, &rq->ranges, hash, apageid, fileid, (char *)ap->auth, 0, apoff, apsize);
-      else if (unlikely(rb!=apsize))
-        goto err0;
-      if (apsize<asize){
-        pbuff=((char *)ap->auth)+apsize;
-        apageid++;
-        apsize=asize-apsize;
-        assert(apsize<PSYNC_FS_PAGE_SIZE);
-        rb=check_page_in_memory_by_hash(hash, apageid, pbuff, apsize, 0);
-        if (rb==-1)
-          rb=check_page_in_database_by_hash(hash, apageid, pbuff, apsize, 0);
-        if (rb==-1)
-          ap->waiter=add_page_waiter(&waiting, &rq->ranges, hash, apageid, fileid, pbuff, 0, 0, apsize);
-        else if (unlikely(rb!=apsize))
+    if (request_auth_page(ap, rq, &waiting, fileid, hash, aoffset, asize))
+      goto err0;
+    if (authupto<(first_page_id+i+1)*PSYNC_FS_PAGE_SIZE && offsets.needmasterauth){
+      psync_crypto_auth_page *lap, *cap;
+      psync_uint_t l;
+      debug(D_NOTICE, "need to check chain checksums for pages %lu-%lu tree level %d", 
+            (unsigned long)ap->firstpageid, (unsigned long)ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE, (int)offsets.treelevels);
+      lap=ap;
+      for (l=1; l<=offsets.treelevels; l++){
+        psync_fs_crypto_get_auth_sector_off(first_page_id+i, l, &offsets, &aoffset, &asize, &aoff);
+        cap=psync_new(psync_crypto_auth_page);
+        cap->waiter=NULL;
+        cap->parent=NULL;
+        cap->firstpageid=0;
+        cap->size=asize;
+        cap->idinparent=0;
+        cap->level=l;
+        lap->parent=cap;
+        lap->idinparent=aoff;
+        lap=cap;
+        psync_list_add_tail(&auth_pages, &cap->list);
+        if (request_auth_page(cap, rq, &waiting, fileid, hash, aoffset, asize))
           goto err0;
       }
     }
@@ -2002,10 +2052,42 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
     psync_free(rq);
   ret=0;
   for (i=0; i<pagecnt; i++){
-    if (dp[i].authpage->waiter){
-      wait_waiter(dp[i].authpage->waiter, hash, "auth");
-      if (!ret && dp[i].authpage->waiter->error)
-        ret=dp[i].authpage->waiter->error;
+    ap=dp[i].authpage;
+    if (ap->waiter){
+      wait_waiter(ap->waiter, hash, "auth");
+      if (!ret && ap->waiter->error)
+        ret=ap->waiter->error;
+    }
+    if (ap->parent){
+      psync_crypto_sector_auth_t sa;
+      psync_crypto_auth_page *p;
+      debug(D_NOTICE, "checking chain checksums for pages %lu-%lu tree level %d", 
+            (unsigned long)ap->firstpageid, (unsigned long)ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE, (int)offsets.treelevels);
+      psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)ap->auth, ap->size, sa);
+      p=ap->parent;
+      ap->parent=NULL;
+      do {
+        if (p->waiter){
+          wait_waiter(p->waiter, hash, "chain auth");
+          if (!ret && p->waiter->error)
+            ret=p->waiter->error;
+        }
+        if (!ret && memcmp(sa, p->auth[ap->idinparent], sizeof(psync_crypto_sector_auth_t))){
+          debug(D_ERROR, "chain verification failed for sector %lu at level %u, idinparent=%u", 
+                (unsigned long)(first_page_id+i), (unsigned)p->level, (unsigned)ap->idinparent);
+          ret=-EIO;
+        }
+        ap=p;
+        psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)ap->auth, ap->size, sa);
+        p=ap->parent;
+      } while (p);
+      ap=dp[i].authpage;
+      if (!ret){
+        pthread_mutex_lock(&of->mutex);
+        if (likely(of->hash==hash))
+          psync_interval_tree_add(&of->authenticatedints, ap->firstpageid*PSYNC_FS_PAGE_SIZE, (ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE)*PSYNC_FS_PAGE_SIZE);
+        pthread_mutex_unlock(&of->mutex);
+      }
     }
     if (dp[i].waiter){
       wait_waiter(dp[i].waiter, hash, "data");
@@ -2013,10 +2095,10 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
         ret=dp[i].waiter->error;
     }
     if (!ret){
-      apageid=first_page_id+i-dp[i].authpage->firstpageid;
+      apageid=first_page_id+i-ap->firstpageid;
       assert(apageid>=0 && apageid<PSYNC_CRYPTO_HASH_TREE_SECTORS);
       if (psync_crypto_aes256_decode_sector(of->encoder, (unsigned char *)dp[i].buff, dp[i].pagesize, (unsigned char *)dp[i].buff,
-                                            dp[i].authpage->auth[apageid], first_page_id+i)){
+                                            ap->auth[apageid], first_page_id+i)){
         debug(D_ERROR, "decoding of page %lu of file %s failed", (unsigned long)(first_page_id+i), of->currentname);
         ret=-EIO;
       }
@@ -2057,7 +2139,6 @@ err0:
   free_waiters(&waiting);
   unlock_wait(hash);
   psync_pagecache_free_request(rq);
-  debug(D_WARNING, "expected auth sector size to be %u, got %u", (unsigned)asize, (unsigned)rb);
   ret=-EIO;
   goto ret0;
 }
