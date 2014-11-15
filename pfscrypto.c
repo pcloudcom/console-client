@@ -45,6 +45,16 @@ static const uint64_t max_level_size[PSYNC_CRYPTO_MAX_HASH_TREE_LEVEL+1]={
   0x40810204081000
 };
 
+psync_crypto_sectorid_t psync_fs_crypto_data_sectorid_by_sectorid(psync_crypto_sectorid_t sectorid){
+  psync_crypto_sectorid_t sect;
+  sect=sectorid;
+  while (sectorid>=PSYNC_CRYPTO_HASH_TREE_SECTORS){
+    sectorid/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
+    sect+=sectorid;
+  }
+  return sect;
+}
+
 static uint64_t psync_fs_crypto_data_offset_by_sectorid(psync_crypto_sectorid_t sectorid){
   uint64_t off;
   off=(uint64_t)sectorid*PSYNC_CRYPTO_SECTOR_SIZE;
@@ -809,8 +819,8 @@ void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint3
   psync_crypto_sectorid_t sizesecd, secd;
   uint32_t i, aid;
   sizesecd=size_div_hash_tree_sectors(offsets->plainsize/PSYNC_CRYPTO_SECTOR_SIZE);
-  secd=sectorid/PSYNC_CRYPTO_SECTOR_SIZE;
-  aid=sectorid%PSYNC_CRYPTO_SECTOR_SIZE;
+  secd=sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
+  aid=sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS;
   for (i=0; i<level; i++){
     sizesecd=size_div_hash_tree_sectors(sizesecd);
     aid=secd%PSYNC_CRYPTO_HASH_TREE_SECTORS;
