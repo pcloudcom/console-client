@@ -156,7 +156,6 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
             psync_interval_tree_free(fl->authenticatedints);
             fl->authenticatedints=NULL;
           }
-
         }
         tr=openfiles;
         d=-1;
