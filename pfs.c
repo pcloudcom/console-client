@@ -1417,11 +1417,11 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_o
       else{
         pthread_mutex_unlock(&of->mutex);
         psync_set_local_full(1);
-        while (psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)))<psync_setting_get_uint(_PS(minlocalfreespace)))
-          psync_milisleep(1000);
-        psync_set_local_full(0);
-        pthread_mutex_lock(&of->mutex);
-        //return -ENOSPC;
+//        while (psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)))<psync_setting_get_uint(_PS(minlocalfreespace)))
+//          psync_milisleep(1000);
+//        psync_set_local_full(0);
+//        pthread_mutex_lock(&of->mutex);
+        return -ENOSPC;
       }
     }
   }
@@ -1593,7 +1593,7 @@ static int psync_fs_can_unlink(const char *path){
   if (!fpath)
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_DELETE))
-    ret=-EROFS;
+    ret=-EACCES;
   else
     ret=psync_fstask_can_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
@@ -1614,7 +1614,7 @@ static int psync_fs_unlink(const char *path){
   if (!fpath)
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_DELETE))
-    ret=-EROFS;
+    ret=-EACCES;
   else
     ret=psync_fstask_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
@@ -1628,11 +1628,11 @@ static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_
   if (parentfolderid==to_folderid){
     assertw(targetperms==src_permissions);
     if (!(src_permissions&PSYNC_PERM_MODIFY))
-      return -EROFS;
+      return -EACCES;
   }
   else{
     if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
-      return -EROFS;
+      return -EACCES;
   }
   return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
 }
@@ -1642,11 +1642,11 @@ static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t pare
   if (parentfolderid==to_folderid){
     assertw(targetperms==src_permissions);
     if (!(src_permissions&PSYNC_PERM_MODIFY))
-      return -EROFS;
+      return -EACCES;
   }
   else{
     if (!(src_permissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
-      return -EROFS;
+      return -EACCES;
   }
   return psync_fstask_rename_file(fileid, parentfolderid, name, to_folderid, new_name);
 }
