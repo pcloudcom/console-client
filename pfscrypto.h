@@ -56,6 +56,7 @@ int psync_fs_crypto_flush_file(psync_openfile_t *of);
 psync_crypto_sectorid_t psync_fs_crypto_data_sectorid_by_sectorid(psync_crypto_sectorid_t sectorid);
 void psync_fs_crypto_offsets_by_plainsize(uint64_t size, psync_crypto_offsets_t *offsets);
 uint64_t psync_fs_crypto_plain_size(uint64_t cryptosize);
+uint64_t psync_fs_crypto_crypto_size(uint64_t plainsize);
 void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint32_t level, psync_crypto_offsets_t *offsets,
                                          uint64_t *offset, uint32_t *size, uint32_t *authid);
 

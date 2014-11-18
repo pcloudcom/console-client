@@ -200,7 +200,7 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
   if (!offsets->needmasterauth)
     return 0;
   sectorid/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
-  sizesect=size_div_hash_tree_sectors(offsets->plainsize/PSYNC_CRYPTO_SECTOR_SIZE);
+  sizesect=size_div_hash_tree_sectors((offsets->plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
   if (sectorid==sizesect){
     off=offsets->lastauthsectoroff[0];
     ssize=offsets->lastauthsectorlen[0];
@@ -264,7 +264,7 @@ static int psync_fs_crypto_read_newfile_full_sector_from_datafile(psync_openfile
   rd=psync_file_pread(of->datafile, buff, ssize, off);
   if (unlikely_log(rd!=ssize))
     return -EIO;
-  if (sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS==size_div_hash_tree_sectors(offsets.plainsize/PSYNC_CRYPTO_SECTOR_SIZE))
+  if (sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS==size_div_hash_tree_sectors((offsets.plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE))
     off=offsets.lastauthsectoroff[0];
   else
     off=psync_fs_crypto_auth_offset(0, sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS);
@@ -428,7 +428,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
     level=0;
     oldsecd=oldsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
     newsecd=newsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
-    sizesecd=size_div_hash_tree_sectors(offsets->plainsize/PSYNC_CRYPTO_SECTOR_SIZE);
+    sizesecd=size_div_hash_tree_sectors((offsets->plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
     do{
       oldsecn=oldsecd%PSYNC_CRYPTO_HASH_TREE_SECTORS;
       memset(&hdr, 0, sizeof(hdr));
@@ -438,6 +438,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         sz=offsets->lastauthsectorlen[level];
       }
       else{
+        assert(oldsecd<sizesecd);
         hdr.offset=psync_fs_crypto_auth_offset(level, oldsecd);
         sz=PSYNC_CRYPTO_SECTOR_SIZE;
       }
@@ -470,7 +471,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
       level=0;
       oldsecd=oldsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
       newsecd=newsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
-      sizesecd=size_div_hash_tree_sectors(ooffsets.plainsize/PSYNC_CRYPTO_SECTOR_SIZE);
+      sizesecd=size_div_hash_tree_sectors((ooffsets.plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
       do{
         if (newsecd<=sizesecd){
           if (newsecd==sizesecd){
@@ -478,6 +479,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
             sz=ooffsets.lastauthsectorlen[level];
           }
           else{
+            assert(newsecd<sizesecd);
             off=psync_fs_crypto_auth_offset(level, newsecd);
             sz=PSYNC_CRYPTO_SECTOR_SIZE;
           }
@@ -814,11 +816,17 @@ uint64_t psync_fs_crypto_plain_size(uint64_t cryptosize){
   return offsets.plainsize;
 }
 
+uint64_t psync_fs_crypto_crypto_size(uint64_t plainsize){
+  psync_crypto_offsets_t offsets;
+  psync_fs_crypto_offsets_by_plainsize(plainsize, &offsets);
+  return offsets.masterauthoff+(offsets.needmasterauth?PSYNC_CRYPTO_AUTH_SIZE:0);
+}
+
 void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint32_t level, psync_crypto_offsets_t *offsets,
                                          uint64_t *offset, uint32_t *size, uint32_t *authid){
   psync_crypto_sectorid_t sizesecd, secd;
   uint32_t i, aid;
-  sizesecd=size_div_hash_tree_sectors(offsets->plainsize/PSYNC_CRYPTO_SECTOR_SIZE);
+  sizesecd=size_div_hash_tree_sectors((offsets->plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
   secd=sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
   aid=sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS;
   for (i=0; i<level; i++){
@@ -831,6 +839,7 @@ void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint3
     *size=offsets->lastauthsectorlen[level];
   }
   else{
+    assert(secd<sizesecd);
     *offset=psync_fs_crypto_auth_offset(level, secd);
     *size=PSYNC_CRYPTO_SECTOR_SIZE;
   }
