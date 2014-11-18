@@ -112,6 +112,25 @@ static gid_t mygid=0;
 
 static psync_tree *openfiles=PSYNC_TREE_EMPTY;
 
+static void delete_log_files(psync_openfile_t *of){
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  const char *cachepath;
+  char *filename;
+  psync_fsfileid_t fileid;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  fileid=-of->fileid;
+  psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
+  fileidhex[sizeof(psync_fsfileid_t)]='l';
+  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  psync_file_delete(filename);
+  psync_free(filename);
+  fileidhex[sizeof(psync_fsfileid_t)]='f';
+  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+  psync_file_delete(filename);
+  psync_free(filename);
+}
+
 int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size){
   psync_sql_res *res;
   psync_uint_row row;
@@ -152,6 +171,11 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
         }
         psync_tree_del(&openfiles, &fl->tree);
         if (fl->encrypted){
+          if (fl->logfile){
+            psync_file_close(fl->logfile);
+            fl->indexfile=INVALID_HANDLE_VALUE;
+          }
+          delete_log_files(fl);
           if (fl->authenticatedints){
             psync_interval_tree_free(fl->authenticatedints);
             fl->authenticatedints=NULL;
@@ -1367,25 +1391,6 @@ void psync_fs_inc_of_refcnt(psync_openfile_t *of){
   pthread_mutex_unlock(&of->mutex);
 }
 
-static void delete_log_files(psync_openfile_t *of){
-  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
-  const char *cachepath;
-  char *filename;
-  psync_fsfileid_t fileid;
-  cachepath=psync_setting_get_string(_PS(fscachepath));
-  fileid=-of->fileid;
-  psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
-  fileidhex[sizeof(psync_fsfileid_t)]='l';
-  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
-  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  psync_file_delete(filename);
-  psync_free(filename);
-  fileidhex[sizeof(psync_fsfileid_t)]='f';
-  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  psync_file_delete(filename);
-  psync_free(filename);
-}
-
 static void close_if_valid(psync_file_t fd){
   if (fd!=INVALID_HANDLE_VALUE)
     psync_file_close(fd);
@@ -1644,6 +1649,75 @@ static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
   return 0;
 }
 
+static int psync_fs_reopen_file_for_writing(psync_openfile_t *of){
+  psync_fstask_creat_t *cr;
+  uint64_t size;
+  int ret;
+  debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
+  if (psync_sql_trylock()){
+    // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
+    pthread_mutex_unlock(&of->mutex);
+    psync_sql_lock();
+    pthread_mutex_lock(&of->mutex);
+    if (of->newfile || of->modified){
+      psync_sql_unlock();
+      return 1;
+    }
+  }
+  if (of->encrypted)
+    size=psync_fs_crypto_crypto_size(of->initialsize);
+  else
+    size=of->initialsize;
+  if (size==0 || (size<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE && 
+        psync_pagecache_have_all_pages_in_cache(of->hash, size) && !psync_pagecache_lock_pages_in_cache())){
+    debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
+    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
+    if (unlikely_log(!cr)){
+      psync_sql_unlock();
+      pthread_mutex_unlock(&of->mutex);
+      psync_pagecache_unlock_pages_from_cache();
+      return -EIO;
+    }
+    psync_fs_update_openfile_fileid_locked(of, cr->fileid);
+    psync_sql_unlock();
+    of->newfile=1;
+    of->modified=1;
+    ret=open_write_files(of, 0);
+    if (unlikely_log(ret)){
+      pthread_mutex_unlock(&of->mutex);
+      psync_pagecache_unlock_pages_from_cache();
+      return ret;
+    }
+    if (size){
+      ret=psync_pagecache_copy_all_pages_from_cache_to_file_locked(of, of->hash, size);
+      psync_pagecache_unlock_pages_from_cache();
+      if (unlikely_log(ret)){
+        pthread_mutex_unlock(&of->mutex);
+        return -EIO;
+      }
+    }
+    return 1;
+  }
+  cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
+  if (unlikely_log(!cr)){
+    psync_sql_unlock();
+    pthread_mutex_unlock(&of->mutex);
+    return -EIO;
+  }
+  psync_fs_update_openfile_fileid_locked(of, cr->fileid);
+  psync_sql_unlock();
+  ret=open_write_files(of, 0);
+  if (unlikely_log(ret) || psync_file_seek(of->datafile, of->initialsize, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
+    pthread_mutex_unlock(&of->mutex);
+    if (!ret)
+      ret=-EIO;
+    return ret;
+  }
+  of->modified=1;
+  of->indexoff=0;
+  return 0;
+}
+
 static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
   ssize_t bw;
@@ -1685,65 +1759,11 @@ retry:
       return -ENOSYS;
     }
     if (unlikely(!of->modified)){
-      psync_fstask_creat_t *cr;
-      debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
-      if (psync_sql_trylock()){
-        // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
-        pthread_mutex_unlock(&of->mutex);
-        psync_sql_lock();
-        pthread_mutex_lock(&of->mutex);
-        if (of->newfile || of->modified){
-          psync_sql_unlock();
-          goto retry;
-        }
-      }
-      if (of->currentsize==0 || (of->currentsize<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE && 
-            psync_pagecache_have_all_pages_in_cache(of->hash, of->currentsize) && !psync_pagecache_lock_pages_in_cache())){
-        debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
-        cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
-        if (unlikely_log(!cr)){
-          psync_sql_unlock();
-          pthread_mutex_unlock(&of->mutex);
-          psync_pagecache_unlock_pages_from_cache();
-          return -EIO;
-        }
-        psync_fs_update_openfile_fileid_locked(of, cr->fileid);
-        psync_sql_unlock();
-        of->newfile=1;
-        of->modified=1;
-        ret=open_write_files(of, 0);
-        if (unlikely_log(ret)){
-          pthread_mutex_unlock(&of->mutex);
-          psync_pagecache_unlock_pages_from_cache();
-          return ret;
-        }
-        if (of->currentsize){
-          ret=psync_pagecache_copy_all_pages_from_cache_to_file_locked(of, of->hash, of->currentsize);
-          psync_pagecache_unlock_pages_from_cache();
-          if (unlikely_log(ret)){
-            pthread_mutex_unlock(&of->mutex);
-            return -EIO;
-          }
-        }
+      ret=psync_fs_reopen_file_for_writing(of);
+      if (ret==1)
         goto retry;
-      }
-      cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
-      if (unlikely_log(!cr)){
-        psync_sql_unlock();
-        pthread_mutex_unlock(&of->mutex);
-        return -EIO;
-      }
-      psync_fs_update_openfile_fileid_locked(of, cr->fileid);
-      psync_sql_unlock();
-      ret=open_write_files(of, 0);
-      if (unlikely_log(ret) || psync_file_seek(of->datafile, of->initialsize, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
-        pthread_mutex_unlock(&of->mutex);
-        if (!ret)
-          ret=-EIO;
+      else if (ret<0)
         return ret;
-      }
-      of->modified=1;
-      of->indexoff=0;
     }
     if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
       return -1;
