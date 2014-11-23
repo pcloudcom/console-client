@@ -57,6 +57,7 @@ struct exception_list {
 typedef struct {
   pthread_mutex_t mutex;
   pthread_cond_t cond;
+  int waiting;
 } mutex_cond;
 
 static psync_list timerlists[TIMER_LEVELS][TIMER_ARRAY_SIZE];
@@ -241,6 +242,7 @@ static void next_sec(psync_timer_t timer, void *ptr){
   psync_timer_stop(timer);
   mc=(mutex_cond *)ptr;
   pthread_mutex_lock(&mc->mutex);
+  mc->waiting=0;
   pthread_cond_signal(&mc->cond);
   pthread_mutex_unlock(&mc->mutex);
 }
@@ -249,9 +251,12 @@ void psync_timer_wait_next_sec(){
   mutex_cond mc;
   pthread_mutex_init(&mc.mutex, NULL);
   pthread_cond_init(&mc.cond, NULL);
+  mc.waiting=1;
   pthread_mutex_lock(&mc.mutex);
   psync_timer_register(next_sec, 1, &mc);
-  pthread_cond_wait(&mc.cond, &mc.mutex);
+  do {
+    pthread_cond_wait(&mc.cond, &mc.mutex);
+  } while (mc.waiting);
   pthread_mutex_unlock(&mc.mutex);
   pthread_cond_destroy(&mc.cond);
   pthread_mutex_destroy(&mc.mutex);
