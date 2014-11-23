@@ -1774,8 +1774,12 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_o
       if (freespc>=psync_setting_get_uint(_PS(minlocalfreespace)))
         psync_set_local_full(0);
       else{
-        psync_set_local_full(1);
         pthread_mutex_unlock(&of->mutex);
+        psync_set_local_full(1);
+//        while (psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)))<psync_setting_get_uint(_PS(minlocalfreespace)))
+//          psync_milisleep(1000);
+//        psync_set_local_full(0);
+//        pthread_mutex_lock(&of->mutex);
         return -ENOSPC;
       }
     }
