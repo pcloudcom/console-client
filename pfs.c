@@ -1448,9 +1448,12 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
     psync_fsupload_wake();
   }
   if (of->encrypted){
-    psync_crypto_aes256_sector_encoder_decoder_free(of->encoder);
+    if (of->encoder!=PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER && of->encoder!=PSYNC_CRYPTO_FAILED_SECTOR_ENCODER){
+      assert(of->encoder!=PSYNC_CRYPTO_LOADING_SECTOR_ENCODER);
+      psync_crypto_aes256_sector_encoder_decoder_free(of->encoder);
+    }
     close_if_valid(of->logfile);
-    psync_tree_for_each_element_call(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
+    psync_tree_for_each_element_call_safe(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
     delete_log_files(of);
     if (of->authenticatedints)
       psync_interval_tree_free(of->authenticatedints);
@@ -1602,10 +1605,10 @@ static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, ui
   ssize_t br=psync_file_pread(of->datafile, buf, size, offset);
   if (br==-1){
     debug(D_NOTICE, "error reading from new file offset %lu, size %lu, error %d", (unsigned long)offset, (unsigned long)size, (int)psync_fs_err());
-    return -EIO;
+    br=-EIO;
   }
-  else
-    return br;
+  pthread_mutex_unlock(&of->mutex);
+  return br;
 }
 
 static int psync_fs_read(const char *path, char *buf, size_t size, fuse_off_t offset, struct fuse_file_info *fi){
@@ -1630,20 +1633,21 @@ static int psync_fs_read(const char *path, char *buf, size_t size, fuse_off_t of
     of->currentsec=currenttime;
     of->bytesthissec=size;
   }
-  if (of->newfile){
-    if (of->encrypted)
+  if (of->encrypted){
+    if (of->newfile)
       return psync_fs_crypto_read_newfile_locked(of, buf, size, offset);
-    else{
-      int ret=psync_read_newfile(of, buf, size, offset);
+    else if (of->modified){
       pthread_mutex_unlock(&of->mutex);
-      return ret;
+      return -ENOSYS;
     }
-  }
-  if (of->modified)
-    return psync_pagecache_read_modified_locked(of, buf, size, offset);
-  else{
-    if (of->encrypted)
+    else
       return psync_pagecache_read_unmodified_encrypted_locked(of, buf, size, offset);
+  }
+  else{
+    if (of->newfile)
+      return psync_read_newfile(of, buf, size, offset);
+    else if (of->modified)
+      return psync_pagecache_read_modified_locked(of, buf, size, offset);
     else
       return psync_pagecache_read_unmodified_locked(of, buf, size, offset);
   }
@@ -1690,11 +1694,21 @@ static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
   return 0;
 }
 
-static int psync_fs_reopen_file_for_writing(psync_openfile_t *of){
+PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of){
   psync_fstask_creat_t *cr;
   uint64_t size;
   int ret;
   debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
+  if (unlikely(of->encrypted && of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)){
+    psync_crypto_aes256_sector_encoder_decoder_t enc;
+    enc=psync_cloud_crypto_get_file_encoder(of->remotefileid, 0);
+    if (unlikely(psync_crypto_is_error(enc))){
+      pthread_mutex_unlock(&of->mutex);
+      return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(enc));
+    }
+    else
+      of->encoder=enc;
+  }
   if (psync_sql_trylock()){
     // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
     pthread_mutex_unlock(&of->mutex);
@@ -1811,7 +1825,7 @@ retry:
         return ret;
     }
     if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
-      return -1;
+      return -EIO;
     ioff=of->indexoff++;
     bw=psync_file_pwrite(of->datafile, buf, size, offset);
     if (unlikely_log(bw==-1)){

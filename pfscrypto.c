@@ -666,7 +666,7 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
     psync_free(flog);
     return -EIO;
   }
-  psync_tree_for_each_element_call(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
+  psync_tree_for_each_element_call_safe(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
   of->sectorsinlog=PSYNC_TREE_EMPTY;
   ret=psync_fs_crypto_mark_log_finalized_and_process(of, flog, offsets.masterauthoff+(offsets.needmasterauth?PSYNC_CRYPTO_AUTH_SIZE:0), 0, 1);
   psync_file_delete(flog);
