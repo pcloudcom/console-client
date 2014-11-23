@@ -116,6 +116,7 @@ typedef struct {
   psync_openfile_t *of;
   psync_fileid_t fileid;
   uint64_t hash;
+  int needkey;
 } psync_request_t;
 
 typedef struct {
@@ -163,6 +164,7 @@ static pthread_mutex_t flush_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t url_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t url_cache_cond=PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t wait_page_mutexes[PAGE_WAITER_MUTEXES];
+static pthread_cond_t enc_key_cond=PTHREAD_COND_INITIALIZER;
 
 static uint32_t clean_cache_stoppers=0;
 static uint32_t clean_cache_waiters=0;
@@ -434,6 +436,20 @@ static void set_urls(psync_urls_t *urls, binresult *res){
   pthread_mutex_unlock(&url_cache_mutex);
 }
 
+static void psync_pagecache_set_bad_encoder(psync_openfile_t *of){
+  pthread_mutex_lock(&of->mutex);
+  if (likely_log(of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)){
+    of->encoder=PSYNC_CRYPTO_FAILED_SECTOR_ENCODER;
+    pthread_cond_broadcast(&enc_key_cond);
+  }
+  pthread_mutex_unlock(&of->mutex);
+}
+
+static int send_key_request(psync_socket *api, psync_request_t *request){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", request->fileid)};
+  return send_command_no_res(api, "crypto_getfilekey", params)!=PTR_OK?-1:0;
+}
+
 static int get_urls(psync_request_t *request, psync_urls_t *urls){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", request->fileid), P_NUM("hash", request->hash), 
                     P_STR("timeformat", "timestamp"), P_BOOL("skipfilename", 1)};
@@ -444,13 +460,16 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
   const binresult *hosts;
   unsigned long result;
   int tries;
-  debug(D_NOTICE, "getting file URLs of fileid %lu, hash %lu together with requests", (unsigned long)request->fileid, (unsigned long)request->hash);
+  debug(D_NOTICE, "getting file URLs of fileid %lu, hash %lu together with requests%s", 
+        (unsigned long)request->fileid, (unsigned long)request->hash, request->needkey?" and encryption key":"");
   tries=0;
   while (tries++<=5){
     api=psync_apipool_get();
     if (unlikely_log(!api))
       continue;
     if (unlikely(send_command_no_res(api, "getfilelink", params)!=PTR_OK))
+      goto err1;
+    if (request->needkey && send_key_request(api, request))
       goto err1;
     psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list){
       debug(D_NOTICE, "sending request for offset %lu, size %lu to API", (unsigned long)range->offset, (unsigned long)range->length);
@@ -478,13 +497,35 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
     /*if (of->initialsize>=PSYNC_FS_FILESIZE_FOR_2CONN && hosts->length>1 && hosts->array[1]->type==PARAM_STR)
       psync_http_connect_and_cache_host(hosts->array[1]->str);*/
     set_urls(urls, ret);
+    if (request->needkey){
+      psync_crypto_aes256_sector_encoder_decoder_t enc;
+      ret=get_result_thread(api);
+      if (unlikely_log(!ret))
+        goto err3;
+      result=psync_find_result(ret, "result", PARAM_NUM)->num;
+      if (unlikely(result!=0)){
+        debug(D_WARNING, "crypto_getfilekey returned error %lu", result);
+        goto err4;
+      }
+      debug(D_NOTICE, "got key for fileid %lu", (unsigned long)request->fileid);
+      enc=psync_cloud_crypto_get_file_encoder_from_binresult(request->fileid, ret);
+      if (psync_crypto_is_error(enc))
+        goto err4;
+      psync_free(ret);
+      pthread_mutex_lock(&request->of->mutex);
+      if (likely_log(request->of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)){
+        request->of->encoder=enc;
+        pthread_cond_broadcast(&enc_key_cond);
+      }
+      else
+        psync_cloud_crypto_release_file_encoder(request->fileid, enc);
+      pthread_mutex_unlock(&request->of->mutex);
+      request->needkey=0;
+    }
     psync_list_for_each_safe(l1, l2, &request->ranges){
       range=psync_list_element(l1, psync_request_range_t, list);
-      if (psync_pagecache_read_range_from_api(request, range, api)){
-        mark_shared_api_bad(api);
-        psync_apipool_release_bad(api);
-        return 0;
-      }
+      if (psync_pagecache_read_range_from_api(request, range, api))
+        goto err2;
       psync_list_del(l1);
       debug(D_NOTICE, "request for offset %lu, size %lu read from API", (unsigned long)range->offset, (unsigned long)range->length);
       psync_free(range);
@@ -496,6 +537,14 @@ err1:
     psync_apipool_release_bad(api);
   }
   return -1;
+err4:
+  psync_free(ret);
+err3:
+  psync_pagecache_set_bad_encoder(request->of);
+err2:
+  mark_shared_api_bad(api);
+  psync_apipool_release_bad(api);
+  return 0;
 }
 
 static psync_urls_t *get_urls_for_request(psync_request_t *req){
@@ -1363,6 +1412,8 @@ static void psync_pagecache_send_error(psync_request_t *request, int err){
   psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list)
     psync_pagecache_send_range_error(range, request, err);
   unlock_wait(request->of->hash);
+  if (request->needkey)
+    psync_pagecache_set_bad_encoder(request->of);
   psync_fs_dec_of_refcnt_and_readers(request->of);
   psync_pagecache_free_request(request);
 }
@@ -1426,6 +1477,7 @@ static void psync_pagecache_read_unmodified_thread(void *ptr){
   psync_request_range_t *range;
   const binresult *hosts;
   psync_urls_t *urls;
+  psync_crypto_aes256_sector_encoder_decoder_t enc;
   int err, tries;
   request=(psync_request_t *)ptr;
   if (psync_status_get(PSTATUS_TYPE_ONLINE)==PSTATUS_ONLINE_OFFLINE){
@@ -1439,6 +1491,22 @@ retry:
   if (!(urls=get_urls_for_request(request))){
     psync_pagecache_send_error(request, -EIO);
     return;
+  }
+  if (unlikely(request->needkey)){
+    enc=psync_cloud_crypto_get_file_encoder(request->fileid, 0);
+    if (psync_crypto_to_error(enc)){
+      psync_pagecache_send_error(request, -EIO);
+      return;
+    }
+    pthread_mutex_lock(&request->of->mutex);
+    if (likely_log(request->of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)){
+      request->of->encoder=enc;
+      pthread_cond_broadcast(&enc_key_cond);
+    }
+    else
+      psync_cloud_crypto_release_file_encoder(request->fileid, enc);
+    pthread_mutex_unlock(&request->of->mutex);
+    request->needkey=0;
   }
   if (psync_list_isempty(&request->ranges)){
     release_urls(urls);
@@ -1997,7 +2065,7 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
   psync_list auth_pages, waiting;
   psync_fileid_t fileid;
   uint32_t asize, aoff;
-  int ret;
+  int ret, needkey;
   initialsize=of->initialsize;
   hash=of->hash;
   fileid=of->remotefileid;
@@ -2006,6 +2074,12 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
     authupto=0;
   else
     authupto=intv->to;
+  if (of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER){
+    needkey=1;
+    of->encoder=PSYNC_CRYPTO_LOADING_SECTOR_ENCODER;
+  }
+  else
+    needkey=0;
   pthread_mutex_unlock(&of->mutex);
   assert(PSYNC_CRYPTO_SECTOR_SIZE==PSYNC_FS_PAGE_SIZE);
   psync_fs_crypto_offsets_by_plainsize(initialsize, &offsets);
@@ -2046,8 +2120,6 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
     if (authupto<(first_page_id+i+1)*PSYNC_FS_PAGE_SIZE && offsets.needmasterauth){
       psync_crypto_auth_page *lap, *cap;
       psync_uint_t l;
-      debug(D_NOTICE, "need to check chain checksums for pages %lu-%lu tree level %d", 
-            (unsigned long)ap->firstpageid, (unsigned long)ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE, (int)offsets.treelevels);
       lap=ap;
       for (l=1; l<=offsets.treelevels; l++){
         psync_fs_crypto_get_auth_sector_off(first_page_id+i, l, &offsets, &aoffset, &asize, &aoff);
@@ -2102,16 +2174,29 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
   }
   unlock_wait(hash);
   psync_pagecache_read_unmodified_readahead(of, poffset, psize, &rq->ranges, fileid, hash, initialsize, &offsets);
-  if (!psync_list_isempty(&rq->ranges)){
+  if (!psync_list_isempty(&rq->ranges) || needkey){
     rq->of=of;
     rq->fileid=fileid;
     rq->hash=hash;
+    rq->needkey=needkey;
     psync_fs_inc_of_refcnt_and_readers(of);
     psync_run_thread1("crypto read unmodified", psync_pagecache_read_unmodified_thread, rq);
   }
   else
     psync_free(rq);
   ret=0;
+  if (needkey){
+    debug(D_NOTICE, "waiting for key to download");
+    pthread_mutex_lock(&of->mutex);
+    while (of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)
+      pthread_cond_wait(&enc_key_cond, &of->mutex);
+    if (of->encoder==PSYNC_CRYPTO_FAILED_SECTOR_ENCODER){
+      debug(D_NOTICE, "failed to download key");
+      ret=-EIO;
+    }
+    pthread_mutex_unlock(&of->mutex);
+    debug(D_NOTICE, "waited for key to download");
+  }
   for (i=0; i<pagecnt; i++){
     ap=dp[i].authpage;
     if (ap->waiter){
