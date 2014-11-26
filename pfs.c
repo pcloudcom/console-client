@@ -2130,7 +2130,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
       goto finish;
     }
     else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
-      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
+      if (psync_fs_is_folder(fnew_path->folderid, fnew_path->name))
         ret=-EISDIR;
       else
         ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
@@ -2176,6 +2176,7 @@ finish:
   psync_sql_unlock();
   psync_free(fold_path);
   psync_free(fnew_path);
+  debug(D_NOTICE, "rename %s to %s=%d", old_path, new_path, ret);
   return ret;
 err_enoent:
   if (folder)
