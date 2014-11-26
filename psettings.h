@@ -34,13 +34,13 @@
 
 #define PSYNC_LIB_VERSION "1.3.0"
 
-#define PSYNC_API_HOST     "api70.pcloud.com"
+/*#define PSYNC_API_HOST     "api70.pcloud.com"
 #define PSYNC_API_PORT     8398
-#define PSYNC_API_PORT_SSL 8399
+#define PSYNC_API_PORT_SSL 8399*/
 
-/*#define PSYNC_API_HOST     "binapi.pcloud.com"
+#define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
-#define PSYNC_API_PORT_SSL 443*/
+#define PSYNC_API_PORT_SSL 443
 
 #define PSYNC_API_AHOST     "api.pcloud.com"
 #define PSYNC_API_APORT     8398
@@ -186,7 +186,7 @@
 #define PSYNC_DEFAULT_SEND_BUFF (4*1024*1024)
 
 #define PSYNC_FS_PAGE_SIZE 4096
-#define PSYNC_FS_MEMORY_CACHE (16*1024*1024)
+#define PSYNC_FS_MEMORY_CACHE (64*1024*1024)
 #define PSYNC_FS_DISK_FLUSH_SEC 20
 #define PSYNC_FS_FILESTREAMS_CNT 12
 #define PSYNC_FS_MIN_READAHEAD_START (128*1024)

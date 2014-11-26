@@ -669,10 +669,10 @@ static psync_encrypted_symmetric_key_t psync_crypto_get_file_enc_key(psync_filei
 }
 
 static psync_symmetric_key_t psync_crypto_get_folder_symkey_locked(psync_folderid_t folderid){
-  char buff[32];
+  char buff[16];
   psync_encrypted_symmetric_key_t enckey;
   psync_symmetric_key_t symkey;
-  sprintf(buff, "FKEY%"P_PRI_U64, folderid);
+  psync_get_string_id(buff, "FKEY", folderid);
   symkey=(psync_symmetric_key_t)psync_cache_get(buff);
   if (symkey)
     return symkey;
@@ -687,10 +687,10 @@ static psync_symmetric_key_t psync_crypto_get_folder_symkey_locked(psync_folderi
 }
 
 static psync_symmetric_key_t psync_crypto_get_file_symkey_locked(psync_fileid_t fileid, int nonetwork){
-  char buff[32];
+  char buff[16];
   psync_encrypted_symmetric_key_t enckey;
   psync_symmetric_key_t symkey;
-  sprintf(buff, "DKEY%"P_PRI_U64, fileid);
+  psync_get_string_id(buff, "DKEY", fileid);
   symkey=(psync_symmetric_key_t)psync_cache_get(buff);
   if (symkey)
     return symkey;
@@ -711,14 +711,14 @@ static void psync_crypto_release_symkey_ptr(void *ptr){
 }
 
 static void psync_crypto_release_folder_symkey_locked(psync_folderid_t folderid, psync_symmetric_key_t key){
-  char buff[32];
-  sprintf(buff, "FKEY%"P_PRI_U64, folderid);
+  char buff[16];
+  psync_get_string_id(buff, "FKEY", folderid);
   psync_cache_add(buff, key, PSYNC_CRYPTO_CACHE_DIR_SYM_KEY, psync_crypto_release_symkey_ptr, 2);
 }
 
 static void psync_crypto_release_file_symkey_locked(psync_fileid_t fileid, psync_symmetric_key_t key){
-  char buff[32];
-  sprintf(buff, "DKEY%"P_PRI_U64, fileid);
+  char buff[16];
+  psync_get_string_id(buff, "DKEY", fileid);
   psync_cache_add(buff, key, PSYNC_CRYPTO_CACHE_FILE_SYM_KEY, psync_crypto_release_symkey_ptr, 2);
 }
 
@@ -763,9 +763,9 @@ static psync_crypto_aes256_text_encoder_t psync_crypto_get_folder_encoder_locked
 }
 
 static psync_crypto_aes256_text_encoder_t psync_crypto_get_folder_encoder_check_cache_locked(psync_folderid_t folderid){
-  char buff[32];
+  char buff[16];
   psync_crypto_aes256_text_encoder_t enc;
-  sprintf(buff, "FLDE%"P_PRI_U64, folderid);
+  psync_get_string_id(buff, "FLDE", folderid);
   enc=(psync_crypto_aes256_text_encoder_t)psync_cache_get(buff);
   if (enc)
     return enc;
@@ -905,12 +905,12 @@ static psync_crypto_aes256_text_decoder_t psync_crypto_get_temp_folder_decoder_l
 }
 
 psync_crypto_aes256_text_decoder_t psync_cloud_crypto_get_folder_decoder(psync_fsfolderid_t folderid){
-  char buff[32];
+  char buff[16];
   psync_crypto_aes256_text_decoder_t dec;
   if (!crypto_started_un)
     return (psync_crypto_aes256_text_decoder_t)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
   if (folderid>=0){
-    sprintf(buff, "FLDD%"P_PRI_D64, folderid);
+    psync_get_string_id(buff, "FLDD", folderid);
     dec=(psync_crypto_aes256_text_decoder_t)psync_cache_get(buff);
     if (dec)
       return dec;
@@ -933,9 +933,9 @@ static void psync_crypto_free_folder_decoder(void *ptr){
 }
 
 void psync_cloud_crypto_release_folder_decoder(psync_fsfolderid_t folderid, psync_crypto_aes256_text_decoder_t decoder){
-  char buff[32];
+  char buff[16];
   if (crypto_started_un && folderid>=0){
-    sprintf(buff, "FLDD%"P_PRI_D64, folderid);
+    psync_get_string_id(buff, "FLDD", folderid);
     psync_cache_add(buff, decoder, PSYNC_CRYPTO_CACHE_DIR_ECODER_SEC, psync_crypto_free_folder_decoder, 2);
   }
   else
@@ -958,18 +958,18 @@ static void psync_crypto_free_folder_encoder(void *ptr){
 }
 
 static void psync_crypto_release_folder_encoder_locked(psync_folderid_t folderid, psync_crypto_aes256_text_encoder_t enc){
-  char buff[32];
-  sprintf(buff, "FLDE%"P_PRI_U64, folderid);
+  char buff[16];
+  psync_get_string_id(buff, "FLDE", folderid);
   psync_cache_add(buff, enc, PSYNC_CRYPTO_CACHE_DIR_ECODER_SEC, psync_crypto_free_folder_encoder, 2);
 }
 
 psync_crypto_aes256_text_encoder_t psync_cloud_crypto_get_folder_encoder(psync_fsfolderid_t folderid){
-  char buff[32];
+  char buff[16];
   psync_crypto_aes256_text_encoder_t enc;
   if (!crypto_started_un)
     return (psync_crypto_aes256_text_encoder_t)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
   if (folderid>=0){
-    sprintf(buff, "FLDE%"P_PRI_D64, folderid);
+    psync_get_string_id(buff, "FLDE", folderid);
     enc=(psync_crypto_aes256_text_encoder_t)psync_cache_get(buff);
     if (enc)
       return enc;
@@ -988,9 +988,9 @@ psync_crypto_aes256_text_encoder_t psync_cloud_crypto_get_folder_encoder(psync_f
 }
 
 void psync_cloud_crypto_release_folder_encoder(psync_fsfolderid_t folderid, psync_crypto_aes256_text_encoder_t encoder){
-  char buff[32];
+  char buff[16];
   if (crypto_started_un && folderid>=0){
-    sprintf(buff, "FLDE%"P_PRI_D64, folderid);
+    psync_get_string_id(buff, "FLDE", folderid);
     psync_cache_add(buff, encoder, PSYNC_CRYPTO_CACHE_DIR_ECODER_SEC, psync_crypto_free_folder_encoder, 2);
   }
   else
@@ -1100,12 +1100,12 @@ static psync_crypto_aes256_sector_encoder_decoder_t psync_crypto_get_temp_file_e
 }
 
 psync_crypto_aes256_sector_encoder_decoder_t psync_cloud_crypto_get_file_encoder(psync_fsfileid_t fileid, int nonetwork){
-  char buff[32];
+  char buff[16];
   psync_crypto_aes256_sector_encoder_decoder_t enc;
   if (!crypto_started_un)
     return (psync_crypto_aes256_sector_encoder_decoder_t)err_to_ptr(PSYNC_CRYPTO_NOT_STARTED);
   if (fileid>=0){
-    sprintf(buff, "SEEN%"P_PRI_D64, fileid);
+    psync_get_string_id(buff, "SEEN", fileid);
     enc=(psync_crypto_aes256_sector_encoder_decoder_t)psync_cache_get(buff);
     if (enc)
       return enc;
@@ -1152,9 +1152,9 @@ static void psync_crypto_free_file_encoder(void *ptr){
 }
 
 void psync_cloud_crypto_release_file_encoder(psync_fsfileid_t fileid, psync_crypto_aes256_sector_encoder_decoder_t encoder){
-  char buff[32];
   if (crypto_started_un && fileid>=0){
-    sprintf(buff, "SEEN%"P_PRI_D64, fileid);
+    char buff[16];
+    psync_get_string_id(buff, "SEEN", fileid);
     psync_cache_add(buff, encoder, PSYNC_CRYPTO_CACHE_FILE_ECODER_SEC, psync_crypto_free_file_encoder, 2);
   }
   else

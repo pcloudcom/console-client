@@ -54,6 +54,7 @@
 #include <sys/utsname.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
 #include <unistd.h>
@@ -65,6 +66,12 @@
 #include <grp.h>
 
 extern char **environ;
+
+#if defined(MAP_ANONYMOUS)
+#define PSYNC_MAP_ANONYMOUS MAP_ANONYMOUS
+#elif defined(MAP_ANON)
+#define PSYNC_MAP_ANONYMOUS MAP_ANON
+#endif
 
 #elif defined(P_OS_WINDOWS)
 
@@ -2670,5 +2677,34 @@ end tell\n";
   }
 #else
   return 0;
+#endif
+}
+
+void *psync_mmap_anon(size_t size){
+#if defined(PSYNC_MAP_ANONYMOUS)
+  return mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|PSYNC_MAP_ANONYMOUS, -1, 0);
+#elif defined(P_OS_WINDOWS)
+  return VirtualAlloc(NULL, size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
+#else
+  return malloc(size);
+#endif
+}
+
+int psync_munmap_anon(void *ptr, size_t size){
+#if defined(PSYNC_MAP_ANONYMOUS)
+  return munmap(ptr, size);
+#elif defined(P_OS_WINDOWS)
+  return psync_bool_to_zero(VirtualFree(ptr, 0, MEM_RELEASE));
+#else
+  free(ptr);
+  return 0;
+#endif
+}
+
+void psync_anon_reset(void *ptr, size_t size){
+#if defined(PSYNC_MAP_ANONYMOUS) && defined(MADV_DONTNEED)
+  madvise(ptr, size, MADV_DONTNEED);
+#elif defined(P_OS_WINDOWS)
+  VirtualAlloc(ptr, size, MEM_RESET, PAGE_READWRITE);
 #endif
 }

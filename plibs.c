@@ -63,7 +63,7 @@ static const uint8_t __hex_lookupl[513]={
   "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
 };
 
-static const char base64_table[]={
+const char base64_table[]={
         'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
         'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
@@ -110,11 +110,8 @@ static pthread_mutex_t psync_db_checkpoint_mutex;
 
 char *psync_strdup(const char *str){
   size_t len;
-  char *ptr;
   len=strlen(str)+1;
-  ptr=psync_new_cnt(char, len);
-  memcpy(ptr, str, len);
-  return ptr;
+  return (char *)memcpy(psync_new_cnt(char, len), str, len);
 }
 
 char *psync_strnormalize_filename(const char *str){
@@ -129,8 +126,7 @@ char *psync_strnormalize_filename(const char *str){
 
 char *psync_strndup(const char *str, size_t len){
   char *ptr;
-  ptr=psync_new_cnt(char, len+1);
-  memcpy(ptr, str, len);
+  ptr=(char *)memcpy(psync_new_cnt(char, len+1), str, len);
   ptr[len]=0;
   return ptr;
 }
@@ -301,8 +297,6 @@ unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size
   result[j]=0;
   return result;
 }
-
-
 
 void psync_sql_err_callback(void *ptr, int code, const char *msg){
   debug(D_WARNING, "database warning %d: %s", code, msg);

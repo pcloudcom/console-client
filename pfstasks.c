@@ -631,10 +631,10 @@ static psync_fsfileid_t get_file_at_old_location(psync_fsfileid_t fileid){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fsfileid_t ret;
-  char key[32];
+  char key[16];
   if (fileid<0)
     return 0;
-  sprintf(key, "HLOC%"PRIu64, (uint64_t)fileid);
+  psync_get_string_id(key, "HLOC", fileid);
   rec=(file_history_record *)psync_cache_get(key);
   if (!rec)
     return 0;
@@ -790,8 +790,8 @@ int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){
 static void add_history_record(psync_fileid_t fileid, psync_folderid_t folderid, const char *name){
   file_history_record *rec;
   size_t len;
-  char key[32];
-  sprintf(key, "HLOC%"PRIu64, fileid);
+  char key[16];
+  psync_get_string_id(key, "HLOC", fileid);
   while ((rec=(file_history_record *)psync_cache_get(key)))
     psync_free(rec);
   len=strlen(name)+1;

@@ -1358,7 +1358,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     psync_sql_unlock();
     return -ENOENT;
   }
-  if (unlikely(psync_fs_need_per_folder_refresh_const() && !memcmp(psync_fake_prefix, fpath->name, psync_fake_prefix_len)))
+  if (unlikely(psync_fs_need_per_folder_refresh_const() && !strncmp(psync_fake_prefix, fpath->name, psync_fake_prefix_len)))
     return psync_fs_creat_fake_locked(fpath, fi);
   if (!(fpath->permissions&PSYNC_PERM_CREATE)){
     psync_sql_unlock();

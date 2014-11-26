@@ -470,4 +470,8 @@ int psync_run_update_file(const char *path);
 int psync_invalidate_os_cache_needed();
 int psync_invalidate_os_cache(const char *path);
 
+void *psync_mmap_anon(size_t size);
+int psync_munmap_anon(void *ptr, size_t size);
+void psync_anon_reset(void *ptr, size_t size);
+
 #endif

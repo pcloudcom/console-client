@@ -149,6 +149,7 @@ typedef struct {
 static psync_list cache_hash[CACHE_HASH];
 static uint32_t cache_pages_in_hash=0;
 static uint32_t cache_pages_free;
+static int cache_pages_reset=1;
 static psync_list free_pages;
 static psync_list wait_page_hash[PAGE_WAITER_HASH];
 static char *pages_base;
@@ -540,7 +541,8 @@ err1:
 err4:
   psync_free(ret);
 err3:
-  psync_pagecache_set_bad_encoder(request->of);
+  if (request->needkey)
+    psync_pagecache_set_bad_encoder(request->of);
 err2:
   mark_shared_api_bad(api);
   psync_apipool_release_bad(api);
@@ -548,7 +550,7 @@ err2:
 }
 
 static psync_urls_t *get_urls_for_request(psync_request_t *req){
-  char buff[32];
+  char buff[16];
   psync_tree *el, **pel;
   psync_urls_t *urls;
   binresult *res;
@@ -599,7 +601,7 @@ static psync_urls_t *get_urls_for_request(psync_request_t *req){
   *pel=&urls->tree;
   psync_tree_added_at(&url_cache_tree, el, &urls->tree);
   pthread_mutex_unlock(&url_cache_mutex);
-  sprintf(buff, "URLS%"PRIu64, req->hash);
+  psync_get_string_id(buff, "URLS", req->hash);
   res=(binresult *)psync_cache_get(buff);
   if (res){
     set_urls(urls, res);
@@ -617,13 +619,13 @@ static void release_urls(psync_urls_t *urls){
   pthread_mutex_lock(&url_cache_mutex);
   if (--urls->refcnt==0){
     if (likely(urls->status==1)){
-      char buff[32];
+      char buff[16];
       time_t ctime, etime;
       psync_tree_del(&url_cache_tree, &urls->tree);
       ctime=psync_timer_time();
       etime=psync_find_result(urls->urls, "expires", PARAM_NUM)->num;
       if (etime>ctime+3600){
-        sprintf(buff, "URLS%"PRIu64, urls->hash);
+        psync_get_string_id(buff, "URLS", urls->hash);
         psync_cache_add(buff, urls->urls, etime-ctime-3600, psync_free, 2);
         urls->urls=NULL;
       }
@@ -992,7 +994,7 @@ static int flush_pages(int nosleep){
   ctime=psync_timer_time();
   psync_list_init(&pages_to_flush);
   pthread_mutex_lock(&cache_mutex);
-  if (diskfull && psync_list_isempty(&free_pages) && free_db_pages==0){
+  if (unlikely(diskfull && psync_list_isempty(&free_pages) && free_db_pages==0)){
     debug(D_NOTICE, "disk is full, discarding some pages");
     for (i=0; i<CACHE_HASH; i++)
       psync_list_for_each_element(page, &cache_hash[i], psync_cache_page_t, list)
@@ -1019,6 +1021,7 @@ static int flush_pages(int nosleep){
   }
   if (cache_pages_in_hash){
     debug(D_NOTICE, "flushing cache");
+    cache_pages_reset=0;
     for (i=0; i<CACHE_HASH; i++)
       psync_list_for_each_element(page, &cache_hash[i], psync_cache_page_t, list)
         if (page->type==PAGE_TYPE_READ){
@@ -1197,6 +1200,13 @@ static void psync_pagecache_flush_timer(psync_timer_t timer, void *ptr){
   if (!flushedbetweentimers && (cache_pages_in_hash || cachepages_to_update_cnt))
     psync_run_thread("flush pages timer", flush_pages_noret);
   flushedbetweentimers=0;
+  pthread_mutex_lock(&cache_mutex);
+  if (cache_pages_free==CACHE_PAGES && !cache_pages_reset){
+    cache_pages_reset=1;
+    debug(D_NOTICE, "resetting free pages");
+    psync_anon_reset(pages_base, CACHE_PAGES*PSYNC_FS_PAGE_SIZE);
+  }
+  pthread_mutex_unlock(&cache_mutex);
 }
 
 static void mark_pagecache_used(uint64_t pagecacheid){
@@ -1884,6 +1894,7 @@ int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint
   psync_list_init(&waiting);
   rq=psync_new(psync_request_t);
   psync_list_init(&rq->ranges);
+  lock_wait(hash);
   for (i=0; i<pagecnt; i++){
     if (i==0){
       copyoff=pageoff;
@@ -1919,15 +1930,15 @@ int psync_pagecache_read_unmodified_locked(psync_openfile_t *of, char *buf, uint
         break;
       }
     }
-    lock_wait(hash);
     add_page_waiter(&waiting, &rq->ranges, hash, first_page_id+i, fileid, pbuff, i, copyoff, copysize);
-    unlock_wait(hash);
   }
+  unlock_wait(hash);
   psync_pagecache_read_unmodified_readahead(of, poffset, psize, &rq->ranges, fileid, hash, initialsize, NULL);
   if (!psync_list_isempty(&rq->ranges)){
     rq->of=of;
     rq->fileid=fileid;
     rq->hash=hash;
+    rq->needkey=0;
     psync_fs_inc_of_refcnt_and_readers(of);
     psync_run_thread1("read unmodified", psync_pagecache_read_unmodified_thread, rq);
   }
@@ -2782,7 +2793,7 @@ void psync_pagecache_init(){
     pthread_mutex_init(&wait_page_mutexes[i], NULL);
   psync_list_init(&free_pages);
   memset(cachepages_to_update, 0, sizeof(cachepages_to_update));
-  pages_base=(char *)psync_malloc(CACHE_PAGES*(PSYNC_FS_PAGE_SIZE+sizeof(psync_cache_page_t)));
+  pages_base=(char *)psync_mmap_anon(CACHE_PAGES*(PSYNC_FS_PAGE_SIZE+sizeof(psync_cache_page_t)));
   page_data=pages_base;
   page=(psync_cache_page_t *)(page_data+CACHE_PAGES*PSYNC_FS_PAGE_SIZE);
   cache_pages_free=CACHE_PAGES;
