@@ -81,3 +81,6 @@ void psync_pagecache_clean_cache(){
 
 void psync_fs_pause_until_login(){
 }
+
+void psync_fs_clean_tasks(){
+}

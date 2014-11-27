@@ -382,6 +382,7 @@ void psync_unlink(){
   pthread_mutex_unlock(&psync_my_auth_mutex);
   debug(D_NOTICE, "clearing database, finished");
   psync_fs_pause_until_login();
+  psync_fs_clean_tasks();
   psync_sql_unlock();
   psync_sql_checkpoint_unlock();
   psync_settings_reset();

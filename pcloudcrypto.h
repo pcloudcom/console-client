@@ -61,6 +61,7 @@ psync_crypto_aes256_sector_encoder_decoder_t psync_cloud_crypto_get_file_encoder
 psync_crypto_aes256_sector_encoder_decoder_t psync_cloud_crypto_get_file_encoder_from_binresult(psync_fileid_t fileid, binresult *res);
 void psync_cloud_crypto_release_file_encoder(psync_fsfileid_t fileid, psync_crypto_aes256_sector_encoder_decoder_t encoder);
 
+char *psync_cloud_crypto_get_file_encoded_key(psync_fsfileid_t fileid, size_t *keylen);
 char *psync_cloud_crypto_get_new_encoded_key(uint32_t flags, size_t *keylen);
 char *psync_cloud_crypto_get_new_encoded_and_plain_key(uint32_t flags, size_t *keylen, psync_symmetric_key_t *deckey);
 

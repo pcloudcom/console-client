@@ -1593,6 +1593,43 @@ static psync_init_task_ptr psync_init_task_func[]={
   psync_init_task_unlink_set_rev
 };
 
+static void psync_fstask_free_tree(psync_tree *tr){
+  psync_tree *ntr;
+  tr=psync_tree_get_first_safe(tr);
+  while (tr){
+    ntr=psync_tree_get_next_safe(tr);
+    psync_free(tr);
+    tr=ntr;
+  }
+}
+
+void psync_fstask_clean(){
+  psync_fstask_folder_t *folder;
+  psync_tree *tr;
+  psync_sql_lock();
+  tr=psync_tree_get_first(folders);
+  while (tr){
+    folder=psync_tree_element(tr, psync_fstask_folder_t, tree);
+    tr=psync_tree_get_next(tr);
+    psync_fstask_free_tree(folder->creats);
+    psync_fstask_free_tree(folder->unlinks);
+    psync_fstask_free_tree(folder->mkdirs);
+    psync_fstask_free_tree(folder->rmdirs);
+    if (folder->refcnt==0){
+      psync_tree_del(&folders, &folder->tree);
+      psync_free(folder);
+    }
+    else{
+      folder->creats=PSYNC_TREE_EMPTY;
+      folder->unlinks=PSYNC_TREE_EMPTY;
+      folder->mkdirs=PSYNC_TREE_EMPTY;
+      folder->rmdirs=PSYNC_TREE_EMPTY;
+      folder->taskscnt=0;
+    }
+  }
+  psync_sql_unlock();
+}
+
 void psync_fstask_init(){
   psync_uint_t tp;
   psync_sql_res *res;

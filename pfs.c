@@ -1223,12 +1223,17 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       debug(D_NOTICE, "creating file %s", path);
     if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
       if (row){
-        encoder=psync_cloud_crypto_get_file_encoder(fileid, 1);
+        encoder=psync_cloud_crypto_get_file_encoder(fileid, 0);
         if (unlikely_log(psync_crypto_is_error(encoder))){
           ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
           goto ex0;
         }
-        
+        encsymkey=psync_cloud_crypto_get_file_encoded_key(fileid, &encsymkeylen);
+        if (unlikely_log(psync_crypto_is_error(encsymkey))){
+          psync_cloud_crypto_release_file_encoder(fileid, encoder);
+          ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encsymkey));
+          goto ex0;
+        }
       }
       else{
         psync_symmetric_key_t symkey;
@@ -2723,6 +2728,10 @@ void psync_fs_pause_until_login(){
     psync_run_thread("fs wait login", psync_fs_wait_login);
   }
   psync_sql_unlock();  
+}
+
+void psync_fs_clean_tasks(){
+  psync_fstask_clean();
 }
 
 int psync_fs_start(){
