@@ -105,6 +105,7 @@ static psync_socket *get_connected_socket(){
   char *auth, *user, *pass;
   psync_socket *sock;
   binresult *res;
+  const binresult *cres;
   psync_sql_res *q;
   char *device;
   uint64_t result, userid, luserid;
@@ -244,6 +245,25 @@ static psync_socket *get_connected_socket(){
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }
+    cres=psync_check_result(res, "account", PARAM_HASH);
+    q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+    if (cres){
+      psync_sql_bind_string(q, 1, "business");
+      psync_sql_bind_uint(q, 2, 1);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "firstname");
+      psync_sql_bind_string(q, 2, psync_find_result(cres, "firstname", PARAM_STR)->str);
+      psync_sql_run(q);
+      psync_sql_bind_string(q, 1, "lastname");
+      psync_sql_bind_string(q, 2, psync_find_result(cres, "lastname", PARAM_STR)->str);
+      psync_sql_run(q);
+    }
+    else{
+      psync_sql_bind_string(q, 1, "business");
+      psync_sql_bind_uint(q, 2, 0);
+      psync_sql_run(q);
+    }
+    psync_sql_free_result(q);
     psync_sql_commit_transaction();
     pthread_mutex_lock(&psync_my_auth_mutex);
     if (psync_my_pass){
@@ -259,11 +279,31 @@ static psync_socket *get_connected_socket(){
       psync_sql_statement("DELETE FROM setting WHERE id='pass'");
     else
       psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
-    psync_sql_sync();
     psync_free(res);
+    if (cres){
+      binparam params[]={P_STR("timeformat", "timestamp"), 
+                         P_STR("auth", psync_my_auth)};
+      res=send_command(sock, "account_info", params);
+      if (unlikely_log(!res)){
+        psync_socket_close(sock);
+        continue;
+      }
+      result=psync_find_result(res, "result", PARAM_NUM)->num;
+      if (likely(result==0)){
+        cres=psync_check_result(res, "account", PARAM_HASH);
+        q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+        psync_sql_bind_string(q, 1, "company");
+        psync_sql_bind_string(q, 2, psync_find_result(cres, "company", PARAM_STR)->str);
+        psync_sql_run_free(q);
+      }
+      else
+        debug(D_WARNING, "account_info returned %lu, continuing without business info", (unsigned long)result);
+      psync_free(res);
+    }
     psync_free(auth);
     psync_free(user);
     psync_free(pass);
+    psync_sql_sync();
     return sock;
   }
 }
