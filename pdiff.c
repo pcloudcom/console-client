@@ -1616,6 +1616,48 @@ static void psync_diff_refresh_fs(const binresult *entries){
   }
 }
 
+static void psync_run_analyze_if_needed(){
+  if (psync_timer_time()>psync_sql_cellint("SELECT value FROM setting WHERE id='lastanalyze'", 0)+24*3600){
+    psync_sql_res *res;
+    psync_uint_row row;
+    psync_str_row srow;
+    char **tablenames;
+    char *sql;
+    size_t tablecnt;
+    debug(D_NOTICE, "running ANALYZE on tables");
+    res=psync_sql_query("SELECT COUNT(*) FROM sqlite_master WHERE type='table'");
+    if ((row=psync_sql_fetch_rowint(res)))
+      tablecnt=row[0];
+    else
+      tablecnt=0;
+    psync_sql_free_result(res);
+    tablenames=psync_new_cnt(char *, tablecnt);
+    res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='table' LIMIT ?");
+    psync_sql_bind_uint(res, 1, tablecnt);
+    tablecnt=0;
+    while ((srow=psync_sql_fetch_rowstr(res)))
+      tablenames[tablecnt++]=psync_strdup(srow[0]);
+    psync_sql_free_result(res);
+    
+    while (tablecnt){
+      --tablecnt;
+      debug(D_NOTICE, "running ANALYZE on %s", tablenames[tablecnt]);
+      sql=psync_strcat("ANALYZE ", tablenames[tablecnt], ";", NULL);
+      psync_free(tablenames[tablecnt]);
+      psync_sql_statement(sql);
+      psync_free(sql);
+      debug(D_NOTICE, "table done");
+      psync_milisleep(5);
+    }
+    psync_free(tablenames);
+    res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+    psync_sql_bind_string(res, 1, "lastanalyze");
+    psync_sql_bind_uint(res, 2, psync_timer_time());
+    psync_sql_run_free(res);
+    debug(D_NOTICE, "done running ANALYZE on tables");
+  }
+}
+
 static void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
@@ -1668,7 +1710,6 @@ restart:
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   initialdownload=0;
   psync_syncer_check_delayed_syncs();
-  psync_sql_statement("ANALYZE");
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){
     debug(D_ERROR, "could not create pipe");
@@ -1678,6 +1719,8 @@ restart:
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
   send_diff_command(sock, diffid);
+  psync_milisleep(50);
+  psync_run_analyze_if_needed();
   while (psync_do_run){
     if (psync_socket_pendingdata(sock))
       sel=1;

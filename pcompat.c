@@ -565,6 +565,8 @@ static void psync_get_random_seed_from_db(psync_lhash_ctx *hctx){
   psync_get_random_seed_from_query(hctx, res);
   res=psync_sql_query("SELECT * FROM hashchecksum ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);
+  res=psync_sql_query("SELECT * FROM pagecache WHERE type=1 AND rowid>(ABS(RANDOM())%(SELECT MAX(rowid)+1 FROM pagecache)) ORDER BY rowid LIMIT 50");
+  psync_get_random_seed_from_query(hctx, res);
   psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('random', RANDOM())");
   psync_nanotime(&tm);
   psync_lhash_update(hctx, &tm, sizeof(&tm));

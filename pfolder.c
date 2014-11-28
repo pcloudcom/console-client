@@ -233,12 +233,13 @@ static string_list *str_list_decode(psync_folderid_t folderid, string_list *e){
   dec=psync_cloud_crypto_get_folder_decoder(folderid);
   if (psync_crypto_is_error(dec)){
     psync_free(e);
+    debug(D_WARNING, "got error %d getting decoder for folderid %lu", psync_crypto_to_error(dec), (unsigned long)folderid);
     return NULL;
   }
   fn=psync_cloud_crypto_decode_filename(dec, e->str);
   psync_cloud_crypto_release_folder_decoder(folderid, dec);
   psync_free(e);
-  if (!fn)
+  if (unlikely_log(!fn))
     return NULL;
   e=str_to_list_element(fn, strlen(fn));
   psync_free(fn);
@@ -266,19 +267,19 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
     res=psync_sql_query("SELECT parentfolderid, name, flags FROM folder WHERE id=?");
     psync_sql_bind_uint(res, 1, folderid);
     row=psync_sql_fetch_row(res);
-    if (unlikely(!row))
+    if (unlikely_log(!row))
       break;
-    folderid=psync_get_number(row[0]);
-    str=psync_get_lstring(row[1], &len);
     flags=psync_get_number(row[2]);
     if (e){
       if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
         e=str_list_decode(folderid, e);
-        if (!e)
+        if (unlikely_log(!e))
           break;
       }
       psync_list_add_head(lst, &e->list);
     }
+    folderid=psync_get_number(row[0]);
+    str=psync_get_lstring(row[1], &len);
     e=str_to_list_element(str, len);
     psync_sql_free_result(res);
   }

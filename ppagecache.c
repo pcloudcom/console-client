@@ -2739,7 +2739,12 @@ int psync_pagecache_copy_all_pages_from_cache_to_file_locked(psync_openfile_t *o
     if (psync_file_pwrite(of->datafile, buff, rb, i*PSYNC_FS_PAGE_SIZE)!=rb)
       return -1;
   }
-  return 0;
+  if (unlikely_log(psync_file_sync(of->datafile)))
+    return -1;
+  else{
+    debug(D_NOTICE, "copied %lu bytes to data file of %s from cache", (unsigned long)size, of->currentname);
+    return 0;
+  }
 }
 
 int psync_pagecache_lock_pages_in_cache(){
@@ -2752,7 +2757,7 @@ int psync_pagecache_lock_pages_in_cache(){
 
 void psync_pagecache_unlock_pages_from_cache(){
   pthread_mutex_lock(&clean_cache_mutex);
-  if (--clean_cache_stoppers && clean_cache_waiters)
+  if (--clean_cache_stoppers==0 && clean_cache_waiters)
     pthread_cond_broadcast(&clean_cache_cond);
   pthread_mutex_unlock(&clean_cache_mutex);
 }

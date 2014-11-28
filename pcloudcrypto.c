@@ -1268,23 +1268,15 @@ int psync_cloud_crypto_send_mkdir(psync_folderid_t folderid, const char *name, c
 }
 
 char *psync_cloud_crypto_get_file_encoded_key(psync_fsfileid_t fileid, size_t *keylen){
-  psync_sql_res *res;
-  psync_variant_row row;
-  const char *enckey;
+  psync_encrypted_symmetric_key_t encsym;
   char *ret;
-  size_t ekeylen;
   if (fileid<0)
     return (char *)err_to_ptr(PSYNC_CRYPTO_FILE_NOT_FOUND);
-  res=psync_sql_query("SELECT enckey FROM cryptofilekey WHERE fileid=?");
-  psync_sql_bind_uint(res, 1, fileid);
-  row=psync_sql_fetch_row(res);
-  if (unlikely_log(!row)){
-    psync_sql_free_result(res);
-    return (char *)err_to_ptr(PSYNC_CRYPTO_FILE_NOT_FOUND);
-  }
-  enckey=psync_get_lstring(row[0], &ekeylen);
-  ret=(char *)psync_base64_encode((const unsigned char *)enckey, ekeylen, keylen);
-  psync_sql_free_result(res);
+  encsym=psync_crypto_get_file_enc_key(fileid, 0);
+  if (psync_crypto_is_error(encsym))
+    return (char *)encsym;
+  ret=(char *)psync_base64_encode(encsym->data, encsym->datalen, keylen);
+  psync_free(encsym);
   return ret;
 }
 

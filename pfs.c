@@ -1702,6 +1702,8 @@ static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
 PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of){
   psync_fstask_creat_t *cr;
   uint64_t size;
+  char *encsymkey;
+  size_t encsymkeylen;
   int ret;
   debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
   if (unlikely(of->encrypted && of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)){
@@ -1728,14 +1730,27 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     size=psync_fs_crypto_crypto_size(of->initialsize);
   else
     size=of->initialsize;
+  if (of->encrypted){
+    encsymkey=psync_cloud_crypto_get_file_encoded_key(of->fileid, &encsymkeylen);
+    if (unlikely_log(psync_crypto_is_error(encsymkey))){
+      psync_sql_unlock();
+      pthread_mutex_unlock(&of->mutex);
+      return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(encsymkey));
+    }
+  }
+  else{
+    encsymkey=NULL;
+    encsymkeylen=0;
+  }
   if (size==0 || (size<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE && 
         psync_pagecache_have_all_pages_in_cache(of->hash, size) && !psync_pagecache_lock_pages_in_cache())){
     debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
-    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
+    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, encsymkey, encsymkeylen);
     if (unlikely_log(!cr)){
       psync_sql_unlock();
       pthread_mutex_unlock(&of->mutex);
       psync_pagecache_unlock_pages_from_cache();
+      psync_free(encsymkey);
       return -EIO;
     }
     psync_fs_update_openfile_fileid_locked(of, cr->fileid);
@@ -1746,6 +1761,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     if (unlikely_log(ret)){
       pthread_mutex_unlock(&of->mutex);
       psync_pagecache_unlock_pages_from_cache();
+      psync_free(encsymkey);
       return ret;
     }
     if (size){
@@ -1753,12 +1769,15 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
       psync_pagecache_unlock_pages_from_cache();
       if (unlikely_log(ret)){
         pthread_mutex_unlock(&of->mutex);
+        psync_free(encsymkey);
         return -EIO;
       }
     }
+    of->currentsize=of->initialsize;
     return 1;
   }
   cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
+  psync_free(encsymkey);
   if (unlikely_log(!cr)){
     psync_sql_unlock();
     pthread_mutex_unlock(&of->mutex);
@@ -1818,16 +1837,17 @@ retry:
       return bw;
   }
   else{
-    if (of->encrypted){
-      debug(D_ERROR, "not implemented");
-      return -ENOSYS;
-    }
     if (unlikely(!of->modified)){
       ret=psync_fs_reopen_file_for_writing(of);
       if (ret==1)
         goto retry;
       else if (ret<0)
         return ret;
+    }
+    if (of->encrypted){
+      debug(D_ERROR, "not implemented");
+      pthread_mutex_unlock(&of->mutex);
+      return -ENOSYS;
     }
     if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
       return -EIO;
