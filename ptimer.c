@@ -54,16 +54,11 @@ struct exception_list {
   pthread_t threadid;
 };
 
-typedef struct {
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
-  int waiting;
-} mutex_cond;
-
 static psync_list timerlists[TIMER_LEVELS][TIMER_ARRAY_SIZE];
 static struct exception_list *excepions=NULL;
 static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
+static uint32_t nextsecwaiters=0;
 static int timer_running=0;
 
 static void timer_check_upper_levels(time_t tmdiv, psync_uint_t level, psync_uint_t sh){
@@ -114,6 +109,8 @@ static void timer_thread(){
     pthread_mutex_lock(&timer_mutex);
 //    pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
     timer_prepare_timers(lt, psync_current_time, &timers);
+    if (nextsecwaiters)
+      pthread_cond_broadcast(&timer_cond);
     pthread_mutex_unlock(&timer_mutex);
     if (!psync_list_isempty(&timers)){
       psync_list_for_each_element(timer, &timers, psync_timer_structure_t, list)
@@ -237,27 +234,14 @@ void psync_timer_do_notify_exception(){
   }
 }
 
-static void next_sec(psync_timer_t timer, void *ptr){
-  mutex_cond *mc;
-  psync_timer_stop(timer);
-  mc=(mutex_cond *)ptr;
-  pthread_mutex_lock(&mc->mutex);
-  mc->waiting=0;
-  pthread_cond_signal(&mc->cond);
-  pthread_mutex_unlock(&mc->mutex);
-}
-
 void psync_timer_wait_next_sec(){
-  mutex_cond mc;
-  pthread_mutex_init(&mc.mutex, NULL);
-  pthread_cond_init(&mc.cond, NULL);
-  mc.waiting=1;
-  pthread_mutex_lock(&mc.mutex);
-  psync_timer_register(next_sec, 1, &mc);
+  time_t ctime;
+  pthread_mutex_lock(&timer_mutex);
+  ctime=psync_current_time;
   do {
-    pthread_cond_wait(&mc.cond, &mc.mutex);
-  } while (mc.waiting);
-  pthread_mutex_unlock(&mc.mutex);
-  pthread_cond_destroy(&mc.cond);
-  pthread_mutex_destroy(&mc.mutex);
+    nextsecwaiters++;
+    pthread_cond_wait(&timer_cond, &timer_mutex);
+    nextsecwaiters--;
+  } while (ctime==psync_current_time);
+  pthread_mutex_unlock(&timer_mutex);
 }
