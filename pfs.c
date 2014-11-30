@@ -1776,7 +1776,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     of->currentsize=of->initialsize;
     return 1;
   }
-  cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
+  cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash, encsymkey, encsymkeylen);
   psync_free(encsymkey);
   if (unlikely_log(!cr)){
     psync_sql_unlock();
@@ -2261,7 +2261,15 @@ static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_fil
   psync_fs_set_thread_name();
   debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   of=fh_to_openfile(fi->fh);
+  // TODO: fix
+  if (of->encrypted)
+    return -ENOSYS;
   pthread_mutex_lock(&of->mutex);
+  if (of->currentsize==size){
+    debug(D_NOTICE, "not truncating as size is already %lu", (long unsigned)size);
+    pthread_mutex_unlock(&of->mutex);
+    return 0;
+  }
   psync_fs_inc_writeid_locked(of);
 retry:
   if (unlikely(!of->newfile && !of->modified)){
@@ -2277,7 +2285,7 @@ retry:
         goto retry;
       }
     }
-    cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash);
+    cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash, NULL, 0);
     psync_sql_unlock();
     if (unlikely_log(!cr)){
       pthread_mutex_unlock(&of->mutex);

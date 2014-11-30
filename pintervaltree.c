@@ -104,9 +104,11 @@ void psync_interval_tree_add(psync_interval_tree_t **tree, uint64_t from, uint64
 }
 
 void psync_interval_tree_free(psync_interval_tree_t *tree){
-  if (!tree)
-    return;
-  psync_interval_tree_free(psync_interval_tree_element(tree->tree.left));
-  psync_interval_tree_free(psync_interval_tree_element(tree->tree.right));
-  psync_free(tree);
+  psync_interval_tree_t *ntree;
+  tree=psync_interval_tree_element(psync_tree_get_first_safe(&tree->tree));
+  while (tree){
+    ntree=psync_interval_tree_element(psync_tree_get_next_safe(&tree->tree));
+    psync_free(tree);
+    tree=ntree;
+  }
 }

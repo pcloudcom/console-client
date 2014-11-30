@@ -708,7 +708,7 @@ static int upload_modify_read_req(psync_socket *api){
 }
 
 int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, const char *filename, const char *indexname, psync_fileid_t fileid, 
-              uint64_t hash, uint64_t writeid){
+              uint64_t hash, uint64_t writeid, const char *key){
   binparam aparams[]={P_STR("auth", psync_my_auth)};
   psync_interval_tree_t *tree, *cinterval;
   psync_socket *api;
@@ -842,7 +842,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
     psync_apipool_release(api);
     return -1;
   }
-  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 0, hash, NULL);
+  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 0, hash, key);
 err3:
   psync_file_close(fd);
 err2:
@@ -918,7 +918,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     if (type==PSYNC_FS_TASK_CREAT)
       ret=large_upload_creat(taskid, folderid, name, filename, uploadid, writeid, key);
     else if (type==PSYNC_FS_TASK_MODIFY)
-      ret=upload_modify(taskid, folderid, name, filename, indexname, fileid, hash, writeid);
+      ret=upload_modify(taskid, folderid, name, filename, indexname, fileid, hash, writeid, key);
     else{
       ret=0;
       debug(D_BUG, "wrong type %lu for task %lu", (unsigned long)type, (unsigned long)taskid);

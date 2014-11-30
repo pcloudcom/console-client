@@ -581,7 +581,8 @@ void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat
   folder->taskscnt++;
 }
 
-psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, uint64_t hash){
+psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, 
+                                                     uint64_t hash, const char *encsymkey, size_t encsymkeylen){
   psync_sql_res *res;
   psync_fstask_unlink_t *un;
   psync_fstask_creat_t *task;
@@ -589,12 +590,17 @@ psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *fold
   size_t len;
   len=strlen(name);
   psync_sql_start_transaction();
-  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, fileid, sfolderid, text1, int1, int2) VALUES ("NTO_STR(PSYNC_FS_TASK_MODIFY)", 1, ?, ?, ?, ?, 0, ?)");
+  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, fileid, sfolderid, text1, text2, int1, int2) "
+                               "VALUES ("NTO_STR(PSYNC_FS_TASK_MODIFY)", 1, ?, ?, ?, ?, 0, ?)");
   psync_sql_bind_int(res, 1, folder->folderid);
   psync_sql_bind_int(res, 2, fileid);
   psync_sql_bind_int(res, 3, folder->folderid);
   psync_sql_bind_lstring(res, 4, name, len);
-  psync_sql_bind_uint(res, 5, hash);
+  if (encsymkey)
+    psync_sql_bind_lstring(res, 5, encsymkey, encsymkeylen);
+  else
+    psync_sql_bind_null(res, 5);
+  psync_sql_bind_uint(res, 6, hash);
   psync_sql_run_free(res);
   taskid=psync_sql_insertid();
   if (folder->folderid<0)
