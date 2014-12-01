@@ -262,14 +262,12 @@ int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum,
   if (unlikely(!api))
     return PSYNC_NET_TEMPFAIL;
   res=send_command(api, "checksumfile", params);
-  if (res)
-    psync_apipool_release(api);
-  else
-    psync_apipool_release_bad(api);
   if (unlikely_log(!res)){
+    psync_apipool_release_bad(api);
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
   }
+  psync_apipool_release(api);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     debug(D_ERROR, "checksumfile returned error %lu", (unsigned long)result);
@@ -2048,14 +2046,12 @@ static int download_file_revisions(psync_fileid_t fileid){
   if (unlikely(!api))
     return PSYNC_NET_TEMPFAIL;
   res=send_command(api, "listrevisions", params);
-  if (res)
-    psync_apipool_release(api);
-  else
-    psync_apipool_release_bad(api);
   if (unlikely_log(!res)){
+    psync_apipool_release_bad(api);
     psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
   }
+  psync_apipool_release(api);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     debug(D_ERROR, "listrevisions returned error %lu", (unsigned long)result);
@@ -2142,9 +2138,12 @@ int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, u
   if (unlikely(!api))
     return PSYNC_NET_TEMPFAIL;
   res=send_command(api, "upload_info", params);
-  psync_apipool_release(api);
-  if (unlikely(!res))
+  if (unlikely_log(!res)){
+    psync_apipool_release_bad(api);
+    psync_timer_notify_exception();
     return PSYNC_NET_TEMPFAIL;
+  }
+  psync_apipool_release(api);
   if (psync_find_result(res, "result", PARAM_NUM)->num){
     psync_free(res);
     return PSYNC_NET_PERMFAIL;
