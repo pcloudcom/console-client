@@ -809,6 +809,13 @@ static psync_socket_t connect_res(struct addrinfo *res){
 #endif
   while (res){
     sock=socket(res->ai_family, res->ai_socktype|PSOCK_TYPE_OR, res->ai_protocol);
+#if defined(P_OS_WINDOWS)
+    if (unlikely(sock==INVALID_SOCKET && WSAGetLastError()==WSANOTINITIALISED)){
+      WSADATA wsaData;
+      if (!WSAStartup(MAKEWORD(2, 2), &wsaData))
+        sock=socket(res->ai_family, res->ai_socktype|PSOCK_TYPE_OR, res->ai_protocol);
+    }
+#endif
     if (likely_log(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
@@ -834,7 +841,7 @@ static psync_socket_t connect_res(struct addrinfo *res){
 }
 
 psync_socket_t psync_create_socket(int domain, int type, int protocol){
-  int ret;
+  psync_socket_t ret;
   ret=socket(domain, type, protocol);
 #if defined(P_OS_WINDOWS)
   if (unlikely(ret==INVALID_SOCKET && WSAGetLastError()==WSANOTINITIALISED)){
