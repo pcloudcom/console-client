@@ -591,7 +591,7 @@ psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *fold
   len=strlen(name);
   psync_sql_start_transaction();
   res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, fileid, sfolderid, text1, text2, int1, int2) "
-                               "VALUES ("NTO_STR(PSYNC_FS_TASK_MODIFY)", 1, ?, ?, ?, ?, 0, ?)");
+                               "VALUES ("NTO_STR(PSYNC_FS_TASK_MODIFY)", 1, ?, ?, ?, ?, ?, 0, ?)");
   psync_sql_bind_int(res, 1, folder->folderid);
   psync_sql_bind_int(res, 2, fileid);
   psync_sql_bind_int(res, 3, folder->folderid);

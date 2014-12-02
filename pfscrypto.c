@@ -1,12 +1,41 @@
+/* Copyright (c) 2014 Anton Titov.
+ * Copyright (c) 2014 pCloud Ltd.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of pCloud Ltd nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL pCloud Ltd BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include "plibs.h"
 #include "pfscrypto.h"
 #include "pcloudcrypto.h"
+#include "ppagecache.h"
 
 // this is only for debug, adds needless checks of tree for local files
-#define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
+//#define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
 
 #define PSYNC_CRYPTO_LOG_HEADER 0
 #define PSYNC_CRYPTO_LOG_DATA   1
+#define PSYNC_CRYPTO_LOG_INT    2
 
 #define PSYNC_CRYPTO_HASH_TREE_SHIFT 8
 
@@ -19,9 +48,11 @@ typedef struct {
   union {
     uint16_t u16;
     uint16_t length;
+    uint16_t longlengthhi;
   };
   union {
     uint32_t u32;
+    uint32_t longlengthlo;
   };
   union {
     uint64_t u64;
@@ -170,7 +201,7 @@ static int psync_fs_crypto_read_newfile_full_sector_from_log(psync_openfile_t *o
     debug(D_ERROR, "bad log record type %u", (unsigned)hdr.type);
     return -EIO;
   }
-  assert(hdr.offset==(uint64_t)se->sectorid*PSYNC_CRYPTO_SECTOR_SIZE);
+  assert(hdr.offset==(uint64_t)psync_fs_crypto_data_sectorid_by_sectorid(se->sectorid)*PSYNC_CRYPTO_SECTOR_SIZE);
   assert(hdr.length<=PSYNC_CRYPTO_SECTOR_SIZE);
   rd=psync_file_pread(of->logfile, buff, hdr.length, se->logoffset+sizeof(hdr));
   if (rd!=hdr.length)
@@ -455,6 +486,8 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         debug(D_ERROR, "write to log of %u bytes returned %d", (unsigned)sz, (int)wrt);
         return -EIO;
       }
+      if (!of->newfile)
+        psync_interval_tree_add(&of->writeintervals, hdr.offset, hdr.offset+sz);
       of->logoffset+=sz+sizeof(hdr);
       oldsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
       newsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
@@ -518,6 +551,8 @@ static int psync_fs_crypto_write_master_auth(psync_openfile_t *of, psync_crypto_
     debug(D_ERROR, "write to log of %u bytes returned %d", (unsigned)sizeof(data), (int)wrt);
     return -EIO;
   }
+  if (!of->newfile)
+    psync_interval_tree_add(&of->writeintervals, offsets->masterauthoff, offsets->masterauthoff+PSYNC_CRYPTO_AUTH_SIZE);
   of->logoffset+=sizeof(data);
   return 0;
 }
@@ -543,17 +578,18 @@ static int psync_fs_write_auth_tree_to_log(psync_openfile_t *of, psync_crypto_of
   ret=psync_fs_crypto_switch_sectors(of, lastsect, PSYNC_CRYPTO_INVALID_SECTORID, authsect, offsets);
   if (ret)
     return ret;
-  if (offsets->needmasterauth){
-    ret=psync_fs_crypto_write_master_auth(of, authsect, offsets);
-  }
+  if (offsets->needmasterauth && (ret=psync_fs_crypto_write_master_auth(of, authsect, offsets)))
+    return ret;
   return 0;
 }
 
 static int psync_fs_crypto_process_log(psync_openfile_t *of, psync_fsfileid_t fd){
   char buff[PSYNC_CRYPTO_SECTOR_SIZE];
+  psync_fs_index_record *records;
   psync_crypto_log_header hdr;
   uint64_t off, size;
   ssize_t rd;
+  uint32_t recid;
   if (unlikely_log(psync_file_pread(fd, &hdr, sizeof(hdr), 0)!=sizeof(hdr)))
     return -1;
   if (unlikely_log(hdr.type!=PSYNC_CRYPTO_LOG_HEADER))
@@ -562,6 +598,11 @@ static int psync_fs_crypto_process_log(psync_openfile_t *of, psync_fsfileid_t fd
   off=sizeof(hdr);
   if (unlikely_log(psync_file_seek(of->datafile, size, P_SEEK_SET)!=size || psync_file_truncate(of->datafile)))
     return -1;
+  if (!of->newfile && (psync_file_seek(of->indexfile, sizeof(psync_fs_index_header), P_SEEK_SET)!=0 || psync_file_truncate(of->indexfile)))
+    return -1;
+  records=(psync_fs_index_record *)buff;
+  recid=0;
+  of->indexoff=0;
   while ((rd=psync_file_pread(fd, &hdr, sizeof(hdr), off))!=0){
     if (unlikely_log(rd!=sizeof(hdr)))
       return -1;
@@ -569,6 +610,7 @@ static int psync_fs_crypto_process_log(psync_openfile_t *of, psync_fsfileid_t fd
     if (hdr.type==PSYNC_CRYPTO_LOG_DATA){
       assert(hdr.length<=sizeof(buff));
       assert(hdr.offset+hdr.length<=size);
+      assert(recid==0);
       rd=psync_file_pread(fd, buff, hdr.length, off);
       if (unlikely(rd!=hdr.length)){
         debug(D_ERROR, "error reading from log file of %s, expected to read %u got %d", of->currentname, (unsigned)hdr.length, (int)rd);
@@ -581,10 +623,32 @@ static int psync_fs_crypto_process_log(psync_openfile_t *of, psync_fsfileid_t fd
         return -1;
       }
     }
+    else if (hdr.type==PSYNC_CRYPTO_LOG_INT){
+      assert(!of->newfile);
+      records[recid].offset=hdr.offset;
+      records[recid].length=hdr.longlengthlo+((uint64_t)hdr.longlengthhi<<32);
+      if (++recid>=PSYNC_CRYPTO_SECTOR_SIZE/sizeof(psync_fs_index_record)){
+        rd=psync_file_pwrite(of->indexfile, records, sizeof(psync_fs_index_record)*recid, sizeof(psync_fs_index_record)*of->indexoff+sizeof(psync_fs_index_header));
+        if (rd!=sizeof(psync_fs_index_record)*recid){
+          debug(D_ERROR, "error writing to index file of %s, expected to write %u got %d", of->currentname, (unsigned)(sizeof(psync_fs_index_record)*recid), (int)rd);
+          return -1;
+        }
+        of->indexoff+=recid;
+        recid=0;
+      }
+    }
     else{
       debug(D_ERROR, "bad record type %u", (unsigned)hdr.type);
       return -1;
     }
+  }
+  if (recid){
+    rd=psync_file_pwrite(of->indexfile, records, sizeof(psync_fs_index_record)*recid, sizeof(psync_fs_index_record)*of->indexoff+sizeof(psync_fs_index_header));
+    if (rd!=sizeof(psync_fs_index_record)*recid){
+      debug(D_ERROR, "error writing to index file of %s, expected to write %u got %d", of->currentname, (unsigned)(sizeof(psync_fs_index_record)*recid), (int)rd);
+      return -1;
+    }
+    of->indexoff+=recid;
   }
   if (unlikely_log(psync_file_seek(of->datafile, size, P_SEEK_SET)!=size || psync_file_truncate(of->datafile)))
     return -1;
@@ -616,6 +680,10 @@ static int psync_fs_crypto_mark_log_finalized_and_process(psync_openfile_t *of, 
   wrt=psync_file_pwrite(fd, &hdr, sizeof(hdr), 0);
   if (unlikely_log(wrt!=sizeof(hdr)))
     goto err_eio;
+  debug(D_NOTICE, "flushing finalized log header %s", filename);
+  if (unlikely_log(psync_file_sync(fd)))
+    goto err_eio;
+  debug(D_NOTICE, "flushed finalized log header %s", filename);
   if (unlikely_log(psync_fs_crypto_process_log(of, fd)))
     goto err_eio;
   psync_file_close(fd);
@@ -625,11 +693,54 @@ static int psync_fs_crypto_mark_log_finalized_and_process(psync_openfile_t *of, 
   if (unlikely_log(psync_file_sync(of->datafile)))
     return -EIO;
   debug(D_NOTICE, "flushed data of %s", of->currentname);
+  if (!of->newfile){
+    debug(D_NOTICE, "flushing index of %s", of->currentname);
+    if (unlikely_log(psync_file_sync(of->indexfile)))
+      return -EIO;
+    debug(D_NOTICE, "flushed index of %s", of->currentname);
+  }
   return 0;
   err_eio:
   psync_file_close(fd);
-  return -EIO;
-  
+  return -EIO; 
+}
+
+static int psync_fs_write_interval_tree_to_log(psync_openfile_t *of){
+  psync_crypto_log_header logs[4096/sizeof(psync_crypto_log_header)];
+  psync_interval_tree_t *itr;
+  uint64_t len;
+  ssize_t wrt;
+  uint32_t last;
+  last=0;
+  itr=psync_interval_tree_get_first(of->writeintervals);
+  while (itr){
+    if (last==ARRAY_SIZE(logs)){
+      wrt=psync_file_pwrite(of->logfile, logs, sizeof(logs), of->logoffset);
+      if (wrt!=sizeof(logs)){
+        debug(D_ERROR, "write to log of %u bytes returned %d", (unsigned)sizeof(logs), (int)wrt);
+        return -EIO;
+      }
+      of->logoffset+=sizeof(logs);
+      last=0;
+    }
+    len=itr->to-itr->from;
+    assert(len>>48==0);
+    logs[last].type=PSYNC_CRYPTO_LOG_INT;
+    logs[last].longlengthhi=len>>32;
+    logs[last].longlengthlo=len&0xffffffffU;
+    logs[last].offset=itr->from;
+    last++;
+    itr=psync_interval_tree_get_next(itr);
+  }
+  if (last){
+    wrt=psync_file_pwrite(of->logfile, logs, sizeof(psync_crypto_log_header)*last, of->logoffset);
+    if (wrt!=sizeof(psync_crypto_log_header)*last){
+      debug(D_ERROR, "write to log of %u bytes returned %d", (unsigned)(sizeof(psync_crypto_log_header)*last), (int)wrt);
+      return -EIO;
+    }
+    of->logoffset+=sizeof(psync_crypto_log_header)*last;
+  }
+  return 0;
 }
 
 static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
@@ -647,6 +758,13 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
   if (unlikely_log(ret))
     return ret;
   debug(D_NOTICE, "wrote checksums to log of %s", of->currentname);
+  if (!of->newfile){
+    debug(D_NOTICE, "writing interval tree to log of %s", of->currentname);
+    ret=psync_fs_write_interval_tree_to_log(of);
+    if (unlikely_log(ret))
+      return ret;
+    debug(D_NOTICE, "wrote interval tree to log of %s", of->currentname);
+  }
   ret=psync_file_close(of->logfile);
   of->logfile=INVALID_HANDLE_VALUE;
   if (unlikely_log(ret))
@@ -677,6 +795,12 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
   return 0;
 }
 
+static void psync_fs_crypt_add_sector_to_interval_tree(psync_openfile_t *of, psync_crypto_sectorid_t sectorid, size_t size){
+  uint64_t offset;
+  offset=(uint64_t)psync_fs_crypto_data_sectorid_by_sectorid(sectorid)*PSYNC_CRYPTO_SECTOR_SIZE;
+  psync_interval_tree_add(&of->writeintervals, offset, offset+size);
+}
+
 static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const char *buf, psync_crypto_sectorid_t sectorid, size_t size){
   psync_crypto_log_data_record rec;
   ssize_t wrt;
@@ -696,6 +820,8 @@ static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const
   }
   psync_fs_crypto_set_sector_log_offset(of, sectorid, of->logoffset, auth);
   of->logoffset+=len;
+  if (!of->newfile)
+    psync_fs_crypt_add_sector_to_interval_tree(of, sectorid, size);
   return 0;
 }
 
@@ -732,10 +858,10 @@ static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
         wr=size;
     }
     ret=psync_fs_crypto_write_newfile_locked(of, buff, wr, offset);
-    offset+=wr;
-    size-=wr;
-    if (ret)
+    if (ret<=0)
       return ret;
+    offset+=ret;
+    size-=ret;
   }
   return 0;
 }
@@ -800,10 +926,248 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
   if (of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE){
     ret=psync_fs_crypto_finalize_log(of, 0);
     if (ret)
-      psync_fs_unlock_ret(of, ret);
+      return psync_fs_unlock_ret(of, ret);
   }
   pthread_mutex_unlock(&of->mutex);
   return wrt;
+}
+
+int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
+  psync_interval_tree_t *itr;
+  char *bufoff;
+  uint64_t eoffset;
+  size_t rd;
+  psync_crypto_sectorid_t firstsectorid, lastsectorid, sectorid, esectorid;
+  uint32_t offmod;
+  int rfr;
+  assert(of->encrypted);
+  assert(of->encoder);
+  if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
+    return psync_fs_unlock_ret(of, -EINVAL);
+  if (unlikely(!size || offset>=of->currentsize))
+    return psync_fs_unlock_ret(of, 0);
+  if (offset+size>of->currentsize)
+    size=of->currentsize-offset;
+  firstsectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
+  lastsectorid=(offset+size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
+  rfr=0;
+  itr=NULL;
+  for (sectorid=firstsectorid; sectorid<=lastsectorid; sectorid++){
+    esectorid=psync_fs_crypto_data_sectorid_by_sectorid(sectorid);
+    eoffset=(uint64_t)esectorid*PSYNC_CRYPTO_SECTOR_SIZE;
+    if (itr && itr->from<=eoffset && itr->to>eoffset)
+      rfr|=1;
+    else{
+      itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
+      if (itr && itr->from<=eoffset)
+        rfr|=1;
+      else
+        rfr|=2;
+    }
+  }
+  if (rfr==1){
+    debug(D_NOTICE, "doing read at offset %lu size %lu from local changes", (unsigned long)offset, (unsigned long)size);
+    return psync_fs_crypto_read_newfile_locked(of, buf, size, offset);
+  }
+  else if (rfr==2){
+    debug(D_NOTICE, "doing read at offset %lu size %lu from remote only", (unsigned long)offset, (unsigned long)size);
+    return psync_pagecache_read_unmodified_encrypted_locked(of, buf, size, offset);
+  }
+  else{
+    assert(rfr==3);
+    debug(D_NOTICE, "doing read at offset %lu size %lu from remote and local merge", (unsigned long)offset, (unsigned long)size);
+  }
+  rfr=psync_pagecache_read_unmodified_encrypted_locked(of, buf, size, offset);
+  if (unlikely(rfr<0)){
+    debug(D_WARNING, "reading from remote failed with error %d", rfr);
+    return rfr;
+  }
+  pthread_mutex_lock(&of->mutex);
+  if (unlikely(offset+size>of->currentsize)){
+    debug(D_NOTICE, "file size changed during read");
+    if (offset>=of->currentsize)
+      return psync_fs_unlock_ret(of, 0);
+    size=of->currentsize-offset;
+    lastsectorid=(offset+size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
+  }
+  offmod=offset%PSYNC_CRYPTO_SECTOR_SIZE;
+  for (sectorid=firstsectorid; sectorid<=lastsectorid; sectorid++){
+    esectorid=psync_fs_crypto_data_sectorid_by_sectorid(sectorid);
+    eoffset=(uint64_t)esectorid*PSYNC_CRYPTO_SECTOR_SIZE;
+    if (!(itr && itr->from<=eoffset && itr->to>eoffset)){
+      itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
+      if (!(itr && itr->from<=eoffset))
+        continue;
+    }
+    if (sectorid==firstsectorid && offmod){
+      rd=PSYNC_CRYPTO_SECTOR_SIZE-offmod;
+      if (rd>size)
+        rd=size;
+      rfr=psync_fs_crypto_read_newfile_partial_sector(of, buf, sectorid, rd, offmod);
+      if (unlikely_log(rfr!=rd))
+        psync_fs_unlock_ret(of, rfr);
+    }
+    else{
+      bufoff=buf+(sectorid-firstsectorid)*PSYNC_CRYPTO_SECTOR_SIZE-offmod;
+      if (sectorid==lastsectorid && (offset+size)%PSYNC_CRYPTO_SECTOR_SIZE)
+        rd=(offset+size)%PSYNC_CRYPTO_SECTOR_SIZE;
+      else
+        rd=PSYNC_CRYPTO_SECTOR_SIZE;
+      if (rd==PSYNC_CRYPTO_SECTOR_SIZE)
+        rfr=psync_fs_crypto_read_newfile_full_sector(of, bufoff, sectorid);
+      else
+        rfr=psync_fs_crypto_read_newfile_partial_sector(of, bufoff, sectorid, rd, 0);
+      if (unlikely_log(rfr!=rd))
+        psync_fs_unlock_ret(of, rfr);
+    }
+  }
+  return size;
+}
+
+static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset){
+  char buff[PSYNC_CRYPTO_SECTOR_SIZE];
+  uint64_t wr;
+  int ret;
+  memset(buff, 0, sizeof(buff));
+  while (size){
+    if (offset%PSYNC_CRYPTO_SECTOR_SIZE){
+      wr=PSYNC_CRYPTO_SECTOR_SIZE-(offset%PSYNC_CRYPTO_SECTOR_SIZE);
+      if (wr>size)
+        wr=size;
+    }
+    else{
+      if (size>PSYNC_CRYPTO_SECTOR_SIZE)
+        wr=PSYNC_CRYPTO_SECTOR_SIZE;
+      else
+        wr=size;
+    }
+    ret=psync_fs_crypto_write_modified_locked(of, buff, wr, offset);
+    if (ret<=0)
+      return ret;
+    offset+=ret;
+    size-=ret;
+  }
+  return 0;
+}
+
+int psync_fs_crypto_write_modified_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+  psync_interval_tree_t *itr, *needtodwl;
+  psync_pagecache_read_range *ranges;
+  char *tmpbuf;
+  psync_crypto_offsets_t offsets;
+  uint64_t eoffset;
+  size_t isize;
+  ssize_t bw;
+  psync_crypto_sectorid_t firstsectorid, lastsectorid, sectorid, esectorid;
+  uint32_t l, asize, aid, icnt;
+  int ret;
+  debug(D_NOTICE, "off=%lu size=%lu cs=%lu", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize);
+  if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
+    return psync_fs_unlock_ret(of, -EINVAL);
+  if (unlikely(!size))
+    return psync_fs_unlock_ret(of, 0);
+  if (unlikely(of->currentsize<offset)){
+    ret=psync_fs_modfile_fillzero(of, offset-of->currentsize, of->currentsize);
+    if (ret)
+      return psync_fs_unlock_ret(of, ret);
+  }
+retry:
+  firstsectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
+  lastsectorid=(offset+size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
+  itr=NULL;
+  needtodwl=NULL;
+  if (offset==of->initialsize && offset && offset%PSYNC_CRYPTO_SECTOR_SIZE==0)
+    lastsectorid=--firstsectorid;
+  for (sectorid=firstsectorid; sectorid<=lastsectorid; sectorid++){
+    if ((uint64_t)sectorid*PSYNC_CRYPTO_SECTOR_SIZE>of->initialsize)
+      break;
+    esectorid=psync_fs_crypto_data_sectorid_by_sectorid(sectorid);
+    eoffset=(uint64_t)esectorid*PSYNC_CRYPTO_SECTOR_SIZE;
+    if (itr && itr->from<=eoffset && itr->to>eoffset)
+      continue;
+    itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
+    if (itr && itr->from<=eoffset)
+      continue;
+    if ((sectorid==firstsectorid && offset%PSYNC_CRYPTO_SECTOR_SIZE!=0) || (sectorid==lastsectorid && (offset+size)%PSYNC_CRYPTO_SECTOR_SIZE!=0))
+      psync_interval_tree_add(&needtodwl, eoffset, eoffset+PSYNC_CRYPTO_SECTOR_SIZE);
+    if (sectorid!=firstsectorid && sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS!=0)
+      continue;
+    psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
+    // Here we create offsets by current size as if the file grew, we would have already moved all trailing checksums to new location.
+    for (l=0; l<offsets.treelevels; l++){
+      psync_fs_crypto_get_auth_sector_off(sectorid, l, &offsets, &eoffset, &asize, &aid);
+      itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
+      if (itr && itr->from<=eoffset)
+        continue;
+      psync_interval_tree_add(&needtodwl, eoffset, eoffset+asize);
+    }
+  }
+  if (needtodwl){
+    icnt=0;
+    isize=0;
+    eoffset=psync_fs_crypto_crypto_size(of->initialsize);
+    itr=psync_interval_tree_get_first(needtodwl);
+    do {
+      debug(D_NOTICE, "need to download from offset %lu size %lu to do a write at offset %lu size %lu", 
+            (unsigned long)itr->from, (unsigned long)(itr->to-itr->from), (unsigned long)offset, (unsigned long)size);
+      assert(itr->from<eoffset);
+      if (itr->to>eoffset)
+        itr->to=eoffset;
+      icnt++;
+      isize+=itr->to-itr->from;
+      itr=psync_interval_tree_get_next(itr);
+    } while (itr);
+    ranges=psync_new_cnt(psync_pagecache_read_range, icnt);
+    tmpbuf=psync_new_cnt(char, isize);
+    icnt=0;
+    isize=0;
+    itr=psync_interval_tree_get_first(needtodwl);
+    do {
+      ranges[icnt].offset=itr->from;
+      ranges[icnt].size=itr->to-itr->from;
+      ranges[icnt].buf=tmpbuf+isize;
+      isize+=ranges[icnt].size;
+      icnt++;
+      itr=psync_interval_tree_get_next(itr);
+    } while (itr);
+    psync_interval_tree_free(needtodwl);
+    ret=psync_pagecache_readv_locked(of, ranges, icnt);
+    // we are unlocked now
+    if (unlikely(ret)){
+      psync_free(ranges);
+      psync_free(tmpbuf);
+      debug(D_NOTICE, "downloading of ranges failed");
+      return ret;
+    }
+    ret=0;
+    debug(D_NOTICE, "ranges downloaded");
+    pthread_mutex_lock(&of->mutex);
+    for (l=0; l<icnt; l++){
+      itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, ranges[l].offset);
+      if (unlikely(itr && itr->from<ranges[l].offset+ranges[l].size && ranges[l].offset<itr->to)){
+        // we were not supposed to have intersection, some write happened while we were unlocked in psync_pagecache_readv_locked
+        debug(D_NOTICE, "restarting write as range %lu to %lu downloaded and %lu to %lu local intersect", (unsigned long)ranges[l].offset,
+              (unsigned long)(ranges[l].offset+ranges[l].size), (unsigned long)itr->from, (unsigned long)itr->to);
+        psync_free(ranges);
+        psync_free(tmpbuf);
+        goto retry;
+      }
+      bw=psync_file_pwrite(of->datafile, ranges[l].buf, ranges[l].size, ranges[l].offset);
+      if (bw!=ranges[l].size){
+        debug(D_ERROR, "write to datafile of %u bytes returned %d", (unsigned)ranges[l].size, (int)bw);
+        ret=-EIO;
+        break;
+      }
+      psync_interval_tree_add(&of->writeintervals, ranges[l].offset, ranges[l].offset+ranges[l].size);
+    }
+    // we do NOT need to fsync of->datafile, as we wrote to positions that were empty, next log flush will fsync
+    psync_free(ranges);
+    psync_free(tmpbuf);
+    if (unlikely(ret))
+      return psync_fs_unlock_ret(of, ret);
+  }
+  // now that we have all auth or partial data sectors, we proceed the same way as it is a new file write
+  return psync_fs_crypto_write_newfile_locked(of, buf, size, offset);
 }
 
 int psync_fs_crypto_flush_file(psync_openfile_t *of){

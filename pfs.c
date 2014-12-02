@@ -85,15 +85,6 @@ typedef off_t fuse_off_t;
 #define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
 #endif
 
-typedef struct {
-  uint64_t offset;
-  uint64_t length;
-} index_record;
-
-typedef struct {
-  uint64_t copyfromoriginal;
-} index_header;
-
 static struct fuse_chan *psync_fuse_channel=NULL;
 static struct fuse *psync_fuse=NULL;
 static char *psync_current_mountpoint=NULL;
@@ -492,7 +483,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
 static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct FUSE_STAT *stbuf, uint32_t flags){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT name, size, ctime, mtime, id, folderid FROM file WHERE id=?");
+  res=psync_sql_query("SELECT name, size, ctime, mtime, id, parentfolderid FROM file WHERE id=?");
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_file_stat(row, stbuf, flags);
@@ -924,20 +915,20 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
 }
 
 int64_t psync_fs_load_interval_tree(psync_file_t fd, uint64_t size, psync_interval_tree_t **tree){
-  index_record records[512];
+  psync_fs_index_record records[512];
   uint64_t cnt;
   uint64_t i;
   ssize_t rrd, rd, j;
-  if (size<sizeof(index_header))
+  if (unlikely(size<sizeof(psync_fs_index_header)))
     return 0;
-  size-=sizeof(index_header);
-  assertw(size%sizeof(index_record)==0);
-  cnt=size/sizeof(index_record);
+  size-=sizeof(psync_fs_index_header);
+  assertw(size%sizeof(psync_fs_index_record)==0);
+  cnt=size/sizeof(psync_fs_index_record);
   debug(D_NOTICE, "loading %lu intervals", (unsigned long)cnt);
   for (i=0; i<cnt; i+=ARRAY_SIZE(records)){
     rd=ARRAY_SIZE(records)>cnt-i?cnt-i:ARRAY_SIZE(records);
-    rrd=psync_file_pread(fd, records, rd*sizeof(index_record), i*sizeof(index_record)+sizeof(index_header));
-    if (unlikely_log(rrd!=rd*sizeof(index_record)))
+    rrd=psync_file_pread(fd, records, rd*sizeof(psync_fs_index_record), i*sizeof(psync_fs_index_record)+sizeof(psync_fs_index_header));
+    if (unlikely_log(rrd!=rd*sizeof(psync_fs_index_record)))
       return -1;
     for (j=0; j<rd; j++)
       psync_interval_tree_add(tree, records[j].offset, records[j].offset+records[j].length);
@@ -957,15 +948,14 @@ int64_t psync_fs_load_interval_tree(psync_file_t fd, uint64_t size, psync_interv
 }
 
 static int load_interval_tree(psync_openfile_t *of){
-  index_header hdr;
+  psync_fs_index_header hdr;
   int64_t ifs;
   ifs=psync_file_size(of->indexfile);
   if (unlikely_log(ifs==-1))
     return -1;
-  if (ifs<sizeof(index_header)){
+  if (ifs<sizeof(psync_fs_index_header)){
     assertw(ifs==0);
-    hdr.copyfromoriginal=of->initialsize;
-    if (psync_file_pwrite(of->indexfile, &hdr, sizeof(index_header), 0)!=sizeof(index_header))
+    if (psync_file_pwrite(of->indexfile, &hdr, sizeof(psync_fs_index_header), 0)!=sizeof(psync_fs_index_header))
       return -1;
     else
       return 0;
@@ -1641,10 +1631,8 @@ static int psync_fs_read(const char *path, char *buf, size_t size, fuse_off_t of
   if (of->encrypted){
     if (of->newfile)
       return psync_fs_crypto_read_newfile_locked(of, buf, size, offset);
-    else if (of->modified){
-      pthread_mutex_unlock(&of->mutex);
-      return -ENOSYS;
-    }
+    else if (of->modified)
+      return psync_fs_crypto_read_modified_locked(of, buf, size, offset);
     else
       return psync_pagecache_read_unmodified_encrypted_locked(of, buf, size, offset);
   }
@@ -1684,13 +1672,13 @@ static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
     if (of->newfile)
       return 0;
     else{
-      index_record rec;
+      psync_fs_index_record rec;
       uint64_t ioff;
       assertw(of->modified);
       ioff=of->indexoff++;
       rec.offset=of->currentsize;
       rec.length=size-of->currentsize;
-      if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(index_header))!=sizeof(rec)))
+      if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(psync_fs_index_header))!=sizeof(rec)))
         return -1;
       psync_interval_tree_add(&of->writeintervals, of->currentsize, size);
       of->currentsize=size;
@@ -1786,7 +1774,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   psync_fs_update_openfile_fileid_locked(of, cr->fileid);
   psync_sql_unlock();
   ret=open_write_files(of, 0);
-  if (unlikely_log(ret) || psync_file_seek(of->datafile, of->initialsize, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
+  if (unlikely_log(ret) || psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
     pthread_mutex_unlock(&of->mutex);
     if (!ret)
       ret=-EIO;
@@ -1794,47 +1782,112 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   }
   of->modified=1;
   of->indexoff=0;
+  of->currentsize=of->initialsize;
   return 0;
+}
+
+PSYNC_NOINLINE static int psync_fs_check_modified_file_write_space(psync_openfile_t *of, size_t size, fuse_off_t offset){
+  uint64_t from, to;
+  psync_interval_tree_t *tr;
+  if (of->encrypted){
+    from=psync_fs_crypto_data_sectorid_by_sectorid(offset/PSYNC_CRYPTO_SECTOR_SIZE)*PSYNC_CRYPTO_SECTOR_SIZE;
+    to=psync_fs_crypto_data_sectorid_by_sectorid((offset+size)/PSYNC_CRYPTO_SECTOR_SIZE)*PSYNC_CRYPTO_SECTOR_SIZE+(offset+size)%PSYNC_CRYPTO_SECTOR_SIZE;
+  }
+  else{
+    from=offset;
+    to=offset+size;
+  }
+  tr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, from);
+  if (tr && tr->from<=from && tr->to>=to)
+    return 1;
+  else
+    return 0;
+}
+
+PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, size_t size){
+  const char *cachepath;
+  uint64_t minlocal;
+  int64_t freespc;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  minlocal=psync_setting_get_uint(_PS(minlocalfreespace));
+  freespc=psync_get_free_space_by_path(cachepath);
+  if (unlikely(freespc==-1)){
+    debug(D_WARNING, "could not get free space of path %s", cachepath);
+    return 0;
+  }
+  if (freespc>=minlocal+size){
+    psync_set_local_full(0);
+    return 0;
+  }
+  debug(D_NOTICE, "free space is %lu, less than minimum %lu+%lu", (unsigned long)freespc, (unsigned long)minlocal, (unsigned long)size);
+  psync_set_local_full(1);
+  return -ENOSPC;
+}
+
+static int psync_fs_check_write_space(psync_openfile_t *of, size_t size, fuse_off_t offset){
+  if (of->writeid%256==0)
+    return 0;
+  if (of->currentsize>=offset+size){
+    if (of->newfile)
+      return 0;
+    if (of->modified && psync_fs_check_modified_file_write_space(of, size, offset))
+      return 0;
+  }
+  return psync_fs_do_check_write_space(of, size);
+}
+
+static int psync_fs_write_modified(psync_openfile_t *of, const char *buf, size_t size, fuse_off_t offset){
+  psync_fs_index_record rec;
+  uint64_t ioff;
+  ssize_t bw;
+  if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
+    return -EIO;
+  ioff=of->indexoff++;
+  bw=psync_file_pwrite(of->datafile, buf, size, offset);
+  if (unlikely_log(bw==-1))
+    return -EIO;
+  rec.offset=offset;
+  rec.length=bw;
+  if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(psync_fs_index_header))!=sizeof(rec)))
+    return -EIO;
+  psync_interval_tree_add(&of->writeintervals, offset, offset+bw);
+  if (of->currentsize<offset+size)
+    of->currentsize=offset+size;
+  return bw;
+}
+
+static int psync_fs_write_newfile(psync_openfile_t *of, const char *buf, size_t size, fuse_off_t offset){
+  ssize_t bw;
+  bw=psync_file_pwrite(of->datafile, buf, size, offset);
+  if (of->currentsize<offset+size && bw!=-1)
+    of->currentsize=offset+size;
+  return bw;
 }
 
 static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_off_t offset, struct fuse_file_info *fi){
   psync_openfile_t *of;
-  ssize_t bw;
-  uint64_t ioff;
-  index_record rec;
   int ret;
   psync_fs_set_thread_name();
+//  debug(D_NOTICE, "write to %s of %lu at %lu", path, (unsigned long)size, (unsigned long)offset);
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
-  if (of->writeid%256==0 && of->currentsize<=offset){
-    int64_t freespc=psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)));
-    if (likely_log(freespc!=-1)){
-      if (freespc>=psync_setting_get_uint(_PS(minlocalfreespace)))
-        psync_set_local_full(0);
-      else{
-        pthread_mutex_unlock(&of->mutex);
-        psync_set_local_full(1);
-//        while (psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)))<psync_setting_get_uint(_PS(minlocalfreespace)))
-//          psync_milisleep(1000);
-//        psync_set_local_full(0);
-//        pthread_mutex_lock(&of->mutex);
-        return -ENOSPC;
-      }
-    }
+  ret=psync_fs_check_write_space(of, size, offset);
+  if (unlikely_log(ret)){
+    pthread_mutex_unlock(&of->mutex);
+    return ret;
   }
   psync_fs_inc_writeid_locked(of);
 retry:
   if (of->newfile){
     if (of->encrypted)
       return psync_fs_crypto_write_newfile_locked(of, buf, size, offset);
-    bw=psync_file_pwrite(of->datafile, buf, size, offset);
-    if (of->currentsize<offset+size && bw!=-1)
-      of->currentsize=offset+size;
+    else
+      ret=psync_fs_write_newfile(of, buf, size, offset);
     pthread_mutex_unlock(&of->mutex);
-    if (unlikely_log(bw==-1))
+    if (unlikely_log(ret==-1))
       return -EIO;
     else
-      return bw;
+      return ret;
   }
   else{
     if (unlikely(!of->modified)){
@@ -1844,30 +1897,12 @@ retry:
       else if (ret<0)
         return ret;
     }
-    if (of->encrypted){
-      debug(D_ERROR, "not implemented");
-      pthread_mutex_unlock(&of->mutex);
-      return -ENOSYS;
-    }
-    if (unlikely_log(psync_fs_modfile_check_size_ok(of, offset)))
-      return -EIO;
-    ioff=of->indexoff++;
-    bw=psync_file_pwrite(of->datafile, buf, size, offset);
-    if (unlikely_log(bw==-1)){
-      pthread_mutex_unlock(&of->mutex);
-      return -EIO;
-    }
-    rec.offset=offset;
-    rec.length=bw;
-    if (unlikely_log(psync_file_pwrite(of->indexfile, &rec, sizeof(rec), sizeof(rec)*ioff+sizeof(index_header))!=sizeof(rec))){
-      pthread_mutex_unlock(&of->mutex);
-      return -EIO;
-    }
-    psync_interval_tree_add(&of->writeintervals, offset, offset+bw);
-    if (of->currentsize<offset+size)
-      of->currentsize=offset+size;
+    if (of->encrypted)
+      return psync_fs_crypto_write_modified_locked(of, buf, size, offset);
+    else
+      ret=psync_fs_write_modified(of, buf, size, offset);
     pthread_mutex_unlock(&of->mutex);
-    return bw;
+    return ret;
   }
 }
 
@@ -2466,8 +2501,6 @@ static int get_first_free_drive(){
     return pos < 26 ? pos : 0;
 }
 
-static char mount_point = 'a';
-
 static char *psync_fuse_get_mountpoint(){
   const char *stored;
   char *mp = (char*)psync_malloc(3);
@@ -2484,7 +2517,6 @@ static char *psync_fuse_get_mountpoint(){
   }
   mp[0] = 'A' + get_first_free_drive();
 ready:
-  mount_point = mp[0];
   return mp;
 }
 

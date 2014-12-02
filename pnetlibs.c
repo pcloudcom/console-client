@@ -299,6 +299,7 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
   void *buff;
   size_t rs;
   ssize_t rrs;
+  psync_uint_t cnt;
   psync_file_t fd;
   unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
   fd=psync_file_open(filename, P_O_RDONLY, 0);
@@ -309,6 +310,7 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
   psync_hash_init(&hctx);
   rsz=psync_stat_size(&st);
+  cnt=0;
   while (rsz){
     if (rsz>PSYNC_COPY_BUFFER_SIZE)
       rs=PSYNC_COPY_BUFFER_SIZE;
@@ -319,7 +321,8 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
       goto err2;
     psync_hash_update(&hctx, buff, rrs);
     rsz-=rrs;
-    psync_yield_cpu();
+    if (++cnt%16==0)
+      psync_milisleep(5);
   }
   psync_free(buff);
   psync_file_close(fd);
@@ -343,6 +346,7 @@ int psync_get_local_file_checksum_part(const char *restrict filename, unsigned c
   void *buff;
   size_t rs;
   ssize_t rrs;
+  psync_uint_t cnt;
   psync_file_t fd;
   unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
   fd=psync_file_open(filename, P_O_RDONLY, 0);
@@ -354,6 +358,7 @@ int psync_get_local_file_checksum_part(const char *restrict filename, unsigned c
   psync_hash_init(&hctx);
   psync_hash_init(&hctxp);
   rsz=psync_stat_size(&st);
+  cnt=0;
   while (rsz){
     if (rsz>PSYNC_COPY_BUFFER_SIZE)
       rs=PSYNC_COPY_BUFFER_SIZE;
@@ -374,7 +379,8 @@ int psync_get_local_file_checksum_part(const char *restrict filename, unsigned c
       }
     }
     rsz-=rrs;
-    psync_yield_cpu();
+    if (++cnt%16==0)
+      psync_milisleep(5);
   }
   psync_free(buff);
   psync_file_close(fd);

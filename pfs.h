@@ -98,6 +98,14 @@ typedef struct {
   uint32_t logoffset;
 } psync_openfile_t;
 
+typedef struct {
+  uint64_t offset;
+  uint64_t length;
+} psync_fs_index_record;
+
+typedef struct {
+} psync_fs_index_header;
+
 int psync_fs_crypto_err_to_errno(int cryptoerr);
 int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size);
 //void psync_fs_uploading_openfile(uint64_t taskid);

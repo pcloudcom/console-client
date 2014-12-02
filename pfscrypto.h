@@ -51,6 +51,8 @@ typedef psync_crypto_sector_auth_t psync_crypto_auth_sector_t[PSYNC_CRYPTO_HASH_
 int psync_fs_crypto_init_log(psync_openfile_t *of);
 int psync_fs_crypto_read_newfile_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
 int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset);
+int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset);
+int psync_fs_crypto_write_modified_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset);
 int psync_fs_crypto_flush_file(psync_openfile_t *of);
 
 psync_crypto_sectorid_t psync_fs_crypto_data_sectorid_by_sectorid(psync_crypto_sectorid_t sectorid);

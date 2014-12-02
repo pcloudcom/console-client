@@ -100,6 +100,7 @@ static psync_interval_tree_t *psync_interval_tree_get_add(psync_interval_tree_t 
 }
 
 void psync_interval_tree_add(psync_interval_tree_t **tree, uint64_t from, uint64_t to){
+  assert(to>from);
   *tree=psync_interval_tree_get_add(*tree, from, to);
 }
 

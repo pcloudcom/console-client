@@ -1132,7 +1132,7 @@ break2:
         free_db_pages--;
       }
       psync_list_add_head(&free_pages, &page->list);
-      if (!nosleep && updates%64==0){
+      if (nosleep!=1 && updates%64==0){
         psync_sql_free_result(res);
         psync_sql_commit_transaction();
         pthread_mutex_unlock(&cache_mutex);
@@ -2318,7 +2318,7 @@ int psync_pagecache_readv_locked(psync_openfile_t *of, psync_pagecache_read_rang
   psync_list_init(&rq->ranges);
   psync_list_init(&waiting);
   for (i=0; i<cnt; i++){
-    assert(ranges[i].offset+ranges[i].size<=initialsize);
+    assert(ranges[i].offset+ranges[i].size<=of->encrypted?psync_fs_crypto_crypto_size(initialsize):initialsize);
     poffset=offset_round_down_to_page(ranges[i].offset);
     pageoff=ranges[i].offset-poffset;
     psize=size_round_up_to_page(ranges[i].size+pageoff);
