@@ -159,7 +159,8 @@ static psync_socket *get_connected_socket(){
     }
     psync_api_conn_fail_reset();
     result=psync_find_result(res, "result", PARAM_NUM)->num;
-    if (unlikely_log(result)){
+    if (unlikely(result)){
+      debug(D_NOTICE, "userinfo returned error %lu %s", (unsigned long)result, psync_find_result(res, "error", PARAM_STR)->str);
       psync_socket_close(sock);
       psync_free(res);
       if (result==2000){
