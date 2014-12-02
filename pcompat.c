@@ -848,7 +848,7 @@ static psync_socket_t connect_res(struct addrinfo *res){
 }
 
 psync_socket_t psync_create_socket(int domain, int type, int protocol){
-  int ret;
+  psync_socket_t ret;
   ret=socket(domain, type, protocol);
 #if defined(P_OS_WINDOWS)
   if (unlikely(ret==INVALID_SOCKET && WSAGetLastError()==WSANOTINITIALISED)){
@@ -1408,7 +1408,7 @@ int psync_socket_write(psync_socket *sock, const void *buff, int num){
   else{
     r=psync_write_socket(sock->sock, buff, num);
     if (r==SOCKET_ERROR){
-      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN))
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN || psync_sock_err()==P_INTR))
         return 0;
       else
         return -1;
