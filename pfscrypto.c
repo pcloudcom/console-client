@@ -249,7 +249,7 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
     level++;
     authoff=(sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS)*PSYNC_CRYPTO_AUTH_SIZE;
     sectorid/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
-    sizesect=size_div_hash_tree_sectors(sizesect);
+    sizesect/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
     if (sectorid==sizesect){
       off=offsets->lastauthsectoroff[level];
       ssize=offsets->lastauthsectorlen[level];
@@ -491,7 +491,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
       of->logoffset+=sz+sizeof(hdr);
       oldsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
       newsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
-      sizesecd=size_div_hash_tree_sectors(sizesecd);
+      sizesecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
       level++;
     } while (oldsecd!=newsecd && level<offsets->treelevels);
   }
@@ -524,7 +524,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         }
         oldsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
         newsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
-        sizesecd=size_div_hash_tree_sectors(sizesecd);
+        sizesecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
         level++;
       } while (oldsecd!=newsecd && (level<ooffsets.treelevels || (ooffsets.needmasterauth && level==ooffsets.treelevels)));
     }
@@ -1194,7 +1194,7 @@ void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint3
   secd=sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
   aid=sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS;
   for (i=0; i<level; i++){
-    sizesecd=size_div_hash_tree_sectors(sizesecd);
+    sizesecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
     aid=secd%PSYNC_CRYPTO_HASH_TREE_SECTORS;
     secd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
   }
