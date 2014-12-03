@@ -533,8 +533,9 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
   odatalen=datalen;
   if (unlikely(datalen<PSYNC_AES256_BLOCK_SIZE)){
     xor_cnt_inplace(hmac, data, datalen);
+    memcpy(aessrc, data, datalen);
     memcpy(out, hmac, datalen);
-    memcpy(hmac, data, datalen);
+    memcpy(hmac, aessrc, datalen);
   }
   else{
     if (unlikely(datalen%16)){
