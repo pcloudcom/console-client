@@ -766,8 +766,11 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
   char *olog, *flog;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int ret;
-  if (of->logoffset==sizeof(psync_crypto_log_header))
+  psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
+  if (of->logoffset==sizeof(psync_crypto_log_header) && offsets.masterauthoff+(offsets.needmasterauth?PSYNC_CRYPTO_AUTH_SIZE:0)==psync_file_size(of->datafile)){
+    debug(D_NOTICE, "skipping finalize of %s", of->currentname);
     return 0;
+  }
   debug(D_NOTICE, "finalizing log of %s", of->currentname);
   psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
   ret=psync_fs_write_auth_tree_to_log(of, &offsets);
