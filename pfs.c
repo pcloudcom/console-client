@@ -2296,9 +2296,6 @@ static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_fil
   psync_fs_set_thread_name();
   debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   of=fh_to_openfile(fi->fh);
-  // TODO: fix
-  if (of->encrypted)
-    return -ENOSYS;
   pthread_mutex_lock(&of->mutex);
   if (of->currentsize==size){
     debug(D_NOTICE, "not truncating as size is already %lu", (long unsigned)size);
@@ -2308,38 +2305,14 @@ static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_fil
   psync_fs_inc_writeid_locked(of);
 retry:
   if (unlikely(!of->newfile && !of->modified)){
-    psync_fstask_creat_t *cr;
-    debug(D_NOTICE, "reopening file %s for writing", of->currentname);
-    if (psync_sql_trylock()){
-      // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
-      pthread_mutex_unlock(&of->mutex);
-      psync_sql_lock();
-      pthread_mutex_lock(&of->mutex);
-      if (of->newfile || of->modified){
-        psync_sql_unlock();
-        goto retry;
-      }
-    }
-    cr=psync_fstask_add_modified_file(of->currentfolder, of->currentname, of->fileid, of->hash, NULL, 0);
-    psync_sql_unlock();
-    if (unlikely_log(!cr)){
-      pthread_mutex_unlock(&of->mutex);
-      return -EIO;
-    }
-    of->fileid=cr->fileid;
-    ret=open_write_files(of, 0);
-    if (unlikely_log(ret) || psync_fs_modfile_check_size_ok(of, size) ||
-        (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))){
-      if (!ret)
-        ret=-EIO;
-    }
-    else{
-      of->modified=1;
-      of->indexoff=0;
-      of->currentsize=size;
-      ret=0;
-    }
+    ret=psync_fs_reopen_file_for_writing(of);
+    if (ret==1)
+      goto retry;
+    else if (ret<0)
+      return ret;
   }
+  if (of->encrypted)
+    return psync_fs_crypto_ftruncate(of, size);
   else{
     if (psync_fs_modfile_check_size_ok(of, size))
       ret=-EIO;

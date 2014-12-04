@@ -2256,7 +2256,7 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
       assert(apageid>=0 && apageid<PSYNC_CRYPTO_HASH_TREE_SECTORS);
       if (psync_crypto_aes256_decode_sector(of->encoder, (unsigned char *)dp[i].buff, dp[i].pagesize, (unsigned char *)dp[i].buff,
                                             ap->auth[apageid], first_page_id+i)){
-        debug(D_ERROR, "decoding of page %lu of file %s failed", (unsigned long)(first_page_id+i), of->currentname);
+        debug(D_ERROR, "decoding of page %lu of file %s failed pagesize=%u", (unsigned long)(first_page_id+i), of->currentname, (unsigned)dp[i].pagesize);
         ret=-EIO;
       }
       else if (dp[i].freebuff){
@@ -2449,7 +2449,6 @@ static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash){
   fileidhex[sizeof(psync_fsfileid_t)+1]=0;
   tm=psync_timer_time();
   filename=psync_strcat(psync_setting_get_string(_PS(fscachepath)), PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  debug(D_NOTICE, "adding file %s to cache for hash %lu (%ld)", filename, (unsigned long)hash, (long)hash);
   fd=psync_file_open(filename, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE){
     debug(D_ERROR, "could not open cache file %s for taskid %lu, skipping", filename, (unsigned long)taskid);
@@ -2457,6 +2456,7 @@ static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash){
     psync_free(filename);
     return;
   }
+  debug(D_NOTICE, "adding file %s to cache for hash %lu (%ld) size %ld", filename, (unsigned long)hash, (long)hash, (long)psync_file_size(fd));
   pageid=0;
   while (1){
     page=psync_pagecache_get_free_page(1);
@@ -2476,7 +2476,7 @@ static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash){
     if (rd<PSYNC_FS_PAGE_SIZE)
       break;
     pageid++;
-    if (pageid%32==0){
+    if (pageid%64==0){
       psync_check_clean_running();
       psync_milisleep(10);
     }
@@ -2511,8 +2511,6 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
   filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
   fileidhex[sizeof(psync_fsfileid_t)]='i';
   indexname=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  debug(D_NOTICE, "adding blocks of file %s to cache for hash %lu (%ld), old hash %lu (%ld)", 
-        filename, (unsigned long)hash, (long)hash, (unsigned long)oldhash, (long)oldhash);
   fd=psync_file_open(indexname, P_O_RDONLY, 0);
   if (unlikely(fd==INVALID_HANDLE_VALUE)){
     debug(D_ERROR, "could not open index of cache file %s for taskid %lu, skipping", indexname, (unsigned long)taskid);
@@ -2534,12 +2532,31 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
   fs=psync_file_size(fd);
   if (unlikely_log(fs==-1))
     goto err2;
+  debug(D_NOTICE, "adding blocks of file %s to cache for hash %lu (%ld), old hash %lu (%ld) size %ld", 
+        filename, (unsigned long)hash, (long)hash, (unsigned long)oldhash, (long)oldhash, (long)fs);
   interval=psync_interval_tree_get_first(tree);
   for (off=0; off<fs; off+=PSYNC_FS_PAGE_SIZE){
     pageid=off/PSYNC_FS_PAGE_SIZE;
     while (interval && interval->to<=off)
       interval=psync_interval_tree_get_next(interval);
     if (!interval || interval->from>=off+PSYNC_FS_PAGE_SIZE){ // full old page
+      if (unlikely(off+PSYNC_FS_PAGE_SIZE>fs)){ // last page, if it is equal we are ok
+        page=psync_pagecache_get_free_page(1);
+        pdb=check_page_in_database_by_hash(oldhash, pageid, page->page, fs-off, 0);
+        if (pdb==-1){
+          psync_pagecache_return_free_page(page);
+          break;
+        }
+        page->hash=hash;
+        page->pageid=pageid;
+        page->lastuse=tm;
+        page->size=pdb;
+        page->usecnt=1;
+        page->crc=psync_crc32c(PSYNC_CRC_INITIAL, page->page, pdb);
+        page->type=PAGE_TYPE_READ;
+        psync_pagecache_add_page_if_not_exists(page, hash, pageid);
+        break;
+      }
       if (!tstarted){
         res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=? WHERE hash=? AND pageid=? AND type=?");
         psync_sql_start_transaction();
@@ -2566,7 +2583,7 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
         psync_sql_commit_transaction();
         tstarted=0;
       }
-      if (interval->from<=off && interval->to>=off+PSYNC_FS_PAGE_SIZE){ // full new page
+      if (interval->from<=off && (interval->to>=off+PSYNC_FS_PAGE_SIZE || interval->to>=fs)){ // full new page
         page=psync_pagecache_get_free_page(1);
         rd=psync_file_pread(fd, page->page, PSYNC_FS_PAGE_SIZE, off);
         if (rd<PSYNC_FS_PAGE_SIZE && off+rd!=fs){
@@ -2581,7 +2598,7 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
         page->crc=psync_crc32c(PSYNC_CRC_INITIAL, page->page, rd);
         page->type=PAGE_TYPE_READ;
         psync_pagecache_add_page_if_not_exists(page, hash, pageid);
-        if (pageid%32==0){
+        if (pageid%64==0){
           psync_check_clean_running();
           psync_milisleep(10);
         }
@@ -2628,6 +2645,10 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
           psync_pagecache_return_free_page(page);
           continue;
         }
+        if (pdb+off>fs){
+          assert(fs>off);
+          pdb=fs-off;
+        }
         page->hash=hash;
         page->pageid=pageid;
         page->lastuse=tm;
@@ -2636,7 +2657,7 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
         page->crc=psync_crc32c(PSYNC_CRC_INITIAL, page->page, pdb);
         page->type=PAGE_TYPE_READ;
         psync_pagecache_add_page_if_not_exists(page, hash, pageid);
-        if (pageid%32==0){
+        if (pageid%64==0){
           psync_check_clean_running();
           psync_milisleep(10);
         }

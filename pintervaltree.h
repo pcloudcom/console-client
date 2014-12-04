@@ -51,6 +51,10 @@ static inline psync_interval_tree_t *psync_interval_tree_get_next(psync_interval
   return psync_interval_tree_element(psync_tree_get_next(&tree->tree));
 }
 
+static inline psync_interval_tree_t *psync_interval_tree_get_prev(psync_interval_tree_t *tree){
+  return psync_interval_tree_element(psync_tree_get_prev(&tree->tree));
+}
+
 static inline void psync_interval_tree_del(psync_interval_tree_t **tree, psync_interval_tree_t *node){
   *tree=psync_interval_tree_element(psync_tree_get_del(&(*tree)->tree, &node->tree));
 }
@@ -75,5 +79,6 @@ static inline psync_interval_tree_t *psync_interval_tree_first_interval_containi
 
 void psync_interval_tree_add(psync_interval_tree_t **tree, uint64_t from, uint64_t to);
 void psync_interval_tree_free(psync_interval_tree_t *tree);
+void psync_interval_tree_cut_end(psync_interval_tree_t **tree, uint64_t end);
 
 #endif

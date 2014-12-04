@@ -31,7 +31,7 @@
 #include "ppagecache.h"
 
 // this is only for debug, adds needless checks of tree for local files
-//#define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
+#define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
 
 #define PSYNC_CRYPTO_LOG_HEADER 0
 #define PSYNC_CRYPTO_LOG_DATA   1
@@ -212,12 +212,21 @@ static int psync_fs_crypto_read_newfile_full_sector_from_log(psync_openfile_t *o
     return rd;
 }
 
-static psync_crypto_sectorid_t size_div_hash_tree_sectors(psync_crypto_sectorid_t sectorid){
+/*static psync_crypto_sectorid_t size_div_hash_tree_sectors(psync_crypto_sectorid_t sectorid){
   psync_crypto_sectorid_t ret;
   ret=sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
   if (sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS==0 && ret)
     ret--;
   return ret;
+}*/
+
+static psync_crypto_sectorid_t get_last_sectorid_by_size(uint64_t size){
+  if (unlikely(size==0)){
+    debug(D_NOTICE, "called for 0 size");
+    return 0;
+  }
+  else
+    return (size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
 }
 
 #if defined(PSYNC_DO_LOCAL_FULL_TREE_CHECK)
@@ -231,7 +240,7 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
   if (!offsets->needmasterauth)
     return 0;
   sectorid/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
-  sizesect=size_div_hash_tree_sectors((offsets->plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
+  sizesect=get_last_sectorid_by_size(offsets->plainsize)/PSYNC_CRYPTO_HASH_TREE_SECTORS;
   if (sectorid==sizesect){
     off=offsets->lastauthsectoroff[0];
     ssize=offsets->lastauthsectorlen[0];
@@ -295,7 +304,7 @@ static int psync_fs_crypto_read_newfile_full_sector_from_datafile(psync_openfile
   rd=psync_file_pread(of->datafile, buff, ssize, off);
   if (unlikely_log(rd!=ssize))
     return -EIO;
-  if (sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS==size_div_hash_tree_sectors((offsets.plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE))
+  if (sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS==get_last_sectorid_by_size(offsets.plainsize)/PSYNC_CRYPTO_HASH_TREE_SECTORS)
     off=offsets.lastauthsectoroff[0];
   else
     off=psync_fs_crypto_auth_offset(0, sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS);
@@ -459,7 +468,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
     level=0;
     oldsecd=oldsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
     newsecd=newsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
-    sizesecd=size_div_hash_tree_sectors((offsets->plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
+    sizesecd=get_last_sectorid_by_size(offsets->plainsize)/PSYNC_CRYPTO_HASH_TREE_SECTORS;
     do{
       oldsecn=oldsecd%PSYNC_CRYPTO_HASH_TREE_SECTORS;
       memset(&hdr, 0, sizeof(hdr));
@@ -474,6 +483,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         sz=PSYNC_CRYPTO_SECTOR_SIZE;
       }
       assert(hdr.offset+sz<=offsets->masterauthoff+PSYNC_CRYPTO_AUTH_SIZE);
+      debug(D_NOTICE, "writing level %u signatures to offset %lu size %u", level, hdr.offset, sz);
       hdr.length=sz;
       psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)&autharr[level], sz, autharr[level+1][oldsecn]);
       wrt=psync_file_pwrite(of->logfile, &hdr, sizeof(hdr), of->logoffset);
@@ -504,7 +514,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
       level=0;
       oldsecd=oldsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
       newsecd=newsectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
-      sizesecd=size_div_hash_tree_sectors((ooffsets.plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
+      sizesecd=get_last_sectorid_by_size(ooffsets.plainsize)/PSYNC_CRYPTO_HASH_TREE_SECTORS;
       do{
         if (newsecd<=sizesecd){
           if (newsecd==sizesecd){
@@ -539,6 +549,7 @@ static int psync_fs_crypto_write_master_auth(psync_openfile_t *of, psync_crypto_
     psync_crypto_sector_auth_t auth;
   } data;
   assert(sizeof(data)==sizeof(psync_crypto_log_header)+PSYNC_CRYPTO_AUTH_SIZE);
+  assert(offsets->treelevels>0);
   assert(offsets->lastauthsectorlen[offsets->treelevels-1]>0);
   assert(offsets->lastauthsectorlen[offsets->treelevels-1]<=PSYNC_CRYPTO_SECTOR_SIZE);
   psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)&autharr[offsets->treelevels-1], offsets->lastauthsectorlen[offsets->treelevels-1], data.auth);
@@ -554,6 +565,7 @@ static int psync_fs_crypto_write_master_auth(psync_openfile_t *of, psync_crypto_
   if (!of->newfile)
     psync_interval_tree_add(&of->writeintervals, offsets->masterauthoff, offsets->masterauthoff+PSYNC_CRYPTO_AUTH_SIZE);
   of->logoffset+=sizeof(data);
+  debug(D_NOTICE, "wrote master auth to offset %lu", (unsigned long)offsets->masterauthoff);
   return 0;
 }
 
@@ -574,12 +586,12 @@ static int psync_fs_write_auth_tree_to_log(psync_openfile_t *of, psync_crypto_of
     lastsect=sect->sectorid;
     sect=psync_tree_element(psync_tree_get_next(&sect->tree), psync_sector_inlog_t, tree);
   }
-  debug(D_NOTICE, "wrote three to log, lastsectorid=%u, currentsize=%lu", (unsigned)lastsect, (unsigned long)of->currentsize);
   ret=psync_fs_crypto_switch_sectors(of, lastsect, PSYNC_CRYPTO_INVALID_SECTORID, authsect, offsets);
   if (ret)
     return ret;
   if (offsets->needmasterauth && (ret=psync_fs_crypto_write_master_auth(of, authsect, offsets)))
     return ret;
+  debug(D_NOTICE, "wrote three to log, lastsectorid=%u, currentsize=%lu", (unsigned)lastsect, (unsigned long)of->currentsize);
   return 0;
 }
 
@@ -609,8 +621,12 @@ static int psync_fs_crypto_process_log(psync_openfile_t *of, psync_fsfileid_t fd
     off+=sizeof(hdr);
     if (hdr.type==PSYNC_CRYPTO_LOG_DATA){
       assert(hdr.length<=sizeof(buff));
-      assert(hdr.offset+hdr.length<=size);
       assert(recid==0);
+      if (unlikely(hdr.offset+hdr.length>size)){
+        debug(D_NOTICE, "got record past the current end of file, this should only happen if file was truncated down, skipping record");
+        off+=hdr.length;
+        continue;
+      }
       rd=psync_file_pread(fd, buff, hdr.length, off);
       if (unlikely(rd!=hdr.length)){
         debug(D_ERROR, "error reading from log file of %s, expected to read %u got %d", of->currentname, (unsigned)hdr.length, (int)rd);
@@ -1170,6 +1186,101 @@ retry:
   return psync_fs_crypto_write_newfile_locked(of, buf, size, offset);
 }
 
+static int psync_fs_crypto_ftruncate_to_zero(psync_openfile_t *of){
+  int ret;
+  if (psync_file_seek(of->logfile, 0, P_SEEK_SET)!=0 || psync_file_truncate(of->logfile)){
+    debug(D_WARNING, "failed to truncate log file of %s", of->currentname);
+    return -EIO;
+  }
+  ret=psync_fs_crypto_init_log(of);
+  if (unlikely(ret))
+    return ret;
+  if (!of->newfile){
+    psync_interval_tree_free(of->writeintervals);
+    of->writeintervals=NULL;
+  }
+  psync_tree_for_each_element_call_safe(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
+  of->sectorsinlog=PSYNC_TREE_EMPTY;
+  of->currentsize=0;
+  return 0;
+}
+
+static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
+  char buf[PSYNC_CRYPTO_SECTOR_SIZE];
+  uint64_t writeid, lastsectoff, elastsectoroff;
+  psync_interval_tree_t *intr;
+  psync_crypto_sectorid_t lastsectorid, elastsectorid;
+  uint32_t lastsectornewsize, lastsectoroldsize;
+  int ret;
+  assert(size>0 && size<of->currentsize);
+  lastsectorid=(size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
+  lastsectoff=(uint64_t)lastsectorid*PSYNC_CRYPTO_SECTOR_SIZE;
+  lastsectornewsize=size-lastsectoff;
+  if (of->currentsize>=lastsectoff+PSYNC_CRYPTO_SECTOR_SIZE)
+    lastsectoroldsize=PSYNC_CRYPTO_SECTOR_SIZE;
+  else
+    lastsectoroldsize=of->currentsize-lastsectoff;
+  elastsectorid=psync_fs_crypto_data_sectorid_by_sectorid(lastsectorid);
+  elastsectoroff=(uint64_t)elastsectorid*PSYNC_CRYPTO_SECTOR_SIZE;
+retry:
+  if (of->newfile || ((intr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, elastsectoroff)) && intr->from<=elastsectoroff)){
+    ret=psync_fs_crypto_read_newfile_full_sector(of, buf, lastsectorid);
+    if (ret<0)
+      return psync_fs_unlock_ret(of, ret);
+    assert(ret==lastsectoroldsize);
+  }
+  else{
+    writeid=of->writeid;
+    ret=psync_fs_crypto_read_modified_locked(of, buf, lastsectoroldsize, lastsectoff);
+    // unlocked now
+    if (ret<0)
+      return ret;
+    pthread_mutex_lock(&of->mutex);
+    if (unlikely(of->writeid!=writeid)){
+      debug(D_NOTICE, "writeid changed, restarting");
+      goto retry;
+    }
+    ret=psync_fs_crypto_write_modified_locked(of, buf, lastsectoroldsize, lastsectoff);
+    // unlocked now
+    if (ret<0)
+      return ret;
+    pthread_mutex_lock(&of->mutex);
+    if (unlikely(of->writeid!=writeid)){
+      debug(D_NOTICE, "writeid changed, restarting");
+      goto retry;
+    }
+  }
+  of->currentsize=lastsectoff;
+  ret=psync_fs_crypto_write_newfile_full_sector(of, buf, lastsectorid, lastsectornewsize);
+  if (ret<0)
+    return psync_fs_unlock_ret(of, ret);
+  of->currentsize=size;
+  if (!of->newfile)
+    psync_interval_tree_cut_end(&of->writeintervals, psync_fs_crypto_crypto_size(size));
+  debug(D_NOTICE, "file truncated");
+  return psync_fs_unlock_ret(of, 0);
+}
+
+int psync_fs_crypto_ftruncate(psync_openfile_t *of, uint64_t size){
+  int ret;
+  assert(of->modified);
+  if (of->currentsize<size){
+    if (of->newfile)
+      ret=psync_fs_newfile_fillzero(of, size-of->currentsize, of->currentsize);
+    else
+      ret=psync_fs_modfile_fillzero(of, size-of->currentsize, of->currentsize);
+  }
+  else if (of->currentsize>size){
+    if (size==0)
+      ret=psync_fs_crypto_ftruncate_to_zero(of);
+    else
+      return psync_fs_crypto_ftruncate_down(of, size);
+  }
+  else
+    ret=0;  
+  return psync_fs_unlock_ret(of, ret);
+}
+
 int psync_fs_crypto_flush_file(psync_openfile_t *of){
   return psync_fs_crypto_finalize_log(of, 1);
 }
@@ -1190,7 +1301,7 @@ void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint3
                                          uint64_t *offset, uint32_t *size, uint32_t *authid){
   psync_crypto_sectorid_t sizesecd, secd;
   uint32_t i, aid;
-  sizesecd=size_div_hash_tree_sectors((offsets->plainsize+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE);
+  sizesecd=get_last_sectorid_by_size(offsets->plainsize)/PSYNC_CRYPTO_HASH_TREE_SECTORS;
   secd=sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS;
   aid=sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS;
   for (i=0; i<level; i++){

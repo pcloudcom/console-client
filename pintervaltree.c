@@ -113,3 +113,23 @@ void psync_interval_tree_free(psync_interval_tree_t *tree){
     tree=ntree;
   }
 }
+
+psync_interval_tree_t *psync_interval_tree_get_cut_end(psync_interval_tree_t *tree, uint64_t end){
+  psync_interval_tree_t *last, *prev;
+  last=psync_interval_tree_get_last(tree);
+  while (last && last->to>end){
+    if (last->from<end){
+      last->to=end;
+      break;
+    }
+    prev=psync_interval_tree_get_prev(last);
+    tree=psync_interval_tree_element(psync_tree_get_del(&tree->tree, &last->tree));
+    psync_free(last);
+    last=prev;
+  }
+  return tree;
+}
+
+void psync_interval_tree_cut_end(psync_interval_tree_t **tree, uint64_t end){
+  *tree=psync_interval_tree_get_cut_end(*tree, end);
+}

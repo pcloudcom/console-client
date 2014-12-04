@@ -2295,7 +2295,7 @@ ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count){
   ret=read(fd, buf, count);
   if (unlikely(ret==-1)){
     while (errno==EINTR){
-      debug(D_NOTICE, "got EINTR while writing to file");
+      debug(D_NOTICE, "got EINTR while reading from file");
       ret=read(fd, buf, count);
       if (ret!=-1)
         return ret;
@@ -2427,7 +2427,7 @@ int psync_file_truncate(psync_file_t fd){
   off_t off;
   off=lseek(fd, 0, SEEK_CUR);
   if (likely_log(off!=(off_t)-1)){
-    if (unlikely_log(ftruncate(fd, off))){
+    if (unlikely(ftruncate(fd, off))){
       while (errno==EINTR){
         debug(D_NOTICE, "got EINTR while truncating file");
         if (!ftruncate(fd, off))
