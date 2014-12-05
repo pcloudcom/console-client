@@ -1696,15 +1696,20 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   debug(D_NOTICE, "reopening file %s for writing size %lu", of->currentname, (unsigned long)of->currentsize);
   if (unlikely(of->encrypted && of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)){
     psync_crypto_aes256_sector_encoder_decoder_t enc;
+    // we should unlock of->mutex as it can deadlock with sqllock and taking sqllock before network operation is not a good idea
+    pthread_mutex_unlock(&of->mutex);
     enc=psync_cloud_crypto_get_file_encoder(of->remotefileid, 0);
-    if (unlikely(psync_crypto_is_error(enc))){
-      pthread_mutex_unlock(&of->mutex);
+    if (unlikely(psync_crypto_is_error(enc)))
       return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(enc));
-    }
-    else
+    pthread_mutex_lock(&of->mutex);
+    if (of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)
       of->encoder=enc;
+    else
+      psync_cloud_crypto_release_file_encoder(of->remotefileid, enc);
+    if (of->newfile || of->modified)
+      return 1;
   }
-  if (psync_sql_trylock()){
+  if (unlikely(psync_sql_trylock())){
     // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
     pthread_mutex_unlock(&of->mutex);
     psync_sql_lock();

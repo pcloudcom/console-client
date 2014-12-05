@@ -483,7 +483,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         sz=PSYNC_CRYPTO_SECTOR_SIZE;
       }
       assert(hdr.offset+sz<=offsets->masterauthoff+PSYNC_CRYPTO_AUTH_SIZE);
-      debug(D_NOTICE, "writing level %u signatures to offset %lu size %u", level, hdr.offset, sz);
+//      debug(D_NOTICE, "writing level %u signatures to offset %lu size %u", level, hdr.offset, sz);
       hdr.length=sz;
       psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)&autharr[level], sz, autharr[level+1][oldsecn]);
       wrt=psync_file_pwrite(of->logfile, &hdr, sizeof(hdr), of->logoffset);
