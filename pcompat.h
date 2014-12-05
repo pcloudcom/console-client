@@ -240,7 +240,7 @@ typedef int psync_file_t;
 
 #include <malloc.h>
 
-#define psync_def_var_arr(name, type, size) type *name=(type *)alloca(sizeof(type)*size)
+#define psync_def_var_arr(name, type, size) type *name=(type *)alloca(sizeof(type)*(size))
 #define atoll _atoi64
 #define snprintf _snprintf
 
