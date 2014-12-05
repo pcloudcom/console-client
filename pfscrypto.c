@@ -680,7 +680,7 @@ static int psync_fs_crypto_mark_log_finalized_and_process(psync_openfile_t *of, 
   psync_crypto_log_header hdr;
   ssize_t wrt;
   psync_file_t fd;
-  fd=open(filename, P_O_RDWR, 0);
+  fd=psync_file_open(filename, P_O_RDWR, 0);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE))
     return -EIO;
   if (dowaits && !locked)
