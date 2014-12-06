@@ -776,6 +776,15 @@ void psync_fs_stop();
 char *psync_fs_getmountpoint();
 char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 
+
+/* psync_password_quality estimates password quality, returns one of:
+ *   0 - weak
+ *   1 - moderate
+ *   2 - strong
+ */
+
+int psync_password_quality(const char *password);
+
 /*
  * Crypto functions.
  * 

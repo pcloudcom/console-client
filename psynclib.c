@@ -50,6 +50,7 @@
 #include "pfileops.h"
 #include "pcloudcrypto.h"
 #include "ppagecache.h"
+#include "ppassword.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -1286,6 +1287,16 @@ void psync_run_new_version(psync_new_version_t *ver){
     return;
   psync_destroy();
   exit(0);
+}
+
+int psync_password_quality(const char *password){
+  uint64_t score=psync_password_score(password);
+  if (score<(uint64_t)1<<30)
+    return 0;
+  if (score<(uint64_t)1<<40)
+    return 1;
+  else
+    return 2;
 }
 
 int psync_crypto_setup(const char *password){
