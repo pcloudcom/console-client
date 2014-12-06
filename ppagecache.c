@@ -188,6 +188,19 @@ static void flush_pages_noret(){
   flush_pages(0);
 }
 
+static psync_cache_page_t *psync_pagecache_get_free_page_if_available(){
+  psync_cache_page_t *page;
+  pthread_mutex_lock(&cache_mutex);
+  if (unlikely(cache_pages_free<=CACHE_PAGES*25/100 && !flushcacherun))
+    psync_run_thread("flush pages get free page ifav", flush_pages_noret);
+  if (likely(!psync_list_isempty(&free_pages)))
+    page=psync_list_remove_head_element(&free_pages, psync_cache_page_t, list);
+  else
+    page=NULL;
+  pthread_mutex_unlock(&cache_mutex);
+  return page;
+}
+
 static psync_cache_page_t *psync_pagecache_get_free_page(int runflushcacheinside){
   psync_cache_page_t *page;
   pthread_mutex_lock(&cache_mutex);
@@ -2678,6 +2691,25 @@ err1:
   psync_free(indexname);
 }
 
+static void psync_pagecache_check_free_space(){
+  const char *cachepath;
+  uint64_t minlocal;
+  int64_t freespc;
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  minlocal=psync_setting_get_uint(_PS(minlocalfreespace));
+  freespc=psync_get_free_space_by_path(cachepath);
+  if (unlikely(freespc==-1)){
+    debug(D_WARNING, "could not get free space of path %s", cachepath);
+    return;
+  }
+  if (freespc>=minlocal)
+    psync_set_local_full(0);
+  else{
+    debug(D_WARNING, "local disk holding %s is full", cachepath);
+    psync_set_local_full(1);
+  }
+}
+
 static void psync_pagecache_upload_to_cache(){
   psync_sql_res *res;
   psync_uint_row row;
@@ -2703,6 +2735,7 @@ static void psync_pagecache_upload_to_cache(){
     res=psync_sql_prep_statement("DELETE FROM pagecachetask WHERE id=?");
     psync_sql_bind_uint(res, 1, id);
     psync_sql_run_free(res);
+    psync_pagecache_check_free_space();
   }
 }
 
@@ -2802,6 +2835,96 @@ void psync_pagecache_resize_cache(){
     }
   }
   pthread_mutex_unlock(&flush_cache_mutex);
+}
+
+int psync_pagecache_free_page_from_read_cache(){
+  psync_stat_t st;
+  uint64_t sizeinpages;
+  psync_sql_res *res;
+  psync_cache_page_t *page;
+  psync_uint_row row;
+  int ret;
+  ret=-1;
+  pthread_mutex_lock(&flush_cache_mutex);
+  do {
+    if (psync_fstat(readcache, &st)){
+      debug(D_NOTICE, "stat of read cache file failed");
+      break;
+    }
+    if (psync_stat_size(&st)<PSYNC_FS_PAGE_SIZE){
+      debug(D_NOTICE, "read cache is already zero");
+      break;
+    }
+    sizeinpages=psync_stat_size(&st)/PSYNC_FS_PAGE_SIZE;
+    if (unlikely(db_cache_max_page>sizeinpages)){
+      debug(D_NOTICE, "there are %lu unallocated pages in db, deleting", (unsigned long)(db_cache_max_page-sizeinpages));
+      res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
+      psync_sql_bind_uint(res, 1, sizeinpages);
+      psync_sql_run_free(res);
+      db_cache_max_page=sizeinpages;
+    }
+    else if (unlikely_log(db_cache_max_page<sizeinpages))
+      sizeinpages=db_cache_max_page;
+    page=psync_pagecache_get_free_page_if_available();
+    if (unlikely(!page)){
+      debug(D_NOTICE, "no free pages, skipping");
+      break;
+    }
+    if (psync_file_pread(readcache, page->page, PSYNC_FS_PAGE_SIZE, (sizeinpages-1)*PSYNC_FS_PAGE_SIZE)!=PSYNC_FS_PAGE_SIZE){
+      psync_pagecache_return_free_page(page);
+      debug(D_NOTICE, "read from read cache failed");
+      break;
+    }
+    res=psync_sql_query("SELECT type, hash, pageid, lastuse, usecnt, size, crc FROM pagecache WHERE id=?");
+    psync_sql_bind_uint(res, 1, sizeinpages);
+    row=psync_sql_fetch_rowint(res);
+    if (!row || row[0]==PAGE_TYPE_FREE){
+      psync_sql_free_result(res);
+      psync_pagecache_return_free_page(page);
+    }
+    else{
+      page->hash=row[1];
+      page->pageid=row[2];
+      page->lastuse=row[3];
+      page->size=row[5];
+      page->usecnt=row[4];
+      page->crc=row[6];
+      psync_sql_free_result(res);
+      if (unlikely(psync_crc32c(PSYNC_CRC_INITIAL, page->page, page->size)!=page->crc)){
+        debug(D_WARNING, "page CRC check failed, dropping page");
+        psync_pagecache_return_free_page(page);
+      }
+      else{
+        page->type=PAGE_TYPE_READ;
+        psync_pagecache_add_page_if_not_exists(page, page->hash, page->pageid);
+      }
+    }
+    db_cache_max_page=--sizeinpages;
+    res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
+    psync_sql_bind_uint(res, 1, sizeinpages);
+    psync_sql_run_free(res);
+    if (psync_file_seek(readcache, sizeinpages*PSYNC_FS_PAGE_SIZE, P_SEEK_SET)!=-1 && psync_file_truncate(readcache)==0)
+      ret=0;
+    else
+      debug(D_NOTICE, "failed to truncate down read cache");
+  } while (0);
+  pthread_mutex_unlock(&flush_cache_mutex);
+  return ret;
+}
+
+uint64_t psync_pagecache_free_from_read_cache(uint64_t size){
+  uint64_t i;
+  size=size_round_up_to_page(size);
+  if (unlikely(size==0))
+    return 0;
+  size/=PSYNC_FS_PAGE_SIZE;
+  for (i=0; i<size; i++)
+    if (psync_pagecache_free_page_from_read_cache()){
+      debug(D_WARNING, "failed to free page from read cache");
+      break;
+    }
+  debug(D_NOTICE, "freed %lu pages from read cache", (unsigned long)i);
+  return i*PSYNC_FS_PAGE_SIZE;
 }
 
 void psync_pagecache_init(){

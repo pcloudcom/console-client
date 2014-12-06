@@ -87,6 +87,7 @@ typedef struct {
   unsigned char releasedforupload;
   unsigned char deleted;
   unsigned char encrypted;
+  unsigned char throttle;
   /*
    * for non-encrypted files only offsetof(psync_openfile_t, encoder) bytes are allocated
    * keep all fields for encryption after encoder

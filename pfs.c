@@ -1809,34 +1809,109 @@ PSYNC_NOINLINE static int psync_fs_check_modified_file_write_space(psync_openfil
     return 0;
 }
 
+static void psync_fs_throttle(size_t size, uint64_t speed){
+  static pthread_mutex_t throttle_mutex=PTHREAD_MUTEX_INITIALIZER;
+  static uint64_t writtenthissec=0;
+  static time_t thissec=0;
+  time_t currsec;
+  assert(speed>0);
+  while (1){
+    currsec=psync_timer_time();
+    pthread_mutex_lock(&throttle_mutex);
+    if (currsec!=thissec){
+      thissec=currsec;
+      writtenthissec=0;
+    }
+    if (writtenthissec<speed){
+      if (writtenthissec+size>speed){
+        size-=speed-writtenthissec;
+        writtenthissec=speed;
+      }
+      else{
+        writtenthissec+=size;
+        pthread_mutex_unlock(&throttle_mutex);
+        assert(size<=speed);
+        psync_milisleep(size*1000/speed);
+        return;
+      }
+    }
+    pthread_mutex_unlock(&throttle_mutex);
+    psync_timer_wait_next_sec();
+  }
+}
+
 PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, size_t size){
   const char *cachepath;
-  uint64_t minlocal;
+  uint64_t minlocal, mult, speed;
   int64_t freespc;
+  int freed;
   cachepath=psync_setting_get_string(_PS(fscachepath));
   minlocal=psync_setting_get_uint(_PS(minlocalfreespace));
   freespc=psync_get_free_space_by_path(cachepath);
   if (unlikely(freespc==-1)){
     debug(D_WARNING, "could not get free space of path %s", cachepath);
-    return 0;
+    return 1;
   }
   if (freespc>=minlocal+size){
     psync_set_local_full(0);
-    return 0;
+    of->throttle=0;
+    return 1;
   }
+  of->throttle=1;
+  pthread_mutex_unlock(&of->mutex);
   debug(D_NOTICE, "free space is %lu, less than minimum %lu+%lu", (unsigned long)freespc, (unsigned long)minlocal, (unsigned long)size);
   psync_set_local_full(1);
-  return -ENOSPC;
+  if ((freespc<=minlocal/2 || minlocal<=PSYNC_FS_PAGE_SIZE || freespc<=size)){
+    if (psync_pagecache_free_from_read_cache(size*2)<size*2){
+      debug(D_WARNING, "free space is %lu, less than half of minimum %lu+%lu, returning error", (unsigned long)freespc, (unsigned long)minlocal, (unsigned long)size);
+      psync_milisleep(5000);
+#if defined(P_OS_POSIX)
+      return -EINTR;
+#else
+      return 0;
+#endif
+    }
+    else{
+      debug(D_NOTICE, "free space is %lu, less than half of minimum %lu+%lu, but we managed to free from read cache", 
+            (unsigned long)freespc, (unsigned long)minlocal, (unsigned long)size);
+      freespc=minlocal/2+1;
+      freed=1;
+    }
+  }
+  else if (freespc<=minlocal/4*3){
+    debug(D_NOTICE, "free space is %lu, less than 3/4 of minimum %lu+%lu, will try to free read cache pages", 
+          (unsigned long)freespc, (unsigned long)minlocal, (unsigned long)size);
+    freed=psync_pagecache_free_from_read_cache(size)>=size;
+  }
+  if (psync_status.uploadspeed==0){
+    if (freed || psync_pagecache_free_from_read_cache(size)>=size){
+      debug(D_NOTICE, "there is no active upload and we managed to free from cache, not throttling write");
+      pthread_mutex_lock(&of->mutex);
+      return 1;
+    }
+  }
+  minlocal/=2;
+  mult=(freespc-minlocal)*1023/minlocal+1;
+  assert(mult>=1 && mult<=1024);
+  speed=psync_status.uploadspeed*3/2;
+  if (speed<PSYNC_FS_MIN_INITIAL_WRITE_SHAPER)
+    speed=PSYNC_FS_MIN_INITIAL_WRITE_SHAPER;
+  speed=speed*mult/1024;
+  debug(D_NOTICE, "limiting write speed to %luKb (%lub)/sec, speed multiplier %lu", (unsigned long)speed/1024, (unsigned long)speed, (unsigned long)mult);
+  psync_fs_throttle(size, speed);
+  debug(D_NOTICE, "continuing write");
+  pthread_mutex_lock(&of->mutex);
+  return 1;
 }
 
 static int psync_fs_check_write_space(psync_openfile_t *of, size_t size, fuse_off_t offset){
-  if (of->writeid%256==0)
-    return 0;
+  if (!of->throttle && of->writeid%256==0)
+    return 1;
   if (of->currentsize>=offset+size){
     if (of->newfile)
-      return 0;
+      return 1;
     if (of->modified && psync_fs_check_modified_file_write_space(of, size, offset))
-      return 0;
+      return 1;
   }
   return psync_fs_do_check_write_space(of, size);
 }
@@ -1877,10 +1952,8 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_o
   of=fh_to_openfile(fi->fh);
   pthread_mutex_lock(&of->mutex);
   ret=psync_fs_check_write_space(of, size, offset);
-  if (unlikely_log(ret)){
-    pthread_mutex_unlock(&of->mutex);
+  if (unlikely_log(ret<=0))
     return ret;
-  }
   psync_fs_inc_writeid_locked(of);
 retry:
   if (of->newfile){
