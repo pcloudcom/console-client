@@ -226,6 +226,13 @@ typedef struct {
 #define PSYNC_CRYPTO_STOP_NOT_SUPPORTED    -1
 #define PSYNC_CRYPTO_STOP_NOT_STARTED      1
 
+#define PSYNC_CRYPTO_HINT_SUCCESS          0
+#define PSYNC_CRYPTO_HINT_NOT_SUPPORTED    -1
+#define PSYNC_CRYPTO_HINT_NOT_PROVIDED     1
+#define PSYNC_CRYPTO_HINT_CANT_CONNECT     2
+#define PSYNC_CRYPTO_HINT_NOT_LOGGED_IN    3
+#define PSYNC_CRYPTO_HINT_UNKNOWN_ERROR    4
+
 #define PSYNC_CRYPTO_SUCCESS               0
 #define PSYNC_CRYPTO_NOT_STARTED           -1
 #define PSYNC_CRYPTO_RSA_ERROR             -2
@@ -802,6 +809,9 @@ int psync_password_quality10000(const char *password);
  * Crypto functions.
  * 
  * psync_crypto_setup() - setups crypto with a given password, on error returns one of PSYNC_CRYPTO_SETUP_* errors
+ * psync_crypto_get_hint() - if successful sets *hint to point to a string with the user's password hint. In this case
+ *                        *hint is to be free-d. On error one of PSYNC_CRYPTO_HINT_* codes is returned and *hint is not
+ *                        set.
  * psync_crypto_start() - starts crypto with a given password, on error returns one of PSYNC_CRYPTO_START_* errors
  * psync_crypto_stop() - stops crypto, on error returns one of PSYNC_CRYPTO_STOP_* errors
  * psync_crypto_isstarted() - returns 1 if crypto is started and 0 otherwise
@@ -813,7 +823,8 @@ int psync_password_quality10000(const char *password);
  *                        message that you do NOT have to free.
  */
 
-int psync_crypto_setup(const char *password);
+int psync_crypto_setup(const char *password, const char *hint);
+int psync_crypto_get_hint(char **hint);
 int psync_crypto_start(const char *password);
 int psync_crypto_stop();
 int psync_crypto_isstarted();

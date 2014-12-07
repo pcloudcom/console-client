@@ -179,7 +179,7 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
   if (maxkeys){
     l=0;
     psync_list_for_each_element (he2, lst, hash_element, list)
-      if (he2->hash==h && !strcmp(key, he2->key) && ++l==maxkeys){
+      if (unlikely(he2->hash==h && !strcmp(key, he2->key) && ++l==maxkeys)){
         pthread_mutex_unlock(&cache_mutexes[hash_to_lock(h)]);
         psync_free(he);
         freefunc(ptr);
@@ -188,7 +188,7 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
       }
   }
   /* adding to head should be better than to the tail: more recent objects are likely to be in processor cache, more recent
-   * connections are likely to be "faster" (e.g. futher from idle slowstart reset)
+   * connections are likely to be "faster" (e.g. further from idle slowstart reset)
    */
   psync_list_add_head(lst, &he->list);
   he->timer=psync_timer_register(cache_timer, freeafter, he);

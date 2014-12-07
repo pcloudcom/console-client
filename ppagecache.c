@@ -2837,7 +2837,7 @@ void psync_pagecache_resize_cache(){
   pthread_mutex_unlock(&flush_cache_mutex);
 }
 
-int psync_pagecache_free_page_from_read_cache(){
+static int psync_pagecache_free_page_from_read_cache(){
   psync_stat_t st;
   uint64_t sizeinpages;
   psync_sql_res *res;
@@ -2915,10 +2915,7 @@ int psync_pagecache_free_page_from_read_cache(){
 
 uint64_t psync_pagecache_free_from_read_cache(uint64_t size){
   uint64_t i;
-  size=size_round_up_to_page(size);
-  if (unlikely(size==0))
-    return 0;
-  size/=PSYNC_FS_PAGE_SIZE;
+  size=size_round_up_to_page(size)/PSYNC_FS_PAGE_SIZE;
   for (i=0; i<size; i++)
     if (psync_pagecache_free_page_from_read_cache()){
       debug(D_WARNING, "failed to free page from read cache");

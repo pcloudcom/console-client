@@ -29,6 +29,7 @@
 #include "ptimer.h"
 #include "pcompat.h"
 #include "plibs.h"
+#include "pcache.h"
 
 /* Maximum timeout possible is TIMER_ARRAY_SIZE^TIMER_LEVELS seconds, in the worst case
  * TIMER_LEVELS operations will be preformed for each timer to service it
@@ -72,6 +73,7 @@ PSYNC_NOINLINE static void timer_sleep_detected(time_t lt){
     e=e->next;
   }
   pthread_mutex_unlock(&timer_mutex);
+  psync_cache_clean_all();
   psync_timer_notify_exception();
 }
 

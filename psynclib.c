@@ -1319,8 +1319,12 @@ int psync_password_quality10000(const char *password){
   }
 }
 
-int psync_crypto_setup(const char *password){
-  return psync_cloud_crypto_setup(password);
+int psync_crypto_setup(const char *password, const char *hint){
+  return psync_cloud_crypto_setup(password, hint);
+}
+
+int psync_crypto_get_hint(char **hint){
+  return psync_cloud_crypto_get_hint(hint);
 }
 
 int psync_crypto_start(const char *password){
