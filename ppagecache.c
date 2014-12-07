@@ -2851,11 +2851,11 @@ int psync_pagecache_free_page_from_read_cache(){
       debug(D_NOTICE, "stat of read cache file failed");
       break;
     }
-    if (psync_stat_size(&st)<PSYNC_FS_PAGE_SIZE){
+    if (psync_stat_size(&st)<PSYNC_FS_PAGE_SIZE*2){
       debug(D_NOTICE, "read cache is already zero");
       break;
     }
-    sizeinpages=psync_stat_size(&st)/PSYNC_FS_PAGE_SIZE;
+    sizeinpages=psync_stat_size(&st)/PSYNC_FS_PAGE_SIZE-1;
     if (unlikely(db_cache_max_page>sizeinpages)){
       debug(D_NOTICE, "there are %lu unallocated pages in db, deleting", (unsigned long)(db_cache_max_page-sizeinpages));
       res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
@@ -2870,7 +2870,7 @@ int psync_pagecache_free_page_from_read_cache(){
       debug(D_NOTICE, "no free pages, skipping");
       break;
     }
-    if (psync_file_pread(readcache, page->page, PSYNC_FS_PAGE_SIZE, (sizeinpages-1)*PSYNC_FS_PAGE_SIZE)!=PSYNC_FS_PAGE_SIZE){
+    if (psync_file_pread(readcache, page->page, PSYNC_FS_PAGE_SIZE, sizeinpages*PSYNC_FS_PAGE_SIZE)!=PSYNC_FS_PAGE_SIZE){
       psync_pagecache_return_free_page(page);
       debug(D_NOTICE, "read from read cache failed");
       break;
@@ -2891,7 +2891,8 @@ int psync_pagecache_free_page_from_read_cache(){
       page->crc=row[6];
       psync_sql_free_result(res);
       if (unlikely(psync_crc32c(PSYNC_CRC_INITIAL, page->page, page->size)!=page->crc)){
-        debug(D_WARNING, "page CRC check failed, dropping page");
+        debug(D_WARNING, "page CRC check failed, dropping page, db CRC %u calculated CRC %u", 
+              (unsigned)page->crc, (unsigned)psync_crc32c(PSYNC_CRC_INITIAL, page->page, page->size));
         psync_pagecache_return_free_page(page);
       }
       else{
@@ -2899,9 +2900,9 @@ int psync_pagecache_free_page_from_read_cache(){
         psync_pagecache_add_page_if_not_exists(page, page->hash, page->pageid);
       }
     }
-    db_cache_max_page=--sizeinpages;
+    db_cache_max_page=sizeinpages-1;
     res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
-    psync_sql_bind_uint(res, 1, sizeinpages);
+    psync_sql_bind_uint(res, 1, db_cache_max_page);
     psync_sql_run_free(res);
     if (psync_file_seek(readcache, sizeinpages*PSYNC_FS_PAGE_SIZE, P_SEEK_SET)!=-1 && psync_file_truncate(readcache)==0)
       ret=0;
