@@ -56,10 +56,24 @@ struct exception_list {
 
 static psync_list timerlists[TIMER_LEVELS][TIMER_ARRAY_SIZE];
 static struct exception_list *excepions=NULL;
+static struct exception_list *sleeplist=NULL;
 static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t nextsecwaiters=0;
 static int timer_running=0;
+
+PSYNC_NOINLINE static void timer_sleep_detected(time_t lt){
+  struct exception_list *e;
+  debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
+  e=sleeplist;
+  pthread_mutex_lock(&timer_mutex);
+  while (e){
+    e->func();
+    e=e->next;
+  }
+  pthread_mutex_unlock(&timer_mutex);
+  psync_timer_notify_exception();
+}
 
 static void timer_check_upper_levels(time_t tmdiv, psync_uint_t level, psync_uint_t sh){
   psync_list *l1, *l2, *l;
@@ -88,50 +102,42 @@ static void timer_prepare_timers(time_t from, time_t to, psync_list *list){
   }
 }
 
-static void timer_thread(){
-//  struct timespec tm;
-  psync_list timers;
+PSYNC_NOINLINE static void timer_process_timers(psync_list *timers){
   psync_timer_t timer;
   psync_list *l1, *l2;
+  psync_list_for_each_element(timer, timers, psync_timer_structure_t, list)
+    timer->call(timer, timer->param);
+  pthread_mutex_lock(&timer_mutex);
+  psync_list_for_each_safe(l1, l2, timers){
+    timer=psync_list_element(l1, psync_timer_structure_t, list);
+    if (!(timer->opts&PTIMER_STOP_AFTER_RUN)){
+      timer->opts=0;
+      psync_list_del(l1);
+      timer->runat=psync_current_time+timer->numsec;
+      psync_list_add_tail(&timerlists[timer->level][(timer->runat>>(timer->level*TIMER_ARRAY_SIZE_SHIFT))%TIMER_ARRAY_SIZE], &timer->list);
+    }
+  }
+  pthread_mutex_unlock(&timer_mutex);
+  psync_list_for_each_element_call(timers, psync_timer_structure_t, list, psync_free);
+}
+
+static void timer_thread(){
+  psync_list timers;
   time_t lt;
   lt=psync_current_time;
-//  tm.tv_nsec=500000000;
   while (psync_do_run){
-    /* pthread_cond_timedwait is better than sleep as it waits for absolute time and therefore no
-     * matter how much time actual timers wasted, they get called every second sharply.
-     * 
-     * but this is not reliable on Mac OS X
-     */
-//    tm.tv_sec=psync_current_time+1;
     psync_list_init(&timers);
     psync_milisleep(1000);
     psync_current_time=psync_time();
     pthread_mutex_lock(&timer_mutex);
-//    pthread_cond_timedwait(&timer_cond, &timer_mutex, &tm);
     timer_prepare_timers(lt, psync_current_time, &timers);
     if (nextsecwaiters)
       pthread_cond_broadcast(&timer_cond);
     pthread_mutex_unlock(&timer_mutex);
-    if (!psync_list_isempty(&timers)){
-      psync_list_for_each_element(timer, &timers, psync_timer_structure_t, list)
-        timer->call(timer, timer->param);
-      pthread_mutex_lock(&timer_mutex);
-      psync_list_for_each_safe(l1, l2, &timers){
-        timer=psync_list_element(l1, psync_timer_structure_t, list);
-        if (!(timer->opts&PTIMER_STOP_AFTER_RUN)){
-          timer->opts=0;
-          psync_list_del(l1);
-          timer->runat=psync_current_time+timer->numsec;
-          psync_list_add_tail(&timerlists[timer->level][(timer->runat>>(timer->level*TIMER_ARRAY_SIZE_SHIFT))%TIMER_ARRAY_SIZE], &timer->list);
-        }
-      }
-      pthread_mutex_unlock(&timer_mutex);
-      psync_list_for_each_element_call(&timers, psync_timer_structure_t, list, psync_free);
-    }
-    if (unlikely(psync_current_time-lt>=15)){
-      debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
-      psync_timer_notify_exception();
-    }
+    if (unlikely(!psync_list_isempty(&timers)))
+      timer_process_timers(&timers);
+    if (unlikely(psync_current_time-lt>=20))
+      timer_sleep_detected(lt);
     else if (unlikely_log(psync_current_time==lt)){
       if (!psync_do_run)
         break;
@@ -222,16 +228,30 @@ void psync_timer_exception_handler(psync_exception_callback func){
   pthread_mutex_unlock(&timer_mutex);
 }
 
+void psync_timer_sleep_handler(psync_exception_callback func){
+  struct exception_list *t;
+  t=psync_new(struct exception_list);
+  t->next=NULL;
+  t->func=func;
+  t->threadid=pthread_self();
+  pthread_mutex_lock(&timer_mutex);
+  t->next=sleeplist;
+  sleeplist=t;
+  pthread_mutex_unlock(&timer_mutex);
+}
+
 void psync_timer_do_notify_exception(){
   struct exception_list *e;
   pthread_t threadid;
   e=excepions;
   threadid=pthread_self();
+  pthread_mutex_lock(&timer_mutex);
   while (e){
     if (!pthread_equal(threadid, e->threadid))
       e->func();
     e=e->next;
   }
+  pthread_mutex_unlock(&timer_mutex);
 }
 
 void psync_timer_wait_next_sec(){
