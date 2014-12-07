@@ -1883,6 +1883,8 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
           (unsigned long)freespc, (unsigned long)minlocal, (unsigned long)size);
     freed=psync_pagecache_free_from_read_cache(size)>=size;
   }
+  else
+    freed=0;
   if (psync_status.uploadspeed==0){
     if (freed || psync_pagecache_free_from_read_cache(size)>=size){
       debug(D_NOTICE, "there is no active upload and we managed to free from cache, not throttling write");

@@ -785,6 +785,18 @@ char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 
 int psync_password_quality(const char *password);
 
+/* psync_password_quality10000 works the same way as psync_password_quality but for each password strength also return
+ * a range, returns integer in one of the following (inclusive) intervals
+ *   0     to  9999 - weak password
+ *   10000 to 19999 - moderate password
+ *   20000 to 29999 - strong password
+ * 
+ * integer division of the result of psync_password_quality10000 by 10000 will give the same result as psync_password_quality()
+ * 
+ */
+
+int psync_password_quality10000(const char *password);
+
 /*
  * Crypto functions.
  * 

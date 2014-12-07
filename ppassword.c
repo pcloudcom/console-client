@@ -52,7 +52,7 @@ static int find_in_dict(const char *pwd, size_t len){
     else if (c>0)
       lo=med+1;
     else{
-      if (l==8 || passworddict[med][l]==0){
+//      if (l==8 || passworddict[med][l]==0){
         while (l<8 && l<=len && med<ARRAY_SIZE(passworddict) && !memcmp(pwd, passworddict[med+1], l+1)){
           hi=len;
           med++;
@@ -64,9 +64,9 @@ static int find_in_dict(const char *pwd, size_t len){
             l=hi;
         }
         return l;
-      }
+/*      }
       else
-        hi--;
+        hi--;*/
     }
   }
   return 0;
@@ -216,15 +216,15 @@ ex:;
   n=0;
   if (haslow)
     n+=26;
-  else if (hasup)
+  if (hasup)
     n+=26;
-  else if (hasnum)
+  if (hasnum)
     n+=10;
-  else if (haspunct)
+  if (haspunct)
     n+=20;
-  else if (hasspace)
+  if (hasspace)
     n+=2;
-  else if (hasother)
+  if (hasother)
     n+=10;
   while (numchars--)
     mul_score(n);

@@ -1299,6 +1299,20 @@ int psync_password_quality(const char *password){
     return 2;
 }
 
+int psync_password_quality10000(const char *password){
+  uint64_t score=psync_password_score(password);
+  if (score<(uint64_t)1<<30)
+    return score/(((uint64_t)1<<30)/10000+1);
+  if (score<(uint64_t)1<<40)
+    return (score-((uint64_t)1<<30))/((((uint64_t)1<<40)-((uint64_t)1<<30))/10000+1)+10000;
+  else{
+    if (score>=((uint64_t)1<<45)-((uint64_t)1<<40))
+      return 29999;
+    else
+      return (score-((uint64_t)1<<40))/((((uint64_t)1<<45)-((uint64_t)1<<40))/10000+1)+20000;
+  }
+}
+
 int psync_crypto_setup(const char *password){
   return psync_cloud_crypto_setup(password);
 }
