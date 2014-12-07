@@ -67,7 +67,8 @@ static psync_setting_t settings[]={
   {"fsroot", fsroot_change, NULL, {0}, PSYNC_TSTRING},
   {"autostartfs", NULL, NULL, {PSYNC_AUTOSTARTFS_DEFAULT}, PSYNC_TBOOL},
   {"fscachesize", psync_pagecache_resize_cache, NULL, {PSYNC_FS_DEFAULT_CACHE_SIZE}, PSYNC_TNUMBER},
-  {"fscachepath", NULL, NULL, {0}, PSYNC_TSTRING}
+  {"fscachepath", NULL, NULL, {0}, PSYNC_TSTRING},
+  {"sleepstopcrypto", NULL, NULL, {PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP}, PSYNC_TNUMBER}
 };
 
 void psync_settings_reset(){
@@ -92,6 +93,7 @@ void psync_settings_reset(){
   settings[_PS(fsroot)].str=defaultfs;
   settings[_PS(fscachesize)].num=PSYNC_FS_DEFAULT_CACHE_SIZE;
   settings[_PS(fscachepath)].str=defaultcache;
+  settings[_PS(sleepstopcrypto)].num=PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);

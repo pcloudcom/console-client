@@ -595,6 +595,7 @@ const char *psync_get_auth_string();
  * fscachesize (uint) - size of filesystem cache, in bytes, sane minimum of few tens of Mb or even hundreds is advised
  * fsroot (string) - where to mount the filesystem
  * autostartfs (bool) - if set starts the fs on app startup
+ * sleepstopcrypto (bool) - if set, stops crypto when computer wakes up from sleep
  * 
  *
  * The following functions operate on settings. The value of psync_get_string_setting does not have to be freed, however if you are

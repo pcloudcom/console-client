@@ -138,6 +138,8 @@
 #define PSYNC_P2P_INITIAL_TIMEOUT      600
 #define PSYNC_P2P_SLEEP_WAIT_DOWNLOAD  20000
 
+#define PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP 0
+
 #define PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS 20000
 #define PSYNC_CRYPTO_PBKDF2_SALT_LEN     64
 #define PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN 128
@@ -238,6 +240,7 @@ $RECYCLE.BIN;\
 #define PSYNC_SETTING_autostartfs       8
 #define PSYNC_SETTING_fscachesize       9
 #define PSYNC_SETTING_fscachepath      10
+#define PSYNC_SETTING_sleepstopcrypto  11
 
 typedef int psync_settingid_t;
 

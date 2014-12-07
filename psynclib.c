@@ -109,6 +109,11 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
   psync_free=free_call;
 }
 
+static void psync_stop_crypto_on_sleep(){
+  if (psync_setting_get_bool(_PS(sleepstopcrypto)))
+    psync_cloud_crypto_stop();
+}
+
 int psync_init(){
   psync_thread_name="main app thread";
   if (IS_DEBUG){
@@ -144,6 +149,7 @@ int psync_init(){
   psync_libs_init();
   psync_settings_init();
   psync_status_init();
+  psync_timer_sleep_handler(psync_stop_crypto_on_sleep);
   if (IS_DEBUG){
     psync_libstate=1;
     pthread_mutex_unlock(&psync_libstate_mutex);
