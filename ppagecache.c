@@ -966,11 +966,13 @@ static int check_disk_full(){
   psync_sql_res *res;
   db_cache_max_page=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
   filesize=psync_file_size(readcache);
-  if (unlikely_log(filesize==-1) || filesize>=db_cache_max_page*PSYNC_FS_PAGE_SIZE)
+  if (unlikely_log(filesize==-1))
     return 0;
   freespace=psync_get_free_space_by_path(psync_setting_get_string(_PS(fscachepath)));
   minlocal=psync_setting_get_uint(_PS(minlocalfreespace));
-  if (unlikely_log(freespace==-1) || minlocal+db_cache_max_page*PSYNC_FS_PAGE_SIZE-filesize<=freespace){
+  if (unlikely_log(freespace==-1))
+    return 0;
+  if (minlocal+db_cache_max_page*PSYNC_FS_PAGE_SIZE-filesize<=freespace){
     psync_set_local_full(0);
     return 0;
   }
@@ -1116,6 +1118,16 @@ break2:
     while (db_cache_max_page+i<db_cache_in_pages && i<CACHE_PAGES && i<cache_pages_in_hash){
       psync_sql_run(res);
       i++;
+      if (i%64==0){
+        psync_sql_free_result(res);
+        psync_sql_commit_transaction();
+        pthread_mutex_unlock(&cache_mutex);
+        if (!nosleep)
+          psync_milisleep(1);
+        pthread_mutex_lock(&cache_mutex);
+        psync_sql_start_transaction();
+        res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
+      }
     }
     psync_sql_free_result(res);
     free_db_pages+=i;

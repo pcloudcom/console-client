@@ -157,7 +157,7 @@ static uint64_t score_variants(const char *password, const char *lpassword, cons
     }
     d=find_in_dict(npassword+off, r);
     if (d){
-      mul_score(ARRAY_SIZE(passworddict)/3);
+      mul_score(ARRAY_SIZE(passworddict)/2);
       off+=d;
       continue;
     }
@@ -190,12 +190,12 @@ static uint64_t score_variants(const char *password, const char *lpassword, cons
       for (j=off; j>0; j--)
         if (j<=r){
           if (!memcmp(password+off, password+off-j, j)){
-            mul_score(2);
+            mul_score(1+j);
             off+=j;
             goto ex;
           }
           else if (!memcmp(lpassword+off, lpassword+off-j, j)){
-            mul_score(3);
+            mul_score(2+j);
             off+=j;
             goto ex;
           }
@@ -205,8 +205,8 @@ static uint64_t score_variants(const char *password, const char *lpassword, cons
         mul_score(2);
       else if (keyboard_buddies(pch, ch))
         mul_score(2);
-      else if (keyboard_buddies(tolower(pch), tolower(ch)))
-        mul_score(3);
+      else if (keyboard_buddies(lpassword[off-1], lpassword[off]))
+        mul_score(4);
       else
         numchars++;
     }
