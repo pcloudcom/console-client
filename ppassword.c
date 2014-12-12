@@ -37,7 +37,7 @@ static int find_in_dict(const char *pwd, size_t len){
   int c;
   if (len>8)
     len=8;
-  else if (len<3)
+  else if (len<=3)
     return 0;
   lo=0;
   hi=ARRAY_SIZE(passworddict);
@@ -63,6 +63,7 @@ static int find_in_dict(const char *pwd, size_t len){
           else
             l=hi;
         }
+        debug(D_NOTICE, "pwd=%s l=%lu", pwd, l);
         return l;
 /*      }
       else
@@ -148,19 +149,19 @@ static uint64_t score_variants(const char *password, const char *lpassword, cons
     r=plen-off;
     d=find_in_dict(password+off, r);
     if (d){
-      mul_score(ARRAY_SIZE(passworddict)/8);
+      mul_score(ARRAY_SIZE(passworddict)/32*d);
       off+=d;
       continue;
     }
     d=find_in_dict(lpassword+off, r);
     if (d){
-      mul_score(ARRAY_SIZE(passworddict)/4);
+      mul_score(ARRAY_SIZE(passworddict)/16*d);
       off+=d;
       continue;
     }
     d=find_in_dict(npassword+off, r);
     if (d){
-      mul_score(ARRAY_SIZE(passworddict)/2);
+      mul_score(ARRAY_SIZE(passworddict)/8*d);
       off+=d;
       continue;
     }
