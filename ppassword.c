@@ -79,8 +79,10 @@ static int is_punct(int c){
 #define mul_score(num) do{\
   oscore=score;\
   score*=num;\
-  if (unlikely(oscore>score))\
+  if (unlikely(oscore>score)){\
+    debug(D_NOTICE, "got overflow");\
     return ~((uint64_t)0);\
+  }\
 } while (0)
 
 static uint64_t trailing_num_score(uint64_t num, size_t numlen, const char *nstr){
@@ -120,6 +122,7 @@ static uint64_t trailing_num_score(uint64_t num, size_t numlen, const char *nstr
       mul_score(2);
     else
       mul_score(10);
+    i++;
   ex:;
   } while (i<numlen);
   return score;
