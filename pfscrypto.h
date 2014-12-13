@@ -63,4 +63,6 @@ uint64_t psync_fs_crypto_crypto_size(uint64_t plainsize);
 void psync_fs_crypto_get_auth_sector_off(psync_crypto_sectorid_t sectorid, uint32_t level, psync_crypto_offsets_t *offsets,
                                          uint64_t *offset, uint32_t *size, uint32_t *authid);
 
+void psync_fs_crypto_check_logs();
+
 #endif
