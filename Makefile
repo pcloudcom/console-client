@@ -1,10 +1,11 @@
-CC=clang
+CC=cc
 AR=ar rcu
 RANLIB=ranlib
 USESSL=openssl
 
 #CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2
 CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -mtune=core2
+#CFLAGS=-O2 -g -pg
 
 LIB_A=psynclib.a
 
