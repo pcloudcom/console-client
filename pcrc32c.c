@@ -392,7 +392,7 @@ PSYNC_NOINLINE static int psync_has_hw_crc(){
 PSYNC_NOINLINE static int psync_has_hw_crc(){
   int info[4];
   __cpuid(info, 1);
-  return (info[2]&(1<<20))&1;
+  return (info[2]>>20)&1;
 }
 
 #define CRC32C_64BIT_HW(crc, data) do {crc=_mm_crc32_u64(crc, data);} while (0)
