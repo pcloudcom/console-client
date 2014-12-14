@@ -330,7 +330,11 @@ static const uint32_t crc32c_table[8][256]={
     crc=crc32c_table[0][(((crc)^(*((uint8_t *)data)))&0xff)]^((crc)>>8);\
   } while (0);
 
-static uint32_t psync_crc32c_sw(uint32_t crc, const void *ptr, size_t len){
+#ifdef CRC32_HW
+PSYNC_NOINLINE static uint32_t psync_crc32c_sw(uint32_t crc, const void *ptr, size_t len){
+#else
+uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
+#endif
   const char *data;
   data=(const char *)ptr;
   while (((uintptr_t)data)%sizeof(uint32_t) && len){
@@ -385,6 +389,7 @@ PSYNC_NOINLINE static int psync_has_hw_crc(){
 }
 
 #define CRC32C_64BIT_HW(crc, data) asm("crc32q %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "rm" (data))
+#define CRC32C_32BIT_HW(crc, data) asm("crc32l %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "rm" (data))
 #define CRC32C_8BIT_HW(crc, data) asm("crc32b %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "rm" (data))
 
 #elif defined(CRC32_MSC)
@@ -396,14 +401,16 @@ PSYNC_NOINLINE static int psync_has_hw_crc(){
 }
 
 #define CRC32C_64BIT_HW(crc, data) do {crc=_mm_crc32_u64(crc, data);} while (0)
+#define CRC32C_32BIT_HW(crc, data) do {crc=_mm_crc32_u32(crc, data);} while (0)
 #define CRC32C_8BIT_HW(crc, data) do {crc=_mm_crc32_u8(crc, data);} while (0)
 
 #endif
 
+#if defined(_WIN64) || defined(__x86_64__)
 static uint32_t psync_crc32c_hw(uint64_t crc, const void *ptr, size_t len){
   const char *data;
   data=(const char *)ptr;
-  while (((uintptr_t)data)%sizeof(uint32_t) && len){
+  while (((uintptr_t)data)%sizeof(uint64_t) && len){
     CRC32C_8BIT_HW(crc, *data);
     data++;
     len--;
@@ -439,23 +446,69 @@ static uint32_t psync_crc32c_hw(uint64_t crc, const void *ptr, size_t len){
   }
   return crc;
 }
-
+#else
+static uint32_t psync_crc32c_hw(uint32_t crc, const void *ptr, size_t len){
+  const char *data;
+  data=(const char *)ptr;
+  while (((uintptr_t)data)%sizeof(uint32_t) && len){
+    CRC32C_8BIT_HW(crc, *data);
+    data++;
+    len--;
+  }
+  while (len>=32){
+    len-=32;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+  }
+  while (len>=4){
+    len-=4;
+    CRC32C_32BIT_HW(crc, *((uint32_t *)data));
+    data+=4;
+  }
+  while (len){
+    len--;
+    CRC32C_8BIT_HW(crc, *data);
+    data++;
+  }
+  return crc;
+}
 #endif
 
+PSYNC_NOINLINE static uint32_t psync_crc32c_init(uint32_t crc, const void *ptr, size_t len, int *hashw){
+  *hashw=psync_has_hw_crc()+1;
+  if (likely(*hashw==2))
+    return psync_crc32c_hw(crc, ptr, len);
+  else
+    return psync_crc32c_sw(crc, ptr, len);
+}
+
 uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
-#ifdef CRC32_HW
 #if defined(CRC32_GNUC) && defined(__SSE4_2__)
   return psync_crc32c_hw(crc, ptr, len);
 #else
   static int hashw=0;
   if (unlikely(!hashw))
-    hashw=psync_has_hw_crc()+1;
-  if (hashw==2)
+    return psync_crc32c_init(crc, ptr, len, &hashw);
+  if (likely(hashw==2))
     return psync_crc32c_hw(crc, ptr, len);
   else
     return psync_crc32c_sw(crc, ptr, len);
 #endif
-#else
-  return psync_crc32c_sw(crc, ptr, len);
-#endif
 }
+
+#endif
+
