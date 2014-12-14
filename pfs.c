@@ -2735,6 +2735,7 @@ static int psync_fs_do_start(){
   fuse_opt_add_arg(&args, "argv");
   fuse_opt_add_arg(&args, "-oauto_unmount");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
+  fuse_opt_add_arg(&args, "-ononempty");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
