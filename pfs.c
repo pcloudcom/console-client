@@ -144,6 +144,17 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       pthread_mutex_lock(&fl->mutex);
       if (fl->writeid==writeid){
         debug(D_NOTICE, "updating fileid %ld to %lu, hash %lu", (long)fileid, (unsigned long)newfileid, (unsigned long)hash);
+        if (fl->encrypted){
+          if (fl->logfile){
+            psync_file_close(fl->logfile);
+            fl->logfile=INVALID_HANDLE_VALUE;
+          }
+          delete_log_files(fl);
+          if (fl->authenticatedints){
+            psync_interval_tree_free(fl->authenticatedints);
+            fl->authenticatedints=NULL;
+          }
+        }
         fl->fileid=newfileid;
         fl->remotefileid=newfileid;
         fl->hash=hash;
@@ -161,17 +172,6 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
           fl->indexfile=INVALID_HANDLE_VALUE;
         }
         psync_tree_del(&openfiles, &fl->tree);
-        if (fl->encrypted){
-          if (fl->logfile){
-            psync_file_close(fl->logfile);
-            fl->indexfile=INVALID_HANDLE_VALUE;
-          }
-          delete_log_files(fl);
-          if (fl->authenticatedints){
-            psync_interval_tree_free(fl->authenticatedints);
-            fl->authenticatedints=NULL;
-          }
-        }
         tr=openfiles;
         d=-1;
         while (tr){
@@ -2316,8 +2316,7 @@ finish:
   psync_sql_unlock();
   psync_free(fold_path);
   psync_free(fnew_path);
-  debug(D_NOTICE, "rename %s to %s=%d", old_path, new_path, ret);
-  return ret;
+  return PRINT_NEG_RETURN_FORMAT(ret, "from %s to %s", old_path, new_path);
 err_enoent:
   if (folder)
     psync_fstask_release_folder_tasks_locked(folder);
@@ -2404,8 +2403,7 @@ retry:
     }
   }
   pthread_mutex_unlock(&of->mutex);
-  debug(D_NOTICE, "ftruncate %s %lu=%d", path, (unsigned long)size, ret);
-  return ret;
+  return PRINT_NEG_RETURN_FORMAT(ret, " for ftruncate of %s to %lu", path, (unsigned long)size);
 }
 
 static int psync_fs_truncate(const char *path, fuse_off_t size){
