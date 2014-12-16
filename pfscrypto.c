@@ -581,7 +581,7 @@ static int psync_fs_write_auth_tree_to_log(psync_openfile_t *of, psync_crypto_of
     if (lastsect/PSYNC_CRYPTO_HASH_TREE_SECTORS!=sect->sectorid/PSYNC_CRYPTO_HASH_TREE_SECTORS){
       ret=psync_fs_crypto_switch_sectors(of, lastsect, sect->sectorid, authsect, offsets);
       if (ret)
-        return ret;
+        return PRINT_RETURN(ret);
     }
     memcpy(authsect[0][sect->sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS], sect->auth, PSYNC_CRYPTO_AUTH_SIZE);
     lastsect=sect->sectorid;
@@ -589,9 +589,9 @@ static int psync_fs_write_auth_tree_to_log(psync_openfile_t *of, psync_crypto_of
   }
   ret=psync_fs_crypto_switch_sectors(of, lastsect, PSYNC_CRYPTO_INVALID_SECTORID, authsect, offsets);
   if (ret)
-    return ret;
+    return PRINT_RETURN(ret);
   if (offsets->needmasterauth && (ret=psync_fs_crypto_write_master_auth(of, authsect, offsets)))
-    return ret;
+    return PRINT_RETURN(ret);
   debug(D_NOTICE, "wrote three to log, lastsectorid=%u, currentsize=%lu", (unsigned)lastsect, (unsigned long)of->currentsize);
   return 0;
 }

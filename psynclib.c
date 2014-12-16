@@ -298,6 +298,7 @@ void psync_logout(){
   psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth', 'saveauth')");
   psync_invalidate_auth(psync_my_auth);
   memset(psync_my_auth, 0, sizeof(psync_my_auth));
+  psync_cloud_crypto_stop();
   pthread_mutex_lock(&psync_my_auth_mutex);
   psync_free(psync_my_pass);
   psync_my_pass=NULL;
@@ -323,6 +324,7 @@ void psync_unlink(){
   psync_status_recalc_to_download();
   psync_status_recalc_to_upload();
   psync_invalidate_auth(psync_my_auth);
+  psync_cloud_crypto_stop();
   psync_milisleep(20);
   psync_stop_localscan();
   psync_sql_checkpoint_lock();
