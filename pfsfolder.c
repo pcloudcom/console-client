@@ -47,7 +47,7 @@ static char *get_encname_for_folder(psync_fsfolderid_t folderid, const char *pat
   return encname;
 }
 
-static psync_fspath_t *ret_folder_data(psync_fsfolderid_t folderid, const char *name, uint32_t permissions, uint32_t flags){
+static psync_fspath_t *ret_folder_data(psync_fsfolderid_t folderid, const char *name, uint32_t permissions, uint32_t flags, uint32_t shareid){
   psync_fspath_t *ret;
   if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED && strncmp(psync_fake_prefix, name, psync_fake_prefix_len)){
     psync_crypto_aes256_text_encoder_t enc;
@@ -64,6 +64,7 @@ static psync_fspath_t *ret_folder_data(psync_fsfolderid_t folderid, const char *
     psync_free(encname);
     ret->folderid=folderid;
     ret->name=(char *)(ret+1);
+    ret->shareid=shareid;
     ret->permissions=permissions;
     ret->flags=flags;
   }
@@ -71,10 +72,31 @@ static psync_fspath_t *ret_folder_data(psync_fsfolderid_t folderid, const char *
     ret=psync_new(psync_fspath_t);
     ret->folderid=folderid;
     ret->name=name;
+    ret->shareid=shareid;
     ret->permissions=permissions;
     ret->flags=flags;
   }
   return ret;
+}
+
+PSYNC_NOINLINE void do_check_userid(uint64_t userid, uint64_t folderid, uint32_t *shareid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT id FROM sharedfolder WHERE userid=? AND folderid=?");
+  psync_sql_bind_uint(res, 1, userid);
+  psync_sql_bind_uint(res, 2, folderid);
+  if ((row=psync_sql_fetch_rowint(res)))
+    *shareid=row[0];
+  else
+    debug(D_WARNING, "came up to a folder %lu owned by userid %lu but can't find it in sharedfolder", (unsigned long)folderid, (unsigned long)userid);
+  psync_sql_free_result(res);
+}
+
+static void check_userid(uint64_t userid, uint64_t folderid, uint32_t *shareid){
+  if (userid==psync_my_userid || *shareid)
+    return;
+  else
+    do_check_userid(userid, folderid, shareid);
 }
 
 psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
@@ -86,12 +108,13 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
   psync_uint_row row;
   char *ename;
   size_t len, elen;
-  uint32_t permissions, flags;
+  uint32_t permissions, flags, shareid;
   int hasit;
   res=NULL;
   if (*path!='/')
     return NULL;
   cfolderid=0;
+  shareid=0;
   permissions=PSYNC_PERM_ALL;
   flags=0;
   while (1){
@@ -108,10 +131,10 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
     else{
       if (res)
         psync_sql_free_result(res);
-      return ret_folder_data(cfolderid, path, permissions, flags);
+      return ret_folder_data(cfolderid, path, permissions, flags, shareid);
     }
     if (!res)
-      res=psync_sql_query("SELECT id, permissions, flags FROM folder WHERE parentfolderid=? AND name=?");
+      res=psync_sql_query("SELECT id, permissions, flags, userid FROM folder WHERE parentfolderid=? AND name=?");
     else
       psync_sql_reset(res);
     psync_sql_bind_int(res, 1, cfolderid);
@@ -141,6 +164,7 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
         permissions&=row[1];
         flags=row[2];
         hasit=1;
+        check_userid(row[3], row[0], &shareid);
       }
       else
         hasit=0;
@@ -152,6 +176,7 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
         cfolderid=row[0];
         permissions=row[1];
         flags=row[2];
+        check_userid(row[3], row[0], &shareid);
         hasit=1;
       }
       else

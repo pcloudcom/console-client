@@ -2089,31 +2089,30 @@ static int psync_fs_unlink(const char *path){
   return ret;
 }
 
+static int psync_fs_can_move(psync_fsfolderid_t fromfolderid, uint32_t frompermissions, psync_fsfolderid_t tofolderid, uint32_t topermissions, int sameshare){
+  if (fromfolderid==tofolderid)
+    return (frompermissions&PSYNC_PERM_MODIFY)==PSYNC_PERM_MODIFY;
+  if ((frompermissions&PSYNC_PERM_ALL)==PSYNC_PERM_ALL && (topermissions&PSYNC_PERM_ALL)==PSYNC_PERM_ALL)
+    return 1;
+  if ((frompermissions&(PSYNC_PERM_DELETE|PSYNC_PERM_MODIFY))==0 || (topermissions&(PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY))==0)
+    return 0;
+  if (sameshare)
+    return (frompermissions&PSYNC_PERM_MODIFY)!=0;
+  else
+    return (frompermissions&PSYNC_PERM_DELETE) && (topermissions&PSYNC_PERM_CREATE);
+}
+
 static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions,
-                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
-  if (parentfolderid==to_folderid){
-    assertw(targetperms==srcpermissions);
-    if (!(srcpermissions&PSYNC_PERM_MODIFY))
-      return -EACCES;
-  }
-  else{
-    if (!(srcpermissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
-      return -EACCES;
-  }
-  return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, int sameshare){
+  if (!psync_fs_can_move(folderid, srcpermissions, to_folderid, targetperms, sameshare))
+    return -EACCES;
+  return psync_fstask_rename_folder(parentfolderid, parentfolderid, name, to_folderid, new_name);
 }
 
 static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions,
-                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms){
-  if (parentfolderid==to_folderid){
-    assertw(targetperms==srcpermissions);
-    if (!(srcpermissions&PSYNC_PERM_MODIFY))
-      return -EACCES;
-  }
-  else{
-    if (!(srcpermissions&PSYNC_PERM_DELETE) || !(targetperms&PSYNC_PERM_CREATE))
-      return -EACCES;
-  }
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, int sameshare){
+  if (!psync_fs_can_move(parentfolderid, srcpermissions, to_folderid, targetperms, sameshare))
+    return -EACCES;
   return psync_fstask_rename_file(fileid, parentfolderid, name, to_folderid, new_name);
 }
 
@@ -2266,14 +2265,16 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
       else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name))
         ret=-ENOTEMPTY;
       else
-        ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
+        ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, 
+                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fold_path->shareid==fnew_path->shareid);
       goto finish;
     }
     else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
       if (psync_fs_is_folder(fnew_path->folderid, fnew_path->name))
         ret=-EISDIR;
       else
-        ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
+        ret=psync_fs_rename_file(creat->fileid, fold_path->folderid, fold_path->name, fold_path->permissions, 
+                                 fnew_path->folderid, fnew_path->name, fnew_path->permissions, fold_path->shareid==fnew_path->shareid);
       goto finish;
     }
   }
@@ -2289,7 +2290,8 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
       else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name))
         ret=-ENOTEMPTY;
       else
-        ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
+        ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, 
+                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fold_path->shareid==fnew_path->shareid);
       goto finish;
     }
     psync_sql_free_result(res);
@@ -2304,7 +2306,8 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
       if (psync_fs_is_folder(fnew_path->folderid, fnew_path->name))
         ret=-EISDIR;
       else
-        ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, fnew_path->folderid, fnew_path->name, fnew_path->permissions);
+        ret=psync_fs_rename_file(fid, fold_path->folderid, fold_path->name, fold_path->permissions, 
+                                 fnew_path->folderid, fnew_path->name, fnew_path->permissions, fold_path->shareid==fnew_path->shareid);
       goto finish;
     }
     psync_sql_free_result(res);

@@ -39,8 +39,9 @@ typedef int64_t psync_fsfileid_t;
 typedef struct {
   psync_fsfolderid_t folderid;
   const char *name;
-  uint32_t permissions;
-  uint32_t flags;
+  uint32_t shareid;
+  uint16_t permissions;
+  uint16_t flags;
 } psync_fspath_t;
 
 psync_fspath_t *psync_fsfolder_resolve_path(const char *path);
