@@ -9,6 +9,12 @@
 #include <errno.h>
 #include <string.h>
 
+#if IS_DEBUG
+#define psync_fs_set_thread_name() do {psync_thread_name=__FUNCTION__;} while (0)
+#else
+#define psync_fs_set_thread_name() do {} while (0)
+#endif
+
 // Do we have this in Win?
 #if !defined(P_OS_WINDOWS)
 #include <sys/xattr.h>
@@ -184,6 +190,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
   psync_sql_res *res;
   int64_t oid;
   int ret;
+  psync_fs_set_thread_name();
   LOCK_AND_LOOKUP();
   if (flags&XATTR_CREATE){
     res=psync_sql_prep_statement("INSERT OR IGNORE INTO fsxattr (objectid, name, value) VALUES (?, ?, ?)");
@@ -223,6 +230,7 @@ int psync_fs_getxattr(const char *path, const char *name, char *value, size_t si
   psync_sql_res *res;
   int64_t oid;
   int ret;
+  psync_fs_set_thread_name();
   LOCK_AND_LOOKUP();
   if (size && value){
     psync_variant_row row;
@@ -274,6 +282,7 @@ int psync_fs_listxattr(const char *path, char *list, size_t size){
   const char *str;
   size_t len;
   int ret;
+  psync_fs_set_thread_name();
   LOCK_AND_LOOKUP();
   if (size && list){
     psync_variant_row row;
@@ -312,6 +321,7 @@ int psync_fs_removexattr(const char *path, const char *name){
   psync_sql_res *res;
   int64_t oid;
   uint32_t aff;
+  psync_fs_set_thread_name();
   LOCK_AND_LOOKUP();
   res=psync_sql_prep_statement("DELETE FROM fsxattr WHERE objectid=? AND name=?");
   psync_sql_bind_uint(res, 1, oid);

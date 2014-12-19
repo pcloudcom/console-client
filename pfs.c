@@ -1598,11 +1598,11 @@ static int psync_fs_fsyncdir(const char *path, int datasync, struct fuse_file_in
 
 static int psync_read_newfile(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
   ssize_t br=psync_file_pread(of->datafile, buf, size, offset);
+  pthread_mutex_unlock(&of->mutex);
   if (br==-1){
     debug(D_NOTICE, "error reading from new file offset %lu, size %lu, error %d", (unsigned long)offset, (unsigned long)size, (int)psync_fs_err());
     br=-EIO;
   }
-  pthread_mutex_unlock(&of->mutex);
   return br;
 }
 
