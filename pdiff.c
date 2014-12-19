@@ -1659,6 +1659,28 @@ static void psync_run_analyze_if_needed(){
   }
 }
 
+static int psync_diff_check_quota(psync_socket *sock){
+  binparam diffparams[]={P_STR("timeformat", "timestamp")};
+  binresult *res;
+  uint64_t oused_quota, result;
+  oused_quota=used_quota;
+  res=send_command(sock, "userinfo", diffparams);
+  if (!res)
+    return -1;
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (unlikely(result))
+    debug(D_WARNING, "userinfo returned error %u: %s", (unsigned)result, psync_find_result(res, "error", PARAM_STR)->str);
+  else
+    used_quota=psync_find_result(res, "usedquota", PARAM_NUM)->num;
+  if (used_quota!=oused_quota){
+    debug(D_WARNING, "corrected locally calculated quota from %lu to %lu", (unsigned long)oused_quota, (unsigned long)used_quota);
+    psync_set_uint_value("usedquota", used_quota);
+    psync_send_eventid(PEVENT_USEDQUOTA_CHANGED);
+  }
+  psync_free(res);
+  return 0;
+}
+
 static void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
@@ -1707,6 +1729,11 @@ restart:
     psync_free(res);
   } while (result);
   debug(D_NOTICE, "initial sync finished");
+  if (psync_diff_check_quota(sock)){
+    psync_socket_close(sock);
+    psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
+    goto restart;
+  }
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   initialdownload=0;
@@ -1758,8 +1785,9 @@ restart:
         if (entries->length){
           newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
           diffid=process_entries(entries, newdiffid);
-          check_overquota();
           psync_diff_refresh_fs(entries);
+          psync_diff_check_quota(sock);
+          check_overquota();
         }
         else
           debug(D_NOTICE, "diff with 0 entries, did we send a nop recently?");
