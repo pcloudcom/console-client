@@ -1177,9 +1177,23 @@ psync_new_version_t *psync_check_new_version(const char *os, unsigned long curre
   return ver;
 }
 
+static void psync_del_all_except(void *ptr, psync_pstat_fast *st){
+  const char **nmarr;
+  char *fp;
+  nmarr=(const char **)ptr;
+  if (!psync_filename_cmp(st->name, nmarr[1]) || st->isfolder)
+    return;
+  fp=psync_strcat(nmarr[0], PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
+  debug(D_NOTICE, "deleting old update file %s", fp);
+  if (psync_file_delete(fp))
+    debug(D_WARNING, "could not delete %s", fp);
+  psync_free(fp);
+}
+
 static char *psync_filename_from_res(const binresult *res){
   const char *nm;
   char *nmd, *path, *ret;
+  const char *nmarr[2];
   nm=strrchr(psync_find_result(res, "path", PARAM_STR)->str, '/');
   if (unlikely_log(!nm))
     return NULL;
@@ -1187,6 +1201,9 @@ static char *psync_filename_from_res(const binresult *res){
   if (unlikely_log(!path))
     return NULL;
   nmd=psync_url_decode(nm+1);
+  nmarr[0]=path;
+  nmarr[1]=nmd;
+  psync_list_dir_fast(path, psync_del_all_except, nmarr);
   ret=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, nmd, NULL);
   psync_free(nmd);
   psync_free(path);
