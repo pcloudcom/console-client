@@ -159,7 +159,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
   int res, err;
   ssl=SSL_new(globalctx);
   if (!ssl)
-    return PSYNC_SSL_FAIL;
+    return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
   SSL_set_fd(ssl, sock);
   conn=psync_ssl_alloc_conn(ssl, hostname);
   if ((sess=(SSL_SESSION *)psync_cache_get(conn->cachekey))){
@@ -185,7 +185,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
 fail:
   SSL_free(ssl);
   psync_free(conn);
-  return PSYNC_SSL_FAIL;
+  return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
 }
 
 int psync_ssl_connect_finish(void *sslconn, const char *hostname){
@@ -207,7 +207,7 @@ int psync_ssl_connect_finish(void *sslconn, const char *hostname){
 fail:
   SSL_free(conn->ssl);
   psync_free(conn);
-  return PSYNC_SSL_FAIL;
+  return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
 }
 
 static void psync_ssl_free_session(void *ptr){
@@ -253,11 +253,11 @@ int psync_ssl_read(void *sslconn, void *buf, int num){
   int res, err;
   conn=(ssl_connection_t *)sslconn;
   res=SSL_read(conn->ssl, buf, num);
-  if (res>=0)
+  if (likely(res>=0))
     return res;
   err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
-  return PSYNC_SSL_FAIL;
+  return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
 }
 
 int psync_ssl_write(void *sslconn, const void *buf, int num){
@@ -265,11 +265,11 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
   int res, err;
   conn=(ssl_connection_t *)sslconn;
   res=SSL_write(conn->ssl, buf, num);
-  if (res>=0)
+  if (likely(res>=0))
     return res;
   err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
-  return PSYNC_SSL_FAIL;
+  return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
 }
 
 void psync_ssl_rand_strong(unsigned char *buf, int num){
@@ -323,7 +323,7 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
     goto err1;
   if (unlikely_log(!BN_set_word(bn, RSA_F4)))
     goto err2;
-  if (!RSA_generate_key_ex(rsa, bits, bn, NULL))
+  if (unlikely_log(!RSA_generate_key_ex(rsa, bits, bn, NULL)))
     goto err2;
   BN_free(bn);
   return rsa;

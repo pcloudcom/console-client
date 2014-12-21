@@ -94,6 +94,7 @@
       debug(D_CRITICAL, "pthread_mutex_lock returned %d", __mutex_result);\
   } while (0)
 #define PRINT_RETURN(x) (x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_NOTICE, "returning %d", (int)(x))
+#define PRINT_RETURN_CONST(x) (x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_NOTICE, "returning " #x)
 #define PRINT_RETURN_FORMAT(x, format, ...) (x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_NOTICE, "returning %d" format, (int)(x), __VA_ARGS__)
 #define PRINT_NEG_RETURN(x) ((x<0)?(x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "returning %d", (int)(x)):(x))
 #define PRINT_NEG_RETURN_FORMAT(x, format, ...) ((x<0)?(x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "returning %d "  format, (int)(x), __VA_ARGS__):(x))
@@ -101,6 +102,7 @@
 #define likely_log likely
 #define unlikely_log unlikely
 #define PRINT_RETURN(x) (x)
+#define PRINT_RETURN_CONST(x) (x)
 #define PRINT_RETURN_FORMAT(x, format, ...) (x)
 #define PRINT_NEG_RETURN(x) (x)
 #define PRINT_NEG_RETURN_FORMAT(x, format, ...) (x)
