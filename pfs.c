@@ -731,7 +731,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   return -ENOENT;
 }
 
-static int filler_decoded(psync_crypto_aes256_text_decoder_t dec, fuse_fill_dir_t filler, void *buf, const char *name, struct stat *st, off_t off){
+static int filler_decoded(psync_crypto_aes256_text_decoder_t dec, fuse_fill_dir_t filler, void *buf, const char *name, struct FUSE_STAT *st, fuse_off_t off){
   if (dec){
     char *namedec;
     int ret;

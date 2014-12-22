@@ -68,6 +68,7 @@ static void *debug_malloc(size_t sz){
   void *ptr;
   if (unlikely(sz>=PSYNC_DEBUG_LOG_ALLOC_OVER))
     debug(D_WARNING, "allocating %lu bytes", (unsigned long)sz);
+  assert(sz>0);
   ptr=psync_real_malloc(sz);
   if (likely_log(ptr))
     memset(ptr, 0xfa, sz);
