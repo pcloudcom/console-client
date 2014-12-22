@@ -253,11 +253,11 @@ int psync_ssl_read(void *sslconn, void *buf, int num){
   int res, err;
   conn=(ssl_connection_t *)sslconn;
   res=SSL_read(conn->ssl, buf, num);
-  if (likely(res>=0))
+  if (res>=0)
     return res;
   err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
-  return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
+  return PSYNC_SSL_FAIL;
 }
 
 int psync_ssl_write(void *sslconn, const void *buf, int num){
@@ -265,11 +265,11 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
   int res, err;
   conn=(ssl_connection_t *)sslconn;
   res=SSL_write(conn->ssl, buf, num);
-  if (likely(res>=0))
+  if (res>=0)
     return res;
   err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(err);
-  return PRINT_RETURN_CONST(PSYNC_SSL_FAIL);
+  return PSYNC_SSL_FAIL;
 }
 
 void psync_ssl_rand_strong(unsigned char *buf, int num){
