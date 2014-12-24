@@ -68,6 +68,36 @@ typedef AES_KEY *psync_aes256_decoder;
 #define psync_sha512_update(pctx, data, datalen) SHA512_Update(pctx, data, datalen)
 #define psync_sha512_final(checksum, pctx) SHA512_Final(checksum, pctx)
 
+/* AES_encrypt/AES_decrypt do not use hardware acceleration, do it ourselves, at least for gcc for now */
+
+#if defined(__GNUC__) && (defined(__amd64__) || defined(__x86_64__) || defined(__i386__))
+#define PSYNC_AES_HW
+#define PSYNC_AES_HW_GCC
+#elif defined(_MSC_VER)
+#define PSYNC_AES_HW
+#define PSYNC_AES_HW_MSC
+#endif
+
+#if defined(PSYNC_AES_HW)
+extern int psync_ssl_hw_aes;
+
+void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst);
+void psync_aes256_decode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst);
+
+static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+  if (psync_ssl_hw_aes)
+    psync_aes256_encode_block_hw(enc, src, dst);
+  else
+    AES_encrypt(src, dst, enc);
+}
+
+static inline void psync_aes256_decode_block(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
+  if (psync_ssl_hw_aes)
+    psync_aes256_decode_block_hw(enc, src, dst);
+  else
+    AES_decrypt(src, dst, enc);
+}
+#else
 static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
   AES_encrypt(src, dst, enc);
 }
@@ -75,6 +105,6 @@ static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const uns
 static inline void psync_aes256_decode_block(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
   AES_decrypt(src, dst, enc);
 }
-
+#endif
 
 #endif

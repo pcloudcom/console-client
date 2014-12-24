@@ -37,6 +37,11 @@
 #include "pcache.h"
 #include "ptimer.h"
 
+#if defined(PSYNC_AES_HW_MSC)
+#include <intrin.h>
+#include <wmmintrin.h>
+#endif
+
 typedef struct {
   SSL *ssl;
   char cachekey[];
@@ -44,6 +49,10 @@ typedef struct {
 
 static SSL_CTX *globalctx=NULL;
 static pthread_mutex_t *olocks;
+
+#if defined(PSYNC_AES_HW)
+int psync_ssl_hw_aes;
+#endif
 
 PSYNC_THREAD int psync_ssl_errno;
 
@@ -68,11 +77,45 @@ static void openssl_thread_setup(){
   CRYPTO_set_locking_callback(openssl_locking_callback);
 }
 
+#if defined(PSYNC_AES_HW_GCC)
+static int psync_ssl_detect_aes_hw(){
+  uint32_t eax, ecx;
+  eax=1;
+  __asm__("cpuid" 
+          : "=c"(ecx)
+          : "a"(eax)
+          : "%ebx", "%edx");
+  ecx=(ecx>>25)&1;
+  if (ecx)
+    debug(D_NOTICE, "Hardware AES support detected");
+  else
+    debug(D_NOTICE, "Hardware AES support not detected");
+  return ecx;
+}
+#elif defined(PSYNC_AES_HW_MSC)
+static int psync_ssl_detect_aes_hw(){
+  int info[4];
+  int ret;
+  __cpuid(info, 1);
+  ret=(info[2]>>25)&1
+  if (ret)
+    debug(D_NOTICE, "Hardware AES support detected");
+  else
+    debug(D_NOTICE, "Hardware AES support not detected");
+  return ret;
+}
+#endif
+
 int psync_ssl_init(){
   BIO *bio;
   X509 *cert;
   psync_uint_t i;
   unsigned char seed[PSYNC_LHASH_DIGEST_LEN];
+#if defined(PSYNC_AES_HW)
+  psync_ssl_hw_aes=psync_ssl_detect_aes_hw();
+#else
+  debug(D_NOTICE, "Hardware AES is not supported for this compiler");
+#endif
   SSL_library_init();
   OpenSSL_add_all_algorithms();
   OpenSSL_add_all_ciphers();
@@ -492,3 +535,96 @@ void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
   psync_ssl_memclean(aes, sizeof(AES_KEY));
   psync_free(aes);
 }
+
+#if defined(PSYNC_AES_HW_GCC)
+
+#define AESDEC      ".byte 0x66,0x0F,0x38,0xDE,"
+#define AESDECLAST  ".byte 0x66,0x0F,0x38,0xDF,"
+#define AESENC      ".byte 0x66,0x0F,0x38,0xDC,"
+#define AESENCLAST  ".byte 0x66,0x0F,0x38,0xDD,"
+
+#define xmm0_xmm1   "0xC8"
+
+void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+  asm("movdqa (%0), %%xmm0\n"
+      "movdqa (%1), %%xmm1\n"
+      "dec %%ecx\n"
+      "addq $16, %0\n"
+      "pxor %%xmm0, %%xmm1\n"
+      "movdqa (%0), %%xmm0\n"
+      "1:\n"
+      "addq $16, %0\n"
+      AESENC xmm0_xmm1 "\n"
+      "movdqa (%0), %%xmm0\n"
+      "loop 1b\n"
+      AESENCLAST xmm0_xmm1 "\n"
+      "movdqa %%xmm1, (%2)\n"
+      :
+      : "r" (enc->rd_key), "r" (src), "r" (dst),  "c" (enc->rounds)
+      : "memory", "ecx", "cc", "xmm0", "xmm1"
+  );
+}
+
+void psync_aes256_decode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+  asm("movdqa (%0), %%xmm0\n"
+      "movdqa (%1), %%xmm1\n"
+      "dec %%ecx\n"
+      "addq $16, %0\n"
+      "pxor %%xmm0, %%xmm1\n"
+      "movdqa (%0), %%xmm0\n"
+      "1:\n"
+      "addq $16, %0\n"
+      AESDEC xmm0_xmm1 "\n"
+      "movdqa (%0), %%xmm0\n"
+      "loop 1b\n"
+      AESDECLAST xmm0_xmm1 "\n"
+      "movdqa %%xmm1, (%2)\n"
+      :
+      : "r" (enc->rd_key), "r" (src), "r" (dst),  "c" (enc->rounds)
+      : "memory", "ecx", "cc", "xmm0", "xmm1"
+  );
+}
+
+#elif defined(PSYNC_AES_HW_MSC)
+
+void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+  __m128i r0, r1;
+  unsigned char *key;
+  unsigned cnt;
+  key=(unsigned char *)enc->rd_key;
+  r0=_mm_load_si128((__m128i *)key);
+  r1=_mm_load_si128((__m128i *)src);
+  cnt=enc->rounds-1;
+  key+=16;
+  r1=_mm_xor_si128(r0, r1);
+  r0=_mm_load_si128((__m128i *)key);
+  do{
+    key+=16;
+    r1=_mm_aesenc_si128(r1, r0);
+    r0=_mm_load_si128((__m128i *)key);
+  } while (--cnt);
+  r1=_mm_aesenclast_si128(r1, r0);
+  _mm_store_si128((__m128i *)dst, r1);
+}
+
+void psync_aes256_decode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+  __m128i r0, r1;
+  unsigned char *key;
+  unsigned cnt;
+  key=(unsigned char *)enc->rd_key;
+  r0=_mm_load_si128((__m128i *)key);
+  r1=_mm_load_si128((__m128i *)src);
+  cnt=enc->rounds-1;
+  key+=16;
+  r1=_mm_xor_si128(r0, r1);
+  r0=_mm_load_si128((__m128i *)key);
+  do{
+    key+=16;
+    r1=_mm_aesdec_si128(r1, r0);
+    r0=_mm_load_si128((__m128i *)key);
+  } while (--cnt);
+  r1=_mm_aesdeclast_si128(r1, r0);
+  _mm_store_si128((__m128i *)dst, r1);
+}
+
+#endif
