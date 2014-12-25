@@ -75,22 +75,20 @@ static uint32_t hash_func(const char *key){
   while ((c=(uint32_t)*key++))
     hash=c+(hash<<5)+hash;
   hash+=hash<<3;
-  hash-=hash>>7;
+  hash^=hash>>11;
   return hash;
 }
 
 static uint32_t hash_funcl(const char *key, size_t *len){
+  const char *k;
   uint32_t c, hash;
-  size_t l;
+  k=key;
   hash=0;
-  l=0;
-  while ((c=(uint32_t)*key++)){
+  while ((c=(uint32_t)*k++))
     hash=c+(hash<<5)+hash;
-    l++;
-  }
   hash+=hash<<3;
-  hash-=hash>>7;
-  *len=l;
+  hash^=hash>>11;
+  *len=k-key+1;
   return hash;
 }
 
