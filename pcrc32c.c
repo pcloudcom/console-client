@@ -28,6 +28,7 @@
 
 #include "pcrc32c.h"
 #include "pcompiler.h"
+#include "plibs.h"
 #include <string.h>
 
 #if defined(__GNUC__) && (defined(__amd64__) || defined(__x86_64__) || defined(__i386__))
@@ -393,6 +394,10 @@ PSYNC_NOINLINE static int psync_has_hw_crc(){
           : "=c"(ecx)
           : "a"(eax)
           : "%ebx", "%edx");
+  if ((ecx>>20)&1)
+    debug(D_NOTICE, "hardware CRC32C support detected");
+  else
+    debug(D_NOTICE, "hardware CRC32C support not detected");
   return (ecx>>20)&1;
 }
 
@@ -405,6 +410,10 @@ PSYNC_NOINLINE static int psync_has_hw_crc(){
 PSYNC_NOINLINE static int psync_has_hw_crc(){
   int info[4];
   __cpuid(info, 1);
+  if ((info[2]>>20)&1)
+    debug(D_NOTICE, "hardware CRC32C support detected");
+  else
+    debug(D_NOTICE, "hardware CRC32C support not detected");
   return (info[2]>>20)&1;
 }
 
