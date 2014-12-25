@@ -31,6 +31,9 @@
 #include "pcompiler.h"
 #include "pcompat.h"
 
+#define PSYNC_AES256_BLOCK_SIZE 16
+#define PSYNC_AES256_KEY_SIZE 32
+
 #if defined(P_SSL_OPENSSL)
 #include "pssl-openssl.h"
 #elif defined(P_SSL_SECURETRANSPORT)
@@ -61,9 +64,6 @@ typedef psync_encrypted_data_t psync_binary_rsa_key_t;
 #define PSYNC_INVALID_ENC_SYM_KEY NULL
 #define PSYNC_INVALID_ENCODER NULL
 #define PSYNC_INVALID_BIN_RSA NULL
-
-#define PSYNC_AES256_BLOCK_SIZE 16
-#define PSYNC_AES256_KEY_SIZE 32
 
 #define psync_ssl_alloc_binary_rsa psync_ssl_alloc_encrypted_symmetric_key
 

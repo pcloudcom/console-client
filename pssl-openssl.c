@@ -87,9 +87,9 @@ static int psync_ssl_detect_aes_hw(){
           : "%ebx", "%edx");
   ecx=(ecx>>25)&1;
   if (ecx)
-    debug(D_NOTICE, "Hardware AES support detected");
+    debug(D_NOTICE, "hardware AES support detected");
   else
-    debug(D_NOTICE, "Hardware AES support not detected");
+    debug(D_NOTICE, "hardware AES support not detected");
   return ecx;
 }
 #elif defined(PSYNC_AES_HW_MSC)
@@ -99,9 +99,9 @@ static int psync_ssl_detect_aes_hw(){
   __cpuid(info, 1);
   ret=(info[2]>>25)&1
   if (ret)
-    debug(D_NOTICE, "Hardware AES support detected");
+    debug(D_NOTICE, "hardware AES support detected");
   else
-    debug(D_NOTICE, "Hardware AES support not detected");
+    debug(D_NOTICE, "hardware AES support not detected");
   return ret;
 }
 #endif
@@ -114,7 +114,7 @@ int psync_ssl_init(){
 #if defined(PSYNC_AES_HW)
   psync_ssl_hw_aes=psync_ssl_detect_aes_hw();
 #else
-  debug(D_NOTICE, "Hardware AES is not supported for this compiler");
+  debug(D_NOTICE, "hardware AES is not supported for this compiler");
 #endif
   SSL_library_init();
   OpenSSL_add_all_algorithms();
@@ -544,44 +544,142 @@ void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
 #define AESENCLAST  ".byte 0x66,0x0F,0x38,0xDD,"
 
 #define xmm0_xmm1   "0xC8"
+#define xmm0_xmm2   "0xD0"
+#define xmm0_xmm3   "0xD8"
+#define xmm0_xmm4   "0xE0"
 
 void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
-  asm("movdqa (%0), %%xmm0\n"
+  asm("movdqu (%0), %%xmm0\n"
       "movdqa (%1), %%xmm1\n"
-      "dec %%ecx\n"
+      "dec %3\n"
       "addq $16, %0\n"
       "pxor %%xmm0, %%xmm1\n"
-      "movdqa (%0), %%xmm0\n"
+      "movdqu (%0), %%xmm0\n"
       "1:\n"
       "addq $16, %0\n"
       AESENC xmm0_xmm1 "\n"
-      "movdqa (%0), %%xmm0\n"
-      "loop 1b\n"
+      "dec %3\n"
+      "movdqu (%0), %%xmm0\n"
+      "jnz 1b\n"
       AESENCLAST xmm0_xmm1 "\n"
       "movdqa %%xmm1, (%2)\n"
       :
-      : "r" (enc->rd_key), "r" (src), "r" (dst),  "c" (enc->rounds)
-      : "memory", "ecx", "cc", "xmm0", "xmm1"
+      : "r" (enc->rd_key), "r" (src), "r" (dst),  "r" (enc->rounds)
+      : "memory", "cc", "xmm0", "xmm1"
   );
 }
 
 void psync_aes256_decode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
-  asm("movdqa (%0), %%xmm0\n"
+  asm("movdqu (%0), %%xmm0\n"
       "movdqa (%1), %%xmm1\n"
-      "dec %%ecx\n"
+      "dec %3\n"
       "addq $16, %0\n"
       "pxor %%xmm0, %%xmm1\n"
-      "movdqa (%0), %%xmm0\n"
+      "movdqu (%0), %%xmm0\n"
       "1:\n"
       "addq $16, %0\n"
       AESDEC xmm0_xmm1 "\n"
-      "movdqa (%0), %%xmm0\n"
-      "loop 1b\n"
+      "dec %3\n"
+      "movdqu (%0), %%xmm0\n"
+      "jnz 1b\n"
       AESDECLAST xmm0_xmm1 "\n"
       "movdqa %%xmm1, (%2)\n"
       :
-      : "r" (enc->rd_key), "r" (src), "r" (dst),  "c" (enc->rounds)
-      : "memory", "ecx", "cc", "xmm0", "xmm1"
+      : "r" (enc->rd_key), "r" (src), "r" (dst),  "r" (enc->rounds)
+      : "memory", "cc", "xmm0", "xmm1"
+  );
+}
+
+void psync_aes256_decode_2blocks_hw(psync_aes256_decoder enc, const unsigned char *src1, unsigned char *dst1,
+                                                              const unsigned char *src2, unsigned char *dst2){
+  asm("movdqu (%0), %%xmm0\n"
+      "movdqa (%1), %%xmm1\n"
+      "movdqa (%3), %%xmm2\n"
+      "dec %5\n"
+      "addq $16, %0\n"
+      "pxor %%xmm0, %%xmm1\n"
+      "pxor %%xmm0, %%xmm2\n"
+      "movdqu (%0), %%xmm0\n"
+      "1:\n"
+      "addq $16, %0\n"
+      AESDEC xmm0_xmm1 "\n"
+      AESDEC xmm0_xmm2 "\n"
+      "dec %5\n"
+      "movdqu (%0), %%xmm0\n"
+      "jnz 1b\n"
+      AESDECLAST xmm0_xmm1 "\n"
+      AESDECLAST xmm0_xmm2 "\n"
+      "movdqa %%xmm1, (%2)\n"
+      "movdqa %%xmm2, (%4)\n"
+      :
+      : "r" (enc->rd_key), "r" (src1), "r" (dst1), "r" (src2), "r" (dst2),  "r" (enc->rounds)
+      : "memory", "cc", "xmm0", "xmm1", "xmm2"
+  );
+}
+
+void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
+  asm("movdqu (%0), %%xmm0\n"
+      "movdqa (%1), %%xmm1\n"
+      "movdqa 16(%1), %%xmm2\n"
+      "dec %3\n"
+      "addq $16, %0\n"
+      "pxor %%xmm0, %%xmm1\n"
+      "pxor %%xmm0, %%xmm2\n"
+      "movdqu (%0), %%xmm0\n"
+      "1:\n"
+      "addq $16, %0\n"
+      AESDEC xmm0_xmm1 "\n"
+      AESDEC xmm0_xmm2 "\n"
+      "dec %3\n"
+      "movdqu (%0), %%xmm0\n"
+      "jnz 1b\n"
+      AESDECLAST xmm0_xmm1 "\n"
+      AESDECLAST xmm0_xmm2 "\n"
+      "movdqa %%xmm1, (%2)\n"
+      "movdqa %%xmm2, 16(%2)\n"
+      :
+      : "r" (enc->rd_key), "r" (src), "r" (dst),  "r" (enc->rounds)
+      : "memory", "cc", "xmm0", "xmm1", "xmm2"
+  );
+}
+
+void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor){
+  asm("movdqu (%0), %%xmm0\n"
+      "movdqa (%1), %%xmm1\n"
+      "movdqa 16(%1), %%xmm2\n"
+      "movdqa 32(%1), %%xmm3\n"
+      "movdqa 48(%1), %%xmm4\n"
+      "dec %4\n"
+      "addq $16, %0\n"
+      "pxor %%xmm0, %%xmm1\n"
+      "pxor %%xmm0, %%xmm2\n"
+      "pxor %%xmm0, %%xmm3\n"
+      "pxor %%xmm0, %%xmm4\n"
+      "movdqu (%0), %%xmm0\n"
+      "1:\n"
+      "addq $16, %0\n"
+      AESDEC xmm0_xmm1 "\n"
+      AESDEC xmm0_xmm2 "\n"
+      AESDEC xmm0_xmm3 "\n"
+      AESDEC xmm0_xmm4 "\n"
+      "dec %4\n"
+      "movdqu (%0), %%xmm0\n"
+      "jnz 1b\n"
+      AESDECLAST xmm0_xmm1 "\n"
+      AESDECLAST xmm0_xmm2 "\n"
+      AESDECLAST xmm0_xmm3 "\n"
+      AESDECLAST xmm0_xmm4 "\n"
+      "pxor (%3), %%xmm1\n"
+      "pxor 16(%3), %%xmm2\n"
+      "pxor 32(%3), %%xmm3\n"
+      "pxor 48(%3), %%xmm4\n"
+      "movdqa %%xmm1, (%2)\n"
+      "movdqa %%xmm2, 16(%2)\n"
+      "movdqa %%xmm3, 32(%2)\n"
+      "movdqa %%xmm4, 48(%2)\n"
+      :
+      : "r" (enc->rd_key), "r" (src), "r" (dst),  "r" (bxor), "r" (enc->rounds)
+      : "memory", "cc", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4"
   );
 }
 
@@ -592,7 +690,7 @@ void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char 
   unsigned char *key;
   unsigned cnt;
   key=(unsigned char *)enc->rd_key;
-  r0=_mm_load_si128((__m128i *)key);
+  r0=_mm_loadu_si128((__m128i *)key);
   r1=_mm_load_si128((__m128i *)src);
   cnt=enc->rounds-1;
   key+=16;
@@ -601,7 +699,7 @@ void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char 
   do{
     key+=16;
     r1=_mm_aesenc_si128(r1, r0);
-    r0=_mm_load_si128((__m128i *)key);
+    r0=_mm_loadu_si128((__m128i *)key);
   } while (--cnt);
   r1=_mm_aesenclast_si128(r1, r0);
   _mm_store_si128((__m128i *)dst, r1);
@@ -612,19 +710,113 @@ void psync_aes256_decode_block_hw(psync_aes256_encoder enc, const unsigned char 
   unsigned char *key;
   unsigned cnt;
   key=(unsigned char *)enc->rd_key;
-  r0=_mm_load_si128((__m128i *)key);
+  r0=_mm_loadu_si128((__m128i *)key);
   r1=_mm_load_si128((__m128i *)src);
   cnt=enc->rounds-1;
   key+=16;
   r1=_mm_xor_si128(r0, r1);
-  r0=_mm_load_si128((__m128i *)key);
+  r0=_mm_loadu_si128((__m128i *)key);
   do{
     key+=16;
     r1=_mm_aesdec_si128(r1, r0);
-    r0=_mm_load_si128((__m128i *)key);
+    r0=_mm_loadu_si128((__m128i *)key);
   } while (--cnt);
   r1=_mm_aesdeclast_si128(r1, r0);
   _mm_store_si128((__m128i *)dst, r1);
+}
+
+void psync_aes256_decode_2blocks_hw(psync_aes256_decoder enc, const unsigned char *src1, unsigned char *dst1,
+                                                              const unsigned char *src2, unsigned char *dst2){
+  __m128i r0, r1, r2;
+  unsigned char *key;
+  unsigned cnt;
+  key=(unsigned char *)enc->rd_key;
+  r0=_mm_loadu_si128((__m128i *)key);
+  r1=_mm_load_si128((__m128i *)src1);
+  r2=_mm_load_si128((__m128i *)src2);
+  cnt=enc->rounds-1;
+  key+=16;
+  r1=_mm_xor_si128(r0, r1);
+  r2=_mm_xor_si128(r0, r2);
+  r0=_mm_loadu_si128((__m128i *)key);
+  do{
+    key+=16;
+    r1=_mm_aesdec_si128(r1, r0);
+    r2=_mm_aesdec_si128(r2, r0);
+    r0=_mm_loadu_si128((__m128i *)key);
+  } while (--cnt);
+  r1=_mm_aesdeclast_si128(r1, r0);
+  r2=_mm_aesdeclast_si128(r2, r0);
+  _mm_store_si128((__m128i *)dst1, r1);
+  _mm_store_si128((__m128i *)dst2, r2);
+}
+
+void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
+  __m128i r0, r1, r2;
+  unsigned char *key;
+  unsigned cnt;
+  key=(unsigned char *)enc->rd_key;
+  r0=_mm_loadu_si128((__m128i *)key);
+  r1=_mm_load_si128((__m128i *)src);
+  r2=_mm_load_si128((__m128i *)(src+16));
+  cnt=enc->rounds-1;
+  key+=16;
+  r1=_mm_xor_si128(r0, r1);
+  r2=_mm_xor_si128(r0, r2);
+  r0=_mm_loadu_si128((__m128i *)key);
+  do{
+    key+=16;
+    r1=_mm_aesdec_si128(r1, r0);
+    r2=_mm_aesdec_si128(r2, r0);
+    r0=_mm_loadu_si128((__m128i *)key);
+  } while (--cnt);
+  r1=_mm_aesdeclast_si128(r1, r0);
+  r2=_mm_aesdeclast_si128(r2, r0);
+  _mm_store_si128((__m128i *)dst, r1);
+  _mm_store_si128((__m128i *)(dst+16), r2);
+}
+
+void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor){
+  __m128i r0, r1, r2, r3, r4;
+  unsigned char *key;
+  unsigned cnt;
+  key=(unsigned char *)enc->rd_key;
+  r0=_mm_loadu_si128((__m128i *)key);
+  r1=_mm_load_si128((__m128i *)src);
+  r2=_mm_load_si128((__m128i *)(src+16));
+  r3=_mm_load_si128((__m128i *)(src+32));
+  r4=_mm_load_si128((__m128i *)(src+48));
+  cnt=enc->rounds-1;
+  key+=16;
+  r1=_mm_xor_si128(r0, r1);
+  r2=_mm_xor_si128(r0, r2);
+  r3=_mm_xor_si128(r0, r3);
+  r4=_mm_xor_si128(r0, r4);
+  r0=_mm_loadu_si128((__m128i *)key);
+  do{
+    key+=16;
+    r1=_mm_aesdec_si128(r1, r0);
+    r2=_mm_aesdec_si128(r2, r0);
+    r3=_mm_aesdec_si128(r3, r0);
+    r4=_mm_aesdec_si128(r4, r0);
+    r0=_mm_loadu_si128((__m128i *)key);
+  } while (--cnt);
+  r1=_mm_aesdeclast_si128(r1, r0);
+  r2=_mm_aesdeclast_si128(r2, r0);
+  r3=_mm_aesdeclast_si128(r3, r0);
+  r4=_mm_aesdeclast_si128(r4, r0);
+  r0=_mm_load_si128((__m128i *)bxor);
+  r1=_mm_xor_si128(r0, r1);
+  r0=_mm_load_si128((__m128i *)(bxor+16));
+  _mm_store_si128((__m128i *)dst, r1);
+  r2=_mm_xor_si128(r0, r2);
+  r0=_mm_load_si128((__m128i *)(bxor+32));
+  _mm_store_si128((__m128i *)(dst+16), r2);
+  r3=_mm_xor_si128(r0, r3);
+  r0=_mm_load_si128((__m128i *)(bxor+48));
+  _mm_store_si128((__m128i *)(dst+32), r3);
+  r4=_mm_xor_si128(r0, r4);
+  _mm_store_si128((__m128i *)(dst+48), r4);
 }
 
 #endif
