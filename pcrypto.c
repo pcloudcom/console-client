@@ -517,18 +517,16 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
 int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder_t enc, const unsigned char *data, size_t datalen, 
                                       unsigned char *out, const psync_crypto_sector_auth_t auth, uint64_t sectorid){
   psync_hmac_sha512_ctx ctx;
-  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*6], hmacsha1bin[PSYNC_SHA512_DIGEST_LEN];
+  unsigned char buff[PSYNC_AES256_BLOCK_SIZE*15], hmacsha1bin[PSYNC_SHA512_DIGEST_LEN];
   unsigned char *aessrc, *aesdst, *aesxor, *hmac, *oout, *tmp;
   size_t odatalen;
   uint32_t needsteal;
   aessrc=ALIGN_PTR_A256_BS(buff);
-  aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE;
-  aesxor=aessrc+PSYNC_AES256_BLOCK_SIZE*2;
-  hmac=aessrc+PSYNC_AES256_BLOCK_SIZE*3;
-  memcpy(aessrc, auth, PSYNC_AES256_BLOCK_SIZE);
-  psync_aes256_decode_block(enc->decoder, aessrc, hmac);
-  memcpy(aessrc, auth+PSYNC_AES256_BLOCK_SIZE, PSYNC_AES256_BLOCK_SIZE);
-  psync_aes256_decode_block(enc->decoder, aessrc, hmac+PSYNC_AES256_BLOCK_SIZE);
+  aesdst=aessrc+PSYNC_AES256_BLOCK_SIZE*4;
+  aesxor=aessrc+PSYNC_AES256_BLOCK_SIZE*8;
+  hmac=aessrc+PSYNC_AES256_BLOCK_SIZE*12;
+  memcpy(aessrc, auth, PSYNC_AES256_BLOCK_SIZE*2);
+  psync_aes256_decode_2blocks_consec(enc->decoder, aessrc, hmac);
   oout=out;
   odatalen=datalen;
   if (unlikely(datalen<PSYNC_AES256_BLOCK_SIZE)){
@@ -547,32 +545,28 @@ int psync_crypto_aes256_decode_sector(psync_crypto_aes256_sector_encoder_decoder
     memcpy(aesxor, hmac+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE);
     memcpy(hmac+PSYNC_AES256_BLOCK_SIZE/2, hmac+PSYNC_AES256_BLOCK_SIZE+PSYNC_AES256_BLOCK_SIZE/2, PSYNC_AES256_BLOCK_SIZE/2);
     memcpy(hmac+PSYNC_AES256_BLOCK_SIZE, aesxor, PSYNC_AES256_BLOCK_SIZE);
-    if (IS_WORD_ALIGNED(data) && IS_WORD_ALIGNED(out))
-      while (datalen){
-        copy_aligned(aessrc, data);
-        psync_aes256_decode_block(enc->decoder, aessrc, aesdst);
-        xor16_aligned_inplace(aesdst, aesxor);
-        copy_aligned(out, aesdst);
-        data+=PSYNC_AES256_BLOCK_SIZE;
-        out+=PSYNC_AES256_BLOCK_SIZE;
-        datalen-=PSYNC_AES256_BLOCK_SIZE;
-        tmp=aesxor;
-        aesxor=aessrc;
-        aessrc=tmp;
-      }
-    else
-      while (datalen){
-        copy_unaligned(aessrc, data);
-        psync_aes256_decode_block(enc->decoder, aessrc, aesdst);
-        xor16_aligned_inplace(aesdst, aesxor);
-        copy_unaligned(out, aesdst);
-        data+=PSYNC_AES256_BLOCK_SIZE;
-        out+=PSYNC_AES256_BLOCK_SIZE;
-        datalen-=PSYNC_AES256_BLOCK_SIZE;
-        tmp=aesxor;
-        aesxor=aessrc;
-        aessrc=tmp;
-      }
+    while (datalen>=PSYNC_AES256_BLOCK_SIZE*4){
+      memcpy(aessrc, data, PSYNC_AES256_BLOCK_SIZE*4);
+      memcpy(aesxor+PSYNC_AES256_BLOCK_SIZE, aessrc, PSYNC_AES256_BLOCK_SIZE*3);
+      psync_aes256_decode_4blocks_consec_xor(enc->decoder, aessrc, aesdst, aesxor);
+      memcpy(out, aesdst, PSYNC_AES256_BLOCK_SIZE*4);
+      memcpy(aesxor, aessrc+PSYNC_AES256_BLOCK_SIZE*3, PSYNC_AES256_BLOCK_SIZE);
+      datalen-=PSYNC_AES256_BLOCK_SIZE*4;
+      data+=PSYNC_AES256_BLOCK_SIZE*4;
+      out+=PSYNC_AES256_BLOCK_SIZE*4;
+    }
+    while (datalen){
+      copy_unaligned(aessrc, data);
+      psync_aes256_decode_block(enc->decoder, aessrc, aesdst);
+      xor16_aligned_inplace(aesdst, aesxor);
+      copy_unaligned(out, aesdst);
+      data+=PSYNC_AES256_BLOCK_SIZE;
+      out+=PSYNC_AES256_BLOCK_SIZE;
+      datalen-=PSYNC_AES256_BLOCK_SIZE;
+      tmp=aesxor;
+      aesxor=aessrc;
+      aessrc=tmp;
+    }
     if (unlikely(needsteal)){
       copy_unaligned(aessrc, data);
       psync_aes256_decode_block(enc->decoder, aessrc, aesdst);
