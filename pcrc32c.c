@@ -28,6 +28,7 @@
 
 #include "pcrc32c.h"
 #include "pcompiler.h"
+#include <string.h>
 
 #if defined(__GNUC__) && (defined(__amd64__) || defined(__x86_64__) || defined(__i386__))
 #define CRC32_HW
@@ -314,6 +315,11 @@ static const uint32_t crc32c_table[8][256]={
   }
 };
 
+// From CityHash
+static const uint64_t k0=0xc3a5c85c97cb3127ULL;
+static const uint64_t k1=0xb492b66fbe98f273ULL;
+static const uint64_t k2=0x9ae16a3b2f90404fULL;
+
 #define CRC32C_64BIT(crc, data) do{\
     crc^=((uint32_t *)(data))[0];\
     crc=crc32c_table[7][crc&0xff]^\
@@ -331,6 +337,8 @@ static const uint32_t crc32c_table[8][256]={
   } while (0);
 
 #ifdef CRC32_HW
+static int crc_hashw=0;
+
 PSYNC_NOINLINE static uint32_t psync_crc32c_sw(uint32_t crc, const void *ptr, size_t len){
 #else
 uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
@@ -488,9 +496,9 @@ static uint32_t psync_crc32c_hw(uint32_t crc, const void *ptr, size_t len){
 }
 #endif
 
-PSYNC_NOINLINE static uint32_t psync_crc32c_init(uint32_t crc, const void *ptr, size_t len, int *hashw){
-  *hashw=psync_has_hw_crc()+1;
-  if (likely(*hashw==2))
+PSYNC_NOINLINE static uint32_t psync_crc32c_init(uint32_t crc, const void *ptr, size_t len){
+  crc_hashw=psync_has_hw_crc()+1;
+  if (likely(crc_hashw==2))
     return psync_crc32c_hw(crc, ptr, len);
   else
     return psync_crc32c_sw(crc, ptr, len);
@@ -500,10 +508,9 @@ uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
 #if defined(CRC32_GNUC) && defined(__SSE4_2__)
   return psync_crc32c_hw(crc, ptr, len);
 #else
-  static int hashw=0;
-  if (unlikely(!hashw))
-    return psync_crc32c_init(crc, ptr, len, &hashw);
-  if (likely(hashw==2))
+  if (unlikely(!crc_hashw))
+    return psync_crc32c_init(crc, ptr, len);
+  if (likely(crc_hashw==2))
     return psync_crc32c_hw(crc, ptr, len);
   else
     return psync_crc32c_sw(crc, ptr, len);
@@ -511,4 +518,234 @@ uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
 }
 
 #endif
+
+/* psync_fast_hash256 has some similarities to CityHash256Crc, but works with state.
+ * 
+ * https://code.google.com/p/cityhash/
+ */
+
+void psync_fast_hash256_init(psync_fast_hash256_ctx *ctx){
+#ifdef CRC32_HW
+  if (unlikely(!crc_hashw))
+    crc_hashw=psync_has_hw_crc()+1;
+#endif
+  memcpy(ctx->state, &crc32c_table[0][2], sizeof(ctx->state));
+  ctx->length=0;
+  ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]=0;
+}
+
+void psync_fast_hash256_init_seed(psync_fast_hash256_ctx *ctx, const void *seed, size_t seedlen){
+  size_t i;
+  psync_fast_hash256_init(ctx);
+  if (seedlen>sizeof(ctx->state))
+    seedlen=sizeof(ctx->state);
+  for (i=0; i<seedlen; i++)
+    ((unsigned char *)ctx->state)[i]^=((const unsigned char *)seed)[i];
+}
+
+#define FH_LOAD_STATE() do{\
+  a=ctx->state[0];\
+  b=ctx->state[1];\
+  c=ctx->state[2];\
+  d=ctx->state[3];\
+  x=ctx->state[4];\
+  y=ctx->state[5];\
+} while (0)
+
+#define FH_SAVE_STATE() do{\
+  ctx->state[0]=a;\
+  ctx->state[1]=b;\
+  ctx->state[2]=c;\
+  ctx->state[3]=d;\
+  ctx->state[4]=x;\
+  ctx->state[5]=y;\
+}  while (0)
+
+#define ROTATE_4_64(a, b, c, d) do{\
+  uint64_t __tmp=d;\
+  d=c;\
+  c=b;\
+  b=a;\
+  a=__tmp;\
+} while (0)
+
+#define ROTATE_2_64(a, b) do{\
+  uint64_t __tmp=b;\
+  b=a;\
+  a=__tmp;\
+} while (0)
+
+#define ROUND_GEN(from, mul, crc)\
+do{\
+  a+=fh_load64(from[0*mul]);\
+  b+=fh_load64(from[1*mul]);\
+  c+=fh_load64(from[2*mul]);\
+  d+=fh_load64(from[3*mul]);\
+  b^=fh_rotate64(a, 21);\
+  d^=fh_rotate64(c, 17);\
+  x=crc(x, a+b);\
+  y=crc(y, c+d);\
+  a+=fh_load64(from[4*mul]);\
+  b+=fh_load64(from[5*mul]);\
+  c+=fh_load64(from[6*mul]);\
+  d+=fh_load64(from[7*mul]);\
+  a^=fh_rotate64(b, 13);\
+  c^=fh_rotate64(d, 16);\
+  x=crc(x, a+b);\
+  y=crc(y, c+d);\
+  ROTATE_4_64(a, b, c, d);\
+  ROTATE_2_64(x, y);\
+} while (0)
+
+#ifdef CRC32_HW
+#define ROUND_BUFF() do{\
+  if (crc_hashw==2)\
+    ROUND_GEN(&ctx->buff64, 1, fh_crc32_64hw);\
+  else\
+    ROUND_GEN(&ctx->buff64, 1, fh_crc32_64sw);\
+} while (0)
+
+#define ROUND_BUFF_SW() ROUND_GEN(&ctx->buff64, 1, fh_crc32_64sw)
+#define ROUND_BUFF_HW() ROUND_GEN(&ctx->buff64, 1, fh_crc32_64hw)
+
+#else
+
+#define ROUND_BUFF() ROUND_GEN(&ctx->buff64, 1, fh_crc32_64sw)
+#define ROUND_BUFF_SW() ROUND_BUFF()
+
+#endif
+
+#define ROUND_CDATA_SW() ROUND_GEN(&cdata, 8, fh_crc32_64sw)
+#define ROUND_CDATA_HW() ROUND_GEN(&cdata, 8, fh_crc32_64hw)
+
+// From CityHash
+static inline uint64_t fh_shiftmix(uint64_t val) {
+  return val^(val>>47);
+}
+
+static inline uint64_t fh_rotate64(uint64_t val, int shift){
+  return shift?((val>>shift)|(val<<(64-shift))):val;
+}
+
+static inline uint64_t fh_load64(const void *ptr){
+  uint64_t r;
+  memcpy(&r, ptr, sizeof(uint64_t));
+  return r;
+}
+
+// From CityHash/Murmur
+static uint64_t fh_hashmul3(uint64_t u, uint64_t v, uint64_t mul){
+  return fh_shiftmix((fh_shiftmix((u^v)*mul)^v)*mul)*mul;
+}
+
+static uint64_t fh_hashmul2(uint64_t u, uint64_t v){
+  return fh_hashmul3(u, v, 0x9ddfea08eb382d69ULL);
+}
+
+static inline uint64_t fh_crc32_64sw(uint64_t crc, uint64_t data){
+  CRC32C_64BIT(crc, &data);
+  return crc;
+}
+
+#ifdef CRC32_HW
+static inline uint64_t fh_crc32_64hw(uint64_t crc, uint64_t data){
+  CRC32C_64BIT_HW(crc, data);
+  return crc;
+}
+
+static void psync_fast_hash256_update_long_hw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len);
+#endif
+
+static void psync_fast_hash256_update_long_sw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len);
+static void psync_fast_hash256_update_short_sw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len);
+
+void psync_fast_hash256_update(psync_fast_hash256_ctx *ctx, const void *data, size_t len){
+  ctx->length+=len;
+  if (len+ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]<PSYNC_FAST_HASH256_BLOCK_LEN)
+    psync_fast_hash256_update_short_sw(ctx, (const char *)data, len);
+#ifdef CRC32_HW
+  else if (crc_hashw==2)
+    psync_fast_hash256_update_long_hw(ctx, (const char *)data, len);
+  else
+    psync_fast_hash256_update_long_sw(ctx, (const char *)data, len);
+#else
+  else
+    psync_fast_hash256_update_long_sw(ctx, (const char *)data, len);
+#endif
+}
+
+PSYNC_NOINLINE static void psync_fast_hash256_update_short_sw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len){
+  ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]+=len;
+  memcpy(ctx->buff+ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]-len, cdata, len);
+}
+
+#ifdef CRC32_HW
+PSYNC_NOINLINE static void psync_fast_hash256_update_long_hw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len){
+  uint64_t a, b, c, d, x, y;
+  FH_LOAD_STATE();
+  if (ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]){
+    uint32_t l=ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1];
+    memcpy(ctx->buff+l, cdata, PSYNC_FAST_HASH256_BLOCK_LEN-l);
+    l=PSYNC_FAST_HASH256_BLOCK_LEN-l;
+    len-=l;
+    cdata+=l;
+    ROUND_BUFF_HW();
+  }
+  while (len>=PSYNC_FAST_HASH256_BLOCK_LEN){
+    ROUND_CDATA_HW();
+    len-=PSYNC_FAST_HASH256_BLOCK_LEN;
+    cdata+=PSYNC_FAST_HASH256_BLOCK_LEN;
+  }
+  FH_SAVE_STATE();
+  memcpy(ctx->buff, cdata, len);
+  ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]=len;
+}
+#endif
+
+PSYNC_NOINLINE static void psync_fast_hash256_update_long_sw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len){
+  uint64_t a, b, c, d, x, y;
+  FH_LOAD_STATE();
+  if (ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]){
+    uint32_t l=ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1];
+    memcpy(ctx->buff+l, cdata, PSYNC_FAST_HASH256_BLOCK_LEN-l);
+    l=PSYNC_FAST_HASH256_BLOCK_LEN-l;
+    len-=l;
+    cdata+=l;
+    ROUND_BUFF_SW();
+  }
+  while (len>=PSYNC_FAST_HASH256_BLOCK_LEN){
+    ROUND_CDATA_SW();
+    len-=PSYNC_FAST_HASH256_BLOCK_LEN;
+    cdata+=PSYNC_FAST_HASH256_BLOCK_LEN;
+  }
+  FH_SAVE_STATE();
+  memcpy(ctx->buff, cdata, len);
+  ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]=len;
+}
+
+void psync_fast_hash256_final(void *hash, psync_fast_hash256_ctx *ctx){
+  uint64_t a, b, c, d, x, y, len;
+  len=ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1];
+  memcpy(ctx->buff+len, &crc32c_table[1][2], PSYNC_FAST_HASH256_BLOCK_LEN-len);
+  len=ctx->length;
+  ctx->buff64[0]+=len*k0;
+  ctx->buff64[1]^=fh_hashmul2(len, k0);
+  ctx->buff64[2]^=len*k1;
+  ctx->buff64[3]-=len*k2;
+  FH_LOAD_STATE();
+  ROUND_BUFF();
+  d^=fh_rotate64(a, 43);
+  a+=fh_rotate64(b, 42);
+  b^=fh_rotate64(c, 41);
+  c+=fh_rotate64(d, 40);
+  a=fh_hashmul2(a, x+b);
+  b=fh_hashmul2(b, y+c);
+  c=fh_hashmul2(c, x+d);
+  d=fh_hashmul2(d, y+a);
+  ctx->buff64[0]=a+b+y+x;
+  ctx->buff64[1]=fh_shiftmix((a+x)*k0)*k0+b;
+  ctx->buff64[2]=fh_shiftmix((c^y)*k1)*k1+d;
+  ctx->buff64[3]=fh_shiftmix((x-y)*k2)*k2+(c^d);;
+  memcpy(hash, ctx->buff64, PSYNC_FAST_HASH256_LEN);
+}
 
