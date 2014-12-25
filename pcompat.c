@@ -2206,8 +2206,31 @@ int psync_file_close(psync_file_t fd){
 }
 
 int psync_file_sync(psync_file_t fd){
-#if defined(P_OS_POSIX)
+#if defined(F_FULLFSYNC) && defined(P_OS_POSIX)
+  if (unlikely(fcntl(fd, F_FULLFSYNC))){
+    while (errno==EINTR){
+      debug(D_NOTICE, "got EINTR while fsyncing file");
+      if (!fcntl(fd, F_FULLFSYNC))
+        return 0;
+    }
+    debug(D_NOTICE, "got error %d, when doing fcntl(F_FULLFSYNC), trying fsync()", (int)errno);
+    if (fsync(fd)){
+      debug(D_NOTICE, "fsync also failed, error %d", (int)errno);
+      return -1;
+    }
+    else{
+      debug(D_NOTICE, "fsync succeded");
+      return 0;
+    }
+  }
+  else
+    return 0;
+#elif defined(P_OS_POSIX)
+#if _POSIX_SYNCHRONIZED_IO>0
+  if (unlikely(fdatasync(fd))){
+#else
   if (unlikely(fsync(fd))){
+#endif
     while (errno==EINTR){
       debug(D_NOTICE, "got EINTR while fsyncing file");
       if (!fsync(fd))
@@ -2220,6 +2243,94 @@ int psync_file_sync(psync_file_t fd){
     return 0;
 #elif defined(P_OS_WINDOWS)
   return psync_bool_to_zero(FlushFileBuffers(fd));
+#else
+#error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_file_schedulesync(psync_file_t fd){
+#if defined(P_OS_LINUX) && defined(SYNC_FILE_RANGE_WRITE)
+  return sync_file_range(fd, 0, 0, SYNC_FILE_RANGE_WRITE);
+#elif defined(P_OS_POSIX) && _POSIX_MAPPED_FILES>0 && _POSIX_SYNCHRONIZED_IO>0
+  struct stat st;
+  void *fmap;
+  int ret;
+  if (unlikely(fstat(fd, &st))){
+    debug(D_NOTICE, "fstat failed, errno=%d", (int)errno);
+    return -1;
+  }
+  fmap=mmap(NULL, st.st_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  if (unlikely(fmap==MAP_FAILED)){
+    debug(D_NOTICE, "mmap failed, errno=%d", (int)errno);
+    return -1;
+  }
+  ret=msync(fmap, st.st_size, MS_ASYNC);
+  if (unlikely(ret))
+    debug(D_NOTICE, "msync failed, errno=%d", (int)errno);
+  munmap(fmap, st.st_size);
+  return ret;
+#elif defined(P_OS_WINDOWS)
+  HANDLE mapping;
+  void *fmap;
+  int ret;
+  ret=-1;
+  mapping=CreateFileMapping(fd, NULL, PAGE_READWRITE, 0, 0, NULL);
+  if (mapping!=NULL){
+    fmap=MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0, 0);
+    if (fmap!=NULL){
+      if (FlushViewOfFile(fmap, 0))
+        ret=0;
+      else
+        debug(D_NOTICE, "FlushViewOfFile failed, error %u", (unsigned)GetLastError());
+      UnmapViewOfFile(fmap);
+    }
+    else
+      debug(D_NOTICE, "MapViewOfFile failed, error %u", (unsigned)GetLastError());
+    CloseHandle(mapping);
+  }
+  else
+    debug(D_NOTICE, "CreateFileMapping failed, error %u", (unsigned)GetLastError());
+  return ret;
+#else
+  return 0;
+#endif
+}
+
+int psync_folder_sync(const char *path){
+#if defined(P_OS_POSIX)
+  int fd, ret;
+  fd=open(path, O_RDONLY);
+  if (fd==-1){
+    debug(D_NOTICE, "could not open folder %s, error %d", path, (int)errno);
+    return -1;
+  }
+  if (unlikely(psync_file_sync(fd))){
+    debug(D_NOTICE, "could not fsync folder %s, error %d", path, (int)errno);
+    ret=-1;
+  }
+  else
+    ret=0;
+  close(fd);
+  return ret;
+#elif defined(P_OS_WINDOWS)
+  wchar_t *wpath;
+  HANDLE fd;
+  int ret;
+  wpath=utf8_to_wchar(path);
+  fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  psync_free(wpath);
+  if (fd==INVALID_HANDLE_VALUE){
+    debug(D_NOTICE, "could not open folder %s", path);
+    return -1;
+  }
+  if (FlushFileBuffers(fd))
+    ret=0;
+  else{
+    debug(D_NOTICE, "could not flush folder %s", path);
+    ret=-1;
+  }
+  CloseHandle(fd);
+  return ret;
 #else
 #error "Function not implemented for your operating system"
 #endif

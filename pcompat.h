@@ -74,25 +74,30 @@
 #endif
 
 #if defined(P_OS_WINDOWS)
-#define P_OS_ID 5
-#elif defined(P_OS_MACOSX)
-#define P_OS_ID 6
-#elif defined(P_OS_LINUX)
-#define P_OS_ID 7
-#else
-#define P_OS_ID 0
-#endif
 
-#ifdef P_OS_WINDOWS
+#define P_OS_ID 5
 
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0501
 #endif
 
-#endif
 
-#if defined(P_OS_MACOSX)
+#elif defined(P_OS_MACOSX)
+
+#define P_OS_ID 6
+
 #define _DARWIN_USE_64_BIT_INODE
+
+#elif defined(P_OS_LINUX)
+
+#define P_OS_ID 7
+
+#define _GNU_SOURCE
+
+#else
+
+#define P_OS_ID 0
+
 #endif
 
 #define _FILE_OFFSET_BITS 64
@@ -450,6 +455,8 @@ int psync_file_delete(const char *path);
 psync_file_t psync_file_open(const char *path, int access, int flags);
 int psync_file_close(psync_file_t fd);
 int psync_file_sync(psync_file_t fd);
+int psync_file_schedulesync(psync_file_t fd);
+int psync_folder_sync(const char *path);
 psync_file_t psync_file_dup(psync_file_t fd);
 int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count);
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count);
