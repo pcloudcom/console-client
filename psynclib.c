@@ -1204,7 +1204,7 @@ static char *psync_filename_from_res(const binresult *res){
   nmd=psync_url_decode(nm+1);
   nmarr[0]=path;
   nmarr[1]=nmd;
-  psync_list_dir_fast(path, psync_del_all_except, nmarr);
+  psync_list_dir_fast(path, psync_del_all_except, (void *)nmarr);
   ret=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, nmd, NULL);
   psync_free(nmd);
   psync_free(path);

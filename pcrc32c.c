@@ -657,10 +657,18 @@ static inline uint64_t fh_crc32_64sw(uint64_t crc, uint64_t data){
 }
 
 #ifdef CRC32_HW
+#if defined(_WIN64) || defined(__x86_64__)
 static inline uint64_t fh_crc32_64hw(uint64_t crc, uint64_t data){
   CRC32C_64BIT_HW(crc, data);
   return crc;
 }
+#else
+static inline uint32_t fh_crc32_64hw(uint32_t crc, uint64_t data){
+  CRC32C_32BIT_HW(crc, ((uint32_t *)&data)[0]);
+  CRC32C_32BIT_HW(crc, ((uint32_t *)&data)[1]);
+  return crc;
+}
+#endif
 
 static void psync_fast_hash256_update_long_hw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len);
 #endif

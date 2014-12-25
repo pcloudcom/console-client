@@ -97,7 +97,7 @@ static int psync_ssl_detect_aes_hw(){
   int info[4];
   int ret;
   __cpuid(info, 1);
-  ret=(info[2]>>25)&1
+  ret=(info[2]>>25)&1;
   if (ret)
     debug(D_NOTICE, "hardware AES support detected");
   else
