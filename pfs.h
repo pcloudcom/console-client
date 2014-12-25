@@ -37,6 +37,7 @@
 #include "pfstasks.h"
 #include "pcompat.h"
 #include "pcrypto.h"
+#include "pcrc32c.h"
 #include <pthread.h>
 
 #if defined(P_OS_POSIX)
@@ -95,6 +96,7 @@ typedef struct {
   psync_crypto_aes256_sector_encoder_decoder_t encoder;
   psync_tree *sectorsinlog;
   psync_interval_tree_t *authenticatedints;
+  psync_fast_hash256_ctx loghashctx;
   psync_file_t logfile;
   uint32_t logoffset;
 } psync_openfile_t;

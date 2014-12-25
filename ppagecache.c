@@ -1103,6 +1103,7 @@ static int flush_pages(int nosleep){
         i++;
       }
       debug(D_NOTICE, "cache data of %u pages written", (unsigned)i);
+      psync_file_schedulesync(readcache);
       /* if we can afford it, wait a while before calling fsync() as at least on Linux this blocks reads from the same file until it returns */
       if (nosleep!=1){
         if (nosleep==2)
@@ -1117,6 +1118,7 @@ static int flush_pages(int nosleep){
         }
         pthread_mutex_unlock(&cache_mutex);
       }
+      debug(D_NOTICE, "syncing cache data");
       if (psync_file_sync(readcache)){
         debug(D_ERROR, "flush of cache file failed");
         pthread_mutex_unlock(&flush_cache_mutex);
