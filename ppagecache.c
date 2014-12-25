@@ -698,6 +698,8 @@ static unsigned char *has_pages_in_db(uint64_t hash, uint64_t pageid, uint32_t p
   unsigned char *ret;
   uint64_t fromid;
   uint32_t fcnt;
+  if (unlikely(!pagecnt))
+    return NULL;
   ret=psync_new_cnt(unsigned char, pagecnt);
   memset(ret, 0, pagecnt);
   fromid=0;
@@ -2230,8 +2232,8 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
   }
   for (i=0; i<pagecnt; i++){
     pbuff=NULL;
-    if (poffset+i*PSYNC_FS_PAGE_SIZE+PSYNC_FS_PAGE_SIZE>initialsize){
-      apsize=initialsize-(poffset+i*PSYNC_FS_PAGE_SIZE);
+    if ((first_page_id+i)*PSYNC_FS_PAGE_SIZE+PSYNC_FS_PAGE_SIZE>initialsize){
+      apsize=initialsize-((first_page_id+i)*PSYNC_FS_PAGE_SIZE);
       assert(apsize>0 && apsize<=PSYNC_FS_PAGE_SIZE);
     }
     else
@@ -2241,7 +2243,7 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
         pbuff=buf;
     }
     else if (i==pagecnt-1){
-      if (i*PSYNC_FS_PAGE_SIZE+apsize>=size+pageoff)
+      if (i*PSYNC_FS_PAGE_SIZE+apsize<=size+pageoff)
         pbuff=buf+i*PSYNC_FS_PAGE_SIZE-pageoff;
     }
     else
@@ -2334,7 +2336,8 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
       assert(apageid>=0 && apageid<PSYNC_CRYPTO_HASH_TREE_SECTORS);
       if (psync_crypto_aes256_decode_sector(of->encoder, (unsigned char *)dp[i].buff, dp[i].pagesize, (unsigned char *)dp[i].buff,
                                             ap->auth[apageid], first_page_id+i)){
-        debug(D_ERROR, "decoding of page %lu of file %s failed pagesize=%u", (unsigned long)(first_page_id+i), of->currentname, (unsigned)dp[i].pagesize);
+        debug(D_ERROR, "decoding of page %lu of file %s failed pagesize=%u, requested offset=%lu, requested size=%lu", 
+              (unsigned long)(first_page_id+i), of->currentname, (unsigned)dp[i].pagesize, (unsigned long)offset, (unsigned long)size);
         ret=-EIO;
       }
       else if (dp[i].freebuff){
