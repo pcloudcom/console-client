@@ -32,7 +32,9 @@
 #include <ctype.h>
 
 // this is only for debug, adds needless checks of tree for local files
+#if IS_DEBUG
 #define PSYNC_DO_LOCAL_FULL_TREE_CHECK 1
+#endif
 
 #define PSYNC_CRYPTO_LOG_DATA   1
 #define PSYNC_CRYPTO_LOG_INT    2
@@ -219,9 +221,11 @@ static int psync_fs_crypto_read_newfile_full_sector_from_log(psync_openfile_t *o
   assert(hdr.offset==(uint64_t)psync_fs_crypto_data_sectorid_by_sectorid(se->sectorid)*PSYNC_CRYPTO_SECTOR_SIZE);
   assert(hdr.length<=PSYNC_CRYPTO_SECTOR_SIZE);
   rd=psync_file_pread(of->logfile, buff, hdr.length, se->logoffset+sizeof(hdr));
-  if (rd!=hdr.length)
+  if (unlikely(rd!=hdr.length)){
+    debug(D_ERROR, "read from log of %u bytes returned %d", (unsigned)hdr.length, (int)rd);
     return -EIO;
-  if (psync_crypto_aes256_decode_sector(of->encoder, buff, rd, (unsigned char *)buf, se->auth, se->sectorid))
+  }
+  if (unlikely_log(psync_crypto_aes256_decode_sector(of->encoder, buff, rd, (unsigned char *)buf, se->auth, se->sectorid)))
     return -EIO;
   else
     return rd;
@@ -348,9 +352,8 @@ static int psync_fs_crypto_read_newfile_full_sector(psync_openfile_t *of, char *
       tr=psync_tree_element(tr->tree.left, psync_sector_inlog_t, tree);
     else if (d>0)
       tr=psync_tree_element(tr->tree.right, psync_sector_inlog_t, tree);
-    else{
+    else
       return psync_fs_crypto_read_newfile_full_sector_from_log(of, buf, tr);
-    }
   }
   return psync_fs_crypto_read_newfile_full_sector_from_datafile(of, buf, sectorid);
 }

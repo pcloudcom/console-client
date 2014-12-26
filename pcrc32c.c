@@ -401,9 +401,9 @@ PSYNC_NOINLINE static int psync_has_hw_crc(){
   return (ecx>>20)&1;
 }
 
-#define CRC32C_64BIT_HW(crc, data) asm("crc32q %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "rm" (data))
-#define CRC32C_32BIT_HW(crc, data) asm("crc32l %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "rm" (data))
-#define CRC32C_8BIT_HW(crc, data) asm("crc32b %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "rm" (data))
+#define CRC32C_64BIT_HW(crc, data) asm("crc32q %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "r" (data))
+#define CRC32C_32BIT_HW(crc, data) asm("crc32l %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "r" (data))
+#define CRC32C_8BIT_HW(crc, data) asm("crc32b %[value], %[crcval]\n" : [crcval] "+r" (crc) : [value] "r" (data))
 
 #elif defined(CRC32_MSC)
 

@@ -28,6 +28,10 @@
 #ifndef _PSYNC_COMPILER_H
 #define _PSYNC_COMPILER_H
 
+#if defined(_MSC_VER)
+#include <mmintrin.h>
+#endif
+
 #if !defined(__has_attribute)
 #if defined(__GNUC__)
 #define __has_attribute(x) 1
@@ -55,6 +59,8 @@
 
 #if defined(__GNUC__) || __has_builtin(__builtin_prefetch)
 #define psync_prefetch(expr) __builtin_prefetch(expr)
+#elif defined(_MSC_VER)
+#define psync_prefetch(expr) _mm_prefetch((char *)(expr), _MM_HINT_T0)
 #else
 #define psync_prefetch(expr) ((void)0)
 #endif

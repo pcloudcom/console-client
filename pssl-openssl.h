@@ -82,9 +82,8 @@ typedef AES_KEY *psync_aes256_decoder;
 extern int psync_ssl_hw_aes;
 
 void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst);
-void psync_aes256_decode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst);
-void psync_aes256_decode_2blocks_hw(psync_aes256_decoder enc, const unsigned char *src1, unsigned char *dst1,
-                                                              const unsigned char *src2, unsigned char *dst2);
+void psync_aes256_decode_block_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst);
+void psync_aes256_encode_2blocks_consec_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst);
 void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst);
 void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor);
 
@@ -102,13 +101,12 @@ static inline void psync_aes256_decode_block(psync_aes256_decoder enc, const uns
     AES_decrypt(src, dst, enc);
 }
 
-static inline void psync_aes256_decode_2blocks(psync_aes256_decoder enc, const unsigned char *src1, unsigned char *dst1,
-                                                                         const unsigned char *src2, unsigned char *dst2){
+static inline void psync_aes256_encode_2blocks_consec(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
   if (likely(psync_ssl_hw_aes))
-    psync_aes256_decode_2blocks_hw(enc, src1, dst1, src2, dst2);
+    psync_aes256_encode_2blocks_consec_hw(enc, src, dst);
   else{
-    AES_decrypt(src1, dst1, enc);
-    AES_decrypt(src2, dst2, enc);
+    AES_encrypt(src, dst, enc);
+    AES_encrypt(src+PSYNC_AES256_BLOCK_SIZE, dst+PSYNC_AES256_BLOCK_SIZE, enc);
   }
 }
 
@@ -143,12 +141,6 @@ static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const uns
 
 static inline void psync_aes256_decode_block(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
   AES_decrypt(src, dst, enc);
-}
-
-static inline void psync_aes256_decode_2blocks(psync_aes256_decoder enc, const unsigned char *src1, unsigned char *dst1,
-                                                                         const unsigned char *src2, unsigned char *dst2){
-  AES_decrypt(src1, dst1, enc);
-  AES_decrypt(src2, dst2, enc);
 }
 
 static inline void psync_aes256_decode_2blocks_consec(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
