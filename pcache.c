@@ -88,7 +88,7 @@ static uint32_t hash_funcl(const char *key, size_t *len){
     hash=c+(hash<<5)+hash;
   hash+=hash<<3;
   hash^=hash>>11;
-  *len=k-key+1;
+  *len=k-key-1;
   return hash;
 }
 
