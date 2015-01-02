@@ -21,5 +21,7 @@ void psync_fs_task_deleted(uint64_t taskid);
 
 void psync_fs_task_to_file(uint64_t taskid, psync_fileid_t fileid);
 void psync_fs_task_to_folder(uint64_t taskid, psync_folderid_t folderid);
+void psync_fs_static_to_task(uint64_t statictaskid, uint64_t taskid);
+void psync_fs_file_to_task(psync_fileid_t fileid, uint64_t taskid);
 
 #endif

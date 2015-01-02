@@ -1429,6 +1429,7 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
     else if (ret==-2){
       task->needprocessing=1;
       np++;
+      continue;
     }
     while (get_result_async(api, &reader)==ASYNC_RES_READY){
       if (unlikely_log(!reader.result))

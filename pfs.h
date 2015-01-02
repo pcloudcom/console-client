@@ -69,12 +69,18 @@ typedef struct {
   char *currentname;
   psync_fsfileid_t fileid;
   psync_fsfileid_t remotefileid;
-  uint64_t hash;
+  union {
+    uint64_t hash;
+    const char *staticdata;
+  };
   uint64_t initialsize;
   uint64_t currentsize;
   uint64_t laststreamid;
   uint64_t indexoff;
-  uint64_t writeid;
+  union {
+    uint64_t writeid;
+    time_t staticctime;
+  };
   time_t currentsec;
   psync_file_t datafile;
   psync_file_t indexfile;
@@ -89,6 +95,7 @@ typedef struct {
   unsigned char deleted;
   unsigned char encrypted;
   unsigned char throttle;
+  unsigned char staticfile;
   /*
    * for non-encrypted files only offsetof(psync_openfile_t, encoder) bytes are allocated
    * keep all fields for encryption after encoder

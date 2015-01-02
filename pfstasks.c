@@ -47,6 +47,7 @@ typedef struct {
 } file_history_record;
 
 static psync_tree *folders=PSYNC_TREE_EMPTY;
+static uint64_t psync_local_taskid=UINT64_MAX;
 
 psync_uint_t folder_hash(psync_fsfolderid_t folderid){
   return ((uint64_t)folderid)%FOLDER_HASH;
@@ -581,6 +582,11 @@ void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat
   folder->taskscnt++;
 }
 
+void psync_fstask_inject_unlink(psync_fstask_folder_t *folder, psync_fstask_unlink_t *un){
+  psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_creat_t, name), &un->tree);
+  folder->taskscnt++;
+}
+
 psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, 
                                                      uint64_t hash, const char *encsymkey, size_t encsymkeylen){
   psync_sql_res *res;
@@ -628,6 +634,61 @@ psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *fold
   psync_fstask_insert_into_tree(&folder->creats, offsetof(psync_fstask_creat_t, name), &task->tree);
   folder->taskscnt+=2;
   return task;
+}
+
+int psync_fstask_add_local_creat_static(psync_fsfolderid_t folderid, const char *name, const void *data, size_t datalen){
+  psync_fstask_folder_t *folder;
+  psync_fstask_creat_t *cr;
+  psync_fstask_unlink_t *un;
+  psync_fstask_local_creat_t *lc;
+  psync_sql_res *res;
+  psync_uint_row row;
+  size_t len, addlen;
+  int ret;
+  ret=-1;
+  len=strlen(name);
+  psync_sql_lock();
+  folder=psync_fstask_get_or_create_folder_tasks_locked(folderid);
+  cr=psync_fstask_find_creat(folder, name, 0);
+  if (cr){
+    debug(D_NOTICE, "not adding file %s to folderid %ld as creat already exists", name, (long)folderid);
+    goto ex;
+  }
+  if (folderid>=0 && !psync_fstask_find_unlink(folder, name, 0)){
+    res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_lstring(res, 2, name, len);
+    row=psync_sql_fetch_rowint(res);
+    psync_sql_free_result(res);
+    if (row){
+      debug(D_NOTICE, "not adding file %s to folderid %ld as it already exists in the database", name, (long)folderid);
+      goto ex;
+    }
+  }
+  debug(D_NOTICE, "adding file %s to folderid %ld, datalen %lu", name, (long)folderid, (unsigned long)datalen);
+  len++;
+  un=(psync_fstask_unlink_t *)psync_malloc(offsetof(psync_fstask_unlink_t, name)+len);
+  un->taskid=psync_local_taskid;
+  un->fileid=0;
+  memcpy(un->name, name, len);
+  psync_fstask_insert_into_tree(&folder->unlinks, offsetof(psync_fstask_unlink_t, name), &un->tree);
+  addlen=psync_fstask_creat_local_offset(len-1);
+  cr=(psync_fstask_creat_t *)psync_malloc(addlen+sizeof(psync_fstask_local_creat_t));
+  cr->taskid=psync_local_taskid;
+  cr->fileid=0;
+  memcpy(cr->name, name, len);
+  lc=(psync_fstask_local_creat_t *)(((char *)cr)+addlen);
+  lc->data=data;
+  lc->datalen=datalen;
+  lc->ctime=psync_timer_time();
+  psync_fstask_insert_into_tree(&folder->creats, offsetof(psync_fstask_creat_t, name), &cr->tree);
+  psync_local_taskid--;
+  folder->taskscnt+=2;
+  ret=0;
+ex:
+  psync_fstask_release_folder_tasks_locked(folder);
+  psync_sql_unlock();
+  return ret;
 }
 
 static psync_fsfileid_t get_file_at_old_location(psync_fsfileid_t fileid){
@@ -743,6 +804,19 @@ int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){
     depend=0;
   }
   else{
+    if (unlikely(cr->fileid==0)){
+      task=psync_fstask_find_unlink(folder, cr->name, cr->taskid);
+      if (likely_log(task)){
+        psync_tree_del(&folder->unlinks, &task->tree);
+        folder->taskscnt--;
+        psync_free(task);
+      }
+      psync_tree_del(&folder->creats, &cr->tree);
+      psync_free(cr);
+      folder->taskscnt--;
+      psync_fstask_release_folder_tasks_locked(folder);
+      return 0;
+    }
     depend=cr->taskid;
     fileid=cr->fileid;
     psync_tree_del(&folder->creats, &cr->tree);

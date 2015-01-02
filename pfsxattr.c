@@ -38,14 +38,16 @@ enum
 #define ENOATTR ENODATA
 #endif
 
-#define OBJECT_MULTIPLIER 8
-#define OBJECT_FOLDER 0
-#define OBJECT_FILE   1
-#define OBJECT_TASK   2
+#define OBJECT_MULTIPLIER   8
+#define OBJECT_FOLDER       0
+#define OBJECT_FILE         1
+#define OBJECT_TASK         2
+#define OBJECT_STATICFILE   3
 
 #define folderid_to_objid(id) ((id)*OBJECT_MULTIPLIER+OBJECT_FOLDER)
 #define fileid_to_objid(id) ((id)*OBJECT_MULTIPLIER+OBJECT_FILE)
 #define taskid_to_objid(id) ((id)*OBJECT_MULTIPLIER+OBJECT_TASK)
+#define static_taskid_to_objid(id) ((UINT64_MAX-id+1)*OBJECT_MULTIPLIER+OBJECT_STATICFILE)
 
 static void delete_object_id(uint64_t oid){
   psync_sql_res *res;
@@ -82,6 +84,14 @@ void psync_fs_task_to_folder(uint64_t taskid, psync_folderid_t folderid){
   update_object_id(taskid_to_objid(taskid), folderid_to_objid(folderid));
 }
 
+void psync_fs_static_to_task(uint64_t statictaskid, uint64_t taskid){
+  update_object_id(static_taskid_to_objid(statictaskid), taskid_to_objid(taskid));
+}
+
+void psync_fs_file_to_task(psync_fileid_t fileid, uint64_t taskid){
+  update_object_id(fileid_to_objid(fileid), taskid_to_objid(taskid));
+}
+
 static int64_t xattr_get_object_id_locked(const char *path){
   psync_fspath_t *fspath;
   psync_fstask_folder_t *folder;
@@ -116,6 +126,8 @@ static int64_t xattr_get_object_id_locked(const char *path){
       psync_free(fspath);
       if (cr->fileid>0)
         return fileid_to_objid(cr->fileid);
+      else if (cr->fileid==0)
+        return static_taskid_to_objid(cr->taskid);
       else{
         res=psync_sql_query("SELECT type, fileid FROM fstask WHERE id=?");
         psync_sql_bind_uint(res, 1, -cr->fileid);
@@ -182,7 +194,7 @@ static int64_t xattr_get_object_id_locked(const char *path){
   oid=xattr_get_object_id_locked(path);\
   if (unlikely(oid==-1)){\
     psync_sql_unlock();\
-    return -ENOENT;\
+    return -PRINT_RETURN_CONST(ENOENT);\
   }\
 } while (0)
 
@@ -223,7 +235,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
     ret=0;
   }
   psync_sql_unlock();
-  return ret;
+  return PRINT_NEG_RETURN(ret);
 }
 
 int psync_fs_getxattr(const char *path, const char *name, char *value, size_t size PFS_XATTR_IGN){
