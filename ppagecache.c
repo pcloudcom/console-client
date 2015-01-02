@@ -191,8 +191,10 @@ static void flush_pages_noret(){
 static psync_cache_page_t *psync_pagecache_get_free_page_if_available(){
   psync_cache_page_t *page;
   pthread_mutex_lock(&cache_mutex);
-  if (unlikely(cache_pages_free<=CACHE_PAGES*25/100 && !flushcacherun))
+  if (unlikely(cache_pages_free<=CACHE_PAGES*25/100 && !flushcacherun)){
+    flushcacherun=1;
     psync_run_thread("flush pages get free page ifav", flush_pages_noret);
+  }
   if (likely(!psync_list_isempty(&free_pages)))
     page=psync_list_remove_head_element(&free_pages, psync_cache_page_t, list);
   else
@@ -1017,7 +1019,7 @@ static int flush_pages(int nosleep){
   ctime=psync_timer_time();
   psync_list_init(&pages_to_flush);
   pthread_mutex_lock(&cache_mutex);
-  if (unlikely(diskfull && psync_list_isempty(&free_pages) && free_db_pages==0)){
+  if (unlikely(diskfull && free_db_pages==0)){
     debug(D_NOTICE, "disk is full, discarding some pages");
     for (i=0; i<CACHE_HASH; i++)
       psync_list_for_each_safe(l1, l2, &cache_hash[i]){
@@ -1047,7 +1049,7 @@ static int flush_pages(int nosleep){
     psync_list_init(&pages_to_flush);
   }
   if (cache_pages_in_hash){
-    debug(D_NOTICE, "flushing cache");
+    debug(D_NOTICE, "flushing cache free_db_pages=%u", (unsigned)free_db_pages);
     cache_pages_reset=0;
     for (i=0; i<CACHE_HASH; i++)
       psync_list_for_each_safe(l1, l2, &cache_hash[i]){
@@ -1229,6 +1231,8 @@ static int flush_pages(int nosleep){
     psync_sql_rollback_transaction();
     pthread_mutex_unlock(&cache_mutex);
     pthread_mutex_unlock(&flush_cache_mutex);
+    if (free_db_pages==0)
+      psync_run_thread("clean cache", clean_cache);
     return 0;
   }
 }
@@ -1813,10 +1817,12 @@ static void psync_pagecache_read_unmodified_readahead(psync_openfile_t *of, uint
   }
   else if (offset!=0 && (size<PSYNC_FS_MIN_READAHEAD_RAND) && readahead<PSYNC_FS_MIN_READAHEAD_RAND-size)
     readahead=PSYNC_FS_MIN_READAHEAD_RAND-size;
-  if (readahead>PSYNC_FS_MAX_READAHEAD)
+  if (of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC>PSYNC_FS_MIN_READAHEAD_START){
+    if (readahead>of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC)
+      readahead=size_round_up_to_page(of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC);
+  }
+  else if (readahead>PSYNC_FS_MAX_READAHEAD)
     readahead=PSYNC_FS_MAX_READAHEAD;
-  if (of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC>PSYNC_FS_MIN_READAHEAD_START && readahead>of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC)
-    readahead=size_round_up_to_page(of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC);
   if (psync_list_isempty(ranges)){
     if (readahead>=8192*1024)
       readahead=(readahead+offset+size)/(4*1024*1024)*(4*1024*1024)-offset-size;
