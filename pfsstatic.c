@@ -298,7 +298,7 @@ void psync_fsstatic_add_files(){
 
 #elif defined(P_OS_WINDOWS)
 
-static const char *rootdir="[autorun]\nicon=pcloud.ico\n";
+static const char *rootdirinf="[autorun]\r\nicon=pCloud.ico\r\n";
 static const unsigned char pcloudicon[]={
   0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x80, 0x80, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x28, 0x4c, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00,
   0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x12, 0x0b,
@@ -1117,8 +1117,8 @@ static const unsigned char pcloudicon[]={
 };
 
 void psync_fsstatic_add_files(){
-  psync_fstask_add_local_creat_static(0, "autorun.inf", rootdir, strlen(rootdir));
-  psync_fstask_add_local_creat_static(0, "pcloud.ico", pcloudicon, ARRAY_SIZE(pcloudicon));
+  psync_fstask_add_local_creat_static(0, "AutoRun.inf", rootdirinf, strlen(rootdirinf));
+  psync_fstask_add_local_creat_static(0, "pCloud.ico", pcloudicon, ARRAY_SIZE(pcloudicon));
 }
 
 

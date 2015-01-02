@@ -1563,6 +1563,11 @@ int psync_debug(const char *file, const char *function, int unsigned line, int u
   psync_uint_t i;
   unsigned int u;
   pthread_t threadid;
+#if defined(P_OS_WINDOWS)
+  errname=strrchr(file, '\\');
+  if (errname)
+    file=errname+1;
+#endif
   errname="BAD_ERROR_CODE";
   for (i=0; i<ARRAY_SIZE(debug_levels); i++)
     if (debug_levels[i].level==level){
