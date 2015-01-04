@@ -134,6 +134,22 @@ psync_fstask_folder_t *psync_fstask_get_folder_tasks_locked(psync_fsfolderid_t f
   return NULL;
 }
 
+psync_fstask_folder_t *psync_fstask_get_folder_tasks_rdlocked(psync_fsfolderid_t folderid){
+  psync_fstask_folder_t *folder;
+  psync_tree *tr;
+  tr=folders;
+  while (tr){
+    folder=psync_tree_element(tr, psync_fstask_folder_t, tree);
+    if (folderid<folder->folderid)
+      tr=tr->left;
+    else if (folderid>folder->folderid)
+      tr=tr->right;
+    else
+      return folder;
+  }
+  return NULL;
+}
+
 void psync_fstask_release_folder_tasks_locked(psync_fstask_folder_t *folder){
 #if IS_DEBUG
   if ((!!folder->taskscnt)!=(folder->creats || folder->mkdirs || folder->rmdirs || folder->unlinks))

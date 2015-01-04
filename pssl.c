@@ -49,3 +49,11 @@ psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t l
   ret->datalen=len;
   return ret;
 }
+
+psync_encrypted_symmetric_key_t psync_ssl_copy_encrypted_symmetric_key(psync_encrypted_symmetric_key_t src){
+  psync_encrypted_symmetric_key_t ret;
+  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+src->datalen);
+  ret->datalen=src->datalen;
+  memcpy(ret->data, src->data, src->datalen);
+  return ret;
+}

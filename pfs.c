@@ -282,7 +282,7 @@ static int psync_fs_relock_fileid(psync_fsfileid_t fileid){
   psync_openfile_t *fl;
   psync_tree *tr;
   int64_t d;
-  psync_sql_lock();
+  psync_sql_rdlock();
   tr=openfiles;
   while (tr){
     d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
@@ -294,11 +294,11 @@ static int psync_fs_relock_fileid(psync_fsfileid_t fileid){
       fl=psync_tree_element(tr, psync_openfile_t, tree);
       pthread_mutex_lock(&fl->mutex);
       pthread_mutex_unlock(&fl->mutex);
-      psync_sql_unlock();
+      psync_sql_rdunlock();
       return 1;
     }
   }
-  psync_sql_unlock();
+  psync_sql_rdunlock();
   return 0;
 }
 
@@ -340,7 +340,7 @@ int64_t psync_fs_get_file_writeid(uint64_t taskid){
   psync_fsfileid_t fileid;
   int64_t d;
   fileid=-taskid;
-  psync_sql_lock();
+  psync_sql_rdlock();
   tr=openfiles;
   while (tr){
     d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
@@ -353,18 +353,18 @@ int64_t psync_fs_get_file_writeid(uint64_t taskid){
       pthread_mutex_lock(&fl->mutex);
       d=fl->writeid;
       pthread_mutex_unlock(&fl->mutex);
-      psync_sql_unlock();
+      psync_sql_rdunlock();
       return d;
     }
   }
-  res=psync_sql_query("SELECT int1 FROM fstask WHERE id=?");
+  res=psync_sql_query_nolock("SELECT int1 FROM fstask WHERE id=?");
   psync_sql_bind_uint(res, 1, taskid);
   if ((row=psync_sql_fetch_rowint(res)))
     d=row[0];
   else
     d=-1;
   psync_sql_free_result(res);
-  psync_sql_unlock();
+  psync_sql_rdunlock();
   return d;
 }
 
@@ -484,7 +484,7 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
 static int psync_creat_db_to_file_stat(psync_fileid_t fileid, struct FUSE_STAT *stbuf, uint32_t flags){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT name, size, ctime, mtime, id, parentfolderid FROM file WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT name, size, ctime, mtime, id, parentfolderid FROM file WHERE id=?");
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_file_stat(row, stbuf, flags);
@@ -521,7 +521,7 @@ static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *s
   psync_tree *tr;
   psync_stat_t st;
   int64_t d;
-  psync_sql_lock();
+  psync_sql_rdlock();
   tr=openfiles;
   while (tr){
     d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
@@ -536,11 +536,11 @@ static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *s
       if (!psync_fstat(fl->logfile, &st))
         stbuf->st_mtime=psync_stat_mtime(&st);
       pthread_mutex_unlock(&fl->mutex);
-      psync_sql_unlock();
+      psync_sql_rdunlock();
       return 1;
     }
   }
-  psync_sql_unlock();
+  psync_sql_rdunlock();
   return 0;
 }
 
@@ -674,7 +674,7 @@ int psync_fs_crypto_err_to_errno(int cryptoerr){
 static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT 0, 0, IFNULL(s.value, 1414766136)*1, f.mtime, f.subdircnt FROM folder f LEFT JOIN setting s ON s.id='registered' WHERE f.id=0");
+  res=psync_sql_query_rdlock("SELECT 0, 0, IFNULL(s.value, 1414766136)*1, f.mtime, f.subdircnt FROM folder f LEFT JOIN setting s ON s.id='registered' WHERE f.id=0");
   if ((row=psync_sql_fetch_row(res)))
     psync_row_to_folder_stat(row, stbuf);
   psync_sql_free_result(res);
@@ -684,6 +684,14 @@ static int psync_fs_getrootattr(struct FUSE_STAT *stbuf){
 #define CHECK_LOGIN_LOCKED() do {\
   if (unlikely(waitingforlogin)){\
     psync_sql_unlock();\
+    debug(D_NOTICE, "returning EACCES for not logged in");\
+    return -EACCES;\
+  }\
+} while (0)
+
+#define CHECK_LOGIN_RDLOCKED() do {\
+  if (unlikely(waitingforlogin)){\
+    psync_sql_rdunlock();\
     debug(D_NOTICE, "returning EACCES for not logged in");\
     return -EACCES;\
   }\
@@ -700,42 +708,39 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
 //  debug(D_NOTICE, "getattr %s", path);
   if (path[0]=='/' && path[1]==0)
     return psync_fs_getrootattr(stbuf);
-  psync_sql_lock();
-  CHECK_LOGIN_LOCKED();
+  psync_sql_rdlock();
+  CHECK_LOGIN_RDLOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     debug(D_NOTICE, "could not find path component of %s, returning ENOENT", path);
     return -ENOENT;
   }
-  folder=psync_fstask_get_folder_tasks_locked(fpath->folderid);
+  folder=psync_fstask_get_folder_tasks_rdlocked(fpath->folderid);
+  if (folder){
+    psync_fstask_mkdir_t *mk;
+    mk=psync_fstask_find_mkdir(folder, fpath->name, 0);
+    if (mk){
+      psync_mkdir_to_folder_stat(mk, stbuf);
+      psync_sql_rdunlock();
+      psync_free(fpath);
+      return 0;
+    }
+  }
   if (!folder || !psync_fstask_find_rmdir(folder, fpath->name, 0)){
-    res=psync_sql_query("SELECT id, permissions, ctime, mtime, subdircnt FROM folder WHERE parentfolderid=? AND name=?");
+    res=psync_sql_query_nolock("SELECT id, permissions, ctime, mtime, subdircnt FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fpath->folderid);
     psync_sql_bind_string(res, 2, fpath->name);
     if ((row=psync_sql_fetch_row(res)))
       psync_row_to_folder_stat(row, stbuf);
     psync_sql_free_result(res);
     if (row){
-      if (folder)
-        psync_fstask_release_folder_tasks_locked(folder);
-      psync_sql_unlock();
+      psync_sql_rdunlock();
       psync_free(fpath);
       return 0;
     }
   }
-  if (folder){
-    psync_fstask_mkdir_t *mk;
-    mk=psync_fstask_find_mkdir(folder, fpath->name, 0);
-    if (mk){
-      psync_mkdir_to_folder_stat(mk, stbuf);
-      psync_fstask_release_folder_tasks_locked(folder);
-      psync_sql_unlock();
-      psync_free(fpath);
-      return 0;
-    }
-  }
-  res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=? AND name=?");
+  res=psync_sql_query_nolock("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, fpath->folderid);
   psync_sql_bind_string(res, 2, fpath->name);
   if ((row=psync_sql_fetch_row(res)))
@@ -748,11 +753,10 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
       crr=psync_creat_to_file_stat(cr, stbuf, fpath->flags);
     else
       crr=-1;
-    psync_fstask_release_folder_tasks_locked(folder);
   }
   else
     crr=-1;
-  psync_sql_unlock();
+  psync_sql_rdunlock();
   psync_free(fpath);
   if (row || !crr)
     return 0;
@@ -788,17 +792,17 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   struct FUSE_STAT st;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "readdir %s", path);
-  psync_sql_lock();
-  CHECK_LOGIN_LOCKED();
+  psync_sql_rdlock();
+  CHECK_LOGIN_RDLOCKED();
   folderid=psync_fsfolderid_by_path(path, &flags);
   if (unlikely_log(folderid==PSYNC_INVALID_FSFOLDERID)){
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     return -ENOENT;
   }
   if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
     dec=psync_cloud_crypto_get_folder_decoder(folderid);
     if (psync_crypto_is_error(dec)){
-      psync_sql_unlock();
+      psync_sql_rdunlock();
       return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(dec));
     }
   }
@@ -807,9 +811,9 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   filler(buf, ".", NULL, 0);
   if (folderid!=0)
     filler(buf, "..", NULL, 0);
-  folder=psync_fstask_get_folder_tasks_locked(folderid);
+  folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
   if (folderid>=0){
-    res=psync_sql_query("SELECT id, permissions, ctime, mtime, subdircnt, name FROM folder WHERE parentfolderid=?");
+    res=psync_sql_query_nolock("SELECT id, permissions, ctime, mtime, subdircnt, name FROM folder WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_lstring(row[5], &namelen);
@@ -825,7 +829,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       filler_decoded(dec, filler, buf, name, &st, 0);
     }
     psync_sql_free_result(res);
-    res=psync_sql_query("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=?");
+    res=psync_sql_query_nolock("SELECT name, size, ctime, mtime, id FROM file WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       name=psync_get_lstring(row[0], &namelen);
@@ -859,9 +863,8 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       if (!psync_creat_to_file_stat(psync_tree_element(trel, psync_fstask_creat_t, tree), &st, flags))
         filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_creat_t, tree)->name, &st, 0);
     }
-    psync_fstask_release_folder_tasks_locked(folder);
   }
-  psync_sql_unlock();
+  psync_sql_rdunlock();
   if (dec)
     psync_cloud_crypto_release_folder_decoder(folderid, dec);
   return 0;

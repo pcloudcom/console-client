@@ -706,7 +706,7 @@ static unsigned char *has_pages_in_db(uint64_t hash, uint64_t pageid, uint32_t p
   memset(ret, 0, pagecnt);
   fromid=0;
   fcnt=0;
-  res=psync_sql_query("SELECT pageid, id FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid>=? AND pageid<? ORDER BY pageid");
+  res=psync_sql_query_rdlock("SELECT pageid, id FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid>=? AND pageid<? ORDER BY pageid");
   psync_sql_bind_uint(res, 1, hash);
   psync_sql_bind_uint(res, 2, pageid);
   psync_sql_bind_uint(res, 3, pageid+pagecnt);
@@ -730,7 +730,7 @@ static unsigned char *has_pages_in_db(uint64_t hash, uint64_t pageid, uint32_t p
 static int has_page_in_db(uint64_t hash, uint64_t pageid){
   psync_sql_res *res;
   psync_uint_row row;
-  res=psync_sql_query("SELECT pageid FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid=?");
+  res=psync_sql_query_rdlock("SELECT pageid FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid=?");
   psync_sql_bind_uint(res, 1, hash);
   psync_sql_bind_uint(res, 2, pageid);
   row=psync_sql_fetch_rowint(res);
@@ -851,7 +851,7 @@ static int pagecache_entry_cmp_id(const void *p1, const void *p2){
 
 static void clean_cache(){
   psync_sql_res *res;
-  uint64_t ocnt, cnt, i, j, e;
+  uint64_t ocnt, cnt, i, e;
   psync_uint_row row;
   pagecache_entry *entries;
   debug(D_NOTICE, "cleaning cache, free cache pages %u", (unsigned)free_db_pages);
@@ -875,7 +875,7 @@ static void clean_cache(){
   i=0;
   e=0;
   while (i<cnt){
-    res=psync_sql_query("SELECT id, lastuse, usecnt, type FROM pagecache WHERE id>? ORDER BY id LIMIT 6000");
+    res=psync_sql_query_rdlock("SELECT id, lastuse, usecnt, type FROM pagecache WHERE id>? ORDER BY id LIMIT 5000");
     psync_sql_bind_uint(res, 1, e);
     row=psync_sql_fetch_rowint(res);
     if (unlikely(!row)){
@@ -917,10 +917,33 @@ static void clean_cache(){
   debug(D_NOTICE, "sorted entries by more than 16 uses and lastuse, deleting %lu entries", (unsigned long)cnt);
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_id);
   debug(D_NOTICE, "sorted entries to delete by id to help the SQL");
-  ocnt=(cnt+127)/128;
+  psync_sql_start_transaction();
+  res=psync_sql_prep_statement("UPDATE pagecache SET type="NTO_STR(PAGE_TYPE_FREE)", hash=NULL, pageid=NULL, crc=NULL WHERE id=?");
+  for (i=0; i<cnt; i++){
+    psync_sql_bind_uint(res, 1, entries[i].id);
+    psync_sql_run(res);
+    free_db_pages++;
+    if ((i&31)==31 && psync_sql_has_waiters()){
+      psync_sql_free_result(res);
+      psync_sql_commit_transaction();
+      debug(D_NOTICE, "got waiters for sql lock, pausing for a while");
+      psync_milisleep(5);
+      psync_sql_start_transaction();
+      res=psync_sql_prep_statement("UPDATE pagecache SET type="NTO_STR(PAGE_TYPE_FREE)", hash=NULL, pageid=NULL, crc=NULL WHERE id=?");
+    }
+    else if ((i&4093)==4093){
+      psync_sql_free_result(res);
+      psync_sql_commit_transaction();
+      psync_sql_start_transaction();
+      res=psync_sql_prep_statement("UPDATE pagecache SET type="NTO_STR(PAGE_TYPE_FREE)", hash=NULL, pageid=NULL, crc=NULL WHERE id=?");
+    }
+  }
+  psync_sql_free_result(res);
+  psync_sql_commit_transaction();
+/*  ocnt=(cnt+63)/64;
   for (j=0; j<ocnt; j++){
-    i=j*128;
-    e=i+128;
+    i=j*64;
+    e=i+64;
     if (e>cnt)
       e=cnt;
     psync_sql_start_transaction();
@@ -932,11 +955,13 @@ static void clean_cache(){
     }
     psync_sql_free_result(res);
     psync_sql_commit_transaction();
-    psync_milisleep(1);
-  }
+    psync_milisleep(5);
+    // 64 pages per 5 millisec is around 50Mb/sec, more than enough
+  }*/
   clean_cache_in_progress=0;
   pthread_mutex_unlock(&clean_cache_mutex);
   psync_free(entries);
+  debug(D_NOTICE, "syncing database");
   psync_sql_sync();
   debug(D_NOTICE, "finished cleaning cache, free cache pages %u", (unsigned)free_db_pages);
 }
@@ -1069,7 +1094,7 @@ static int flush_pages(int nosleep){
       pthread_mutex_unlock(&cache_mutex);
       debug(D_NOTICE, "cache_pages_in_hash=%u", (unsigned)pagecnt);
       psync_list_sort(&pages_to_flush, cmp_flush_pages);
-      res=psync_sql_query("SELECT id FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE)" ORDER BY id LIMIT ?");
+      res=psync_sql_query_rdlock("SELECT id FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE)" ORDER BY id LIMIT ?");
       psync_sql_bind_uint(res, 1, pagecnt);
       psync_list_for_each_element(page, &pages_to_flush, psync_cache_page_t, flushlist){
         if (unlikely(!(row=psync_sql_fetch_rowint(res)))){
@@ -1303,7 +1328,7 @@ static psync_int_t check_page_in_database_by_hash(uint64_t hash, uint64_t pageid
   uint32_t crc;
   int hascrc;
   ret=-1;
-  res=psync_sql_query("SELECT id, size, crc FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid=?");
+  res=psync_sql_query_rdlock("SELECT id, size, crc FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid=?");
   psync_sql_bind_uint(res, 1, hash);
   psync_sql_bind_uint(res, 2, pageid);
   if ((row=psync_sql_fetch_row(res))){
@@ -1358,7 +1383,7 @@ static psync_int_t check_page_in_database_by_hash_and_cache(uint64_t hash, uint6
   uint32_t crc, ccrc;
   int hascrc;
   ret=-1;
-  res=psync_sql_query("SELECT id, size, crc FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid=?");
+  res=psync_sql_query_rdlock("SELECT id, size, crc FROM pagecache WHERE type=+"NTO_STR(PAGE_TYPE_READ)" AND hash=? AND pageid=?");
   psync_sql_bind_uint(res, 1, hash);
   psync_sql_bind_uint(res, 2, pageid);
   if ((row=psync_sql_fetch_row(res))){
@@ -2949,7 +2974,7 @@ static int psync_pagecache_free_page_from_read_cache(){
       debug(D_NOTICE, "read from read cache failed");
       break;
     }
-    res=psync_sql_query("SELECT type, hash, pageid, lastuse, usecnt, size, crc FROM pagecache WHERE id=?");
+    res=psync_sql_query_rdlock("SELECT type, hash, pageid, lastuse, usecnt, size, crc FROM pagecache WHERE id=?");
     psync_sql_bind_uint(res, 1, sizeinpages);
     row=psync_sql_fetch_rowint(res);
     if (!row || row[0]==PAGE_TYPE_FREE){

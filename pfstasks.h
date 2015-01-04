@@ -116,6 +116,7 @@ void psync_fstask_release_folder_tasks(psync_fstask_folder_t *folder);
 psync_fstask_folder_t *psync_fstask_get_ref_locked(psync_fstask_folder_t *folder);
 psync_fstask_folder_t *psync_fstask_get_or_create_folder_tasks_locked(psync_fsfolderid_t folderid);
 psync_fstask_folder_t *psync_fstask_get_folder_tasks_locked(psync_fsfolderid_t folderid);
+psync_fstask_folder_t *psync_fstask_get_folder_tasks_rdlocked(psync_fsfolderid_t folderid);
 void psync_fstask_release_folder_tasks_locked(psync_fstask_folder_t *folder);
 
 void psync_fstask_folder_created(psync_folderid_t parentfolderid, uint64_t taskid, psync_folderid_t folderid, const char *name);
