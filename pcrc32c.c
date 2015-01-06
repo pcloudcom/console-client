@@ -692,8 +692,9 @@ void psync_fast_hash256_update(psync_fast_hash256_ctx *ctx, const void *data, si
 }
 
 PSYNC_NOINLINE static void psync_fast_hash256_update_short_sw(psync_fast_hash256_ctx *ctx, const char *cdata, size_t len){
-  ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]+=len;
-  memcpy(ctx->buff+ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]-len, cdata, len);
+  uint32_t l=ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1];
+  ctx->buff[PSYNC_FAST_HASH256_BLOCK_LEN-1]=l+len;
+  memcpy(ctx->buff+l, cdata, len);
 }
 
 #ifdef CRC32_HW

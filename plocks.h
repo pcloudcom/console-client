@@ -1,5 +1,5 @@
-/* Copyright (c) 2014 Anton Titov.
- * Copyright (c) 2014 pCloud Ltd.
+/* Copyright (c) 2015 Anton Titov.
+ * Copyright (c) 2015 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,35 +25,45 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "pssl.h"
-#include "psynclib.h"
-#include <string.h>
+#ifndef _PSYNC_LOCKS_H
+#define _PSYNC_LOCKS_H
 
-static void psync_ssl_free_psync_encrypted_data_t(psync_encrypted_data_t e){
-  psync_ssl_memclean(e->data, e->datalen);
-  psync_free(e);
-}
+#include <pthread.h>
 
-void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin){
-  psync_ssl_free_psync_encrypted_data_t(bin);
-}
+#ifndef PTHREAD_NULL
+#if defined(PTW32_VERSION)
+#define PTHREAD_NULL {NULL, 0}
+#else
+#define PTHREAD_NULL ((pthread_t)0)
+#endif
+#endif
 
-void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
-  psync_ssl_memclean(key->key, key->keylen);
-  psync_free(key);
-}
+#define PSYNC_RWLOCK_INITIALIZER {0, 0, 0, 0, PTHREAD_NULL,  PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER}
 
-psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len){
-  psync_encrypted_symmetric_key_t ret;
-  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
-  ret->datalen=len;
-  return ret;
-}
+typedef struct {
+  unsigned rcount;
+  unsigned rwait;
+  unsigned wcount;
+  unsigned wwait;
+  unsigned opts;
+  pthread_t wthread;
+  pthread_mutex_t mutex;
+  pthread_cond_t rcond;
+  pthread_cond_t wcond;
+} psync_rwlock_t;
 
-psync_encrypted_symmetric_key_t psync_ssl_copy_encrypted_symmetric_key(psync_encrypted_symmetric_key_t src){
-  psync_encrypted_symmetric_key_t ret;
-  ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+src->datalen);
-  ret->datalen=src->datalen;
-  memcpy(ret->data, src->data, src->datalen);
-  return ret;
-}
+void psync_rwlock_init(psync_rwlock_t *rw);
+void psync_rwlock_destroy(psync_rwlock_t *rw);
+void psync_rwlock_rdlock(psync_rwlock_t *rw);
+int psync_rwlock_tryrdlock(psync_rwlock_t *rw);
+int psync_rwlock_timedrdlock(psync_rwlock_t *rw, const struct timespec *abstime);
+void psync_rwlock_rdlock_starvewr(psync_rwlock_t *rw);
+void psync_rwlock_wrlock(psync_rwlock_t *rw);
+int psync_rwlock_trywrlock(psync_rwlock_t *rw);
+int psync_rwlock_timedwrlock(psync_rwlock_t *rw, const struct timespec *abstime);
+void psync_rwlock_rslock(psync_rwlock_t *rw);
+int psync_rwlock_towrlock(psync_rwlock_t *rw);
+void psync_rwlock_unlock(psync_rwlock_t *rw);
+unsigned psync_rwlock_num_waiters(psync_rwlock_t *rw);
+
+#endif

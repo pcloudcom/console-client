@@ -96,6 +96,7 @@ void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin);
 
 psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen, const unsigned char *salt, size_t saltlen, size_t iterations);
 psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len);
+psync_encrypted_symmetric_key_t psync_ssl_copy_encrypted_symmetric_key(psync_encrypted_symmetric_key_t src);
 void psync_ssl_free_symmetric_key(psync_symmetric_key_t key);
 
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t rsa, const unsigned char *data, size_t datalen);

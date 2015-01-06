@@ -140,6 +140,7 @@ typedef struct {
   sqlite3_stmt *stmt;
   const char *sql;
   int column_count;
+  int locked;
   psync_variant row[];
 } psync_sql_res;
 
@@ -194,6 +195,9 @@ void psync_sql_checkpoint_unlock();
 int psync_sql_trylock();
 void psync_sql_lock();
 void psync_sql_unlock();
+void psync_sql_rdlock();
+void psync_sql_rdunlock();
+int psync_sql_has_waiters();
 int psync_sql_sync();
 int psync_sql_start_transaction();
 int psync_sql_commit_transaction();
@@ -206,6 +210,10 @@ char **psync_sql_rowstr(const char *sql) PSYNC_NONNULL(1);
 psync_variant *psync_sql_row(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query_nocache(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_rdlock(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_nolock(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_nolock_nocache(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_prep_statement_nocache(const char *sql) PSYNC_NONNULL(1);
 void psync_sql_reset(psync_sql_res *res) PSYNC_NONNULL(1);

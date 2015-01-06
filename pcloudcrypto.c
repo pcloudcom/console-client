@@ -423,7 +423,7 @@ retry:
     psync_milisleep(1);
     goto retry;
   }
-  res=psync_sql_query("SELECT id, value FROM setting WHERE id IN ('crypto_private_key', 'crypto_public_key', 'crypto_private_salt', 'crypto_private_iter')");
+  res=psync_sql_query_nolock("SELECT id, value FROM setting WHERE id IN ('crypto_private_key', 'crypto_public_key', 'crypto_private_salt', 'crypto_private_iter')");
   while ((row=psync_sql_fetch_row(res))){
     id=psync_get_string(row[0]);
     rowcnt++;
@@ -553,20 +553,41 @@ static void set_crypto_err_msg(const binresult *res){
   memcpy(crypto_api_err, msg->str, l);
 }
 
-static void save_folder_key_to_db(psync_folderid_t folderid, psync_encrypted_symmetric_key_t enckey){
+typedef struct {
+  psync_encrypted_symmetric_key_t key;
+  const char *sql;
+  psync_fileorfolderid_t id;
+} insert_key_task;
+
+static void save_task(void *ptr){
+  insert_key_task *t;
   psync_sql_res *res;
-  res=psync_sql_prep_statement("REPLACE INTO cryptofolderkey (folderid, enckey) VALUES (?, ?)");
-  psync_sql_bind_uint(res, 1, folderid);
-  psync_sql_bind_blob(res, 2, (const char *)enckey->data, enckey->datalen);
+  t=(insert_key_task *)ptr;
+  res=psync_sql_prep_statement(t->sql);
+  psync_sql_bind_uint(res, 1, t->id);
+  psync_sql_bind_blob(res, 2, (const char *)t->key->data, t->key->datalen);
   psync_sql_run_free(res);
+  psync_free(t->key);
+  psync_free(t);
+}
+
+static void save_folder_key_to_db(psync_folderid_t folderid, psync_encrypted_symmetric_key_t enckey){
+  // we are likely holding (few) read locks on the database, so executing here will deadlock
+  insert_key_task *t;
+  t=psync_new(insert_key_task);
+  t->key=psync_ssl_copy_encrypted_symmetric_key(enckey);
+  t->sql="REPLACE INTO cryptofolderkey (folderid, enckey) VALUES (?, ?)";
+  t->id=folderid;
+  psync_run_thread1("save key to db task", save_task, t);
 }
 
 static void save_file_key_to_db(psync_fileid_t fileid, psync_encrypted_symmetric_key_t enckey){
-  psync_sql_res *res;
-  res=psync_sql_prep_statement("REPLACE INTO cryptofilekey (fileid, enckey) VALUES (?, ?)");
-  psync_sql_bind_uint(res, 1, fileid);
-  psync_sql_bind_blob(res, 2, (const char *)enckey->data, enckey->datalen);
-  psync_sql_run_free(res);
+  insert_key_task *t;
+  t=psync_new(insert_key_task);
+  t->key=psync_ssl_copy_encrypted_symmetric_key(enckey);
+  t->sql="REPLACE INTO cryptofilekey (fileid, enckey) VALUES (?, ?)";
+  t->id=fileid;
+  psync_run_thread1("save key to db task", save_task, t);
 }
 
 static psync_encrypted_symmetric_key_t psync_crypto_download_folder_enc_key(psync_folderid_t folderid){
@@ -669,7 +690,7 @@ static psync_encrypted_symmetric_key_t psync_crypto_get_folder_enc_key(psync_fol
   psync_variant_row row;
   const char *ckey;
   size_t ckeylen;
-  res=psync_sql_query("SELECT enckey FROM cryptofolderkey WHERE folderid=?");
+  res=psync_sql_query_rdlock("SELECT enckey FROM cryptofolderkey WHERE folderid=?");
   psync_sql_bind_uint(res, 1, folderid);
   if ((row=psync_sql_fetch_row(res))){
     ckey=psync_get_lstring(row[0], &ckeylen);
@@ -688,7 +709,7 @@ static psync_encrypted_symmetric_key_t psync_crypto_get_file_enc_key(psync_filei
   psync_variant_row row;
   const char *ckey;
   size_t ckeylen;
-  res=psync_sql_query("SELECT enckey FROM cryptofilekey WHERE fileid=?");
+  res=psync_sql_query_rdlock("SELECT enckey FROM cryptofilekey WHERE fileid=?");
   psync_sql_bind_uint(res, 1, fileid);
   if ((row=psync_sql_fetch_row(res))){
     ckey=psync_get_lstring(row[0], &ckeylen);
@@ -844,7 +865,7 @@ static psync_crypto_aes256_text_encoder_t psync_crypto_get_temp_folder_encoder_l
   sym_key_ver1 *skv1;
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT text2 FROM fstask WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT text2 FROM fstask WHERE id=?");
   psync_sql_bind_uint(res, 1, -folderid);
   if ((row=psync_sql_fetch_row(res))){
     const unsigned char *b64enckey;
@@ -896,7 +917,7 @@ static psync_crypto_aes256_text_decoder_t psync_crypto_get_temp_folder_decoder_l
   sym_key_ver1 *skv1;
   psync_sql_res *res;
   psync_variant_row row;
-  res=psync_sql_query("SELECT text2 FROM fstask WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT text2 FROM fstask WHERE id=?");
   psync_sql_bind_uint(res, 1, -folderid);
   if ((row=psync_sql_fetch_row(res))){
     const unsigned char *b64enckey;
@@ -1088,7 +1109,7 @@ static psync_crypto_aes256_sector_encoder_decoder_t psync_crypto_get_temp_file_e
   unsigned char *enckey;
   size_t enckeylen, b64enckeylen;
   psync_symmetric_key_t symkey;
-  res=psync_sql_query("SELECT type, fileid, text2 FROM fstask WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT type, fileid, text2 FROM fstask WHERE id=?");
   psync_sql_bind_uint(res, 1, -fileid);
   row=psync_sql_fetch_row(res);
   if (unlikely_log(!row)){
@@ -1246,7 +1267,7 @@ static int get_name_for_folder_locked(psync_folderid_t folderid, const char *nam
     psync_sql_res *res;
     psync_uint_row row;
     int enc;
-    res=psync_sql_query("SELECT flags FROM folder WHERE id=?");
+    res=psync_sql_query_rdlock("SELECT flags FROM folder WHERE id=?");
     psync_sql_bind_uint(res, 1, folderid);
     if ((row=psync_sql_fetch_rowint(res)))
       enc=(row[0]&PSYNC_FOLDER_FLAG_ENCRYPTED)!=0;

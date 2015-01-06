@@ -882,7 +882,7 @@ int psync_has_value(const char *valuename){
   psync_sql_res *res;
   psync_uint_row row;
   int ret;
-  res=psync_sql_query("SELECT COUNT(*) FROM setting WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT COUNT(*) FROM setting WHERE id=?");
   psync_sql_bind_string(res, 1, valuename);
   row=psync_sql_fetch_rowint(res);
   if (row)
@@ -913,7 +913,7 @@ uint64_t psync_get_uint_value(const char *valuename){
   psync_sql_res *res;
   psync_uint_row row;
   uint64_t ret;
-  res=psync_sql_query("SELECT value FROM setting WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT value FROM setting WHERE id=?");
   psync_sql_bind_string(res, 1, valuename);
   row=psync_sql_fetch_rowint(res);
   if (row)
@@ -936,7 +936,7 @@ char *psync_get_string_value(const char *valuename){
   psync_sql_res *res;
   psync_str_row row;
   char *ret;
-  res=psync_sql_query("SELECT value FROM setting WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT value FROM setting WHERE id=?");
   psync_sql_bind_string(res, 1, valuename);
   row=psync_sql_fetch_rowstr(res);
   if (row)
@@ -997,7 +997,7 @@ psync_sharerequest_list_t *psync_list_sharerequests(int incoming){
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(psync_sharerequest_t), offsetof(psync_sharerequest_list_t, sharerequests));
   incoming=!!incoming;
-  res=psync_sql_query("SELECT id, folderid, ctime, permissions, userid, mail, name, message FROM sharerequest WHERE isincoming=? ORDER BY name");
+  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, message FROM sharerequest WHERE isincoming=? ORDER BY name");
   psync_sql_bind_uint(res, 1, incoming);
   psync_list_bulder_add_sql(builder, res, create_request);
   return (psync_sharerequest_list_t *)psync_list_builder_finalize(builder);
@@ -1033,7 +1033,7 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
   incoming=!!incoming;
-  res=psync_sql_query("SELECT id, folderid, ctime, permissions, userid, mail, name FROM sharedfolder WHERE isincoming=? ORDER BY name");
+  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name FROM sharedfolder WHERE isincoming=? ORDER BY name");
   psync_sql_bind_uint(res, 1, incoming);
   psync_list_bulder_add_sql(builder, res, create_share);
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
