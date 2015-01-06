@@ -30,23 +30,13 @@
 
 #include <pthread.h>
 
-#ifndef PTHREAD_NULL
-#if defined(PTW32_VERSION)
-#define PTHREAD_NULL {NULL, 0}
-#else
-#define PTHREAD_NULL ((pthread_t)0)
-#endif
-#endif
-
-#define PSYNC_RWLOCK_INITIALIZER {0, 0, 0, 0, PTHREAD_NULL,  PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER}
-
 typedef struct {
   unsigned rcount;
   unsigned rwait;
   unsigned wcount;
   unsigned wwait;
   unsigned opts;
-  pthread_t wthread;
+  pthread_key_t cntkey;
   pthread_mutex_t mutex;
   pthread_cond_t rcond;
   pthread_cond_t wcond;
