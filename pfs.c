@@ -2927,7 +2927,7 @@ static int psync_fs_do_start(){
   fuse_opt_add_arg(&args, "argv");
   fuse_opt_add_arg(&args, "-ovolname=pCloud Drive");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
-  fuse_opt_add_arg(&args, "-olocal");
+  //fuse_opt_add_arg(&args, "-olocal");
   if (psync_user_is_admin())
     fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-onolocalcaches");
