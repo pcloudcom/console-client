@@ -270,7 +270,10 @@ void psync_rwlock_rslock(psync_rwlock_t *rw){
   cnt=psync_rwlock_get_count(rw);
   assert(cnt.cnt[0]==0);
   if (cnt.cnt[1]){
-    cnt.cnt[1]++;
+    if (cnt.cnt[1]==PSYNC_WR_RESERVED)
+      cnt.cnt[0]++;
+    else
+      cnt.cnt[1]++;
     psync_rwlock_set_count(rw, cnt);
     return;
   }
