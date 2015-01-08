@@ -58,6 +58,7 @@ typedef struct {
   uint8_t cansyncup;
   uint8_t cansyncdown;
   uint8_t canshare;
+  uint8_t isencrypted;
 } pfolder_t;
 
 typedef struct {

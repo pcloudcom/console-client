@@ -675,7 +675,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
   uint64_t perms;
   list=folder_list_init();
   if (listtype&PLIST_FOLDERS){
-    res=psync_sql_query("SELECT id, permissions, name, userid FROM folder WHERE parentfolderid=? ORDER BY name");
+    res=psync_sql_query("SELECT id, permissions, name, userid, flags FROM folder WHERE parentfolderid=? ORDER BY name");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       entry.folder.folderid=psync_get_number(row[0]);
@@ -683,6 +683,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
       entry.folder.cansyncup=((perms&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE);
       entry.folder.cansyncdown=((perms&PSYNC_PERM_READ)==PSYNC_PERM_READ);
       entry.folder.canshare=(psync_my_userid==psync_get_number(row[3]));
+      entry.folder.isencrypted=(psync_get_number(row[4])&PSYNC_FOLDER_FLAG_ENCRYPTED)?1:0;
       entry.name=psync_get_lstring(row[2], &namelen);
       entry.namelen=namelen;
       entry.isfolder=1;
@@ -718,6 +719,7 @@ static void add_to_folderlist(void *ptr, psync_pstat *stat){
       entry.folder.folderid=psync_stat_inode(&stat->stat);
       entry.folder.cansyncup=psync_stat_mode_ok(&stat->stat, 5);
       entry.folder.cansyncdown=psync_stat_mode_ok(&stat->stat, 7);
+      entry.folder.isencrypted=0;
     }
     else{
       entry.isfolder=0;
@@ -774,7 +776,7 @@ pentry_t *psync_folder_stat_path(const char *remotepath){
   }
   len++;
   olen-=len;
-  res=psync_sql_query("SELECT id, permissions, userid FROM folder WHERE parentfolderid=? AND name=?");
+  res=psync_sql_query("SELECT id, permissions, userid, flags FROM folder WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_lstring(res, 2, remotepath+len, olen);
   if ((row=psync_sql_fetch_rowint(res))){
@@ -783,6 +785,7 @@ pentry_t *psync_folder_stat_path(const char *remotepath){
     ret->folder.cansyncup=((row[1]&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE);
     ret->folder.cansyncdown=((row[1]&PSYNC_PERM_READ)==PSYNC_PERM_READ);
     ret->folder.canshare=(psync_my_userid==row[2]);
+    ret->folder.isencrypted=(row[3]&PSYNC_FOLDER_FLAG_ENCRYPTED)?1:0;
     ret->name=(char *)(ret+1);
     ret->namelen=olen;
     ret->isfolder=1;
