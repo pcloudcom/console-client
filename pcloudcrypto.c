@@ -561,7 +561,7 @@ int psync_cloud_crypto_reset(){
   if (ret)
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CRYPTO_IS_STARTED);
   if (!psync_crypto_issetup())
-    return PRINT_RETURN_CONST(PSYNC_CRYPTO_NOT_SETUP);
+    return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_SETUP);
   //TODO: actually do something
   return PSYNC_CRYPTO_RESET_SUCCESS;
 }
