@@ -1377,6 +1377,10 @@ int psync_crypto_isexpired(){
   return ce?(ce>psync_timer_time()):0;
 }
 
+time_t psync_crypto_expires(){
+  return psync_sql_cellint("SELECT value FROM setting WHERE id='cryptoexpires'", 0);
+}
+
 int psync_crypto_reset(){
   return psync_cloud_crypto_reset();
 }

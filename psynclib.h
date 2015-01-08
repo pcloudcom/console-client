@@ -831,6 +831,9 @@ int psync_password_quality10000(const char *password);
  * psync_crypto_hassubscription() - returns 1 if the user have active payment subscription for crypto or 0 otherwise
  * psync_crypto_isexpired() - returns 1 if the users crypto service is expired or 0 otherwise. Note that it also returns
  *                        0 when the user never set up crypto and is therefore eligible for a trial account.
+ * psync_crypto_expires() - returns unix timestamp with the date of current crypto service expiration. The returned value
+ *                        may be in the past, meaning expired service. If crypto has never been setup for this account
+ *                        this functions returns 0.
  * psync_crypto_reset() - reset user's crypto, which means that all encrypted files and folders get deleted
  * 
  */
@@ -844,6 +847,7 @@ int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char *
 int psync_crypto_issetup();
 int psync_crypto_hassubscription();
 int psync_crypto_isexpired();
+time_t psync_crypto_expires();
 int psync_crypto_reset();
 
 #ifdef __cplusplus
