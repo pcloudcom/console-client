@@ -289,6 +289,11 @@ static int handle_upload_api_error_taskid(uint64_t result, uint64_t taskid){
     case 2008: /* overquota */
       psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
       return -1;
+    case 2124: /* crypto expired */
+      res=psync_sql_prep_statement("UPDATE fstask SET status=1 WHERE id=?");
+      psync_sql_bind_uint(res, 1, taskid);
+      psync_sql_run_free(res);
+      return -1;
     default:
       return -1;
   }
@@ -1482,11 +1487,11 @@ static void psync_fsupload_check_tasks(){
   psync_list_init(&tasks);
   cnt=0;
   if (psync_status_get(PSTATUS_TYPE_ACCFULL)==PSTATUS_ACCFULL_QUOTAOK)
-    res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f"
+    res=psync_sql_query_rdlock("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f"
                         " LEFT JOIN fstaskdepend d ON f.id=d.fstaskid"
                         " WHERE d.fstaskid IS NULL AND status IN (0, 11) ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   else
-    res=psync_sql_query("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f"
+    res=psync_sql_query_rdlock("SELECT f.id, f.type, f.folderid, f.fileid, f.text1, f.text2, f.int1, f.int2, f.sfolderid, f.status FROM fstask f"
                         " LEFT JOIN fstaskdepend d ON f.id=d.fstaskid WHERE d.fstaskid IS NULL AND status IN (0, 11) AND f.type NOT IN ("NTO_STR(PSYNC_FS_TASK_CREAT)
                         ", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   while ((row=psync_sql_fetch_row(res))){

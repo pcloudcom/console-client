@@ -44,15 +44,6 @@ typedef union {
   uint_halfptr_t cnt[2];
 } psync_rwlock_lockcnt_t;
 
-#if IS_DEBUG
-static void psync_rwlock_thread_exit(void *ptr){
-  psync_rwlock_lockcnt_t locks;
-  locks.ptr=ptr;
-  debug(D_BUG, "thread exited while holding %u read locks and %u write locks", (unsigned)locks.cnt[0], (unsigned)locks.cnt[1]);
-  abort();
-}
-#endif
-
 void psync_rwlock_init(psync_rwlock_t *rw){
   assert(sizeof(void *)==sizeof(psync_rwlock_lockcnt_t));
   rw->rcount=0;
@@ -60,11 +51,7 @@ void psync_rwlock_init(psync_rwlock_t *rw){
   rw->wcount=0;
   rw->wwait=0;
   rw->opts=0;
-#if IS_DEBUG
-  pthread_key_create(&rw->cntkey, psync_rwlock_thread_exit);
-#else
   pthread_key_create(&rw->cntkey, NULL);
-#endif
   pthread_mutex_init(&rw->mutex, NULL);
   pthread_cond_init(&rw->rcond, NULL);
   pthread_cond_init(&rw->wcond, NULL);

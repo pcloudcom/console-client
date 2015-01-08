@@ -233,6 +233,11 @@ typedef struct {
 #define PSYNC_CRYPTO_HINT_NOT_LOGGED_IN    3
 #define PSYNC_CRYPTO_HINT_UNKNOWN_ERROR    4
 
+#define PSYNC_CRYPTO_RESET_SUCCESS         0
+#define PSYNC_CRYPTO_RESET_CRYPTO_IS_STARTED 1
+#define PSYNC_CRYPTO_RESET_NOT_LOGGED_IN   2
+#define PSYNC_CRYPTO_NOT_SETUP             3
+
 #define PSYNC_CRYPTO_SUCCESS               0
 #define PSYNC_CRYPTO_NOT_STARTED           -1
 #define PSYNC_CRYPTO_RSA_ERROR             -2
@@ -821,6 +826,12 @@ int psync_password_quality10000(const char *password);
  *                        on error. Negative error values are local and positive error values are API
  *                        error codes. If err is not null it is set to point to an static error string
  *                        message that you do NOT have to free.
+ * psync_crypto_issetup() - returns 1 if crypto is set up or 0 otherwise
+ * psync_crypto_hassubscription() - returns 1 if the user have active payment subscription for crypto or 0 otherwise
+ * psync_crypto_isexpired() - returns 1 if the users crypto service is expired or 0 otherwise. Note that it also returns
+ *                        0 when the user never set up crypto and is therefore eligible for a trial account.
+ * psync_crypto_reset() - reset user's crypto, which means that all encrypted files and folders get deleted
+ * 
  */
 
 int psync_crypto_setup(const char *password, const char *hint);
@@ -829,6 +840,10 @@ int psync_crypto_start(const char *password);
 int psync_crypto_stop();
 int psync_crypto_isstarted();
 int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err);
+int psync_crypto_issetup();
+int psync_crypto_hassubscription();
+int psync_crypto_isexpired();
+int psync_crypto_reset();
 
 #ifdef __cplusplus
 }

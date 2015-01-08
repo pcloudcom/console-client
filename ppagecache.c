@@ -780,7 +780,9 @@ static psync_int_t check_page_in_memory_by_hash(uint64_t hash, uint64_t pageid, 
 typedef struct {
   time_t lastuse;
   uint32_t id;
-  uint32_t usecnt;
+  uint16_t usecnt;
+  int8_t isfirst;
+  int8_t isxfirst;
 } pagecache_entry;
 
 static int pagecache_entry_cmp_lastuse(const void *p1, const void *p2){
@@ -842,12 +844,52 @@ static int pagecache_entry_cmp_id(const void *p1, const void *p2){
   return (int)((const pagecache_entry *)p1)->id-(int)((const pagecache_entry *)p2)->id;
 }
 
+static int pagecache_entry_cmp_first_pages(const void *p1, const void *p2){
+  const pagecache_entry *e1, *e2;
+  int d;
+  e1=(const pagecache_entry *)p1;
+  e2=(const pagecache_entry *)p2;
+  d=(int)e1->isfirst-(int)e2->isfirst;
+  if (d)
+    return d;
+  else if (e1->isfirst)
+    return (int)((int64_t)e1->lastuse-(int64_t)e2->lastuse);
+  else{
+    d=(int)e1->isxfirst-(int)e2->isxfirst;
+    if (d)
+      return d;
+    else
+      return (int)((int64_t)e1->lastuse-(int64_t)e2->lastuse);
+  }
+}
+
+static int pagecache_entry_cmp_xfirst_pages(const void *p1, const void *p2){
+  const pagecache_entry *e1, *e2;
+  int d;
+  e1=(const pagecache_entry *)p1;
+  e2=(const pagecache_entry *)p2;
+  d=(int)e1->isxfirst-(int)e2->isxfirst;
+  if (d)
+    return d;
+  else
+    return (int)((int64_t)e1->lastuse-(int64_t)e2->lastuse);
+}
+
+
 /* sum should be around 90-95 percent, so after a run cache get smaller */
-#define PSYNC_FS_CACHE_LRU_PERCENT 40
-#define PSYNC_FS_CACHE_LRU2_PERCENT 25
+#define PSYNC_FS_CACHE_LRU_PERCENT  40
+#define PSYNC_FS_CACHE_LRU2_PERCENT 20
 #define PSYNC_FS_CACHE_LRU4_PERCENT 15
 #define PSYNC_FS_CACHE_LRU8_PERCENT 10
 #define PSYNC_FS_CACHE_LRU16_PERCENT 5
+
+/* first pages percent pages are first reserved for the least recently used first pages and the above percents are
+ * only applied to the remainder, so it is OK if first pages percent plus all the above go above 100%
+ */
+#define PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT 15
+#define PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT 5
+#define PSYNC_FS_FIRST_PAGES_UNDER_ID (PSYNC_FS_MIN_READAHEAD_START/PSYNC_FS_PAGE_SIZE)
+#define PSYNC_FS_XFIRST_PAGES_UNDER_ID (1024*1024/PSYNC_FS_PAGE_SIZE)
 
 static void clean_cache(){
   psync_sql_res *res;
@@ -875,7 +917,7 @@ static void clean_cache(){
   i=0;
   e=0;
   while (i<cnt){
-    res=psync_sql_query_rdlock("SELECT id, lastuse, usecnt, type FROM pagecache WHERE id>? ORDER BY id LIMIT 5000");
+    res=psync_sql_query_rdlock("SELECT id, pageid, lastuse, usecnt, type FROM pagecache WHERE id>? ORDER BY id LIMIT 5000");
     psync_sql_bind_uint(res, 1, e);
     row=psync_sql_fetch_rowint(res);
     if (unlikely(!row)){
@@ -886,10 +928,15 @@ static void clean_cache(){
       if (unlikely(i>=cnt))
         break;
       e=row[0];
-      if (likely(row[3]==PAGE_TYPE_READ)){
-        entries[i].lastuse=row[1];
+      if (likely(row[4]==PAGE_TYPE_READ)){
+        entries[i].lastuse=row[2];
         entries[i].id=row[0];
-        entries[i].usecnt=row[2];
+        if (row[3]>UINT16_MAX)
+          entries[i].usecnt=UINT16_MAX;
+        else
+          entries[i].usecnt=row[3];
+        entries[i].isfirst=row[2]<PSYNC_FS_FIRST_PAGES_UNDER_ID;
+        entries[i].isxfirst=row[2]<PSYNC_FS_XFIRST_PAGES_UNDER_ID;
         i++;
       }
       row=psync_sql_fetch_rowint(res);
@@ -900,6 +947,13 @@ static void clean_cache(){
   }
   ocnt=cnt=i;
   debug(D_NOTICE, "read %lu entries", (unsigned long)cnt);
+  qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_first_pages);
+  cnt-=PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT*ocnt/100;
+  debug(D_NOTICE, "sorted first pages, reserved %lu pages, continuing with %lu entries", PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT*ocnt/100, cnt);
+  qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_xfirst_pages);
+  cnt-=PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT*ocnt/100;
+  debug(D_NOTICE, "sorted extended first pages, reserved %lu pages, continuing with %lu entries", PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT*ocnt/100, cnt);
+  ocnt=cnt;
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_lastuse);
   cnt-=PSYNC_FS_CACHE_LRU_PERCENT*ocnt/100;
   debug(D_NOTICE, "sorted entries by lastuse, continuing with %lu oldest entries", (unsigned long)cnt);

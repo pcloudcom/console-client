@@ -264,6 +264,16 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_uint(q, 2, 0);
       psync_sql_run(q);
     }
+    psync_sql_bind_string(q, 1, "cryptosetup");
+    psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosetup", PARAM_BOOL)->num);
+    psync_sql_run(q);
+    psync_sql_bind_string(q, 1, "cryptosubscription");
+    psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
+    psync_sql_run(q);
+    cres=psync_check_result(res, "cryptoexpires", PARAM_NUM);
+    psync_sql_bind_string(q, 1, "cryptoexpires");
+    psync_sql_bind_uint(q, 2, cres?cres->num:0);
+    psync_sql_run(q);
     psync_sql_free_result(q);
     psync_sql_commit_transaction();
     pthread_mutex_lock(&psync_my_auth_mutex);
@@ -1078,7 +1088,7 @@ void psync_diff_delete_folder(const binresult *meta){
 }
 
 static void process_modifyuserinfo(const binresult *entry){
-  const binresult *res;
+  const binresult *res, *cres;
   psync_sql_res *q;
   uint64_t u;
   if (!entry)
@@ -1111,6 +1121,16 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_run(q);
   psync_sql_bind_string(q, 1, "language");
   psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "cryptosetup");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosetup", PARAM_BOOL)->num);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "cryptosubscription");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
+  psync_sql_run(q);
+  cres=psync_check_result(res, "cryptoexpires", PARAM_NUM);
+  psync_sql_bind_string(q, 1, "cryptoexpires");
+  psync_sql_bind_uint(q, 2, cres?cres->num:0);
   psync_sql_run(q);
   psync_sql_free_result(q);
   psync_send_eventid(PEVENT_USERINFO_CHANGED);

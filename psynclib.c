@@ -1363,3 +1363,21 @@ int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char *
   return psync_cloud_crypto_mkdir(folderid, name, err);
 }
 
+int psync_crypto_issetup(){
+  return psync_sql_cellint("SELECT value FROM setting WHERE id='cryptosetup'", 0);
+}
+
+int psync_crypto_hassubscription(){
+  return psync_sql_cellint("SELECT value FROM setting WHERE id='cryptosubscription'", 0);
+}
+
+int psync_crypto_isexpired(){
+  int64_t ce;
+  ce=psync_sql_cellint("SELECT value FROM setting WHERE id='cryptoexpires'", 0);
+  return ce?(ce>psync_timer_time()):0;
+}
+
+int psync_crypto_reset(){
+  return psync_cloud_crypto_reset();
+}
+

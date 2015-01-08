@@ -466,7 +466,7 @@ int psync_sql_trylock(){
     psync_nanotime(&sqllockstart);
   return 0;
 #else
-  return psync_rwlock_wrtrylock(&psync_db_lock);
+  return psync_rwlock_trywrlock(&psync_db_lock);
 #endif
 }
 

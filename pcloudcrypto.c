@@ -80,10 +80,18 @@ typedef struct {
 } sym_key_ver1;
 
 static void psync_cloud_crypto_setup_save_to_db(const unsigned char *rsapriv, size_t rsaprivlen, const unsigned char *rsapub, size_t rsapublen,
-                                                const unsigned char *salt, size_t saltlen, size_t iterations){
+                                                const unsigned char *salt, size_t saltlen, size_t iterations, time_t expires){
   psync_sql_res *res;
   res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
   psync_sql_start_transaction();
+  psync_sql_bind_string(res, 1, "cryptosetup");
+  psync_sql_bind_uint(res, 2, 1);
+  psync_sql_run(res);
+  if (expires){
+    psync_sql_bind_string(res, 1, "cryptoexpires");
+    psync_sql_bind_uint(res, 2, expires);
+    psync_sql_run(res);
+  }
   psync_sql_bind_string(res, 1, "crypto_private_key");
   psync_sql_bind_blob(res, 2, (const char *)rsapriv, rsaprivlen);
   psync_sql_run(res);
@@ -99,8 +107,10 @@ static void psync_cloud_crypto_setup_save_to_db(const unsigned char *rsapriv, si
   psync_sql_commit_transaction();
 }
 
-static int psync_cloud_crypto_setup_do_upload(const unsigned char *rsapriv, size_t rsaprivlen, const unsigned char *rsapub, size_t rsapublen, const char *hint){
-  binparam params[]={P_STR("auth", psync_my_auth), P_LSTR("privatekey", rsapriv, rsaprivlen), P_LSTR("publickey", rsapub, rsapublen), P_STR("hint", hint)};
+static int psync_cloud_crypto_setup_do_upload(const unsigned char *rsapriv, size_t rsaprivlen, const unsigned char *rsapub, size_t rsapublen, 
+                                              const char *hint, time_t *cryptoexpires){
+  binparam params[]={P_STR("auth", psync_my_auth), P_LSTR("privatekey", rsapriv, rsaprivlen), P_LSTR("publickey", rsapub, rsapublen), 
+                     P_STR("hint", hint), P_STR("timeformat", "timestamp")};
   psync_socket *api;
   binresult *res;
   uint64_t result;
@@ -123,11 +133,13 @@ static int psync_cloud_crypto_setup_do_upload(const unsigned char *rsapriv, size
       psync_apipool_release(api);
   } while (0);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (!result)
+    *cryptoexpires=psync_find_result(res, "cryptoexpires", PARAM_NUM)->num;
   psync_free(res);
   if (result!=0)
     debug(D_WARNING, "crypto_setuserkeys returned %u", (unsigned)result);
   switch (result){
-    case 0: return PSYNC_CRYPTO_SETUP_SUCCESS;
+    case 0:    return PSYNC_CRYPTO_SETUP_SUCCESS;
     case 1000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_NOT_LOGGED_IN);
     case 2110: return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_ALREADY_SETUP);
   }
@@ -135,12 +147,13 @@ static int psync_cloud_crypto_setup_do_upload(const unsigned char *rsapriv, size
 }
 
 static int psync_cloud_crypto_setup_upload(const unsigned char *rsapriv, size_t rsaprivlen, const unsigned char *rsapub, size_t rsapublen, 
-                                           const unsigned char *salt, const char *hint){
+                                           const unsigned char *salt, const char *hint, time_t *cryptoexpires){
   priv_key_ver1 *priv;
   pub_key_ver1 *pub;
   unsigned char *b64priv, *b64pub; 
   size_t b64privlen, b64publen;
   int ret;
+  *cryptoexpires=0;
   priv=(priv_key_ver1 *)psync_malloc(offsetof(priv_key_ver1, key)+rsaprivlen);
   priv->type=PSYNC_CRYPTO_TYPE_RSA4096_64BYTESALT_20000IT;
   priv->flags=0;
@@ -154,7 +167,7 @@ static int psync_cloud_crypto_setup_upload(const unsigned char *rsapriv, size_t 
   b64pub=psync_base64_encode((unsigned char *)pub, offsetof(pub_key_ver1, key)+rsapublen, &b64publen);
   psync_free(priv);
   psync_free(pub);
-  ret=psync_cloud_crypto_setup_do_upload(b64priv, b64privlen, b64pub, b64publen, hint);
+  ret=psync_cloud_crypto_setup_do_upload(b64priv, b64privlen, b64pub, b64publen, hint, cryptoexpires);
   psync_free(b64priv);
   psync_free(b64pub);
   return ret;
@@ -176,6 +189,7 @@ int psync_cloud_crypto_setup(const char *password, const char *hint){
   psync_rsa_privatekey_t rsaprivate;
   psync_rsa_publickey_t rsapublic;
   psync_binary_rsa_key_t rsaprivatebin, rsapublicbin;
+  time_t cryptoexpires;
   int ret;
   debug(D_NOTICE, "generating salt");
   psync_ssl_rand_strong(salt, PSYNC_CRYPTO_PBKDF2_SALT_LEN);
@@ -226,7 +240,7 @@ int psync_cloud_crypto_setup(const char *password, const char *hint){
   psync_crypto_aes256_ctr_encode_decode_inplace(enc, rsaprivatebin->data, rsaprivatebin->datalen, 0);
   psync_crypto_aes256_ctr_encoder_decoder_free(enc);
   debug(D_NOTICE, "encoded private key, uploading keys");
-  ret=psync_cloud_crypto_setup_upload(rsaprivatebin->data, rsaprivatebin->datalen, rsapublicbin->data, rsapublicbin->datalen, salt, hint);
+  ret=psync_cloud_crypto_setup_upload(rsaprivatebin->data, rsaprivatebin->datalen, rsapublicbin->data, rsapublicbin->datalen, salt, hint, &cryptoexpires);
   if (unlikely(ret!=PSYNC_CRYPTO_SETUP_SUCCESS)){
     debug(D_WARNING, "keys upload failed with error %d", ret);
     psync_ssl_rsa_free_binary(rsaprivatebin);
@@ -235,7 +249,7 @@ int psync_cloud_crypto_setup(const char *password, const char *hint){
   }
   debug(D_NOTICE, "keys uploaded");
   psync_cloud_crypto_setup_save_to_db(rsaprivatebin->data, rsaprivatebin->datalen, rsapublicbin->data, rsapublicbin->datalen,
-                                      salt, PSYNC_CRYPTO_PBKDF2_SALT_LEN, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS);
+                                      salt, PSYNC_CRYPTO_PBKDF2_SALT_LEN, PSYNC_CRYPTO_PASS_TO_KEY_ITERATIONS, cryptoexpires);
   psync_ssl_rsa_free_binary(rsaprivatebin);
   psync_ssl_rsa_free_binary(rsapublicbin);
   return PSYNC_CRYPTO_SETUP_SUCCESS;
@@ -505,7 +519,7 @@ retry:
   pthread_rwlock_unlock(&crypto_lock);
   crypto_started_un=1;
   if (rowcnt<4)
-    psync_cloud_crypto_setup_save_to_db(rsapriv, rsaprivlen, rsapub, rsapublen, salt, saltlen, iterations);
+    psync_cloud_crypto_setup_save_to_db(rsapriv, rsaprivlen, rsapub, rsapublen, salt, saltlen, iterations, 0);
   psync_free(rsapriv);
   psync_free(rsapub);
   psync_free(salt);
@@ -537,6 +551,19 @@ int psync_cloud_crypto_isstarted(){
   ret=crypto_started_l;
   pthread_rwlock_unlock(&crypto_lock);
   return ret;
+}
+
+int psync_cloud_crypto_reset(){
+  int ret;
+  pthread_rwlock_rdlock(&crypto_lock);
+  ret=crypto_started_l;
+  pthread_rwlock_unlock(&crypto_lock);
+  if (ret)
+    return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CRYPTO_IS_STARTED);
+  if (!psync_crypto_issetup())
+    return PRINT_RETURN_CONST(PSYNC_CRYPTO_NOT_SETUP);
+  //TODO: actually do something
+  return PSYNC_CRYPTO_RESET_SUCCESS;
 }
 
 static void *err_to_ptr(int err){
