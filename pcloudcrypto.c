@@ -1485,7 +1485,7 @@ int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const 
     return set_err(PRINT_RETURN_CONST(PSYNC_CRYPTO_RSA_ERROR), err);
   }
   b64encsym=psync_base64_encode(encsym->data, encsym->datalen, &b64encsymlen);
-  ret=psync_cloud_crypto_send_mkdir(folderid, ename, err, (char *)b64encsym, b64encsymlen, encsym, psync_folderid_t *newfolderid);
+  ret=psync_cloud_crypto_send_mkdir(folderid, ename, err, (char *)b64encsym, b64encsymlen, encsym, newfolderid);
   psync_free(encsym);
   psync_free(ename);
   psync_free(b64encsym);
