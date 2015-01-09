@@ -554,16 +554,45 @@ int psync_cloud_crypto_isstarted(){
 }
 
 int psync_cloud_crypto_reset(){
-  int ret;
+  binparam params[]={P_STR("auth", psync_my_auth)};
+  psync_socket *api;
+  binresult *res;
+  uint32_t result;
+  int tries;
   pthread_rwlock_rdlock(&crypto_lock);
-  ret=crypto_started_l;
+  result=crypto_started_l;
   pthread_rwlock_unlock(&crypto_lock);
-  if (ret)
+  if (result)
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CRYPTO_IS_STARTED);
   if (!psync_crypto_issetup())
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_SETUP);
-  //TODO: actually do something
-  return PSYNC_CRYPTO_RESET_SUCCESS;
+  debug(D_NOTICE, "resetting crypto");
+  tries=0;
+  do {
+    api=psync_apipool_get();
+    if (!api)
+      return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CANT_CONNECT);
+    res=send_command(api, "crypto_reset", params);
+    if (unlikely_log(!res)){
+      psync_apipool_release_bad(api);
+      if (++tries<=5)
+        continue;
+      else
+        return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CANT_CONNECT);
+    }
+    else
+      psync_apipool_release(api);
+  } while (0);
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  psync_free(res);
+  if (result)
+    debug(D_WARNING, "crypto_reset returned error %u", (unsigned)result);
+  switch (result){
+    case 0: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_SUCCESS);
+    case 2000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_LOGGED_IN);
+    case 2111: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_SETUP);
+    default: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_UNKNOWN_ERROR);
+  }
 }
 
 static void *err_to_ptr(int err){
@@ -1311,7 +1340,7 @@ static int get_name_for_folder_locked(psync_folderid_t folderid, const char *nam
 }
 
 int psync_cloud_crypto_send_mkdir(psync_folderid_t folderid, const char *name, const char **err, const char *b64key, size_t b64keylen, 
-                                  psync_encrypted_symmetric_key_t encsym){
+                                  psync_encrypted_symmetric_key_t encsym, psync_folderid_t *newfolderid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_BOOL("encrypted", 1),
                      P_LSTR("key", b64key, b64keylen), P_STR("timeformat", "timestamp")};
   psync_socket *api;
@@ -1344,6 +1373,8 @@ int psync_cloud_crypto_send_mkdir(psync_folderid_t folderid, const char *name, c
     return result;
   }
   meta=psync_find_result(res, "metadata", PARAM_HASH);
+  if (newfolderid)
+    *newfolderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
   psync_sql_start_transaction();
   psync_ops_create_folder_in_db(meta);
   save_folder_key_to_db(psync_find_result(meta, "folderid", PARAM_NUM)->num, encsym);
@@ -1420,7 +1451,7 @@ char *psync_cloud_crypto_get_new_encoded_and_plain_key(uint32_t flags, size_t *k
   return ret;
 }
 
-int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err){
+int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err, psync_folderid_t *newfolderid){
   sym_key_ver1 sym;
   psync_encrypted_symmetric_key_t encsym;
   unsigned char *b64encsym;
@@ -1454,7 +1485,7 @@ int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const 
     return set_err(PRINT_RETURN_CONST(PSYNC_CRYPTO_RSA_ERROR), err);
   }
   b64encsym=psync_base64_encode(encsym->data, encsym->datalen, &b64encsymlen);
-  ret=psync_cloud_crypto_send_mkdir(folderid, ename, err, (char *)b64encsym, b64encsymlen, encsym);
+  ret=psync_cloud_crypto_send_mkdir(folderid, ename, err, (char *)b64encsym, b64encsymlen, encsym, psync_folderid_t *newfolderid);
   psync_free(encsym);
   psync_free(ename);
   psync_free(b64encsym);

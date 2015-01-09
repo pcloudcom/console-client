@@ -1359,8 +1359,8 @@ int psync_crypto_isstarted(){
   return psync_cloud_crypto_isstarted();
 }
 
-int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err){
-  return psync_cloud_crypto_mkdir(folderid, name, err);
+int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err, psync_folderid_t *newfolderid){
+  return psync_cloud_crypto_mkdir(folderid, name, err, newfolderid);
 }
 
 int psync_crypto_issetup(){

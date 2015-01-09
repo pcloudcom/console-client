@@ -239,6 +239,7 @@ typedef struct {
 #define PSYNC_CRYPTO_RESET_CANT_CONNECT    2
 #define PSYNC_CRYPTO_RESET_NOT_LOGGED_IN   3
 #define PSYNC_CRYPTO_RESET_NOT_SETUP       4
+#define PSYNC_CRYPTO_RESET_UNKNOWN_ERROR   5
 
 #define PSYNC_CRYPTO_SUCCESS               0
 #define PSYNC_CRYPTO_NOT_STARTED           -1
@@ -824,9 +825,9 @@ int psync_password_quality10000(const char *password);
  * psync_crypto_isstarted() - returns 1 if crypto is started and 0 otherwise
  * psync_crypto_mkdir() - creates encrypted folder with name in folderid. If the parent 
  *                        folder is not encrypted itself the folder name will be stored in plaintext
- *                        and only the contents will be encrypted. Returns 0 for success, or non-zero
- *                        on error. Negative error values are local and positive error values are API
- *                        error codes. If err is not null it is set to point to an static error string
+ *                        and only the contents will be encrypted. Returns 0 for success and sets *newfolderid (if newfolderid is
+ *                        non-NULL) to the id of the new folder, or non-zero on error. Negative error values are local and positive
+ *                        error  values are API error codes. If err is not null it is set to point to an static error string
  *                        message that you do NOT have to free.
  * psync_crypto_issetup() - returns 1 if crypto is set up or 0 otherwise
  * psync_crypto_hassubscription() - returns 1 if the user have active payment subscription for crypto or 0 otherwise
@@ -835,7 +836,8 @@ int psync_password_quality10000(const char *password);
  * psync_crypto_expires() - returns unix timestamp with the date of current crypto service expiration. The returned value
  *                        may be in the past, meaning expired service. If crypto has never been setup for this account
  *                        this functions returns 0.
- * psync_crypto_reset() - reset user's crypto, which means that all encrypted files and folders get deleted
+ * psync_crypto_reset() - reset user's crypto, which means that all encrypted files and folders get deleted. This function
+ *                        does not directly reset user's account, a confirmation email is first sent to the user.
  * 
  */
 
@@ -844,7 +846,7 @@ int psync_crypto_get_hint(char **hint);
 int psync_crypto_start(const char *password);
 int psync_crypto_stop();
 int psync_crypto_isstarted();
-int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err);
+int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err, psync_folderid_t *newfolderid);
 int psync_crypto_issetup();
 int psync_crypto_hassubscription();
 int psync_crypto_isexpired();

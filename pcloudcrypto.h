@@ -49,7 +49,7 @@ int psync_cloud_crypto_start(const char *password);
 int psync_cloud_crypto_stop();
 int psync_cloud_crypto_isstarted();
 int psync_cloud_crypto_reset();
-int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err);
+int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err, psync_folderid_t *newfolderid);
 
 psync_crypto_aes256_text_decoder_t psync_cloud_crypto_get_folder_decoder(psync_fsfolderid_t folderid);
 void psync_cloud_crypto_release_folder_decoder(psync_fsfolderid_t folderid, psync_crypto_aes256_text_decoder_t decoder);
