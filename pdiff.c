@@ -109,7 +109,7 @@ static psync_socket *get_connected_socket(){
   psync_sql_res *q;
   char *device;
   uint64_t result, userid, luserid;
-  int saveauth;
+  int saveauth, isbusiness;
   auth=user=pass=NULL;
   while (1){
     psync_free(auth);
@@ -258,11 +258,13 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_string(q, 1, "lastname");
       psync_sql_bind_string(q, 2, psync_find_result(cres, "lastname", PARAM_STR)->str);
       psync_sql_run(q);
+      isbusiness=1;
     }
     else{
       psync_sql_bind_string(q, 1, "business");
       psync_sql_bind_uint(q, 2, 0);
       psync_sql_run(q);
+      isbusiness=0;
     }
     psync_sql_bind_string(q, 1, "cryptosetup");
     psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosetup", PARAM_BOOL)->num);
@@ -291,7 +293,7 @@ static psync_socket *get_connected_socket(){
     else
       psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
     psync_free(res);
-    if (cres){
+    if (isbusiness){
       binparam params[]={P_STR("timeformat", "timestamp"), 
                          P_STR("auth", psync_my_auth)};
       res=send_command(sock, "account_info", params);

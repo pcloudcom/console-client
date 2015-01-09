@@ -42,7 +42,6 @@
 #define CACHE_HASH (CACHE_PAGES/2)
 
 #define PAGE_WAITER_HASH 1024
-#define PAGE_WAITER_MUTEXES 16
 
 #define DB_CACHE_UPDATE_HASH (32*1024)
 
@@ -55,9 +54,8 @@
 
 #define pagehash_by_hash_and_pageid(hash, pageid) (((hash)+(pageid))%CACHE_HASH)
 #define waiterhash_by_hash_and_pageid(hash, pageid) (((hash)+(pageid))%PAGE_WAITER_HASH)
-#define waiter_mutex_by_hash(hash) (hash%PAGE_WAITER_MUTEXES)
-#define lock_wait(hash) pthread_mutex_lock(&wait_page_mutexes[waiter_mutex_by_hash(hash)])
-#define unlock_wait(hash) pthread_mutex_unlock(&wait_page_mutexes[waiter_mutex_by_hash(hash)])
+#define lock_wait(hash) pthread_mutex_lock(&wait_page_mutex)
+#define unlock_wait(hash) pthread_mutex_unlock(&wait_page_mutex)
 
 typedef struct {
   psync_list list;
@@ -164,7 +162,7 @@ static pthread_mutex_t cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t flush_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t url_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t url_cache_cond=PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t wait_page_mutexes[PAGE_WAITER_MUTEXES];
+static pthread_mutex_t wait_page_mutex;
 static pthread_cond_t enc_key_cond=PTHREAD_COND_INITIALIZER;
 
 static uint32_t clean_cache_stoppers=0;
@@ -2046,7 +2044,7 @@ static void wait_waiter(psync_page_waiter_t *pwt, uint64_t hash, const char *pt)
     lock_wait(hash);
     while (!pwt->ready){
       debug(D_NOTICE, "waiting for %s page #%lu to be read", pt, (unsigned long)pwt->waiting_for->pageid);
-      pthread_cond_wait(&pwt->cond, &wait_page_mutexes[waiter_mutex_by_hash(hash)]);
+      pthread_cond_wait(&pwt->cond, &wait_page_mutex);
       debug(D_NOTICE, "waited for %s page", pt); // not safe to use pwt->waiting_for here
     }
     unlock_wait(hash);
@@ -2545,7 +2543,7 @@ int psync_pagecache_readv_locked(psync_openfile_t *of, psync_pagecache_read_rang
   psync_list_for_each_element(pwt, &waiting, psync_page_waiter_t, listwaiter){
     while (!pwt->ready){
       debug(D_NOTICE, "waiting for page #%lu to be read", (unsigned long)pwt->waiting_for->pageid);
-      pthread_cond_wait(&pwt->cond, &wait_page_mutexes[waiter_mutex_by_hash(hash)]);
+      pthread_cond_wait(&pwt->cond, &wait_page_mutex);
       debug(D_NOTICE, "waited for page"); // not safe to use pwt->waiting_for here
     }
     if (pwt->error || pwt->rsize<pwt->size)
@@ -3089,8 +3087,7 @@ void psync_pagecache_init(){
     psync_list_init(&cache_hash[i]);
   for (i=0; i<PAGE_WAITER_HASH; i++)
     psync_list_init(&wait_page_hash[i]);
-  for (i=0; i<PAGE_WAITER_MUTEXES; i++)
-    pthread_mutex_init(&wait_page_mutexes[i], NULL);
+  pthread_mutex_init(&wait_page_mutex, NULL);
   psync_list_init(&free_pages);
   memset(cachepages_to_update, 0, sizeof(cachepages_to_update));
   pages_base=(char *)psync_mmap_anon(CACHE_PAGES*(PSYNC_FS_PAGE_SIZE+sizeof(psync_cache_page_t)));

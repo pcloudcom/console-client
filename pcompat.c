@@ -195,6 +195,11 @@ void psync_compat_init(){
   limit.rlim_cur=limit.rlim_max=2048;
   if (setrlimit(RLIMIT_NOFILE, &limit))
     debug(D_ERROR, "setrlimit failed");
+#if IS_DEBUG
+  limit.rlim_cur=limit.rlim_max=RLIM_INFINITY;
+  if (setrlimit(RLIMIT_CORE, &limit))
+    debug(D_ERROR, "setrlimit failed");
+#endif
   signal(SIGPIPE, SIG_IGN);
   psync_uid=getuid();
   psync_gid=getgid();
