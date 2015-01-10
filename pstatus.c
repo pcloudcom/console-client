@@ -134,7 +134,7 @@ void psync_status_init(){
 void psync_status_recalc_to_download(){
   psync_sql_res *res;
   psync_uint_row row;
-  res=psync_sql_query("SELECT COUNT(*), SUM(f.size) FROM task t, file f WHERE t.type=? AND t.itemid=f.id");
+  res=psync_sql_query_rdlock("SELECT COUNT(*), SUM(f.size) FROM task t, file f WHERE t.type=? AND t.itemid=f.id");
   psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
   if ((row=psync_sql_fetch_rowint(res))){
     psync_status.filestodownload=row[0];
@@ -161,7 +161,7 @@ void psync_status_recalc_to_upload(){
   uint64_t bytestou;
   uint32_t filestou;
   
-  res=psync_sql_query("SELECT COUNT(*), SUM(f.size) FROM task t, localfile f WHERE t.type=? AND t.localitemid=f.id");
+  res=psync_sql_query_rdlock("SELECT COUNT(*), SUM(f.size) FROM task t, localfile f WHERE t.type=? AND t.localitemid=f.id");
   psync_sql_bind_uint(res, 1, PSYNC_UPLOAD_FILE);
   if ((row=psync_sql_fetch_rowint(res))){
     filestou=row[0];
@@ -173,7 +173,7 @@ void psync_status_recalc_to_upload(){
   }
   psync_sql_free_result(res);
   fscpath=psync_setting_get_string(_PS(fscachepath));
-  res=psync_sql_query("SELECT id FROM fstask WHERE type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") AND text1 NOT LIKE '.%'");
+  res=psync_sql_query_rdlock("SELECT id FROM fstask WHERE type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") AND text1 NOT LIKE '.%'");
   while ((row=psync_sql_fetch_rowint(res))){
     psync_binhex(fileidhex, &row[0], sizeof(psync_fsfileid_t));
     fileidhex[sizeof(psync_fsfileid_t)]='d';

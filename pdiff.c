@@ -1641,25 +1641,30 @@ static void psync_diff_refresh_fs(const binresult *entries){
 
 static void psync_run_analyze_if_needed(){
   if (psync_timer_time()>psync_sql_cellint("SELECT value FROM setting WHERE id='lastanalyze'", 0)+24*3600){
+    static const char *skiptables[]={"pagecache", "sqlite_stat1"};
     psync_sql_res *res;
     psync_uint_row row;
     psync_str_row srow;
     char **tablenames;
     char *sql;
-    size_t tablecnt;
+    size_t tablecnt, i;
     debug(D_NOTICE, "running ANALYZE on tables");
-    res=psync_sql_query("SELECT COUNT(*) FROM sqlite_master WHERE type='table'");
+    res=psync_sql_query_rdlock("SELECT COUNT(*) FROM sqlite_master WHERE type='table'");
     if ((row=psync_sql_fetch_rowint(res)))
       tablecnt=row[0];
     else
       tablecnt=0;
     psync_sql_free_result(res);
     tablenames=psync_new_cnt(char *, tablecnt);
-    res=psync_sql_query("SELECT name FROM sqlite_master WHERE type='table' LIMIT ?");
+    res=psync_sql_query_rdlock("SELECT name FROM sqlite_master WHERE type='table' LIMIT ?");
     psync_sql_bind_uint(res, 1, tablecnt);
     tablecnt=0;
-    while ((srow=psync_sql_fetch_rowstr(res)))
+    while ((srow=psync_sql_fetch_rowstr(res))){
+      for (i=0; i<ARRAY_SIZE(skiptables); i++)
+        if (!strcmp(srow[0], skiptables[i]))
+          continue;
       tablenames[tablecnt++]=psync_strdup(srow[0]);
+    }
     psync_sql_free_result(res);
     
     while (tablecnt){

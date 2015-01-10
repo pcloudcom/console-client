@@ -106,7 +106,7 @@ static void scanner_set_syncs_to_list(psync_list *lst){
   psync_deviceid_t deviceid;
   psync_list_init(lst);
   syncmp=psync_fs_getmountpoint();
-  res=psync_sql_query("SELECT id, folderid, localpath, synctype, deviceid FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
+  res=psync_sql_query_rdlock("SELECT id, folderid, localpath, synctype, deviceid FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   while ((row=psync_sql_fetch_row(res))){
     lp=psync_get_lstring(row[2], &lplen);
     if (unlikely(psync_stat(lp, &st))){
@@ -164,7 +164,7 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
   const char *name;
   size_t namelen;
   psync_list_init(lst);
-  res=psync_sql_query("SELECT id, folderid, inode, deviceid, mtimenative, name FROM localfolder WHERE localparentfolderid=? AND syncid=? AND mtimenative IS NOT NULL");
+  res=psync_sql_query_rdlock("SELECT id, folderid, inode, deviceid, mtimenative, name FROM localfolder WHERE localparentfolderid=? AND syncid=? AND mtimenative IS NOT NULL");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
@@ -182,7 +182,7 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
     psync_list_add_tail(lst, &e->list);
   }
   psync_sql_free_result(res);
-  res=psync_sql_query("SELECT id, fileid, inode, mtimenative, size, name FROM localfile WHERE localparentfolderid=? AND syncid=?");
+  res=psync_sql_query_rdlock("SELECT id, fileid, inode, mtimenative, size, name FROM localfile WHERE localparentfolderid=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
@@ -823,7 +823,7 @@ void psync_localscan_init(){
   psync_timer_exception_handler(psync_wake_localscan_noscan);
   psync_run_thread("localscan", scanner_thread);
   localnotify=psync_localnotify_init();
-  res=psync_sql_query("SELECT id FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
+  res=psync_sql_query_rdlock("SELECT id FROM syncfolder WHERE synctype&"NTO_STR(PSYNC_UPLOAD_ONLY)"="NTO_STR(PSYNC_UPLOAD_ONLY));
   result=psync_sql_fetchall_int(res);
   for (i=0; i<result->rows; i++)
     psync_localnotify_add_sync(psync_get_result_cell(result, i, 0));

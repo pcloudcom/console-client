@@ -145,7 +145,7 @@ static psync_fileid_t psync_p2p_has_file(const unsigned char *hashstart, const u
   memcpy(like, hashstart, PSYNC_P2P_HEXHASH_BYTES);
   like[PSYNC_P2P_HEXHASH_BYTES]='%';
   memcpy(hashsource+PSYNC_HASH_DIGEST_HEXLEN, rand, PSYNC_HASH_BLOCK_SIZE-PSYNC_HASH_DIGEST_HEXLEN);
-  res=psync_sql_query("SELECT id, checksum FROM localfile WHERE checksum LIKE ? AND size=?");
+  res=psync_sql_query_rdlock("SELECT id, checksum FROM localfile WHERE checksum LIKE ? AND size=?");
   psync_sql_bind_lstring(res, 1, like, PSYNC_P2P_HEXHASH_BYTES+1);
   psync_sql_bind_uint(res, 2, filesize);
   while ((row=psync_sql_fetch_row(res))){

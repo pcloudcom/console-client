@@ -164,7 +164,7 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   char *nname;
   uint64_t result;
   int ret;
-  res=psync_sql_query("SELECT s.folderid FROM localfolder l, syncedfolder s WHERE l.id=? AND l.syncid=? AND l.localparentfolderid=s.localfolderid AND s.syncid=?");
+  res=psync_sql_query_rdlock("SELECT s.folderid FROM localfolder l, syncedfolder s WHERE l.id=? AND l.syncid=? AND l.localparentfolderid=s.localfolderid AND s.syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_bind_uint(res, 3, syncid);
@@ -241,14 +241,14 @@ static int task_renamefile(psync_syncid_t syncid, psync_fileid_t localfileid, ps
   char *nname;
   int ret;
   task_wait_no_uploads();
-  res=psync_sql_query("SELECT fileid FROM localfile WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT fileid FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res)))
     fileid=row[0];
   else
     fileid=0;
   psync_sql_free_result(res);
-  res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
+  res=psync_sql_query_rdlock("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, newlocalparentfolderid);
   if ((row=psync_sql_fetch_rowint(res)))
@@ -282,7 +282,7 @@ static int task_renamefolder(psync_syncid_t syncid, psync_fileid_t localfolderid
   char *nname;
   int ret;
   task_wait_no_uploads();
-  res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
+  res=psync_sql_query_rdlock("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, localfolderid);
   if ((row=psync_sql_fetch_rowint(res)))
@@ -290,7 +290,7 @@ static int task_renamefolder(psync_syncid_t syncid, psync_fileid_t localfolderid
   else
     folderid=0;
   psync_sql_free_result(res);
-  res=psync_sql_query("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
+  res=psync_sql_query_rdlock("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, newlocalparentfolderid);
   if ((row=psync_sql_fetch_rowint(res)))
@@ -380,7 +380,7 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
   uint64_t filesize, hash;
   unsigned char shashhex[PSYNC_HASH_DIGEST_HEXLEN];
   int ret;
-  res=psync_sql_query("SELECT id, size FROM file WHERE parentfolderid=? AND name=?");
+  res=psync_sql_query_rdlock("SELECT id, size FROM file WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_string(res, 2, name);
   row=psync_sql_fetch_rowint(res);
@@ -736,7 +736,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     return -1;
   }
   if (likely(uploadoffset<fsize)){
-    sql=psync_sql_query("SELECT fileid, hash FROM localfile WHERE id=?");
+    sql=psync_sql_query_rdlock("SELECT fileid, hash FROM localfile WHERE id=?");
     psync_sql_bind_uint(sql, 1, localfileid);
     if ((row=psync_sql_fetch_rowint(sql))){
       uint64_t fileid, hash;
@@ -748,7 +748,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     }
     else
       psync_sql_free_result(sql);
-    sql=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 5");
+    sql=psync_sql_query_rdlock("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 5");
     psync_sql_bind_uint(sql, 1, localfileid);
     fr=psync_sql_fetchall_int(sql);
     for (id=0; id<fr->rows; id++)
@@ -902,7 +902,7 @@ static void delete_uploadids(psync_fileid_t localfileid){
   psync_sql_res *res;
   psync_full_result_int *rows;
   uint32_t i;
-  res=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=?");
+  res=psync_sql_query_rdlock("SELECT uploadid FROM localfileupload WHERE localfileid=?");
   psync_sql_bind_uint(res, 1, localfileid);
   rows=psync_sql_fetchall_int(res);
   if (rows->rows){
@@ -968,7 +968,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     psync_milisleep(PSYNC_SLEEP_ON_LOCKED_FILE);
     return -1;
   }
-  res=psync_sql_query("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 1");
+  res=psync_sql_query_rdlock("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 1");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res)))
     uploadid=row[0];
@@ -1013,7 +1013,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   psync_sql_bind_lstring(res, 2, (char *)hashhex, PSYNC_HASH_DIGEST_HEXLEN);
   psync_sql_bind_uint(res, 3, localfileid);
   psync_sql_run_free(res);
-  res=psync_sql_query("SELECT s.folderid FROM localfile f, syncedfolder s WHERE f.id=? AND f.localparentfolderid=s.localfolderid AND s.syncid=?");
+  res=psync_sql_query_rdlock("SELECT s.folderid FROM localfile f, syncedfolder s WHERE f.id=? AND f.localparentfolderid=s.localfolderid AND s.syncid=?");
   psync_sql_bind_uint(res, 1, localfileid);
   psync_sql_bind_uint(res, 2, syncid);
   if (likely_log(row=psync_sql_fetch_rowint(res)))
@@ -1039,8 +1039,8 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     psync_free(localpath);
     return ret==1?0:-1;
   }
-memcpy(upload->hash, hashhex, PSYNC_HASH_DIGEST_HEXLEN);
-  res=psync_sql_query("SELECT hash FROM localfile WHERE hash IS NOT NULL AND id=?");
+  memcpy(upload->hash, hashhex, PSYNC_HASH_DIGEST_HEXLEN);
+  res=psync_sql_query_rdlock("SELECT hash FROM localfile WHERE hash IS NOT NULL AND id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res))){
     pr.paramtype=PARAM_NUM;
@@ -1116,7 +1116,7 @@ static int task_run_uploadfile(uint64_t taskid, psync_syncid_t syncid, psync_fol
   uint64_t filesize;
   size_t len;
   int stop;
-  res=psync_sql_query("SELECT size FROM localfile WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT size FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   row=psync_sql_fetch_rowint(res);
   if (likely(row)){

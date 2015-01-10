@@ -1385,3 +1385,40 @@ int psync_crypto_reset(){
   return psync_cloud_crypto_reset();
 }
 
+psync_folderid_t psync_crypto_folderid(){
+  int64_t id;
+  id=psync_sql_cellint("SELECT id FROM folder WHERE parentfolderid=0 AND flags&"NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)"="NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)" LIMIT 1", 0);
+  if (id)
+    return id;
+  id=psync_sql_cellint("SELECT f1.id FROM folder f1, folder f2 WHERE f1.parentfolderid=f2.id AND "
+                       "f1.flags&"NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)"="NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)" AND "
+                       "f2.flags&"NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)"=0 LIMIT 1", 0);
+  if (id)
+    return id;
+  else
+    return PSYNC_CRYPTO_INVALID_FOLDERID;
+}
+
+psync_folderid_t *psync_crypto_folderids(){
+  psync_sql_res *res;
+  psync_uint_row row;
+  psync_folderid_t *ret;
+  size_t alloc, l;
+  alloc=2;
+  l=0;
+  ret=psync_new_cnt(psync_folderid_t, alloc);
+  res=psync_sql_query_rdlock("SELECT f1.id FROM folder f1, folder f2 WHERE f1.parentfolderid=f2.id AND "
+                             "f1.flags&"NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)"="NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)" AND "
+                             "f2.flags&"NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)"=0");
+  while ((row=psync_sql_fetch_rowint(res))){
+    ret[l]=row[0];
+    if (++l==alloc){
+      alloc*=2;
+      ret=(psync_folderid_t *)psync_realloc(ret, sizeof(psync_folderid_t)*alloc);
+    }
+  }
+  psync_sql_free_result(res);
+  ret[l]=PSYNC_CRYPTO_INVALID_FOLDERID;
+  return ret;
+}
+

@@ -251,6 +251,8 @@ typedef struct {
 #define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -7
 #define PSYNC_CRYPTO_INTERNAL_ERROR        -8
 
+#define PSYNC_CRYPTO_INVALID_FOLDERID      ((psync_folderid_t)-1)
+
 typedef struct {
   const char *localname;
   const char *localpath;
@@ -838,6 +840,11 @@ int psync_password_quality10000(const char *password);
  *                        this functions returns 0.
  * psync_crypto_reset() - reset user's crypto, which means that all encrypted files and folders get deleted. This function
  *                        does not directly reset user's account, a confirmation email is first sent to the user.
+ * psync_crypto_folderid() - returns the id of the first encrypted folder it finds. If no encrypted folder is found the function returns
+ *                        PSYNC_CRYPTO_INVALID_FOLDERID.
+ * psync_crypto_folderids() - returns array of the ids of all encrypted folders (but not their subfolders). Last element of the array is
+ *                        always PSYNC_CRYPTO_INVALID_FOLDERID. You need to free the memory returned by this function.
+ * 
  * 
  */
 
@@ -852,6 +859,8 @@ int psync_crypto_hassubscription();
 int psync_crypto_isexpired();
 time_t psync_crypto_expires();
 int psync_crypto_reset();
+psync_folderid_t psync_crypto_folderid();
+psync_folderid_t *psync_crypto_folderids();
 
 #ifdef __cplusplus
 }

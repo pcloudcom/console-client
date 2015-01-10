@@ -229,7 +229,7 @@ static int clean_uploads_for_task(psync_socket *api, psync_uploadid_t taskid){
   uint32_t i;
   int ret;
   ret=0;
-  sql=psync_sql_query("SELECT uploadid FROM fstaskupload WHERE fstaskid=?");
+  sql=psync_sql_query_rdlock("SELECT uploadid FROM fstaskupload WHERE fstaskid=?");
   psync_sql_bind_uint(sql, 1, taskid);
   fr=psync_sql_fetchall_int(sql);
   for (i=0; i<fr->rows; i++){
@@ -876,8 +876,8 @@ static void large_upload(){
   debug(D_NOTICE, "started");
   while (1){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
-    res=psync_sql_query("SELECT id, type, folderid, text1, text2, int1, fileid, int2 FROM fstask WHERE status=2 AND \
-type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER BY id LIMIT 1");
+    res=psync_sql_query("SELECT id, type, folderid, text1, text2, int1, fileid, int2 FROM fstask WHERE status=2 AND "
+                        "type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER BY id LIMIT 1");
     row=psync_sql_fetch_row(res);
     if (!row){
       large_upload_running=0;
@@ -913,7 +913,7 @@ type IN ("NTO_STR(PSYNC_FS_TASK_CREAT)", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER 
     filename=psync_strcat(cname, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
     fileidhex[sizeof(psync_fsfileid_t)]='i';
     indexname=psync_strcat(cname, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-    res=psync_sql_query("SELECT uploadid FROM fstaskupload WHERE fstaskid=? ORDER BY uploadid DESC LIMIT 1");
+    res=psync_sql_query_rdlock("SELECT uploadid FROM fstaskupload WHERE fstaskid=? ORDER BY uploadid DESC LIMIT 1");
     psync_sql_bind_uint(res, 1, taskid);
     if ((urow=psync_sql_fetch_rowint(res)))
       uploadid=urow[0];
@@ -1250,7 +1250,7 @@ static int psync_cancel_task_creat(fsupload_task_t *task){
   psync_fileid_t fileid;
   psync_delete_write_cache_file(task->id, 0);
   psync_fstask_file_created(task->folderid, task->id, task->text1, 0);
-  res=psync_sql_query("SELECT fileid FROM fstaskfileid WHERE fstaskid=?");
+  res=psync_sql_query_rdlock("SELECT fileid FROM fstaskfileid WHERE fstaskid=?");
   psync_sql_bind_uint(res, 1, task->id);
   if ((row=psync_sql_fetch_rowint(res)))
     fileid=row[0];

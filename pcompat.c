@@ -554,23 +554,23 @@ static void psync_get_random_seed_from_db(psync_lhash_ctx *hctx){
   unsigned char rnd[PSYNC_LHASH_DIGEST_LEN];
   psync_nanotime(&tm);
   psync_lhash_update(hctx, &tm, sizeof(&tm));
-  res=psync_sql_query("SELECT * FROM setting ORDER BY RANDOM()");
+  res=psync_sql_query_rdlock("SELECT * FROM setting ORDER BY RANDOM()");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM filerevision ORDER BY RANDOM() LIMIT 50");
+  res=psync_sql_query_rdlock("SELECT * FROM filerevision ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM file ORDER BY RANDOM() LIMIT 50");
+  res=psync_sql_query_rdlock("SELECT * FROM file ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM localfile ORDER BY RANDOM() LIMIT 50");
+  res=psync_sql_query_rdlock("SELECT * FROM localfile ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM resolver ORDER BY RANDOM() LIMIT 50");
+  res=psync_sql_query_rdlock("SELECT * FROM resolver ORDER BY RANDOM() LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM folder ORDER BY RANDOM() LIMIT 25");
+  res=psync_sql_query_rdlock("SELECT * FROM folder ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM localfolder ORDER BY RANDOM() LIMIT 25");
+  res=psync_sql_query_rdlock("SELECT * FROM localfolder ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM hashchecksum ORDER BY RANDOM() LIMIT 25");
+  res=psync_sql_query_rdlock("SELECT * FROM hashchecksum ORDER BY RANDOM() LIMIT 25");
   psync_get_random_seed_from_query(hctx, res);
-  res=psync_sql_query("SELECT * FROM pagecache WHERE type=1 AND rowid>(ABS(RANDOM())%(SELECT MAX(rowid)+1 FROM pagecache)) ORDER BY rowid LIMIT 50");
+  res=psync_sql_query_rdlock("SELECT * FROM pagecache WHERE type=1 AND rowid>(ABS(RANDOM())%(SELECT MAX(rowid)+1 FROM pagecache)) ORDER BY rowid LIMIT 50");
   psync_get_random_seed_from_query(hctx, res);
   psync_sql_statement("REPLACE INTO setting (id, value) VALUES ('random', RANDOM())");
   psync_nanotime(&tm);
@@ -908,8 +908,8 @@ static struct addrinfo *addr_load_from_db(const char *host, const char *port){
   const char *str;
   uint64_t i;
   size_t len;
-  psync_sql_lock();
-  res=psync_sql_query("SELECT COUNT(*), SUM(LENGTH(data)) FROM resolver WHERE hostname=? AND port=?");
+  psync_sql_rdlock();
+  res=psync_sql_query_nolock("SELECT COUNT(*), SUM(LENGTH(data)) FROM resolver WHERE hostname=? AND port=?");
   psync_sql_bind_string(res, 1, host);
   psync_sql_bind_string(res, 2, port);
   if (!(row=psync_sql_fetch_rowint(res)) || row[0]==0){
@@ -923,7 +923,7 @@ static struct addrinfo *addr_load_from_db(const char *host, const char *port){
     ret[i].ai_next=&ret[i+1];
   ret[i].ai_next=NULL;
   psync_sql_free_result(res);
-  res=psync_sql_query("SELECT family, socktype, protocol, data FROM resolver WHERE hostname=? AND port=? ORDER BY prio");
+  res=psync_sql_query_nolock("SELECT family, socktype, protocol, data FROM resolver WHERE hostname=? AND port=? ORDER BY prio");
   psync_sql_bind_string(res, 1, host);
   psync_sql_bind_string(res, 2, port);
   i=0;
@@ -939,7 +939,7 @@ static struct addrinfo *addr_load_from_db(const char *host, const char *port){
     data+=len;
   }
   psync_sql_free_result(res);
-  psync_sql_unlock();
+  psync_sql_rdunlock();
   return ret;
 }
 

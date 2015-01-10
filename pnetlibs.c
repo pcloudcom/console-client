@@ -244,7 +244,7 @@ int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum,
   psync_variant_row row;
   uint64_t result, h;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
-  sres=psync_sql_query("SELECT h.checksum, f.size, f.hash FROM hashchecksum h, file f WHERE f.id=? AND f.hash=h.hash AND f.size=h.size");
+  sres=psync_sql_query_rdlock("SELECT h.checksum, f.size, f.hash FROM hashchecksum h, file f WHERE f.id=? AND f.hash=h.hash AND f.size=h.size");
   psync_sql_bind_uint(sres, 1, fileid);
   row=psync_sql_fetch_row(sres);
   if (row){
@@ -2031,7 +2031,7 @@ static int is_revision_local(const unsigned char *localhashhex, uint64_t filesiz
   // listrevisions does not return zero sized revisions, so do we
   if (filesize==0)
     return 1;
-  res=psync_sql_query("SELECT f.fileid FROM filerevision f, hashchecksum h WHERE f.fileid=? AND f.hash=h.hash AND h.size=? AND h.checksum=?");
+  res=psync_sql_query_rdlock("SELECT f.fileid FROM filerevision f, hashchecksum h WHERE f.fileid=? AND f.hash=h.hash AND h.size=? AND h.checksum=?");
   psync_sql_bind_uint(res, 1, fileid);
   psync_sql_bind_uint(res, 2, filesize);
   psync_sql_bind_lstring(res, 3, (const char *)localhashhex, PSYNC_HASH_DIGEST_HEXLEN);
