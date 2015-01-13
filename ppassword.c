@@ -63,7 +63,7 @@ static int find_in_dict(const char *pwd, size_t len){
           else
             l=hi;
         }
-        debug(D_NOTICE, "pwd=%s l=%lu", pwd, l);
+        debug(D_NOTICE, "pwd=%s l=%lu", pwd, (unsigned long)l);
         return l;
 /*      }
       else

@@ -947,10 +947,10 @@ static void clean_cache(){
   debug(D_NOTICE, "read %lu entries", (unsigned long)cnt);
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_first_pages);
   cnt-=PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT*ocnt/100;
-  debug(D_NOTICE, "sorted first pages, reserved %lu pages, continuing with %lu entries", PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT*ocnt/100, cnt);
+  debug(D_NOTICE, "sorted first pages, reserved %lu pages, continuing with %lu entries", (unsigned long)PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT*ocnt/100, (unsigned long)nt);
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_xfirst_pages);
   cnt-=PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT*ocnt/100;
-  debug(D_NOTICE, "sorted extended first pages, reserved %lu pages, continuing with %lu entries", PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT*ocnt/100, cnt);
+  debug(D_NOTICE, "sorted extended first pages, reserved %lu pages, continuing with %lu entries", (unsigned long)PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT*ocnt/100, (unsigned long)cnt);
   ocnt=cnt;
   qsort(entries, cnt, sizeof(pagecache_entry), pagecache_entry_cmp_lastuse);
   cnt-=PSYNC_FS_CACHE_LRU_PERCENT*ocnt/100;
