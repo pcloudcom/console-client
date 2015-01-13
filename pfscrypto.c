@@ -290,7 +290,7 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
     if (unlikely_log(rd!=ssize))
       return -1;
     if (unlikely(memcmp(buff+authoff, auth, sizeof(auth)))){
-      debug(D_WARNING, "verify failed on level %u, sectorid %u, off %lu, ssize %u", level, sectorid, off, ssize);
+      debug(D_WARNING, "verify failed on level %u, sectorid %u, off %lu, ssize %u", (unsigned)level, (unsigned)sectorid, (unsigned long)off, (unsigned)ssize);
       return -1;
     }
     psync_crypto_sign_auth_sector(of->encoder, buff, ssize, auth);

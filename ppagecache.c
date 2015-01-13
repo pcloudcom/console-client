@@ -1048,7 +1048,7 @@ static int cmp_discard_pages(const psync_list *p1, const psync_list *p2){
 
 static int check_disk_full(){
   int64_t filesize, freespace;
-  uint64_t minlocal, maxpage;
+  uint64_t minlocal, maxpage, addspc;
   psync_sql_res *res;
   db_cache_max_page=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
   filesize=psync_file_size(readcache);
@@ -1058,7 +1058,11 @@ static int check_disk_full(){
   minlocal=psync_setting_get_uint(_PS(minlocalfreespace));
   if (unlikely_log(freespace==-1))
     return 0;
-  if (minlocal+db_cache_max_page*PSYNC_FS_PAGE_SIZE-filesize<=freespace){
+  if (db_cache_max_page*PSYNC_FS_PAGE_SIZE>filesize)
+    addspc=cache_pages_in_hash*PSYNC_FS_PAGE_SIZE;
+  else
+    addspc=0;
+  if (minlocal+addspc<=freespace){
     psync_set_local_full(0);
     return 0;
   }
