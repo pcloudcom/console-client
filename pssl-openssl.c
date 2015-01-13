@@ -552,6 +552,8 @@ void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
 
 #if defined(PSYNC_AES_HW_GCC)
 
+#define SSE2FUNC __attribute__ ((__target__("sse2")))
+
 #define AESDEC      ".byte 0x66,0x0F,0x38,0xDE,"
 #define AESDECLAST  ".byte 0x66,0x0F,0x38,0xDF,"
 #define AESENC      ".byte 0x66,0x0F,0x38,0xDC,"
@@ -568,7 +570,7 @@ void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
 #define xmm1_xmm4   "0xE1"
 #define xmm1_xmm5   "0xE9"
 
-void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+SSE2FUNC void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
   asm("movdqa (%0), %%xmm0\n"
       "lea 16(%0), %0\n"
       "movdqa (%1), %%xmm1\n"
@@ -589,7 +591,7 @@ void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsigned char 
   );
 }
 
-void psync_aes256_decode_block_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
+SSE2FUNC void psync_aes256_decode_block_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
   asm("movdqa (%0), %%xmm0\n"
       "lea 16(%0), %0\n"
       "movdqa (%1), %%xmm1\n"
@@ -610,7 +612,7 @@ void psync_aes256_decode_block_hw(psync_aes256_decoder enc, const unsigned char 
   );
 }
 
-void psync_aes256_encode_2blocks_consec_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
+SSE2FUNC void psync_aes256_encode_2blocks_consec_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
   asm("movdqa (%0), %%xmm0\n"
       "movdqa (%1), %%xmm1\n"
       "dec %3\n"
@@ -634,10 +636,9 @@ void psync_aes256_encode_2blocks_consec_hw(psync_aes256_encoder enc, const unsig
       : "r" (enc->rd_key), "r" (src), "r" (dst),  "r" (enc->rounds)
       : "memory", "cc", "xmm0", "xmm1", "xmm2"
   );
-
 }
 
-void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
+SSE2FUNC void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst){
   asm("movdqa (%0), %%xmm0\n"
       "movdqa (%1), %%xmm1\n"
       "dec %3\n"
@@ -663,7 +664,7 @@ void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsig
   );
 }
 
-void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor){
+SSE2FUNC void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor){
   asm("movdqa (%0), %%xmm0\n"
       "shr %4\n"
       "movdqa (%1), %%xmm2\n"
