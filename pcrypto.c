@@ -122,11 +122,11 @@ static void xor_cnt_inplace(unsigned char *data, const unsigned char *key, size_
 
 static void copy_iv_and_xor_with_counter(unsigned char *dest, const unsigned char *iv, uint64_t counter){
   if (sizeof(unsigned long)==8){
-    LONG_DEREF(dest, 0)=LONG_DEREF(iv, 0)^LONG_DEREF(&counter, 0);
+    LONG_DEREF(dest, 0)=LONG_DEREF(iv, 0)^counter;
   }
   else if (sizeof(unsigned long)==4){
-    LONG_DEREF(dest, 0)=LONG_DEREF(iv, 0)^LONG_DEREF(&counter, 0);
-    LONG_DEREF(dest, 1)=LONG_DEREF(iv, 1)^LONG_DEREF(&counter, 1);
+    LONG_DEREF(dest, 0)=LONG_DEREF(iv, 0)^(counter&0xffffffffU);
+    LONG_DEREF(dest, 1)=LONG_DEREF(iv, 1)^(counter>>32);
   }
 }
 

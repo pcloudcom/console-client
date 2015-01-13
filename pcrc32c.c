@@ -333,6 +333,18 @@ static const uint64_t k2=0x9ae16a3b2f90404fULL;
         crc32c_table[0][((uint8_t *)(data))[7]];\
   } while (0);
   
+#define CRC32C_64BIT_UINT(crc, uint) do{\
+    crc^=(uint)&0xffffffffU;\
+    crc=crc32c_table[7][crc&0xff]^\
+        crc32c_table[6][(crc>>8)&0xff]^\
+        crc32c_table[5][(crc>>16)&0xff]^\
+        crc32c_table[4][(crc>>24)&0xff]^\
+        crc32c_table[3][((uint)>>32)&0xff]^\
+        crc32c_table[2][((uint)>>40)&0xff]^\
+        crc32c_table[1][((uint)>>48)&0xff]^\
+        crc32c_table[0][((uint)>>56)&0xff];\
+  } while (0);
+  
 #define CRC32C_8BIT(crc, data) do{\
     crc=crc32c_table[0][(((crc)^(*((uint8_t *)data)))&0xff)]^((crc)>>8);\
   } while (0);
@@ -652,7 +664,7 @@ static uint64_t fh_hashmul2(uint64_t u, uint64_t v){
 }
 
 static inline uint64_t fh_crc32_64sw(uint64_t crc, uint64_t data){
-  CRC32C_64BIT(crc, &data);
+  CRC32C_64BIT_UINT(crc, data);
   return crc;
 }
 
@@ -664,8 +676,8 @@ static inline uint64_t fh_crc32_64hw(uint64_t crc, uint64_t data){
 }
 #else
 static inline uint32_t fh_crc32_64hw(uint32_t crc, uint64_t data){
-  CRC32C_32BIT_HW(crc, ((uint32_t *)&data)[0]);
-  CRC32C_32BIT_HW(crc, ((uint32_t *)&data)[1]);
+  CRC32C_32BIT_HW(crc, data&0xffffffffU);
+  CRC32C_32BIT_HW(crc, data>>32);
   return crc;
 }
 #endif
