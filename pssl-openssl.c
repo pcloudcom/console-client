@@ -505,7 +505,7 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t
   if (unlikely(len==-1)){
     unsigned long e;
     e=ERR_get_error();
-    debug(D_WARNING, "could not decrypt key, RSA_private_decrypt returned error %lu: %s", e, ERR_error_string(e, buff));
+    debug(D_WARNING, "could not decrypt key, RSA_private_decrypt returned error %lu: %s", e, ERR_error_string(e, (char *)buff));
     return PSYNC_INVALID_SYM_KEY;
   }
   ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
