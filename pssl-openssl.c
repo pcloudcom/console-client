@@ -850,3 +850,17 @@ void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const u
 }
 
 #endif
+
+#if defined(PSYNC_AES_HW)
+
+void psync_aes256_decode_4blocks_consec_xor_sw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor){
+  unsigned long i;
+  AES_decrypt(src, dst, enc);
+  AES_decrypt(src+PSYNC_AES256_BLOCK_SIZE, dst+PSYNC_AES256_BLOCK_SIZE, enc);
+  AES_decrypt(src+PSYNC_AES256_BLOCK_SIZE*2, dst+PSYNC_AES256_BLOCK_SIZE*2, enc);
+  AES_decrypt(src+PSYNC_AES256_BLOCK_SIZE*3, dst+PSYNC_AES256_BLOCK_SIZE*3, enc);
+  for (i=0; i<PSYNC_AES256_BLOCK_SIZE*4/sizeof(unsigned long); i++)
+    ((unsigned long *)dst)[i]^=((unsigned long *)bxor)[i];
+}
+
+#endif

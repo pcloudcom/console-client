@@ -32,6 +32,10 @@
 #include "plist.h"
 #include "pfolder.h"
 
+#define MAX_STATUS_STR_LEN 64
+#define DONT_SHOW_TIME_IF_SEC_OVER (2*86400)
+#define DONT_SHOW_TIME_IF_SPEED_BELOW (4*1024)
+
 static pthread_mutex_t statusmutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t statuscond=PTHREAD_COND_INITIALIZER;
 static int statuschanges=0;
@@ -49,7 +53,177 @@ typedef struct {
   int freedata;
 } event_list_t;
 
+static char *cat_lstr(char *src, const char *app, size_t len){
+  return (char *)memcpy(src, app, len)+len;
+}
+
+static char *cat_str(char *src, const char *app){
+  return cat_lstr(src, app, strlen(app));
+}
+
+static char *cat_uint32(char *src, uint32_t num){
+  char str[16];
+  uint32_t rem;
+  int unsigned len;
+  len=0;
+  do{
+    rem=num%10;
+    str[sizeof(str)-++len]='0'+rem;
+  } while (num/=10);
+  memcpy(src, str+sizeof(str)-len, len);
+  return src+len;
+}
+
+#define cat_const(src, app) cat_lstr(src, app, sizeof(app)-1)
+
+static char *fill_formatted_bytes(char *str, uint64_t bytes){
+  const static char *sizes[]={"Bytes", "KB", "MB", "GB", "TB"};
+  uint32_t rem, sz;
+  rem=0;
+  sz=0;
+  while (bytes>=1024 && sz<ARRAY_SIZE(sizes)-1){
+    rem=bytes%1024;
+    bytes/=1024;
+    sz++;
+  }
+  str=cat_uint32(str, (uint32_t)bytes);
+  if (sz && bytes<100){
+    rem=rem*1000/1024;
+    assert(rem<=999);
+    *str++='.';
+    if (bytes<10){
+      rem/=10;
+      *str++='0'+rem/10;
+      *str++='0'+rem%10;
+    }
+    else
+      *str++='0'+rem/100;
+  }
+  return cat_str(str, sizes[sz]);
+}
+
+static char *fill_remaining(char *str, uint32_t files, uint64_t bytes){
+  str=cat_const(str, "Remaining: ");
+  str=cat_uint32(str, files);
+  str=cat_const(str, " files, ");
+  return fill_formatted_bytes(str, bytes);
+}
+
+static char *fill_formatted_time(char *str, uint64_t totalsec){
+  uint32_t d, h, m, s;
+  s=totalsec%60;
+  totalsec/=60;
+  m=totalsec%60;
+  totalsec/=60;
+  h=totalsec%24;
+  d=totalsec/24;
+  if (d){
+    str=cat_uint32(str, d);
+    *str++='d';
+    *str++=' ';
+    if (m>=30)
+      h++;
+    str=cat_uint32(str, h);
+    *str++='h';
+  }
+  else if (h){
+    str=cat_uint32(str, h);
+    *str++='h';
+    *str++=' ';
+    if (s>=30)
+      m++;
+    str=cat_uint32(str, m);
+    *str++='m';
+  }
+  else if (m){
+    str=cat_uint32(str, m);
+    *str++='m';
+    *str++=' ';
+    str=cat_uint32(str, s);
+    *str++='s';
+  }
+  else {
+    if (!s)
+      s=1;
+    str=cat_uint32(str, s);
+    *str++='s';
+  }
+  return str;
+}
+
+static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char *uploadstr){
+  char *up, *dw;
+  uint64_t remsec;
+  uint32_t speed;
+  dw=downloadstr;
+  up=uploadstr;
+  
+  if (status->filestodownload){
+    speed=status->downloadspeed;
+    if (status->status==PSTATUS_PAUSED || status->status==PSTATUS_PAUSED || status->localisfull || speed==0){
+      if (status->status==PSTATUS_PAUSED)
+        dw=cat_const(dw, "Paused. ");
+      else if (status->status==PSTATUS_PAUSED)
+        dw=cat_const(dw, "Stopped. ");
+      else if (status->localisfull)
+        dw=cat_const(dw, "Disk full. ");
+      dw=fill_remaining(dw, status->filestodownload, status->bytestodownload-status->bytesdownloaded);
+    }
+    else{
+      dw=fill_formatted_bytes(dw, speed);
+      dw=cat_const(dw, "/sec, ");
+      dw=fill_remaining(dw, status->filestodownload, status->bytestodownload-status->bytesdownloaded);
+      remsec=(status->bytestodownload-status->bytesdownloaded)/speed;
+      if (remsec<DONT_SHOW_TIME_IF_SEC_OVER || speed>=DONT_SHOW_TIME_IF_SPEED_BELOW){
+        *dw++=' ';
+        dw=fill_formatted_time(dw, remsec);
+      }
+    }
+  }
+  else
+    dw=cat_const(dw, "Everything Downloaded");
+  
+  if (status->filestoupload){
+    speed=status->uploadspeed;
+    if (status->status==PSTATUS_PAUSED || status->status==PSTATUS_PAUSED || status->remoteisfull || speed==0){
+      if (status->status==PSTATUS_PAUSED)
+        up=cat_const(up, "Paused. ");
+      else if (status->status==PSTATUS_PAUSED)
+        up=cat_const(up, "Stopped. ");
+      else if (status->remoteisfull)
+        up=cat_const(up, "Account full. ");
+      up=fill_remaining(up, status->filestoupload, status->bytestoupload-status->bytesuploaded);
+    }
+    else{
+      up=fill_formatted_bytes(up, speed);
+      up=cat_const(up, "/sec, ");
+      up=fill_remaining(up, status->filestoupload, status->bytestoupload-status->bytesuploaded);
+      remsec=(status->bytestoupload-status->bytesuploaded)/speed;
+      if (remsec<DONT_SHOW_TIME_IF_SEC_OVER || speed>=DONT_SHOW_TIME_IF_SPEED_BELOW){
+        *up++=' ';
+        up=fill_formatted_time(up, remsec);
+      }
+    }
+  }
+  else
+    up=cat_const(up, "Everything Uploaded");
+  
+  assert(dw<downloadstr+MAX_STATUS_STR_LEN);
+  assert(up<uploadstr+MAX_STATUS_STR_LEN);
+  *dw=0;
+  *up=0;
+  status->downloadstr=downloadstr;
+  status->uploadstr=uploadstr;
+}
+
+void psync_callbacks_get_status(pstatus_t *status){
+  char downloadstr[MAX_STATUS_STR_LEN], uploadstr[MAX_STATUS_STR_LEN];
+  memcpy(status, &psync_status, sizeof(pstatus_t));
+  status_fill_formatted_str(status, downloadstr, uploadstr);
+}
+
 static void status_change_thread(void *ptr){
+  static char downloadstr[MAX_STATUS_STR_LEN], uploadstr[MAX_STATUS_STR_LEN];
   pstatus_change_callback_t callback=(pstatus_change_callback_t)ptr;
   while (1){
     // Maximum 2 updates/sec
@@ -63,6 +237,7 @@ static void status_change_thread(void *ptr){
     pthread_mutex_unlock(&statusmutex);
     if (!psync_do_run)
       break;
+    status_fill_formatted_str(&psync_status, downloadstr, uploadstr);
     callback(&psync_status);
   }
 }

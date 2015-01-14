@@ -104,6 +104,8 @@ typedef struct {
 #define PSTATUS_USER_MISMATCH          14
 
 typedef struct {
+  const char *downloadstr; /* formatted string with the status of uploads */
+  const char *uploadstr;   /* formatted string with the status of downloads */
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */
   uint64_t bytestouploadcurrent; /* sum of the sizes of files in filesuploading */
   uint64_t bytesuploaded; /* bytes uploaded in files accounted in filesuploading */

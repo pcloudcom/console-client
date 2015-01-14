@@ -208,7 +208,7 @@ void psync_destroy(){
 }
 
 void psync_get_status(pstatus_t *status){
-  memcpy(status, &psync_status, sizeof(pstatus_t));
+  psync_callbacks_get_status(status);
 }
 
 char *psync_get_username(){

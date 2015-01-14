@@ -86,6 +86,7 @@ void psync_aes256_decode_block_hw(psync_aes256_decoder enc, const unsigned char 
 void psync_aes256_encode_2blocks_consec_hw(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst);
 void psync_aes256_decode_2blocks_consec_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst);
 void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor);
+void psync_aes256_decode_4blocks_consec_xor_sw(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor);
 
 static inline void psync_aes256_encode_block(psync_aes256_encoder enc, const unsigned char *src, unsigned char *dst){
   if (likely(psync_ssl_hw_aes))
@@ -120,17 +121,10 @@ static inline void psync_aes256_decode_2blocks_consec(psync_aes256_decoder enc, 
 }
 
 static inline void psync_aes256_decode_4blocks_consec_xor(psync_aes256_decoder enc, const unsigned char *src, unsigned char *dst, unsigned char *bxor){
-  if (likely(psync_ssl_hw_aes))
+  if (psync_ssl_hw_aes)
     psync_aes256_decode_4blocks_consec_xor_hw(enc, src, dst, bxor);
-  else{
-    unsigned long i;
-    AES_decrypt(src, dst, enc);
-    AES_decrypt(src+PSYNC_AES256_BLOCK_SIZE, dst+PSYNC_AES256_BLOCK_SIZE, enc);
-    AES_decrypt(src+PSYNC_AES256_BLOCK_SIZE*2, dst+PSYNC_AES256_BLOCK_SIZE*2, enc);
-    AES_decrypt(src+PSYNC_AES256_BLOCK_SIZE*3, dst+PSYNC_AES256_BLOCK_SIZE*3, enc);
-    for (i=0; i<PSYNC_AES256_BLOCK_SIZE*4/sizeof(unsigned long); i++)
-      ((unsigned long *)dst)[i]^=((unsigned long *)bxor)[i];
-  }
+  else
+    psync_aes256_decode_4blocks_consec_xor_sw(enc, src, dst, bxor);
 }
 
 #else
