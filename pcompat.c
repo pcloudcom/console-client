@@ -876,6 +876,12 @@ psync_socket_t psync_create_socket(int domain, int type, int protocol){
 static void addr_save_to_db(const char *host, const char *port, struct addrinfo *addr){
   psync_sql_res *res;
   uint64_t id;
+  if (psync_sql_isrdlocked()){
+    if (psync_sql_tryupgradelock())
+      return;
+    else
+      debug(D_NOTICE, "upgraded read to write lock to save data to DB");
+  }
   psync_sql_start_transaction();
   res=psync_sql_prep_statement("DELETE FROM resolver WHERE hostname=? AND port=?");
   psync_sql_bind_string(res, 1, host);

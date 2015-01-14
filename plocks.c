@@ -308,6 +308,7 @@ int psync_rwlock_towrlock(psync_rwlock_t *rw){
   rw->opts&=~PSYNC_RW_OPT_RESERVED;
   pthread_mutex_unlock(&rw->mutex);
   cnt.cnt[1]=cnt.cnt[0];
+  cnt.cnt[0]=0;
   psync_rwlock_set_count(rw, cnt);
   return 0;
 }
@@ -360,5 +361,9 @@ unsigned psync_rwlock_num_waiters(psync_rwlock_t *rw){
   ret=rw->rwait+rw->wwait;
   pthread_mutex_unlock(&rw->mutex);
   return ret;
+}
+
+int psync_rwlock_holding_rdlock(psync_rwlock_t *rw){
+  return psync_rwlock_get_count(rw).cnt[0]!=0;
 }
 

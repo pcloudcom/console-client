@@ -2254,7 +2254,7 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
     authupto=0;
   else
     authupto=intv->to;
-  if (of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER){
+  if (of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER && initialsize && offset<initialsize){
     needkey=1;
     of->encoder=PSYNC_CRYPTO_LOADING_SECTOR_ENCODER;
   }

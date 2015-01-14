@@ -198,6 +198,8 @@ void psync_sql_unlock();
 void psync_sql_rdlock();
 void psync_sql_rdunlock();
 int psync_sql_has_waiters();
+int psync_sql_isrdlocked();
+int psync_sql_tryupgradelock();
 int psync_sql_sync();
 int psync_sql_start_transaction();
 int psync_sql_commit_transaction();

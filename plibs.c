@@ -562,6 +562,14 @@ int psync_sql_has_waiters(){
   return psync_rwlock_num_waiters(&psync_db_lock)>0;
 }
 
+int psync_sql_isrdlocked(){
+  return psync_rwlock_holding_rdlock(&psync_db_lock);
+}
+
+int psync_sql_tryupgradelock(){
+  return psync_rwlock_towrlock(&psync_db_lock);
+}
+
 int psync_sql_sync(){
   int code;
   pthread_mutex_lock(&psync_db_checkpoint_mutex);

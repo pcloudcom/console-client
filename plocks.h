@@ -55,5 +55,6 @@ void psync_rwlock_rslock(psync_rwlock_t *rw);
 int psync_rwlock_towrlock(psync_rwlock_t *rw);
 void psync_rwlock_unlock(psync_rwlock_t *rw);
 unsigned psync_rwlock_num_waiters(psync_rwlock_t *rw);
+int psync_rwlock_holding_rdlock(psync_rwlock_t *rw);
 
 #endif

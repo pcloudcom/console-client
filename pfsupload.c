@@ -588,10 +588,6 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   res=get_result(api);
   if (unlikely_log(!res))
     goto err0;
-  if (asize){
-    psync_upload_sub_bytes_uploaded(asize);
-    asize=0;
-  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
   if (result){
@@ -601,16 +597,20 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
         psync_apipool_release_bad(api);
       else
         psync_apipool_release(api);
-      return -1;
     }
+    goto errs;
   }
   // large_upload_check_checksum releases api on failure
   if (large_upload_check_checksum(api, uploadid, filehash))
-    return -1;
+    goto errs;
   if (psync_fs_get_file_writeid(taskid)!=writeid){
     debug(D_NOTICE, "%s changed while uploading as %lu/%s", filename, (unsigned long)folderid, name);
     psync_apipool_release(api);
-    return -1;
+    goto errs;
+  }
+  if (asize){
+    psync_upload_sub_bytes_uploaded(asize);
+    asize=0;
   }
   return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 1, 0, key);
 ret01:
@@ -627,6 +627,7 @@ err1:
   psync_file_close(fd);
 err0:
   psync_apipool_release_bad(api);
+errs:
   if (asize)
     psync_upload_sub_bytes_uploaded(asize);
   return -1;
