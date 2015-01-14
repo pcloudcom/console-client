@@ -502,8 +502,12 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t
   psync_symmetric_key_t ret;
   int len;
   len=RSA_private_decrypt(enckey->datalen, enckey->data, buff, rsa, RSA_PKCS1_OAEP_PADDING);
-  if (unlikely_log(len==-1))
+  if (unlikely(len==-1)){
+    unsigned long e;
+    e=ERR_get_error();
+    debug(D_WARNING, "could not decrypt key, RSA_private_decrypt returned error %lu: %s", e, ERR_error_string(e, buff));
     return PSYNC_INVALID_SYM_KEY;
+  }
   ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
   ret->keylen=len;
   memcpy(ret->key, buff, len);
