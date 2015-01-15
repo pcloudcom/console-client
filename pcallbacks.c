@@ -61,7 +61,7 @@ static char *cat_str(char *src, const char *app){
   return cat_lstr(src, app, strlen(app));
 }
 
-static char *cat_uint32(char *src, uint32_t num){
+PSYNC_NOINLINE static char *cat_uint32l(char *src, uint32_t num){
   char str[16];
   uint32_t rem;
   int unsigned len;
@@ -72,6 +72,25 @@ static char *cat_uint32(char *src, uint32_t num){
   } while (num/=10);
   memcpy(src, str+sizeof(str)-len, len);
   return src+len;
+}
+
+static char *cat_uint32(char *src, uint32_t num){
+  if (num>=1000)
+    return cat_uint32l(src, num);
+  if (num<100){
+    if (num<10)
+      goto format10;
+    else
+      goto format100;
+  }
+  *src++='0'+num/100;
+  num%=100;
+format100:
+  *src++='0'+num/10;
+  num%=10;
+format10:
+  *src++='0'+num;
+  return src;
 }
 
 #define cat_const(src, app) cat_lstr(src, app, sizeof(app)-1)

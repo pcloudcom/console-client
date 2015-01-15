@@ -2288,7 +2288,7 @@ static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_
                                   psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, int sameshare){
   if (!psync_fs_can_move(folderid, srcpermissions, to_folderid, targetperms, sameshare))
     return -EACCES;
-  return psync_fstask_rename_folder(parentfolderid, parentfolderid, name, to_folderid, new_name);
+  return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
 }
 
 static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions,
@@ -2922,6 +2922,7 @@ static int psync_fs_do_start(){
   fuse_opt_add_arg(&args, "-oauto_unmount");
   fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
   fuse_opt_add_arg(&args, "-ononempty");
+  fuse_opt_add_arg(&args, "-olarge_read");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");

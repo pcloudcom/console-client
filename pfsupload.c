@@ -1199,7 +1199,7 @@ static int psync_process_task_rename_file(fsupload_task_t *task){
 }
 
 static int handle_rename_folder_api_error(uint64_t result, fsupload_task_t *task){
-  debug(D_ERROR, "renamefolder returned error %u", (unsigned)result);
+  debug(D_ERROR, "renamefolder returned error %u parentfolderid=%lu name=%s", (unsigned)result, (unsigned long)task->folderid, task->text1);
   switch (result){
     case 2005: /* folder does not exist, skip */
     case 2042: /* moving root, should not happen */
@@ -1207,6 +1207,7 @@ static int handle_rename_folder_api_error(uint64_t result, fsupload_task_t *task
     case 2001: /* invalid name, should not happen */
     case 2008: /* overquota */
     case 2023: /* moving into shared folder */
+    case 2043: /* into itself or child  */
       psync_fstask_folder_renamed(task->folderid, task->id, task->text1, task->int1);
       return 0;
   }
