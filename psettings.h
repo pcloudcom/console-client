@@ -34,13 +34,15 @@
 
 #define PSYNC_LIB_VERSION "1.4.0"
 
+/*
 #define PSYNC_API_HOST     "api70.pcloud.com"
 #define PSYNC_API_PORT     8398
 #define PSYNC_API_PORT_SSL 8399
-/*
+*/
+
 #define PSYNC_API_HOST     "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
-#define PSYNC_API_PORT_SSL 443*/
+#define PSYNC_API_PORT_SSL 443
 
 #define PSYNC_API_AHOST     "api.pcloud.com"
 #define PSYNC_API_APORT     8398
