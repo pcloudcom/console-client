@@ -1124,9 +1124,12 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_string(q, 1, "language");
   psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
   psync_sql_run(q);
+  u=psync_find_result(res, "cryptosetup", PARAM_BOOL)->num;
   psync_sql_bind_string(q, 1, "cryptosetup");
-  psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosetup", PARAM_BOOL)->num);
+  psync_sql_bind_uint(q, 2, u);
   psync_sql_run(q);
+  if (!u)
+    psync_crypto_stop();
   psync_sql_bind_string(q, 1, "cryptosubscription");
   psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
   psync_sql_run(q);

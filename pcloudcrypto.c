@@ -559,11 +559,11 @@ int psync_cloud_crypto_reset(){
   binresult *res;
   uint32_t result;
   int tries;
-  pthread_rwlock_rdlock(&crypto_lock);
+/*  pthread_rwlock_rdlock(&crypto_lock);
   result=crypto_started_l;
   pthread_rwlock_unlock(&crypto_lock);
   if (result)
-    return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CRYPTO_IS_STARTED);
+    return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CRYPTO_IS_STARTED);*/
   if (!psync_crypto_issetup())
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_SETUP);
   debug(D_NOTICE, "resetting crypto");
