@@ -2337,7 +2337,7 @@ int psync_folder_sync(const char *path){
   if (FlushFileBuffers(fd))
     ret=0;
   else{
-    debug(D_NOTICE, "could not flush folder %s", path);
+    debug(D_NOTICE, "could not flush folder %s err=%u", path, GetLastError());
     ret=-1;
   }
   CloseHandle(fd);

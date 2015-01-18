@@ -755,7 +755,7 @@ static void wait_before_flush(psync_openfile_t *of, uint32_t millisec){
   psync_milisleep(millisec);
 }
 
-static int psync_fs_flush_cache_dir(){
+/*static int psync_fs_flush_cache_dir(){
   const char *path;
   int ret;
   path=psync_setting_get_string(_PS(fscachepath));
@@ -764,7 +764,7 @@ static int psync_fs_flush_cache_dir(){
   if (!ret)
     debug(D_NOTICE, "flushed directory %s", path);
   return ret;
-}
+}*/
 
 static int psync_fs_crypto_mark_log_finalized(psync_openfile_t *of, uint64_t filesize){
   psync_crypto_master_record mr;
@@ -798,8 +798,11 @@ static int psync_fs_crypto_log_flush_and_process(psync_openfile_t *of, const cha
   if (unlikely_log(psync_file_sync(fd)))
     goto err_eio;
   debug(D_NOTICE, "flushed log data %s", filename);
+/* flushing directory does not seem to work on either Windows on Mac, disable for now, maybe look at SQLite code to see if they flush
   if (unlikely_log(psync_fs_flush_cache_dir()))
     goto err_eio;
+*/
+
 //  assert(NULL=="break here to test log replay");
   if (unlikely_log(psync_fs_crypto_process_log(fd, of->datafile, of->indexfile, 0)))
     goto err_eio;
