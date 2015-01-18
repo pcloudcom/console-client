@@ -842,7 +842,7 @@ static int psync_fs_write_interval_tree_to_log(psync_openfile_t *of){
       last=0;
     }
     len=itr->to-itr->from;
-    assert(len>>48==0);
+    assert((len>>48)==0);
     logs[last].type=PSYNC_CRYPTO_LOG_INT;
     logs[last].longlengthhi=len>>32;
     logs[last].longlengthlo=len&0xffffffffU;
@@ -918,9 +918,7 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
   psync_file_delete(flog);
   psync_free(olog);
   psync_free(flog);
-  if (unlikely_log(ret))
-    return ret;
-  return 0;
+  return PRINT_NEG_RETURN(ret);
 }
 
 static void psync_fs_crypt_add_sector_to_interval_tree(psync_openfile_t *of, psync_crypto_sectorid_t sectorid, size_t size){
