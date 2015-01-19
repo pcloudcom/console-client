@@ -83,4 +83,8 @@ void psync_status_set_download_speed(uint32_t speed);
 void psync_status_set_upload_speed(uint32_t speed);;
 
 void psync_status_send_update();
+
+static inline int psync_status_is_offline(){
+  return psync_status_get(PSTATUS_TYPE_ONLINE)==PSTATUS_ONLINE_OFFLINE;
+}
 #endif

@@ -34,12 +34,16 @@
 #include "pfs.h"
 #include <string.h>
 
+static PSYNC_THREAD int cryptoerr=0;
+
 static char *get_encname_for_folder(psync_fsfolderid_t folderid, const char *path, size_t len){
   char *name, *encname;
   psync_crypto_aes256_text_encoder_t enc;
   enc=psync_cloud_crypto_get_folder_encoder(folderid);
-  if (psync_crypto_is_error(enc))
+  if (psync_crypto_is_error(enc)){
+    cryptoerr=psync_crypto_to_error(enc);
     return NULL;
+  }
   name=psync_strndup(path, len);
   encname=psync_cloud_crypto_encode_filename(enc, name);
   psync_cloud_crypto_release_folder_encoder(folderid, enc);
@@ -54,8 +58,10 @@ static psync_fspath_t *ret_folder_data(psync_fsfolderid_t folderid, const char *
     char *encname;
     size_t len;
     enc=psync_cloud_crypto_get_folder_encoder(folderid);
-    if (psync_crypto_is_error(enc))
+    if (psync_crypto_is_error(enc)){
+      cryptoerr=psync_crypto_to_error(enc);
       return NULL;
+    }
     encname=psync_cloud_crypto_encode_filename(enc, name);
     psync_cloud_crypto_release_folder_encoder(folderid, enc);
     len=strlen(encname);
@@ -110,6 +116,7 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
   size_t len, elen;
   uint32_t permissions, flags, shareid;
   int hasit;
+  cryptoerr=0;
   res=NULL;
   if (*path!='/')
     return NULL;
@@ -205,6 +212,7 @@ psync_fsfolderid_t psync_fsfolderid_by_path(const char *path, uint32_t *pflags){
   uint32_t flags;
   int hasit;
   res=NULL;
+  cryptoerr=0;
   if (*path!='/')
     return PSYNC_INVALID_FSFOLDERID;
   cfolderid=0;
@@ -278,4 +286,8 @@ psync_fsfolderid_t psync_fsfolderid_by_path(const char *path, uint32_t *pflags){
   if (res)
     psync_sql_free_result(res);
   return PSYNC_INVALID_FSFOLDERID;
+}
+
+int psync_fsfolder_crypto_error(){
+  return cryptoerr;
 }

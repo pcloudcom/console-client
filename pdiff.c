@@ -1665,8 +1665,9 @@ static void psync_run_analyze_if_needed(){
     while ((srow=psync_sql_fetch_rowstr(res))){
       for (i=0; i<ARRAY_SIZE(skiptables); i++)
         if (!strcmp(srow[0], skiptables[i]))
-          continue;
+          goto skip;
       tablenames[tablecnt++]=psync_strdup(srow[0]);
+      skip:;
     }
     psync_sql_free_result(res);
     

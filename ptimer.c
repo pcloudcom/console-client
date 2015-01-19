@@ -59,6 +59,7 @@ static psync_list timerlists[TIMER_LEVELS][TIMER_ARRAY_SIZE];
 static struct exception_list *excepions=NULL;
 static struct exception_list *sleeplist=NULL;
 static pthread_mutex_t timer_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t timer_ex_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t timer_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t nextsecwaiters=0;
 static int timer_running=0;
@@ -66,13 +67,13 @@ static int timer_running=0;
 PSYNC_NOINLINE static void timer_sleep_detected(time_t lt){
   struct exception_list *e;
   debug(D_NOTICE, "sleep detected, current_time=%lu, last_current_time=%lu", (unsigned long)psync_current_time, (unsigned long)lt);
+  pthread_mutex_lock(&timer_ex_mutex);
   e=sleeplist;
-  pthread_mutex_lock(&timer_mutex);
   while (e){
     e->func();
     e=e->next;
   }
-  pthread_mutex_unlock(&timer_mutex);
+  pthread_mutex_unlock(&timer_ex_mutex);
   psync_cache_clean_all();
   psync_timer_notify_exception();
 }
@@ -224,10 +225,10 @@ void psync_timer_exception_handler(psync_exception_callback func){
   t->next=NULL;
   t->func=func;
   t->threadid=pthread_self();
-  pthread_mutex_lock(&timer_mutex);
+  pthread_mutex_lock(&timer_ex_mutex);
   t->next=excepions;
   excepions=t;
-  pthread_mutex_unlock(&timer_mutex);
+  pthread_mutex_unlock(&timer_ex_mutex);
 }
 
 void psync_timer_sleep_handler(psync_exception_callback func){
@@ -236,10 +237,10 @@ void psync_timer_sleep_handler(psync_exception_callback func){
   t->next=NULL;
   t->func=func;
   t->threadid=pthread_self();
-  pthread_mutex_lock(&timer_mutex);
+  pthread_mutex_lock(&timer_ex_mutex);
   t->next=sleeplist;
   sleeplist=t;
-  pthread_mutex_unlock(&timer_mutex);
+  pthread_mutex_unlock(&timer_ex_mutex);
 }
 
 void psync_timer_do_notify_exception(){
@@ -247,13 +248,13 @@ void psync_timer_do_notify_exception(){
   pthread_t threadid;
   e=excepions;
   threadid=pthread_self();
-  pthread_mutex_lock(&timer_mutex);
+  pthread_mutex_lock(&timer_ex_mutex);
   while (e){
     if (!pthread_equal(threadid, e->threadid))
       e->func();
     e=e->next;
   }
-  pthread_mutex_unlock(&timer_mutex);
+  pthread_mutex_unlock(&timer_ex_mutex);
 }
 
 void psync_timer_wait_next_sec(){

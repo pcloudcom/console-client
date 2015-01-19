@@ -878,7 +878,7 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
     debug(D_NOTICE, "skipping finalize of %s", of->currentname);
     return 0;
   }
-  debug(D_NOTICE, "finalizing log of %s", of->currentname);
+  debug(D_NOTICE, "finalizing log of %s size %lu", of->currentname, (unsigned long)of->currentsize);
   psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
   ret=psync_fs_write_auth_tree_to_log(of, &offsets);
   if (unlikely_log(ret))
@@ -930,6 +930,43 @@ static void psync_fs_crypt_add_sector_to_interval_tree(psync_openfile_t *of, psy
   psync_interval_tree_add(&of->writeintervals, offset, offset+size);
 }
 
+PSYNC_NOINLINE static void psync_fs_crypto_reset_log_to_off(psync_openfile_t *of, uint32_t off){
+  int64_t sz;
+  sz=psync_file_size(of->logfile);
+  if (sz!=off)
+    debug(D_NOTICE, "need to reset log from size %d to %u", (int)sz, (unsigned)off);
+  if (sz==-1 || sz<off || (sz>off && (psync_file_seek(of->logfile, off, P_SEEK_SET)!=off || psync_file_truncate(of->logfile)))){
+    const char *cachepath;
+    char *log;
+    psync_fsfileid_t fileid;
+    char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+    sz=psync_file_size(of->datafile);
+    if (sz==-1){
+      debug(D_ERROR, "can not stat data file of %s, can't do anything", of->currentname);
+      return;
+    }
+    of->currentsize=psync_fs_crypto_plain_size(sz);
+    debug(D_WARNING, "emptying log");
+    psync_file_close(of->logfile);
+    cachepath=psync_setting_get_string(_PS(fscachepath));
+    fileid=-of->fileid;
+    psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='l';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    log=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    if (psync_file_delete(log))
+      debug(D_NOTICE, "could not delete old log file %s", log);
+    of->logfile=psync_file_open(log, P_O_RDWR, P_O_CREAT|P_O_TRUNC);
+    if (of->logfile==INVALID_HANDLE_VALUE)
+      debug(D_WARNING, "could not create new file %s", log);
+    else if (psync_fs_crypto_init_log(of))
+      debug(D_WARNING, "could not init log file %s", log);
+    
+  }
+  else
+    debug(D_NOTICE, "no need to reset log");
+}
+
 static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const char *buf, psync_crypto_sectorid_t sectorid, size_t size){
   psync_crypto_log_data_record rec;
   ssize_t wrt;
@@ -945,6 +982,7 @@ static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const
   wrt=psync_file_pwrite(of->logfile, &rec, len, of->logoffset);
   if (unlikely(wrt!=len)){
     debug(D_ERROR, "write to log of %u bytes returned %d", (unsigned)len, (int)wrt);
+    psync_fs_crypto_reset_log_to_off(of, of->logoffset);
     return -EIO;
   }
   psync_fast_hash256_update(&of->loghashctx, &rec, len);
@@ -1222,8 +1260,9 @@ retry:
       psync_interval_tree_add(&needtodwl, eoffset, eoffset+PSYNC_CRYPTO_SECTOR_SIZE);
     if (sectorid!=firstsectorid && sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS!=0)
       continue;
+    // Here we create offsets by current size as if the file grew, we would have already moved all trailing checksums to a new location and
+    // they would be in of->writeintervals anyway.
     psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
-    // Here we create offsets by current size as if the file grew, we would have already moved all trailing checksums to new location.
     for (l=0; l<offsets.treelevels; l++){
       psync_fs_crypto_get_auth_sector_off(sectorid, l, &offsets, &eoffset, &asize, &aid);
       itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
@@ -1290,13 +1329,13 @@ retry:
       }
       psync_interval_tree_add(&of->writeintervals, ranges[l].offset, ranges[l].offset+ranges[l].size);
     }
-    // we do NOT need to fsync of->datafile, as we wrote to positions that were empty, next log flush will fsync
+    // we do NOT need to fsync of->datafile, as we wrote to positions that were empty
     psync_free(ranges);
     psync_free(tmpbuf);
     if (unlikely(ret))
       return psync_fs_unlock_ret(of, ret);
   }
-  // now that we have all auth or partial data sectors, we proceed the same way as it is a new file write
+  // now that we have all auth or partial data sectors, we proceed the same way as if it is a new file write
   return psync_fs_crypto_write_newfile_locked(of, buf, size, offset);
 }
 

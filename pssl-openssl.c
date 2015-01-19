@@ -556,7 +556,7 @@ void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
 
 #if defined(PSYNC_AES_HW_GCC)
 
-#define SSE2FUNC __attribute__ ((__target__("sse2")))
+#define SSE2FUNC __attribute__((__target__("sse2")))
 
 #define AESDEC      ".byte 0x66,0x0F,0x38,0xDE,"
 #define AESDECLAST  ".byte 0x66,0x0F,0x38,0xDF,"

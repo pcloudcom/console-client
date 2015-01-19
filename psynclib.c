@@ -111,8 +111,10 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 }
 
 static void psync_stop_crypto_on_sleep(){
-  if (psync_setting_get_bool(_PS(sleepstopcrypto)))
+  if (psync_setting_get_bool(_PS(sleepstopcrypto)) && psync_crypto_isstarted()){
     psync_cloud_crypto_stop();
+    debug(D_NOTICE, "stopped crypto due to sleep");
+  }
 }
 
 int psync_init(){
@@ -1340,11 +1342,17 @@ int psync_password_quality10000(const char *password){
 }
 
 int psync_crypto_setup(const char *password, const char *hint){
-  return psync_cloud_crypto_setup(password, hint);
+  if (psync_status_is_offline())
+    return PSYNC_CRYPTO_SETUP_CANT_CONNECT;
+  else
+    return psync_cloud_crypto_setup(password, hint);
 }
 
 int psync_crypto_get_hint(char **hint){
-  return psync_cloud_crypto_get_hint(hint);
+  if (psync_status_is_offline())
+    return PSYNC_CRYPTO_HINT_CANT_CONNECT;
+  else
+    return psync_cloud_crypto_get_hint(hint);
 }
 
 int psync_crypto_start(const char *password){
@@ -1360,7 +1368,10 @@ int psync_crypto_isstarted(){
 }
 
 int psync_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err, psync_folderid_t *newfolderid){
-  return psync_cloud_crypto_mkdir(folderid, name, err, newfolderid);
+  if (psync_status_is_offline())
+    return PSYNC_CRYPTO_CANT_CONNECT;
+  else
+    return psync_cloud_crypto_mkdir(folderid, name, err, newfolderid);
 }
 
 int psync_crypto_issetup(){
@@ -1374,7 +1385,7 @@ int psync_crypto_hassubscription(){
 int psync_crypto_isexpired(){
   int64_t ce;
   ce=psync_sql_cellint("SELECT value FROM setting WHERE id='cryptoexpires'", 0);
-  return ce?(ce>psync_timer_time()):0;
+  return ce?(ce<psync_timer_time()):0;
 }
 
 time_t psync_crypto_expires(){
@@ -1382,7 +1393,10 @@ time_t psync_crypto_expires(){
 }
 
 int psync_crypto_reset(){
-  return psync_cloud_crypto_reset();
+  if (psync_status_is_offline())
+    return PSYNC_CRYPTO_RESET_CANT_CONNECT;
+  else
+    return psync_cloud_crypto_reset();
 }
 
 psync_folderid_t psync_crypto_folderid(){

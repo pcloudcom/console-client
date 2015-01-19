@@ -713,8 +713,16 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
     psync_sql_rdunlock();
-    debug(D_NOTICE, "could not find path component of %s, returning ENOENT", path);
-    return -ENOENT;
+    crr=psync_fsfolder_crypto_error();
+    if (crr){
+      crr=-psync_fs_crypto_err_to_errno(crr);
+      debug(D_NOTICE, "got crypto error for %s, returning %d", path, crr);
+      return crr;
+    }
+    else{
+      debug(D_NOTICE, "could not find path component of %s, returning ENOENT", path);
+      return -ENOENT;
+    }
   }
   folder=psync_fstask_get_folder_tasks_rdlocked(fpath->folderid);
   if (folder){
@@ -797,13 +805,16 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   folderid=psync_fsfolderid_by_path(path, &flags);
   if (unlikely_log(folderid==PSYNC_INVALID_FSFOLDERID)){
     psync_sql_rdunlock();
-    return -ENOENT;
+    if (psync_fsfolder_crypto_error())
+      return PRINT_RETURN(-psync_fs_crypto_err_to_errno(psync_fsfolder_crypto_error()));
+    else
+      return -PRINT_RETURN_CONST(ENOENT);
   }
   if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
     dec=psync_cloud_crypto_get_folder_decoder(folderid);
     if (psync_crypto_is_error(dec)){
       psync_sql_rdunlock();
-      return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(dec));
+      return PRINT_RETURN(-psync_fs_crypto_err_to_errno(psync_crypto_to_error(dec)));
     }
   }
   else
@@ -1101,9 +1112,16 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
-    debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
     psync_sql_unlock();
-    return -ENOENT;
+    ret=psync_fsfolder_crypto_error();
+    if (ret){
+      ret=-psync_fs_crypto_err_to_errno(ret);
+      return PRINT_RETURN(ret);
+    }
+    else{
+      debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
+      return -ENOENT;
+    }
   }
   if ((fi->flags&3)!=O_RDONLY && !(fpath->permissions&PSYNC_PERM_MODIFY)){
     psync_sql_unlock();
@@ -1396,9 +1414,16 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
   CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
   if (!fpath){
-    debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
     psync_sql_unlock();
-    return -ENOENT;
+    ret=psync_fsfolder_crypto_error();
+    if (ret){
+      ret=psync_fs_crypto_err_to_errno(ret);
+      return PRINT_RETURN(-ret);
+    }
+    else{
+      debug(D_NOTICE, "returning ENOENT for %s, folder not found", path);
+      return -ENOENT;
+    }
   }
   if (unlikely(psync_fs_need_per_folder_refresh_const() && !strncmp(psync_fake_prefix, fpath->name, psync_fake_prefix_len)))
     return psync_fs_creat_fake_locked(fpath, fi);
