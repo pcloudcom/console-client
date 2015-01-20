@@ -117,21 +117,21 @@ static int psync_cloud_crypto_setup_do_upload(const unsigned char *rsapriv, size
   int tries;
   tries=0;
   debug(D_NOTICE, "uploading keys");
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
     res=send_command(api, "crypto_setuserkeys", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (!result)
     *cryptoexpires=psync_find_result(res, "cryptoexpires", PARAM_NUM)->num;
@@ -263,21 +263,21 @@ int psync_cloud_crypto_get_hint(char **hint){
   int tries;
   tries=0;
   debug(D_NOTICE, "dowloading hint");
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return PRINT_RETURN_CONST(PSYNC_CRYPTO_HINT_CANT_CONNECT);
     res=send_command(api, "crypto_getuserhint", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return PRINT_RETURN_CONST(PSYNC_CRYPTO_HINT_CANT_CONNECT);
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     psync_free(res);
@@ -304,21 +304,21 @@ static int psync_cloud_crypto_download_keys(unsigned char **rsapriv, size_t *rsa
   int tries;
   tries=0;
   debug(D_NOTICE, "dowloading keys");
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return PRINT_RETURN_CONST(PSYNC_CRYPTO_START_CANT_CONNECT);
     res=send_command(api, "crypto_getuserkeys", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return PRINT_RETURN_CONST(PSYNC_CRYPTO_START_CANT_CONNECT);
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     psync_free(res);
@@ -568,21 +568,21 @@ int psync_cloud_crypto_reset(){
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_SETUP);
   debug(D_NOTICE, "resetting crypto");
   tries=0;
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CANT_CONNECT);
     res=send_command(api, "crypto_reset", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_CANT_CONNECT);
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
   if (result)
@@ -658,21 +658,21 @@ static psync_encrypted_symmetric_key_t psync_crypto_download_folder_enc_key(psyn
   int tries;
   tries=0;
   debug(D_NOTICE, "downloading key for folder %lu", (unsigned long)folderid);
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return (psync_encrypted_symmetric_key_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_CANT_CONNECT));
     res=send_command(api, "crypto_getfolderkey", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return (psync_encrypted_symmetric_key_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_CANT_CONNECT));
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     debug(D_NOTICE, "got error %lu from crypto_getfolderkey", (unsigned long)result);
@@ -705,21 +705,21 @@ static psync_encrypted_symmetric_key_t psync_crypto_download_file_enc_key(psync_
   int tries;
   tries=0;
   debug(D_NOTICE, "downloading key for file %lu", (unsigned long)fileid);
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return (psync_encrypted_symmetric_key_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_CANT_CONNECT));
     res=send_command(api, "crypto_getfilekey", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return (psync_encrypted_symmetric_key_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_CANT_CONNECT));
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     debug(D_NOTICE, "got error %lu from crypto_getfilekey", (unsigned long)result);
@@ -1349,21 +1349,21 @@ int psync_cloud_crypto_send_mkdir(psync_folderid_t folderid, const char *name, c
   uint64_t result;
   int tries;
   tries=0;
-  do {
+  while (1){
     api=psync_apipool_get();
     if (!api)
       return set_err(PRINT_RETURN_CONST(PSYNC_CRYPTO_CANT_CONNECT), err);
     res=send_command(api, "createfolder", params);
     if (unlikely_log(!res)){
       psync_apipool_release_bad(api);
-      if (++tries<=5)
-        continue;
-      else
+      if (++tries>5)
         return set_err(PRINT_RETURN_CONST(PSYNC_CRYPTO_CANT_CONNECT), err);
     }
-    else
+    else{
       psync_apipool_release(api);
-  } while (0);
+      break;
+    }
+  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     set_crypto_err_msg(res);
