@@ -1362,6 +1362,7 @@ static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
   char buf[PSYNC_CRYPTO_SECTOR_SIZE];
   uint64_t writeid, lastsectoff, elastsectoroff;
   psync_interval_tree_t *intr;
+  psync_tree *tr, *ntr;
   psync_crypto_sectorid_t lastsectorid, elastsectorid;
   uint32_t lastsectornewsize, lastsectoroldsize;
   int ret;
@@ -1404,6 +1405,14 @@ retry:
     }
   }
   of->currentsize=lastsectoff;
+  tr=psync_tree_get_last(of->sectorsinlog);
+  while (tr && psync_tree_element(tr, psync_sector_inlog_t, tree)->sectorid>=lastsectorid){
+    ntr=psync_tree_get_prev(tr);
+    assert(!ntr || psync_tree_element(tr, psync_sector_inlog_t, tree)->sectorid>psync_tree_element(ntr, psync_sector_inlog_t, tree)->sectorid);
+    psync_tree_del(&of->sectorsinlog, tr);
+    psync_free(tr);
+    tr=ntr;
+  }
   ret=psync_fs_crypto_write_newfile_full_sector(of, buf, lastsectorid, lastsectornewsize);
   if (ret<0)
     return psync_fs_unlock_ret(of, ret);
