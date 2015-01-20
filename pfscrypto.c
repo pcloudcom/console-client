@@ -1040,6 +1040,7 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
   int ret, wrt;
   assert(of->encrypted);
   assert(of->encoder);
+  debug(D_NOTICE, "write to %s size %lu, offset %lu, currentsize %lu", of->currentname, (unsigned long)size, (unsigned long)offset, (unsigned long)of->currentsize);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
     return psync_fs_unlock_ret(of, -EINVAL);
   if (unlikely(!size))
@@ -1048,6 +1049,7 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
     ret=psync_fs_newfile_fillzero(of, offset-of->currentsize, of->currentsize);
     if (ret)
       return psync_fs_unlock_ret(of, ret);
+    assert(of->currentsize==offset);
   }
   sectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
   off2=offset%PSYNC_CRYPTO_SECTOR_SIZE;
@@ -1341,6 +1343,7 @@ retry:
 
 static int psync_fs_crypto_ftruncate_to_zero(psync_openfile_t *of){
   int ret;
+  debug(D_NOTICE, "truncating file %s from %lu to zero", of->currentname, (unsigned long)of->currentsize);
   if (psync_file_seek(of->logfile, 0, P_SEEK_SET)!=0 || psync_file_truncate(of->logfile)){
     debug(D_WARNING, "failed to truncate log file of %s", of->currentname);
     return -EIO;
@@ -1367,6 +1370,7 @@ static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
   uint32_t lastsectornewsize, lastsectoroldsize;
   int ret;
   assert(size>0 && size<of->currentsize);
+  debug(D_NOTICE, "truncating file %s from %lu down to %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
   lastsectorid=(size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
   lastsectoff=(uint64_t)lastsectorid*PSYNC_CRYPTO_SECTOR_SIZE;
   lastsectornewsize=size-lastsectoff;
@@ -1419,7 +1423,7 @@ retry:
   of->currentsize=size;
   if (!of->newfile)
     psync_interval_tree_cut_end(&of->writeintervals, psync_fs_crypto_crypto_size(size));
-  debug(D_NOTICE, "file truncated");
+  debug(D_NOTICE, "file %s truncated to %lu", of->currentname, (unsigned long)size);
   return psync_fs_unlock_ret(of, 0);
 }
 
@@ -1427,6 +1431,7 @@ int psync_fs_crypto_ftruncate(psync_openfile_t *of, uint64_t size){
   int ret;
   assert(of->modified);
   if (of->currentsize<size){
+    debug(D_NOTICE, "truncating file %s from %lu up to %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
     if (of->newfile)
       ret=psync_fs_newfile_fillzero(of, size-of->currentsize, of->currentsize);
     else
