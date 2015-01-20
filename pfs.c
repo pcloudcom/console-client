@@ -104,6 +104,8 @@ static gid_t mygid=0;
 
 static psync_tree *openfiles=PSYNC_TREE_EMPTY;
 
+static int psync_fs_ftruncate_of_locked(psync_openfile_t *of, fuse_off_t size);
+
 static void delete_log_files(psync_openfile_t *of){
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   const char *cachepath;
@@ -916,7 +918,9 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
       assertw(!strcmp(fl->currentname, name));
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();
-      debug(D_NOTICE, "found open file %ld, refcnt %u", (long int)fileid, (unsigned)fl->refcnt);
+      if (encoder!=PSYNC_CRYPTO_INVALID_ENCODER && encoder!=PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)
+        psync_cloud_crypto_release_file_encoder(fileid, encoder);
+      debug(D_NOTICE, "found open file %ld, refcnt %u, currentsize=%lu", (long int)fileid, (unsigned)fl->refcnt, (unsigned long)fl->currentsize);
       return fl;
     }
   }
@@ -1019,6 +1023,7 @@ static int open_write_files(psync_openfile_t *of, int trunc){
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int64_t fs;
   int ret;
+  debug(D_NOTICE, "opening write files of %s, trunc=%d", of->currentname, trunc!=0);
   fileid=-of->fileid;
   psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
   fileidhex[sizeof(psync_fsfileid_t)]='d';
@@ -1032,14 +1037,21 @@ static int open_write_files(psync_openfile_t *of, int trunc){
       debug(D_ERROR, "could not open cache file for fileid %ld", (long)of->fileid);
       return -EIO;
     }
+    fs=psync_file_size(of->datafile);
+    if (unlikely_log(fs==-1))
+      return -EIO;
+    if (of->encrypted)
+      of->currentsize=psync_fs_crypto_plain_size(fs);
+    else
+      of->currentsize=fs;
   }
-  fs=psync_file_size(of->datafile);
-  if (unlikely_log(fs==-1))
-    return -EIO;
-  if (of->encrypted)
-    of->currentsize=psync_fs_crypto_plain_size(fs);
-  else
-    of->currentsize=fs;
+  else{
+    debug(D_NOTICE, "data file already open");
+    if (trunc)
+      return psync_fs_ftruncate_of_locked(of, 0);
+    else
+      return 0;
+  }
   if (!of->newfile && of->indexfile==INVALID_HANDLE_VALUE){
     fileidhex[sizeof(psync_fsfileid_t)]='i';
     filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
@@ -2581,16 +2593,10 @@ static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
   return 0;
 }
 
-static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_file_info *fi){
-  psync_openfile_t *of;
+static int psync_fs_ftruncate_of_locked(psync_openfile_t *of, fuse_off_t size){
   int ret;
-  psync_fs_set_thread_name();
-  debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
-  of=fh_to_openfile(fi->fh);
-  pthread_mutex_lock(&of->mutex);
   if (of->currentsize==size){
     debug(D_NOTICE, "not truncating as size is already %lu", (long unsigned)size);
-    pthread_mutex_unlock(&of->mutex);
     return 0;
   }
   psync_fs_inc_writeid_locked(of);
@@ -2614,6 +2620,17 @@ retry:
       of->currentsize=size;
     }
   }
+  return ret;
+}
+
+static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_file_info *fi){
+  psync_openfile_t *of;
+  int ret;
+  psync_fs_set_thread_name();
+  debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
+  of=fh_to_openfile(fi->fh);
+  pthread_mutex_lock(&of->mutex);
+  ret=psync_fs_ftruncate_of_locked(of, size);
   pthread_mutex_unlock(&of->mutex);
   return PRINT_NEG_RETURN_FORMAT(ret, " for ftruncate of %s to %lu", path, (unsigned long)size);
 }
