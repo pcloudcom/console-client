@@ -235,6 +235,26 @@ ex:;
   return score;
 }
 
+static uint64_t uint_sqrt(uint64_t n){
+  uint64_t h, l, m, m2;
+  h=n/2;
+  l=1;
+  m=1;
+  if (n==1)
+    return 1;
+  while (h>l+1){
+    m=(h+l)/2;
+    m2=m*m;
+    if (m2>n)
+      h=m;
+    else if (m2<n)
+      l=m;
+    else
+      break;      
+  }
+  return m;
+}
+
 uint64_t psync_password_score(const char *password){
   uint64_t score, oscore, num;
   char *lpwd, *ldpwd;
@@ -248,9 +268,17 @@ uint64_t psync_password_score(const char *password){
     plen--;
   }
   // trailing 1 is too common
-  while (plen && password[plen-1]=='1'){
-    mul_score(2);
-    plen--;
+  if (plen && password[plen-1]=='1'){
+    nlen=0;
+    do {
+      mul_score(2);
+      plen--;
+      nlen++;
+    } while (plen && password[plen-1]=='1');
+    while (nlen>=2){
+      nlen/=2;
+      score=uint_sqrt(score);
+    }
   }
   ch=0;
   // if punctuation is in the end, we give it a low score
