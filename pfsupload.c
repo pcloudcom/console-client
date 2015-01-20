@@ -630,7 +630,7 @@ err0:
 errs:
   if (asize)
     psync_upload_sub_bytes_uploaded(asize);
-  return -1;
+  return PRINT_RETURN(-1);
 }
 
 static int64_t i64min(int64_t a, int64_t b){
