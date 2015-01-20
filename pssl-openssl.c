@@ -44,6 +44,7 @@
 
 typedef struct {
   SSL *ssl;
+  int isbroken;
   char cachekey[];
 } ssl_connection_t;
 
@@ -148,13 +149,16 @@ void psync_ssl_memclean(void *ptr, size_t len){
   OPENSSL_cleanse(ptr, len);
 }
 
-static void psync_set_ssl_error(int err){
+static void psync_set_ssl_error(ssl_connection_t *conn, int err){
   if (err==SSL_ERROR_WANT_READ)
     psync_ssl_errno=PSYNC_SSL_ERR_WANT_READ;
   else if (err==SSL_ERROR_WANT_WRITE)
     psync_ssl_errno=PSYNC_SSL_ERR_WANT_WRITE;
-  else
+  else{
     psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
+    conn->isbroken=1;
+    debug(D_NOTICE, "got error %d from OpenSSL: %s", err, ERR_error_string(err, NULL));
+  }
 }
 
 static int psync_ssl_verify_cert(SSL *ssl, const char *hostname){
@@ -190,6 +194,7 @@ static ssl_connection_t *psync_ssl_alloc_conn(SSL *ssl, const char *hostname){
   len=strlen(hostname)+1;
   conn=(ssl_connection_t *)psync_malloc(offsetof(ssl_connection_t, cachekey)+len+4);
   conn->ssl=ssl;
+  conn->isbroken=0;
   memcpy(conn->cachekey, "SSLS", 4);
   memcpy(conn->cachekey+4, hostname, len);
   return conn;
@@ -220,7 +225,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
     return PSYNC_SSL_SUCCESS;
   }
   err=SSL_get_error(ssl, res);
-  psync_set_ssl_error(err);
+  psync_set_ssl_error(conn, err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE)){
     *sslconn=conn;
     return PSYNC_SSL_NEED_FINISH;
@@ -244,7 +249,7 @@ int psync_ssl_connect_finish(void *sslconn, const char *hostname){
     return PSYNC_SSL_SUCCESS;
   }
   err=SSL_get_error(conn->ssl, res);
-  psync_set_ssl_error(err);
+  psync_set_ssl_error(conn, err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE))
     return PSYNC_SSL_NEED_FINISH;
 fail:
@@ -265,6 +270,8 @@ int psync_ssl_shutdown(void *sslconn){
   sess=SSL_get1_session(conn->ssl);
   if (sess)
     psync_cache_add(conn->cachekey, sess, PSYNC_SSL_SESSION_CACHE_TIMEOUT, psync_ssl_free_session, PSYNC_MAX_SSL_SESSIONS_PER_DOMAIN);
+  if (conn->isbroken)
+    goto noshutdown;
   res=SSL_shutdown(conn->ssl);
   if (res!=-1){
     SSL_free(conn->ssl);
@@ -272,9 +279,10 @@ int psync_ssl_shutdown(void *sslconn){
     return PSYNC_SSL_SUCCESS;
   }
   err=SSL_get_error(conn->ssl, res);
-  psync_set_ssl_error(err);
+  psync_set_ssl_error(conn, err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE))
     return PSYNC_SSL_NEED_FINISH;
+noshutdown:
   SSL_free(conn->ssl);
   psync_free(conn);
   return PSYNC_SSL_SUCCESS;
@@ -299,7 +307,7 @@ int psync_ssl_read(void *sslconn, void *buf, int num){
   if (res>=0)
     return res;
   err=SSL_get_error(conn->ssl, res);
-  psync_set_ssl_error(err);
+  psync_set_ssl_error(conn, err);
   return PSYNC_SSL_FAIL;
 }
 
@@ -311,7 +319,7 @@ int psync_ssl_write(void *sslconn, const void *buf, int num){
   if (res>=0)
     return res;
   err=SSL_get_error(conn->ssl, res);
-  psync_set_ssl_error(err);
+  psync_set_ssl_error(conn, err);
   return PSYNC_SSL_FAIL;
 }
 
