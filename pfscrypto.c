@@ -1011,22 +1011,13 @@ static int psync_fs_crypto_write_newfile_partial_sector(psync_openfile_t *of, co
 
 static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset){
   char buff[PSYNC_CRYPTO_SECTOR_SIZE];
-  uint64_t wr;
+  uint64_t wr, ocurrentsize;
   psync_crypto_sectorid_t sectorid;
   int ret;
   memset(buff, 0, sizeof(buff));
-retry:
-  if (offset>of->currentsize){
-    debug(D_NOTICE, "got offset %lu when currentsize is %lu", (unsigned long)offset, (unsigned long)offset);
-    size+=offset-of->currentsize;
-    offset=of->currentsize;
-  }
-  else if (offset<of->currentsize){
-    debug(D_NOTICE, "got offset %lu when currentsize is %lu", (unsigned long)offset, (unsigned long)offset);
-    if (offset+size<=of->currentsize)
-      return 0;
-    size-=of->currentsize-offset;
-  }
+  ocurrentsize=of->currentsize;
+  if (of->currentsize<offset+size)
+    of->currentsize=offset+size;
   sectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
   if (offset%PSYNC_CRYPTO_SECTOR_SIZE){
     wr=PSYNC_CRYPTO_SECTOR_SIZE-(offset%PSYNC_CRYPTO_SECTOR_SIZE);
@@ -1034,7 +1025,7 @@ retry:
       wr=size;
     ret=psync_fs_crypto_write_newfile_partial_sector(of, buff, sectorid, wr, offset%PSYNC_CRYPTO_SECTOR_SIZE);
     if (ret<0)
-      return PRINT_RETURN(ret);
+      goto fail;
     size-=wr;
     offset+=wr;
     if (likely(of->currentsize<offset))
@@ -1048,20 +1039,19 @@ retry:
       wr=size;
     ret=psync_fs_crypto_write_newfile_full_sector(of, buff, sectorid, wr);
     if (ret<0)
-      return PRINT_RETURN(ret);
+      goto fail;
     size-=wr;
     offset+=wr;
     if (likely(of->currentsize<offset))
       of->currentsize=offset;
     sectorid++;
-    if (sectorid%128==127){
-      pthread_mutex_unlock(&of->mutex);
-      psync_yield_cpu();
-      pthread_mutex_lock(&of->mutex);
-      goto retry;
-    }
   }
   return 0;
+fail:
+  if (ocurrentsize<offset)
+    ocurrentsize=offset;
+  of->currentsize=offset;
+  return PRINT_RETURN(ret);
 }
 
 static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){

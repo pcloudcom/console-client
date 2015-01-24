@@ -523,6 +523,7 @@ static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *s
   psync_tree *tr;
   psync_stat_t st;
   int64_t d;
+  int mr;
   psync_sql_rdlock();
   tr=openfiles;
   while (tr){
@@ -533,12 +534,13 @@ static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *s
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      mr=pthread_mutex_trylock(&fl->mutex);
       stbuf->st_size=fl->currentsize;
-      debug(D_NOTICE, "found open file with size %lu", (unsigned long)fl->currentsize);
+      debug(D_NOTICE, "found open file with size %lu, got size %s", (unsigned long)fl->currentsize, mr?"without locking mutex":"with mutex locked");
       if (!psync_fstat(fl->logfile, &st))
         stbuf->st_mtime=psync_stat_mtime(&st);
-      pthread_mutex_unlock(&fl->mutex);
+      if (!mr)
+        pthread_mutex_unlock(&fl->mutex);
       psync_sql_rdunlock();
       return 1;
     }
