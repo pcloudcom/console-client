@@ -56,7 +56,7 @@ static int find_in_dict(const char *pwd, size_t len){
         while (l<8 && l<=len && med<ARRAY_SIZE(passworddict) && !memcmp(pwd, passworddict[med+1], l+1)){
           hi=len;
           med++;
-          while (passworddict[med][hi-1]==0)
+          while (hi>0 && passworddict[med][hi-1]==0)
             hi--;
           if (memcmp(pwd, passworddict[med], hi))
             break;
