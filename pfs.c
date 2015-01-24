@@ -881,7 +881,7 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   psync_sql_rdunlock();
   if (dec)
     psync_cloud_crypto_release_folder_decoder(folderid, dec);
-  return 0;
+  return PRINT_RETURN(0);
 }
 
 static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsfileid_t remotefileid, uint64_t size, uint64_t hash, int lock, 

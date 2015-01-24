@@ -1015,6 +1015,18 @@ static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
   psync_crypto_sectorid_t sectorid;
   int ret;
   memset(buff, 0, sizeof(buff));
+retry:
+  if (offset>of->currentsize){
+    debug(D_NOTICE, "got offset %lu when currentsize is %lu", (unsigned long)offset, (unsigned long)offset);
+    size+=offset-of->currentsize;
+    offset=of->currentsize;
+  }
+  else if (offset<of->currentsize){
+    debug(D_NOTICE, "got offset %lu when currentsize is %lu", (unsigned long)offset, (unsigned long)offset);
+    if (offset+size<=of->currentsize)
+      return 0;
+    size-=of->currentsize-offset;
+  }
   sectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
   if (offset%PSYNC_CRYPTO_SECTOR_SIZE){
     wr=PSYNC_CRYPTO_SECTOR_SIZE-(offset%PSYNC_CRYPTO_SECTOR_SIZE);
@@ -1042,6 +1054,12 @@ static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
     if (likely(of->currentsize<offset))
       of->currentsize=offset;
     sectorid++;
+    if (sectorid%128==127){
+      pthread_mutex_unlock(&of->mutex);
+      psync_yield_cpu();
+      pthread_mutex_lock(&of->mutex);
+      goto retry;
+    }
   }
   return 0;
 }
