@@ -87,11 +87,25 @@
 #if D_WARNING<=DEBUG_LEVEL
 #define likely_log(x) (likely(x)?1:psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion likely_log(%s) failed", TO_STR(x))*0)
 #define unlikely_log(x) (unlikely(x)?psync_debug(__FILE__, __FUNCTION__, __LINE__, D_WARNING, "assertion unlikely_log(%s) failed", TO_STR(x)):0)
+#if defined(PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP)
+#undef PTHREAD_MUTEX_INITIALIZER
+#define PTHREAD_MUTEX_INITIALIZER PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP
+#endif
 #define pthread_mutex_lock(mutex) \
   do {\
     int __mutex_result=pthread_mutex_lock(mutex);\
-    if (unlikely(__mutex_result))\
+    if (unlikely(__mutex_result)){\
       debug(D_CRITICAL, "pthread_mutex_lock returned %d", __mutex_result);\
+      abort();\
+    }\
+  } while (0)
+#define pthread_mutex_unlock(mutex) \
+  do {\
+    int __mutex_result=pthread_mutex_unlock(mutex);\
+    if (unlikely(__mutex_result)){\
+      debug(D_CRITICAL, "pthread_mutex_unlock returned %d", __mutex_result);\
+      abort();\
+    }\
   } while (0)
 #define PRINT_RETURN(x) ((x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_NOTICE, "returning %d", (int)(x)))
 #define PRINT_RETURN_CONST(x) ((x)*psync_debug(__FILE__, __FUNCTION__, __LINE__, D_NOTICE, "returning " #x))

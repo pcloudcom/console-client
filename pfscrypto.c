@@ -612,7 +612,7 @@ static int psync_fs_write_auth_tree_to_log(psync_openfile_t *of, psync_crypto_of
     return PRINT_RETURN(ret);
   if (offsets->needmasterauth && (ret=psync_fs_crypto_write_master_auth(of, authsect, offsets)))
     return PRINT_RETURN(ret);
-  debug(D_NOTICE, "wrote three to log, lastsectorid=%u, currentsize=%lu", (unsigned)lastsect, (unsigned long)of->currentsize);
+  debug(D_NOTICE, "wrote tree to log, lastsectorid=%u, currentsize=%lu", (unsigned)lastsect, (unsigned long)of->currentsize);
   return 0;
 }
 
@@ -973,6 +973,7 @@ static int psync_fs_crypto_write_newfile_full_sector(psync_openfile_t *of, const
   uint32_t len;
   psync_crypto_sector_auth_t auth;
   assert(size<=PSYNC_CRYPTO_SECTOR_SIZE);
+  assert(sizeof(psync_crypto_log_data_record)==sizeof(psync_crypto_log_header)+PSYNC_CRYPTO_SECTOR_SIZE);
   psync_crypto_aes256_encode_sector(of->encoder, (const unsigned char *)buf, size, rec.data, auth, sectorid);
   memset(&rec.header, 0, sizeof(psync_crypto_log_header));
   rec.header.type=PSYNC_CRYPTO_LOG_DATA;
@@ -1011,44 +1012,55 @@ static int psync_fs_crypto_write_newfile_partial_sector(psync_openfile_t *of, co
 static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset){
   char buff[PSYNC_CRYPTO_SECTOR_SIZE];
   uint64_t wr;
+  psync_crypto_sectorid_t sectorid;
   int ret;
   memset(buff, 0, sizeof(buff));
+  sectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
+  if (offset%PSYNC_CRYPTO_SECTOR_SIZE){
+    wr=PSYNC_CRYPTO_SECTOR_SIZE-(offset%PSYNC_CRYPTO_SECTOR_SIZE);
+    if (wr>size)
+      wr=size;
+    ret=psync_fs_crypto_write_newfile_partial_sector(of, buff, sectorid, wr, offset%PSYNC_CRYPTO_SECTOR_SIZE);
+    if (ret<0)
+      return PRINT_RETURN(ret);
+    size-=wr;
+    offset+=wr;
+    if (likely(of->currentsize<offset))
+      of->currentsize=offset;
+    sectorid++;
+  }
   while (size){
-    if (offset%PSYNC_CRYPTO_SECTOR_SIZE){
-      wr=PSYNC_CRYPTO_SECTOR_SIZE-(offset%PSYNC_CRYPTO_SECTOR_SIZE);
-      if (wr>size)
-        wr=size;
-    }
-    else{
-      if (size>PSYNC_CRYPTO_SECTOR_SIZE)
-        wr=PSYNC_CRYPTO_SECTOR_SIZE;
-      else
-        wr=size;
-    }
-    ret=psync_fs_crypto_write_newfile_locked(of, buff, wr, offset);
-    if (ret<=0)
-      return ret;
-    offset+=ret;
-    size-=ret;
+    if (size>PSYNC_CRYPTO_SECTOR_SIZE)
+      wr=PSYNC_CRYPTO_SECTOR_SIZE;
+    else
+      wr=size;
+    ret=psync_fs_crypto_write_newfile_full_sector(of, buff, sectorid, wr);
+    if (ret<0)
+      return PRINT_RETURN(ret);
+    size-=wr;
+    offset+=wr;
+    if (likely(of->currentsize<offset))
+      of->currentsize=offset;
+    sectorid++;
   }
   return 0;
 }
 
-int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
   uint64_t off2, offdiff;
   psync_crypto_sectorid_t sectorid;
   int ret, wrt;
   assert(of->encrypted);
   assert(of->encoder);
-  debug(D_NOTICE, "write to %s size %lu, offset %lu, currentsize %lu", of->currentname, (unsigned long)size, (unsigned long)offset, (unsigned long)of->currentsize);
+//  debug(D_NOTICE, "write to %s size %lu, offset %lu, currentsize %lu", of->currentname, (unsigned long)size, (unsigned long)offset, (unsigned long)of->currentsize);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
-    return psync_fs_unlock_ret(of, -EINVAL);
+    return -EINVAL;
   if (unlikely(!size))
-    return psync_fs_unlock_ret(of, 0);
+    return 0;
   if (unlikely(of->currentsize<offset)){
     ret=psync_fs_newfile_fillzero(of, offset-of->currentsize, of->currentsize);
     if (ret)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
     assert(of->currentsize==offset);
   }
   sectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
@@ -1066,7 +1078,7 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
     size-=offdiff;
     sectorid++;
     if (ret)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
     if (of->currentsize<offset)
       of->currentsize=offset;
   }
@@ -1078,7 +1090,7 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
     size-=PSYNC_CRYPTO_SECTOR_SIZE;
     sectorid++;
     if (ret)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
     if (of->currentsize<offset)
       of->currentsize=offset;
   }
@@ -1088,7 +1100,7 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
     else
       ret=psync_fs_crypto_write_newfile_partial_sector(of, buf, sectorid, size, 0);
     if (ret)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
     wrt+=size;
     if (of->currentsize<offset+size)
       of->currentsize=offset+size;
@@ -1096,10 +1108,16 @@ int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, 
   if (of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE){
     ret=psync_fs_crypto_finalize_log(of, 0);
     if (ret)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
   }
-  pthread_mutex_unlock(&of->mutex);
   return wrt;
+
+}
+
+int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+  int ret=psync_fs_crypto_write_newfile_locked_nu(of, buf, size, offset);
+  pthread_mutex_unlock(&of->mutex);
+  return ret;
 }
 
 int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64_t size, uint64_t offset){
@@ -1194,6 +1212,8 @@ int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   return size;
 }
 
+int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset);
+
 static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset){
   char buff[PSYNC_CRYPTO_SECTOR_SIZE];
   uint64_t wr;
@@ -1211,7 +1231,7 @@ static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
       else
         wr=size;
     }
-    ret=psync_fs_crypto_write_modified_locked(of, buff, wr, offset);
+    ret=psync_fs_crypto_write_modified_locked_nu(of, buff, wr, offset);
     if (ret<=0)
       return ret;
     offset+=ret;
@@ -1220,7 +1240,7 @@ static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
   return 0;
 }
 
-int psync_fs_crypto_write_modified_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
   psync_interval_tree_t *itr, *needtodwl;
   psync_pagecache_read_range *ranges;
   char *tmpbuf;
@@ -1233,13 +1253,13 @@ int psync_fs_crypto_write_modified_locked(psync_openfile_t *of, const char *buf,
   int ret;
   debug(D_NOTICE, "off=%lu size=%lu cs=%lu", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
-    return psync_fs_unlock_ret(of, -EINVAL);
+    return -EINVAL;
   if (unlikely(!size))
-    return psync_fs_unlock_ret(of, 0);
+    return 0;
   if (unlikely(of->currentsize<offset)){
     ret=psync_fs_modfile_fillzero(of, offset-of->currentsize, of->currentsize);
     if (ret)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
   }
 retry:
   firstsectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
@@ -1279,66 +1299,80 @@ retry:
     eoffset=psync_fs_crypto_crypto_size(of->initialsize);
     itr=psync_interval_tree_get_first(needtodwl);
     do {
+      // if we are past initialsize, we are probably trying to download uncommited auth sector
+      if (itr->from>=eoffset)
+        break;
       debug(D_NOTICE, "need to download from offset %lu size %lu to do a write at offset %lu size %lu", 
             (unsigned long)itr->from, (unsigned long)(itr->to-itr->from), (unsigned long)offset, (unsigned long)size);
-      assert(itr->from<eoffset);
       if (itr->to>eoffset)
         itr->to=eoffset;
       icnt++;
       isize+=itr->to-itr->from;
       itr=psync_interval_tree_get_next(itr);
     } while (itr);
-    ranges=psync_new_cnt(psync_pagecache_read_range, icnt);
-    tmpbuf=psync_new_cnt(char, isize);
-    icnt=0;
-    isize=0;
-    itr=psync_interval_tree_get_first(needtodwl);
-    do {
-      ranges[icnt].offset=itr->from;
-      ranges[icnt].size=itr->to-itr->from;
-      ranges[icnt].buf=tmpbuf+isize;
-      isize+=ranges[icnt].size;
-      icnt++;
-      itr=psync_interval_tree_get_next(itr);
-    } while (itr);
-    psync_interval_tree_free(needtodwl);
-    ret=psync_pagecache_readv_locked(of, ranges, icnt);
-    // we are unlocked now
-    if (unlikely(ret)){
-      psync_free(ranges);
-      psync_free(tmpbuf);
-      debug(D_NOTICE, "downloading of ranges failed");
-      return ret;
-    }
-    ret=0;
-    debug(D_NOTICE, "ranges downloaded");
-    pthread_mutex_lock(&of->mutex);
-    for (l=0; l<icnt; l++){
-      itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, ranges[l].offset);
-      if (unlikely(itr && itr->from<ranges[l].offset+ranges[l].size && ranges[l].offset<itr->to)){
-        // we were not supposed to have intersection, some write happened while we were unlocked in psync_pagecache_readv_locked
-        debug(D_NOTICE, "restarting write as range %lu to %lu downloaded and %lu to %lu local intersect", (unsigned long)ranges[l].offset,
-              (unsigned long)(ranges[l].offset+ranges[l].size), (unsigned long)itr->from, (unsigned long)itr->to);
+    if (!icnt)
+      psync_interval_tree_free(needtodwl);
+    else{
+      ranges=psync_new_cnt(psync_pagecache_read_range, icnt);
+      tmpbuf=psync_new_cnt(char, isize);
+      icnt=0;
+      isize=0;
+      itr=psync_interval_tree_get_first(needtodwl);
+      do {
+        if (itr->from>=eoffset)
+          break;
+        ranges[icnt].offset=itr->from;
+        ranges[icnt].size=itr->to-itr->from;
+        ranges[icnt].buf=tmpbuf+isize;
+        isize+=ranges[icnt].size;
+        icnt++;
+        itr=psync_interval_tree_get_next(itr);
+      } while (itr);
+      psync_interval_tree_free(needtodwl);
+      ret=psync_pagecache_readv_locked(of, ranges, icnt);
+      // we are unlocked now
+      pthread_mutex_lock(&of->mutex);
+      if (unlikely(ret)){
         psync_free(ranges);
         psync_free(tmpbuf);
-        goto retry;
+        debug(D_NOTICE, "downloading of ranges failed");
+        return ret;
       }
-      bw=psync_file_pwrite(of->datafile, ranges[l].buf, ranges[l].size, ranges[l].offset);
-      if (bw!=ranges[l].size){
-        debug(D_ERROR, "write to datafile of %u bytes returned %d", (unsigned)ranges[l].size, (int)bw);
-        ret=-EIO;
-        break;
+      ret=0;
+      debug(D_NOTICE, "ranges downloaded");
+      for (l=0; l<icnt; l++){
+        itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, ranges[l].offset);
+        if (unlikely(itr && itr->from<ranges[l].offset+ranges[l].size && ranges[l].offset<itr->to)){
+          // we were not supposed to have intersection, some write happened while we were unlocked in psync_pagecache_readv_locked
+          debug(D_NOTICE, "restarting write as range %lu to %lu downloaded and %lu to %lu local intersect", (unsigned long)ranges[l].offset,
+                (unsigned long)(ranges[l].offset+ranges[l].size), (unsigned long)itr->from, (unsigned long)itr->to);
+          psync_free(ranges);
+          psync_free(tmpbuf);
+          goto retry;
+        }
+        bw=psync_file_pwrite(of->datafile, ranges[l].buf, ranges[l].size, ranges[l].offset);
+        if (bw!=ranges[l].size){
+          debug(D_ERROR, "write to datafile of %u bytes returned %d", (unsigned)ranges[l].size, (int)bw);
+          ret=-EIO;
+          break;
+        }
+        psync_interval_tree_add(&of->writeintervals, ranges[l].offset, ranges[l].offset+ranges[l].size);
       }
-      psync_interval_tree_add(&of->writeintervals, ranges[l].offset, ranges[l].offset+ranges[l].size);
+      // we do NOT need to fsync of->datafile, as we wrote to positions that were empty
+      psync_free(ranges);
+      psync_free(tmpbuf);
+      if (unlikely(ret))
+        return ret;
     }
-    // we do NOT need to fsync of->datafile, as we wrote to positions that were empty
-    psync_free(ranges);
-    psync_free(tmpbuf);
-    if (unlikely(ret))
-      return psync_fs_unlock_ret(of, ret);
   }
   // now that we have all auth or partial data sectors, we proceed the same way as if it is a new file write
-  return psync_fs_crypto_write_newfile_locked(of, buf, size, offset);
+  return psync_fs_crypto_write_newfile_locked_nu(of, buf, size, offset);
+}
+
+int psync_fs_crypto_write_modified_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+  int ret=psync_fs_crypto_write_modified_locked_nu(of, buf, size, offset);
+  pthread_mutex_unlock(&of->mutex);
+  return ret;
 }
 
 static int psync_fs_crypto_ftruncate_to_zero(psync_openfile_t *of){
@@ -1445,7 +1479,7 @@ int psync_fs_crypto_ftruncate(psync_openfile_t *of, uint64_t size){
   }
   else
     ret=0;  
-  return psync_fs_unlock_ret(of, ret);
+  return ret;
 }
 
 int psync_fs_crypto_flush_file(psync_openfile_t *of){

@@ -535,6 +535,7 @@ static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *s
       fl=psync_tree_element(tr, psync_openfile_t, tree);
       pthread_mutex_lock(&fl->mutex);
       stbuf->st_size=fl->currentsize;
+      debug(D_NOTICE, "found open file with size %lu", (unsigned long)fl->currentsize);
       if (!psync_fstat(fl->logfile, &st))
         stbuf->st_mtime=psync_stat_mtime(&st);
       pthread_mutex_unlock(&fl->mutex);
@@ -937,7 +938,17 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
     psync_tree_add_before(&openfiles, tr, &fl->tree);
   else
     psync_tree_add_after(&openfiles, tr, &fl->tree);
+#if IS_DEBUG
+  {
+    pthread_mutexattr_t mattr;
+    pthread_mutexattr_init(&mattr);
+    pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&fl->mutex, &mattr);
+    pthread_mutexattr_destroy(&mattr);
+  }
+#else
   pthread_mutex_init(&fl->mutex, NULL);
+#endif
   fl->currentfolder=folder;
   fl->currentname=psync_strdup(name);
   fl->fileid=fileid;
@@ -2632,7 +2643,7 @@ static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_fil
   pthread_mutex_lock(&of->mutex);
   ret=psync_fs_ftruncate_of_locked(of, size);
   pthread_mutex_unlock(&of->mutex);
-  return PRINT_NEG_RETURN_FORMAT(ret, " for ftruncate of %s to %lu", path, (unsigned long)size);
+  return PRINT_RETURN_FORMAT(ret, " for ftruncate of %s to %lu", path, (unsigned long)size);
 }
 
 static int psync_fs_truncate(const char *path, fuse_off_t size){
