@@ -227,7 +227,7 @@ int psync_cloud_crypto_setup(const char *password, const char *hint){
   rsapublicbin=psync_ssl_rsa_public_to_binary(rsapublic);
   psync_ssl_rsa_free_private(rsaprivate);
   psync_ssl_rsa_free_public(rsapublic);
-  if (unlikely(rsaprivatebin==PSYNC_INVALID_BIN_RSA || rsaprivatebin==PSYNC_INVALID_BIN_RSA)){
+  if (unlikely(rsaprivatebin==PSYNC_INVALID_BIN_RSA || rsapublic==PSYNC_INVALID_BIN_RSA)){
     debug(D_WARNING, "psync_ssl_rsa_private_to_binary or psync_ssl_rsa_public_to_binary failed");
     if (rsaprivatebin!=PSYNC_INVALID_BIN_RSA)
       psync_ssl_rsa_free_binary(rsaprivatebin);
