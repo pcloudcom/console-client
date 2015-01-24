@@ -1573,8 +1573,16 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
 
 void psync_fs_dec_of_refcnt(psync_openfile_t *of){
   uint32_t refcnt;
+retry:
   psync_sql_lock();
-  pthread_mutex_lock(&of->mutex);
+  if (pthread_mutex_trylock(&of->mutex)){
+    psync_sql_unlock();
+    pthread_mutex_lock(&of->mutex);
+    if (psync_sql_trylock()){
+      pthread_mutex_unlock(&of->mutex);
+      goto retry;
+    }
+  }
   refcnt=--of->refcnt;
   if (refcnt==0)
     psync_tree_del(&openfiles, &of->tree);
@@ -1628,7 +1636,6 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
       return 0;
     }
     writeid=of->writeid;
-    of->releasedforupload=1;
     if (of->encrypted){
       ret=psync_fs_crypto_flush_file(of);
       if (unlikely_log(ret)){
@@ -1636,6 +1643,7 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
         return ret;
       }
     }
+    of->releasedforupload=1;
     pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", path, (unsigned long)of->currentsize, (unsigned)of->writeid);
     res=psync_sql_prep_statement("UPDATE fstask SET status=0, int1=? WHERE id=? AND status=1");

@@ -299,6 +299,51 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
 }
 #endif
 
+static int psync_fs_crypto_wait_no_extender_locked(psync_openfile_t *of){
+  int ret;
+  while (of->extender && !of->extender->ready){
+    debug(D_NOTICE, "waiting for extender to finish");
+    of->extender->waiters++;
+    pthread_cond_wait(&of->extender->cond, &of->mutex);
+    of->extender->waiters--;
+  }
+  if (of->extender){
+    ret=of->extender->error;
+    do {
+      pthread_mutex_unlock(&of->mutex);
+      pthread_mutex_lock(&of->mutex);
+    } while (of->extender);
+    debug(D_NOTICE, "waited for extender to finish");
+    return ret;
+  }
+  else
+    return 0;
+}
+
+static int psync_fs_crypto_wait_extender_after_locked(psync_openfile_t *of, uint64_t offset){
+  while (of->extender && !of->extender->ready && of->extender->extendedto<offset){
+    debug(D_NOTICE, "waiting for extending process to reach %lu, currently at %lu", (unsigned long)offset, (unsigned long)of->extender->extendedto);
+    of->extender->waiters++;
+    pthread_cond_wait(&of->extender->cond, &of->mutex);
+    of->extender->waiters--;
+    debug(D_NOTICE, "waited extending process to reach %lu", (unsigned long)of->extender->extendedto);
+  }
+  if (of->extender)
+    return of->extender->error;
+  else
+    return 0;
+}
+
+static int psync_fs_crypto_kill_extender_locked(psync_openfile_t *of){
+  if (of->extender){
+    debug(D_NOTICE, "killing extender of file %s", of->currentname);
+    of->extender->kill=1;
+    if (of->extender->error)
+      return of->extender->error;
+  }
+  return 0;
+}
+
 static int psync_fs_crypto_read_newfile_full_sector_from_datafile(psync_openfile_t *of, char *buf, psync_crypto_sectorid_t sectorid){
   unsigned char buff[PSYNC_CRYPTO_SECTOR_SIZE];
   psync_crypto_sector_auth_t auth;
@@ -387,6 +432,9 @@ int psync_fs_crypto_read_newfile_locked(psync_openfile_t *of, char *buf, uint64_
   assert(of->encoder);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
     return psync_fs_unlock_ret(of, -EINVAL);
+  ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
+  if (unlikely_log(ret))
+    return psync_fs_unlock_ret(of, ret);
   if (unlikely(!size || of->currentsize<=offset))
     return psync_fs_unlock_ret(of, 0);
   if (offset+size>of->currentsize)
@@ -866,7 +914,7 @@ static int psync_fs_write_interval_tree_to_log(psync_openfile_t *of){
   return 0;
 }
 
-static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
+static int psync_fs_crypto_do_finalize_log(psync_openfile_t *of, int fullsync){
   psync_crypto_offsets_t offsets;
   psync_fsfileid_t fileid;
   const char *cachepath;
@@ -922,6 +970,19 @@ static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
   psync_free(olog);
   psync_free(flog);
   return PRINT_NEG_RETURN(ret);
+}
+
+static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
+  int ret;
+  if (of->extender){
+    assert(of->currentsize=of->extender->extendto);
+    of->currentsize=of->extender->extendedto;
+    ret=psync_fs_crypto_do_finalize_log(of, fullsync);
+    of->currentsize=of->extender->extendto;
+  }
+  else
+    ret=psync_fs_crypto_do_finalize_log(of, fullsync);
+  return ret;
 }
 
 static void psync_fs_crypt_add_sector_to_interval_tree(psync_openfile_t *of, psync_crypto_sectorid_t sectorid, size_t size){
@@ -1011,13 +1072,10 @@ static int psync_fs_crypto_write_newfile_partial_sector(psync_openfile_t *of, co
 
 static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset){
   char buff[PSYNC_CRYPTO_SECTOR_SIZE];
-  uint64_t wr, ocurrentsize;
+  uint64_t wr;
   psync_crypto_sectorid_t sectorid;
   int ret;
   memset(buff, 0, sizeof(buff));
-  ocurrentsize=of->currentsize;
-  if (of->currentsize<offset+size)
-    of->currentsize=offset+size;
   sectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
   if (offset%PSYNC_CRYPTO_SECTOR_SIZE){
     wr=PSYNC_CRYPTO_SECTOR_SIZE-(offset%PSYNC_CRYPTO_SECTOR_SIZE);
@@ -1048,9 +1106,6 @@ static int psync_fs_newfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
   }
   return 0;
 fail:
-  if (ocurrentsize<offset)
-    ocurrentsize=offset;
-  of->currentsize=offset;
   return PRINT_RETURN(ret);
 }
 
@@ -1400,6 +1455,7 @@ static int psync_fs_crypto_ftruncate_to_zero(psync_openfile_t *of){
   psync_tree_for_each_element_call_safe(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
   of->sectorsinlog=PSYNC_TREE_EMPTY;
   of->currentsize=0;
+  psync_fs_crypto_kill_extender_locked(of);
   return 0;
 }
 
@@ -1413,6 +1469,21 @@ static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
   int ret;
   assert(size>0 && size<of->currentsize);
   debug(D_NOTICE, "truncating file %s from %lu down to %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
+  if (of->extender){
+    if (of->extender->error)
+      return psync_fs_unlock_ret(of, of->extender->error);
+    if (!of->extender->ready){
+      if (of->extender->extendedto>size)
+        psync_fs_crypto_kill_extender_locked(of);
+      else{
+        debug(D_NOTICE, "extender is so far extended up to %lu, switching target from %lu to %lu and we are done", 
+              (unsigned long)of->extender->extendedto, (unsigned long)of->extender->extendto, (unsigned long)size);
+        of->extender->extendto=size;
+        of->currentsize=size;
+        return psync_fs_unlock_ret(of, 0);
+      }
+    }
+  }
   lastsectorid=(size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
   lastsectoff=(uint64_t)lastsectorid*PSYNC_CRYPTO_SECTOR_SIZE;
   lastsectornewsize=size-lastsectoff;
@@ -1469,11 +1540,115 @@ retry:
   return psync_fs_unlock_ret(of, 0);
 }
 
+static void psync_fs_extender_thread(void *ptr){
+  psync_openfile_t *of;
+  psync_enc_file_extender_t *ext;
+  uint64_t cs;
+  int ret;
+  of=(psync_openfile_t *)ptr;
+  pthread_mutex_lock(&of->mutex);  
+  assert(of->extender);
+  ext=of->extender;
+  while (!ext->kill && ext->extendedto<ext->extendto){
+    assert(of->modified);
+    if (ext->extendto-ext->extendedto>256*1024){
+      cs=256*1024;
+      if (ext->extendedto%PSYNC_CRYPTO_SECTOR_SIZE)
+        cs-=ext->extendedto%PSYNC_CRYPTO_SECTOR_SIZE;
+    }
+    else
+      cs=ext->extendto-ext->extendedto;
+    if (of->newfile)
+      ret=psync_fs_newfile_fillzero(of, cs, ext->extendedto);
+    else
+      ret=psync_fs_modfile_fillzero(of, cs, ext->extendedto);
+    if (ret){
+      ext->error=ret;
+      of->currentsize=ext->extendedto;
+      break;
+    }
+    ext->extendedto+=cs;
+    pthread_mutex_unlock(&of->mutex);
+    debug(D_NOTICE, "extender at %lu of %lu", (unsigned long)ext->extendedto, (unsigned long)ext->extendto);
+    pthread_mutex_lock(&of->mutex);
+    if (ext->waiters){
+      pthread_cond_broadcast(&ext->cond);
+      pthread_mutex_unlock(&of->mutex);
+      pthread_mutex_lock(&of->mutex);
+    }
+    if (of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE){
+      ret=psync_fs_crypto_finalize_log(of, 0);
+      if (ret){
+        ext->error=ret;
+        of->currentsize=ext->extendedto;
+        break;
+      }
+    }
+  }
+  ext->ready=1;
+  if (ext->kill)
+    debug(D_NOTICE, "killed");
+  else if (ext->error)
+    debug(D_NOTICE, "error %d", ext->error);
+  else
+    debug(D_NOTICE, "finished");
+  while (ext->waiters){
+    debug(D_NOTICE, "waiting for waiters to finish");
+    pthread_cond_broadcast(&ext->cond);
+    pthread_mutex_unlock(&of->mutex);
+    psync_milisleep(1);
+    pthread_mutex_lock(&of->mutex);
+  }
+  of->extender=NULL;
+  pthread_mutex_unlock(&of->mutex);
+  pthread_cond_destroy(&ext->cond);
+  psync_free(ext);
+  psync_fs_dec_of_refcnt(of);
+}
+
+static int psync_fs_crypto_run_extender(psync_openfile_t *of, uint64_t size){
+  psync_enc_file_extender_t *ext;
+  assert(of->currentsize<size);
+  assert(!of->extender);
+  debug(D_NOTICE, "will run extender thread to extend from %lu to %lu", (unsigned long)of->currentsize, (unsigned long)size);
+  ext=psync_new(psync_enc_file_extender_t);
+  pthread_cond_init(&ext->cond, NULL);
+  ext->extendto=size;
+  ext->extendedto=of->currentsize;
+  of->currentsize=size;
+  ext->waiters=0;
+  ext->error=0;
+  ext->ready=0;
+  ext->kill=0;
+  of->extender=ext;
+  psync_fs_inc_of_refcnt_locked(of);
+  psync_run_thread1("extender", psync_fs_extender_thread, of);
+  return 0;
+}
+
 int psync_fs_crypto_ftruncate(psync_openfile_t *of, uint64_t size){
   int ret;
   assert(of->modified);
+retry:
   if (of->currentsize<size){
     debug(D_NOTICE, "truncating file %s from %lu up to %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
+    if (of->extender){
+      if (of->extender->ready){
+        ret=psync_fs_crypto_wait_no_extender_locked(of);
+        if (ret)
+          return ret;
+        else
+          goto retry; // we've unlocked mutex while waiting, of->currentsize might be changed
+      }
+      assert(of->extender->extendto<size);
+      debug(D_NOTICE, "found active extender that extended the file up to %lu of target %lu, changing target to %lu",
+            (unsigned long)of->extender->extendedto, (unsigned long)of->extender->extendto, (unsigned long)size);
+      of->extender->extendto=size;
+      of->currentsize=size;
+      return 0;
+    }
+    if (size-of->currentsize>=PSYNC_CRYPTO_RUN_EXTEND_IN_THREAD_OVER)
+      return psync_fs_crypto_run_extender(of, size);
     if (of->newfile)
       ret=psync_fs_newfile_fillzero(of, size-of->currentsize, of->currentsize);
     else
@@ -1491,6 +1666,9 @@ int psync_fs_crypto_ftruncate(psync_openfile_t *of, uint64_t size){
 }
 
 int psync_fs_crypto_flush_file(psync_openfile_t *of){
+  int ret=psync_fs_crypto_wait_no_extender_locked(of);
+  if (ret)
+    return ret;
   return psync_fs_crypto_finalize_log(of, 1);
 }
 

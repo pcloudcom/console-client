@@ -61,6 +61,16 @@ typedef struct {
 } psync_file_stream_t;
 
 typedef struct {
+  pthread_cond_t cond;
+  uint64_t extendto;
+  uint64_t extendedto;
+  uint32_t waiters;
+  int error;
+  unsigned char ready;
+  unsigned char kill;
+} psync_enc_file_extender_t;
+
+typedef struct {
   psync_tree tree;
   psync_file_stream_t streams[PSYNC_FS_FILESTREAMS_CNT];
   pthread_mutex_t mutex;
@@ -104,6 +114,7 @@ typedef struct {
   psync_tree *sectorsinlog;
   psync_interval_tree_t *authenticatedints;
   psync_fast_hash256_ctx loghashctx;
+  psync_enc_file_extender_t *extender;
   psync_file_t logfile;
   uint32_t logoffset;
 } psync_openfile_t;
