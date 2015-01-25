@@ -1471,7 +1471,7 @@ static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
   debug(D_NOTICE, "truncating file %s from %lu down to %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)size);
   if (of->extender){
     if (of->extender->error)
-      return psync_fs_unlock_ret(of, of->extender->error);
+      return of->extender->error;
     if (!of->extender->ready){
       if (of->extender->extendedto>size)
         psync_fs_crypto_kill_extender_locked(of);
@@ -1480,7 +1480,7 @@ static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
               (unsigned long)of->extender->extendedto, (unsigned long)of->extender->extendto, (unsigned long)size);
         of->extender->extendto=size;
         of->currentsize=size;
-        return psync_fs_unlock_ret(of, 0);
+        return 0;
       }
     }
   }
@@ -1497,7 +1497,7 @@ retry:
   if (of->newfile || ((intr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, elastsectoroff)) && intr->from<=elastsectoroff)){
     ret=psync_fs_crypto_read_newfile_full_sector(of, buf, lastsectorid);
     if (ret<0)
-      return psync_fs_unlock_ret(of, ret);
+      return ret;
     assert(ret==lastsectoroldsize);
   }
   else{
@@ -1511,6 +1511,7 @@ retry:
       debug(D_NOTICE, "writeid changed, restarting");
       goto retry;
     }
+    // the write will push all the auth data we need to the datafile (it is probably in cache from the read)
     ret=psync_fs_crypto_write_modified_locked(of, buf, lastsectoroldsize, lastsectoff);
     // unlocked now
     if (ret<0)
@@ -1532,12 +1533,12 @@ retry:
   }
   ret=psync_fs_crypto_write_newfile_full_sector(of, buf, lastsectorid, lastsectornewsize);
   if (ret<0)
-    return psync_fs_unlock_ret(of, ret);
+    return ret;
   of->currentsize=size;
   if (!of->newfile)
     psync_interval_tree_cut_end(&of->writeintervals, psync_fs_crypto_crypto_size(size));
   debug(D_NOTICE, "file %s truncated to %lu", of->currentname, (unsigned long)size);
-  return psync_fs_unlock_ret(of, 0);
+  return 0;
 }
 
 static void psync_fs_extender_thread(void *ptr){
@@ -1551,8 +1552,8 @@ static void psync_fs_extender_thread(void *ptr){
   ext=of->extender;
   while (!ext->kill && ext->extendedto<ext->extendto){
     assert(of->modified);
-    if (ext->extendto-ext->extendedto>256*1024){
-      cs=256*1024;
+    if (ext->extendto-ext->extendedto>PSYNC_CRYPTO_EXTENDER_STEP){
+      cs=PSYNC_CRYPTO_EXTENDER_STEP;
       if (ext->extendedto%PSYNC_CRYPTO_SECTOR_SIZE)
         cs-=ext->extendedto%PSYNC_CRYPTO_SECTOR_SIZE;
     }
@@ -1570,6 +1571,7 @@ static void psync_fs_extender_thread(void *ptr){
     ext->extendedto+=cs;
     pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "extender at %lu of %lu", (unsigned long)ext->extendedto, (unsigned long)ext->extendto);
+    psync_yield_cpu();
     pthread_mutex_lock(&of->mutex);
     if (ext->waiters){
       pthread_cond_broadcast(&ext->cond);
