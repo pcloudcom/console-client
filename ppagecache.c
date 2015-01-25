@@ -2889,9 +2889,14 @@ static void psync_pagecache_upload_to_cache(){
       psync_pagecache_new_upload_to_cache(taskid, hash);
     else if (type==PAGE_TASK_TYPE_MODIFY)
       psync_pagecache_modify_to_cache(taskid, hash, oldhash);
+    psync_sql_start_transaction();
+    res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
     res=psync_sql_prep_statement("DELETE FROM pagecachetask WHERE id=?");
     psync_sql_bind_uint(res, 1, id);
     psync_sql_run_free(res);
+    psync_sql_commit_transaction();
     psync_pagecache_check_free_space();
   }
 }

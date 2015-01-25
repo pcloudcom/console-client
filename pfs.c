@@ -574,6 +574,8 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
     debug(D_NOTICE, "could not stat file %s", filename);
     psync_fs_relock_fileid(cr->fileid);
     stret=psync_stat(filename, &st);
+    if (stret)
+      debug(D_NOTICE, "could not stat file %s even after relocking, error %d", filename, (int)psync_fs_err());
   }
   psync_free(filename);
   if (stret)

@@ -131,6 +131,17 @@ INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_D
 COMMIT;\
 "
 
+/*
+ * fstask.status:
+ *   0 - normal task for execution
+ *   1 - file is still open, will switch to 0 on close
+ *   2 - large upload task
+ *   3 - upload task that is finished but still not added to cache
+ *   11- cancelled task
+ * 
+ * 
+ */
+
 static const char *psync_db_upgrade[PSYNC_DATABASE_VERSION]={
   "",
   "BEGIN;\

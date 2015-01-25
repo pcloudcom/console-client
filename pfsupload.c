@@ -357,7 +357,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   psync_sql_bind_uint(sql, 1, fileid);
   psync_sql_bind_int(sql, 2, -taskid);
   psync_sql_run_free(sql);
-  sql=psync_sql_prep_statement("DELETE FROM fstask WHERE id=? AND int1=?");
+  sql=psync_sql_prep_statement("UPDATE fstask SET status=3 WHERE id=? AND int1=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_bind_uint(sql, 2, writeid);
   psync_sql_run_free(sql);
@@ -1340,30 +1340,67 @@ static psync_cancel_task_ptr psync_cancel_task_func[]={
   psync_cancel_task_unlink
 };
 
+static void pr_del_dep(uint64_t taskid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  psync_sql_run_free(res);
+  if (psync_sql_affected_rows())
+    upload_wakes++;
+}
+
+static void pr_del_task(uint64_t taskid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  psync_sql_run_free(res);
+}
+
+static void pr_set_task_status3(uint64_t taskid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("UPDATE fstask SET status=3 WHERE id=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  psync_sql_run_free(res);
+}
+
+static void pr_update_folderid(psync_folderid_t newfolderid, psync_fsfolderid_t oldfolderid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("UPDATE fstask SET folderid=? WHERE folderid=?");
+  psync_sql_bind_uint(res, 1, newfolderid);
+  psync_sql_bind_int(res, 2, oldfolderid);
+  psync_sql_run_free(res);
+}
+
+static void pr_update_sfolderid(psync_folderid_t newfolderid, psync_fsfolderid_t oldfolderid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("UPDATE fstask SET sfolderid=? WHERE sfolderid=?");
+  psync_sql_bind_uint(res, 1, newfolderid);
+  psync_sql_bind_int(res, 2, oldfolderid);
+  psync_sql_run_free(res);
+}
+
+static void pr_update_fileid(psync_fileid_t newfileid, psync_fsfileid_t oldfileid){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
+  psync_sql_bind_uint(res, 1, newfileid);
+  psync_sql_bind_int(res, 2, oldfileid);
+  psync_sql_run_free(res);
+}
+
 static void psync_fsupload_process_tasks(psync_list *tasks){
   fsupload_task_t *task;
-  psync_sql_res *del, *dep, *fol, *sfol, *fil;
   uint32_t creats, cancels;
   creats=0;
   cancels=0;
   psync_sql_start_transaction();
-  del=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
-  dep=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
-  fol=psync_sql_prep_statement("UPDATE fstask SET folderid=? WHERE folderid=?");
-  sfol=psync_sql_prep_statement("UPDATE fstask SET sfolderid=? WHERE sfolderid=?");
-  fil=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_list_for_each_element (task, tasks, fsupload_task_t, list){
     if (task->ccreat)
       creats++;
     if (task->status==11){
       if (psync_cancel_task_func[task->type] && psync_cancel_task_func[task->type](task))
         continue;
-      psync_sql_bind_uint(dep, 1, task->id);
-      psync_sql_run(dep);
-      if (psync_sql_affected_rows())
-        upload_wakes++;
-      psync_sql_bind_uint(del, 1, task->id);
-      psync_sql_run(del);
+      pr_del_dep(task->id);
+      pr_del_task(task->id);
       cancels++;
     }
     else if (task->res){
@@ -1371,33 +1408,20 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
         debug(D_WARNING, "processing task %lu of type %lu failed", (unsigned long)task->id, (unsigned long)task->type);
       else{
         if (task->type==PSYNC_FS_TASK_MKDIR){
-          psync_sql_bind_uint(fol, 1, task->int2);
-          psync_sql_bind_int(fol, 2, -task->id);
-          psync_sql_run(fol);
-          psync_sql_bind_uint(sfol, 1, task->int2);
-          psync_sql_bind_int(sfol, 2, -task->id);
-          psync_sql_run(sfol);
+          pr_update_folderid(task->int2, -(psync_fsfolderid_t)task->id);
+          pr_update_sfolderid(task->int2, -(psync_fsfolderid_t)task->id);
         }
+        pr_del_dep(task->id);
         if (task->type==PSYNC_FS_TASK_CREAT){
-          psync_sql_bind_uint(fil, 1, task->int2);
-          psync_sql_bind_int(fil, 2, -task->id);
-          psync_sql_run(fil);
+          pr_update_fileid(task->int2, -(psync_fsfileid_t)task->id);
+          pr_set_task_status3(task->id);
         }
-        psync_sql_bind_uint(dep, 1, task->id);
-        psync_sql_run(dep);
-        if (psync_sql_affected_rows())
-          upload_wakes++;
-        psync_sql_bind_uint(del, 1, task->id);
-        psync_sql_run(del);
+        else
+          pr_del_task(task->id);
       }
       psync_free(task->res);
     }
   }
-  psync_sql_free_result(fil);
-  psync_sql_free_result(sfol);
-  psync_sql_free_result(fol);
-  psync_sql_free_result(dep);
-  psync_sql_free_result(del);
   psync_sql_commit_transaction();
   if (creats){
     psync_upload_dec_uploads_cnt(creats);
