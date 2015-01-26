@@ -802,7 +802,7 @@ void psync_stop_localscan(){
 }
 
 void psync_resume_localscan(){
-  pthread_mutex_unlock(&scan_mutex);
+  pthread_mutex_lock(&scan_mutex);
   scan_stoppers--;
   if (!scan_stoppers)
     pthread_cond_signal(&scan_cond);
