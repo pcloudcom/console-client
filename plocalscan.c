@@ -775,7 +775,6 @@ static void scanner_thread(){
     lastscan=psync_current_time;
     scanner_scan(w);
     w=scanner_wait();
-
   }
 }
 
