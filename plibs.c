@@ -1296,21 +1296,32 @@ void psync_free_after_sec(void *ptr, uint32_t seconds){
 int psync_match_pattern(const char *name, const char *pattern, size_t plen){
   size_t i;
   for (i=0; i<plen; i++){
-    if (pattern[i]=='?')
-      continue;
-    else if (pattern[i]=='*'){
-      i++;
-      plen-=i;
-      if (!plen)
-        return 1;
-      pattern+=i;
-      do {
-        if (psync_match_pattern(name, pattern, plen))
+    if (pattern[i]=='*'){
+      name+=i;
+      while (1){
+        if (++i==plen)
           return 1;
-      } while (*name++);
-      return 0;
+        switch (pattern[i]){
+          case '?':
+            if (!*name++)
+              return 0;
+          case '*':
+            break;
+          default:
+            name=strchr(name, pattern[i]);
+            pattern+=i+1;
+            plen-=i+1;
+            while (name){
+              name++;
+              if (psync_match_pattern(name, pattern, plen))
+                return 1;
+              name=strchr(name, *(pattern-1));
+            }
+            return 0;
+        }
+      }
     }
-    else if (pattern[i]!=name[i])
+    else if (!name[i] || (pattern[i]!=name[i] && pattern[i]!='?'))
       return 0;
   }
   return name[i]==0;
