@@ -1120,6 +1120,9 @@ static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const c
     return -EINVAL;
   if (unlikely(!size))
     return 0;
+  ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
+  if (unlikely_log(ret))
+    return psync_fs_unlock_ret(of, ret);
   if (unlikely(of->currentsize<offset)){
     ret=psync_fs_newfile_fillzero(of, offset-of->currentsize, of->currentsize);
     if (ret)
