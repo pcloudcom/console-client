@@ -32,7 +32,7 @@
 #include <string.h>
 #include <ctype.h>
 
-static int find_in_dict(const char *pwd, size_t len){
+static int find_in_dict(const unsigned char *pwd, size_t len){
   size_t hi, lo, med, l;
   int c;
   if (len>8)
@@ -86,7 +86,7 @@ static int is_punct(int c){
   }\
 } while (0)
 
-static uint64_t trailing_num_score(uint64_t num, size_t numlen, const char *nstr){
+static uint64_t trailing_num_score(uint64_t num, size_t numlen, const unsigned char *nstr){
   uint64_t score, oscore;
   size_t i, j;
   if (numlen==1){
@@ -136,7 +136,7 @@ static int keyboard_buddies(int ch1, int ch2){
   return f && (f[1]==ch2 || (f>kb && *(f-1)==ch2));
 }
 
-static uint64_t score_variants(const char *password, const char *lpassword, const char *npassword, size_t plen){
+static uint64_t score_variants(const unsigned char *password, const unsigned char *lpassword, const unsigned char *npassword, size_t plen){
   uint64_t score, oscore;
   size_t off, r, numchars, n, j;
   int d, haslow, hasup, hasnum, haspunct, hasspace, hasother;
@@ -255,12 +255,13 @@ static uint64_t uint_sqrt(uint64_t n){
   return m;
 }
 
-uint64_t psync_password_score(const char *password){
+uint64_t psync_password_score(const char *cpassword){
   uint64_t score, oscore, num;
-  char *lpwd, *ldpwd;
+  char unsigned *lpwd, *ldpwd, *password;
   size_t plen, nlen;
   char ch;
-  plen=strlen(password);
+  plen=strlen(cpassword);
+  password=(unsigned char *)cpassword;
   score=1;
   // trailing ! is too common
   while (plen && password[plen-1]=='!'){
@@ -310,8 +311,8 @@ uint64_t psync_password_score(const char *password){
   }
   if (!plen)
     return score;
-  lpwd=psync_new_cnt(char, plen);
-  ldpwd=psync_new_cnt(char, plen);
+  lpwd=psync_new_cnt(unsigned char, plen);
+  ldpwd=psync_new_cnt(unsigned char, plen);
   for (nlen=0; nlen<plen; nlen++){
     lpwd[nlen]=tolower(password[nlen]);
     if (lpwd[nlen]=='0')
