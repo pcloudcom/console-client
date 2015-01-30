@@ -1734,7 +1734,7 @@ void psync_fstask_init(){
   psync_sql_run_free(res);
   res=psync_sql_prep_statement("UPDATE fstask SET status=11 WHERE status=12");
   psync_sql_run_free(res);
-  res=psync_sql_query("SELECT id, type, folderid, fileid, text1, text2, int1, int2, sfolderid FROM fstask ORDER BY id");
+  res=psync_sql_query("SELECT id, type, folderid, fileid, text1, text2, int1, int2, sfolderid FROM fstask WHERE status NOT IN (3) ORDER BY id");
   while ((row=psync_sql_fetch_row(res))){
     tp=psync_get_number(row[1]);
     if (!tp || tp>=ARRAY_SIZE(psync_init_task_func)){
