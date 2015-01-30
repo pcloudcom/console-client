@@ -88,10 +88,13 @@ typedef off_t fuse_off_t;
 
 #if defined(P_OS_LINUX)
 #define PSYNC_FS_ERR_CRYPTO_EXPIRED EROFS
+#define PSYNC_FS_ERR_MOVE_ACROSS_CRYPTO EXDEV
 #elif defined(P_OS_WINDOWS)
 #define PSYNC_FS_ERR_CRYPTO_EXPIRED EACCES
+#define PSYNC_FS_ERR_MOVE_ACROSS_CRYPTO EACCES
 #else
 #define PSYNC_FS_ERR_CRYPTO_EXPIRED EIO
+#define PSYNC_FS_ERR_MOVE_ACROSS_CRYPTO EXDEV
 #endif
 
 static struct fuse_chan *psync_fuse_channel=NULL;
@@ -2514,7 +2517,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   if (!fold_path || !fnew_path)
     goto err_enoent;
   if ((fold_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)!=(fnew_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)){
-    ret=-EXDEV;
+    ret=-PSYNC_FS_ERR_MOVE_ACROSS_CRYPTO;
     goto finish;
   }
   folder=psync_fstask_get_folder_tasks_locked(fold_path->folderid);
