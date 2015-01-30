@@ -807,8 +807,10 @@ static psync_symmetric_key_t psync_crypto_get_file_symkey_locked(psync_fileid_t 
   psync_symmetric_key_t symkey;
   psync_get_string_id(buff, "DKEY", fileid);
   symkey=(psync_symmetric_key_t)psync_cache_get(buff);
-  if (symkey)
+  if (symkey){
+    debug(D_NOTICE, "got key for file %lu from cache", (unsigned long)fileid);
     return symkey;
+  }
   enckey=psync_crypto_get_file_enc_key(fileid, nonetwork);
   if (unlikely_log(psync_crypto_is_error(enckey)))
     return (psync_symmetric_key_t)enckey;

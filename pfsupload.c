@@ -39,6 +39,7 @@
 #include "pfsxattr.h"
 #include "pupload.h"
 #include "pfscrypto.h"
+#include "pcache.h"
 #include <string.h>
 
 typedef struct {
@@ -305,6 +306,7 @@ static int handle_upload_api_error(uint64_t result, fsupload_task_t *task){
 }
 
 static void set_key_for_fileid(psync_fileid_t fileid, const char *key){
+  char buff[16];
   psync_sql_res *res;
   unsigned char *enckey;
   size_t enckeylen;
@@ -316,6 +318,8 @@ static void set_key_for_fileid(psync_fileid_t fileid, const char *key){
     psync_sql_run_free(res);
     psync_free(enckey);
   }
+  psync_get_string_id(buff, "DKEY", fileid);
+  psync_cache_del(buff);
 }
 
 static int save_meta(const binresult *meta, psync_folderid_t folderid, const char *name, uint64_t taskid, uint64_t writeid, int newfile, 
