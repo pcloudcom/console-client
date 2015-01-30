@@ -75,6 +75,7 @@ void psync_status_recalc_to_upload_async();
 uint32_t psync_status_get(uint32_t statusid);
 void psync_set_status(uint32_t statusid, uint32_t status);
 void psync_wait_status(uint32_t statusid, uint32_t status);
+void psync_terminate_status_waiters();
 void psync_wait_statuses_array(const uint32_t *combinedstatuses, uint32_t cnt);
 void psync_wait_statuses(uint32_t first, ...);
 int psync_statuses_ok_array(const uint32_t *combinedstatuses, uint32_t cnt);
