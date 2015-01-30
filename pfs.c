@@ -86,6 +86,12 @@ typedef off_t fuse_off_t;
 #define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
 #endif
 
+#if defined(P_OS_LINUX)
+#define PSYNC_FS_ERR_CRYPTO_EXPIRED EROFS
+#else
+#define PSYNC_FS_ERR_CRYPTO_EXPIRED EIO
+#endif
+
 static struct fuse_chan *psync_fuse_channel=NULL;
 static struct fuse *psync_fuse=NULL;
 static char *psync_current_mountpoint=NULL;
@@ -1469,6 +1475,12 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     return ret;
   }
   if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
+    if (psync_crypto_isexpired()){
+      psync_fstask_release_folder_tasks_locked(folder);
+      psync_sql_unlock();
+      psync_free(fpath);
+      return -PRINT_RETURN_CONST(PSYNC_FS_ERR_CRYPTO_EXPIRED);
+    }
     encsymkey=psync_cloud_crypto_get_new_encoded_and_plain_key(0, &encsymkeylen, &symkey);
     if (unlikely_log(psync_crypto_is_error(encsymkey))){
       psync_fstask_release_folder_tasks_locked(folder);
@@ -1849,11 +1861,13 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
       return 1;
     }
   }
-  if (of->encrypted)
-    size=psync_fs_crypto_crypto_size(of->initialsize);
-  else
-    size=of->initialsize;
   if (of->encrypted){
+    if (unlikely(psync_crypto_isexpired())){
+      psync_sql_unlock();
+      pthread_mutex_unlock(&of->mutex);
+      return -PRINT_RETURN_CONST(PSYNC_FS_ERR_CRYPTO_EXPIRED);
+    }
+    size=psync_fs_crypto_crypto_size(of->initialsize);
     encsymkey=psync_cloud_crypto_get_file_encoded_key(of->fileid, &encsymkeylen);
     if (unlikely_log(psync_crypto_is_error(encsymkey))){
       psync_sql_unlock();
@@ -1864,6 +1878,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   else{
     encsymkey=NULL;
     encsymkeylen=0;
+    size=of->initialsize;
   }
   if (size==0 || (size<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE && 
         psync_pagecache_have_all_pages_in_cache(of->hash, size) && !psync_pagecache_lock_pages_in_cache())){
@@ -2195,9 +2210,10 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_CREATE))
     ret=-EACCES;
-  else{
+  else if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED && psync_crypto_isexpired())
+    ret=-PSYNC_FS_ERR_CRYPTO_EXPIRED;
+  else
     ret=psync_fstask_mkdir(fpath->folderid, fpath->name, fpath->flags);
-  }
   psync_sql_unlock();
   psync_free(fpath);
   debug(D_NOTICE, "mkdir %s=%d", path, ret);

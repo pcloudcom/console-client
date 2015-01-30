@@ -199,6 +199,7 @@ uint32_t psync_download_state(){
 void psync_destroy(){
   psync_do_run=0;
   psync_fs_stop();
+  psync_terminate_status_waiters();
   psync_send_status_update();
   psync_timer_wake();
   psync_timer_notify_exception();

@@ -228,11 +228,22 @@ void psync_set_status(uint32_t statusid, uint32_t status){
 
 void psync_wait_status(uint32_t statusid, uint32_t status){
   pthread_mutex_lock(&statusmutex);
-  while ((statuses[statusid]&status)==0){
+  while ((statuses[statusid]&status)==0 && psync_do_run){
     status_waiters++;
     pthread_cond_wait(&statuscond, &statusmutex);
     status_waiters--;
   }
+  pthread_mutex_unlock(&statusmutex);
+  if (unlikely(!psync_do_run)){
+    debug(D_NOTICE, "exiting");
+    pthread_exit(NULL);
+  }
+}
+
+void psync_terminate_status_waiters(){
+  pthread_mutex_lock(&statusmutex);
+  if (status_waiters)
+    pthread_cond_broadcast(&statuscond);
   pthread_mutex_unlock(&statusmutex);
 }
 
