@@ -37,6 +37,7 @@ void *psync_cache_get(const char *key);
 int psync_cache_has(const char *key);
 void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys);
 void psync_cache_add_free(char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys);
+void psync_cache_del(const char *key);
 void psync_cache_clean_all();
 
 #endif
