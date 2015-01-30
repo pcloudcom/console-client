@@ -744,6 +744,11 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
     psync_fstask_mkdir_t *mk;
     mk=psync_fstask_find_mkdir(folder, fpath->name, 0);
     if (mk){
+      if (mk->flags&PSYNC_FOLDER_FLAG_INVISIBLE){
+        psync_sql_rdunlock();
+        psync_free(fpath);
+        return -ENOENT;
+      }
       psync_mkdir_to_folder_stat(mk, stbuf);
       psync_sql_rdunlock();
       psync_free(fpath);
@@ -878,6 +883,8 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       if (unlikely_log(strlen(psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name)>FS_MAX_ACCEPTABLE_FILENAME_LEN))
         continue;
 #endif
+      if (psync_tree_element(trel, psync_fstask_mkdir_t, tree)->flags&PSYNC_FOLDER_FLAG_INVISIBLE)
+        continue;
       psync_mkdir_to_folder_stat(psync_tree_element(trel, psync_fstask_mkdir_t, tree), &st);
       filler_decoded(dec, filler, buf, psync_tree_element(trel, psync_fstask_mkdir_t, tree)->name, &st, 0);
     }
@@ -2966,6 +2973,7 @@ static void psync_fs_init_once(){
   psync_setup_signals();
 #endif
   psync_fsstatic_add_files();
+  psync_fstask_add_banned_folders();
 }
 
 static void psync_fuse_thread(){

@@ -154,4 +154,6 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
 
 void psync_fstask_clean();
 
+void psync_fstask_add_banned_folders();
+
 #endif

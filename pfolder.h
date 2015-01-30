@@ -35,6 +35,7 @@
 #define PSYNC_INVALID_PATH NULL
 
 #define PSYNC_FOLDER_FLAG_ENCRYPTED 1
+#define PSYNC_FOLDER_FLAG_INVISIBLE 2
 
 psync_folderid_t psync_get_folderid_by_path(const char *path) PSYNC_NONNULL(1) PSYNC_PURE;
 psync_folderid_t psync_get_folderid_by_path_or_create(const char *path) PSYNC_NONNULL(1);

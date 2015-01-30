@@ -158,10 +158,14 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
       elen=len;
     }
     row=psync_sql_fetch_rowint(res);
-    folder=psync_fstask_get_folder_tasks_locked(cfolderid);
+    folder=psync_fstask_get_folder_tasks_rdlocked(cfolderid);
     if (folder){
       char *name=psync_strndup(ename, elen);
       if ((mk=psync_fstask_find_mkdir(folder, name, 0))){
+        if (mk->flags&PSYNC_FOLDER_FLAG_INVISIBLE){
+          psync_free(name);
+          break;
+        }
         cfolderid=mk->folderid;
         flags=mk->flags;
         hasit=1;
@@ -175,7 +179,6 @@ psync_fspath_t *psync_fsfolder_resolve_path(const char *path){
       }
       else
         hasit=0;
-      psync_fstask_release_folder_tasks_locked(folder);
       psync_free(name);
     }
     else{

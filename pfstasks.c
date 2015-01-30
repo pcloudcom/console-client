@@ -327,12 +327,16 @@ int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name, uint32_t f
     psync_sql_free_result(res);
     if (row && !psync_fstask_find_rmdir(folder, name, 0)){
       psync_fstask_release_folder_tasks_locked(folder);
-      return -EEXIST;
+      return -PRINT_RETURN_CONST(EEXIST);
     }
   }
-  if (psync_fstask_find_mkdir(folder, name, 0)){
+  if ((task=psync_fstask_find_mkdir(folder, name, 0))){
+    depend=task->flags;
     psync_fstask_release_folder_tasks_locked(folder);
-    return -EEXIST;
+    if (depend&PSYNC_FOLDER_FLAG_INVISIBLE)
+      return -PRINT_RETURN_CONST(EACCES);
+    else
+      return -PRINT_RETURN_CONST(EEXIST);
   }
   ctime=psync_timer_time();
   if (folderflags&PSYNC_FOLDER_FLAG_ENCRYPTED){
@@ -1724,6 +1728,38 @@ void psync_fstask_clean(){
     }
   }
   psync_sql_unlock();
+}
+
+void psync_fstask_add_banned_folder(psync_fsfolderid_t folderid, const char *name){
+  psync_fstask_folder_t *folder;
+  psync_fstask_mkdir_t *mk;
+  psync_fstask_rmdir_t *rm;
+  size_t len;
+  len=strlen(name)+1;
+  mk=(psync_fstask_mkdir_t *)psync_malloc(offsetof(psync_fstask_mkdir_t, name)+len);
+  mk->taskid=0;
+  mk->ctime=mk->mtime=0;
+  mk->folderid=0;
+  mk->subdircnt=0;
+  mk->flags=PSYNC_FOLDER_FLAG_INVISIBLE;
+  memcpy(mk->name, name, len);
+  rm=(psync_fstask_rmdir_t *)psync_malloc(offsetof(psync_fstask_rmdir_t, name)+len);
+  rm->taskid=0;
+  rm->folderid=0;
+  memcpy(rm->name, name, len);
+  psync_sql_lock();
+  folder=psync_fstask_get_or_create_folder_tasks_locked(folderid);
+  psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &mk->tree);
+  psync_fstask_insert_into_tree(&folder->rmdirs, offsetof(psync_fstask_rmdir_t, name), &rm->tree);
+  folder->taskscnt+=2;
+  psync_fstask_release_folder_tasks_locked(folder);
+  psync_sql_unlock();
+}
+
+void psync_fstask_add_banned_folders(){
+#if defined(P_OS_MACOSX)
+  psync_fstask_add_banned_folder(0, ".TemporaryItems");
+#endif
 }
 
 void psync_fstask_init(){
