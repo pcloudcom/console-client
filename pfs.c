@@ -88,6 +88,8 @@ typedef off_t fuse_off_t;
 
 #if defined(P_OS_LINUX)
 #define PSYNC_FS_ERR_CRYPTO_EXPIRED EROFS
+#elif defined(P_OS_WINDOWS)
+#define PSYNC_FS_ERR_CRYPTO_EXPIRED EACCES
 #else
 #define PSYNC_FS_ERR_CRYPTO_EXPIRED EIO
 #endif
