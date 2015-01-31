@@ -221,7 +221,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
     if (psync_sql_affected_rows())
       ret=0;
     else
-      ret=-EEXIST;
+      ret=-PRINT_RETURN_CONST(EEXIST);
   }
   else if (flags&XATTR_REPLACE){
     res=psync_sql_prep_statement("UPDATE fsxattr SET value=? WHERE objectid=? AND name=?");
@@ -232,7 +232,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
     if (psync_sql_affected_rows())
       ret=0;
     else
-      ret=-ENOATTR;
+      ret=-PRINT_RETURN_CONST(ENOATTR);
   }
   else{
     res=psync_sql_prep_statement("REPLACE INTO fsxattr (objectid, name, value) VALUES (?, ?, ?)");
@@ -243,7 +243,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
     ret=0;
   }
   psync_sql_unlock();
-  return PRINT_NEG_RETURN(ret);
+  return ret;
 }
 
 int psync_fs_getxattr(const char *path, const char *name, char *value, size_t size PFS_XATTR_IGN){

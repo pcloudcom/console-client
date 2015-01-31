@@ -157,7 +157,6 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       fl=psync_tree_element(tr, psync_openfile_t, tree);
       pthread_mutex_lock(&fl->mutex);
       if (fl->writeid==writeid){
-        debug(D_NOTICE, "updating fileid %ld to %lu, hash %lu", (long)fileid, (unsigned long)newfileid, (unsigned long)hash);
         if (fl->encrypted){
           if (fl->logfile){
             psync_file_close(fl->logfile);
@@ -168,7 +167,9 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
             psync_interval_tree_free(fl->authenticatedints);
             fl->authenticatedints=NULL;
           }
+          size=psync_fs_crypto_plain_size(size);
         }
+        debug(D_NOTICE, "updating fileid %ld to %lu, hash %lu size %lu", (long)fileid, (unsigned long)newfileid, (unsigned long)hash, (unsigned long)size);
         fl->fileid=newfileid;
         fl->remotefileid=newfileid;
         fl->hash=hash;
