@@ -525,10 +525,10 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
         debug(D_WARNING, "crypto_getfilekey returned error %lu", result);
         goto err4;
       }
-      debug(D_NOTICE, "got key for fileid %lu", (unsigned long)request->fileid);
       enc=psync_cloud_crypto_get_file_encoder_from_binresult(request->fileid, ret);
-      if (psync_crypto_is_error(enc))
+      if (unlikely_log(psync_crypto_is_error(enc)))
         goto err4;
+      debug(D_NOTICE, "got key for fileid %lu", (unsigned long)request->fileid);
       psync_free(ret);
       pthread_mutex_lock(&request->of->mutex);
       if (likely_log(request->of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)){

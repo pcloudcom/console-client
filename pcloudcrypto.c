@@ -611,15 +611,14 @@ static void set_crypto_err_msg(const binresult *res){
 
 typedef struct {
   psync_encrypted_symmetric_key_t key;
-  const char *sql;
-  psync_fileorfolderid_t id;
-} insert_key_task;
+  psync_folderid_t id;
+} insert_folder_key_task;
 
-static void save_task(void *ptr){
-  insert_key_task *t;
+static void save_folder_key_task(void *ptr){
+  insert_folder_key_task *t;
   psync_sql_res *res;
-  t=(insert_key_task *)ptr;
-  res=psync_sql_prep_statement(t->sql);
+  t=(insert_folder_key_task *)ptr;
+  res=psync_sql_prep_statement("REPLACE INTO cryptofolderkey (folderid, enckey) VALUES (?, ?)");
   psync_sql_bind_uint(res, 1, t->id);
   psync_sql_bind_blob(res, 2, (const char *)t->key->data, t->key->datalen);
   psync_sql_run_free(res);
@@ -629,21 +628,39 @@ static void save_task(void *ptr){
 
 static void save_folder_key_to_db(psync_folderid_t folderid, psync_encrypted_symmetric_key_t enckey){
   // we are likely holding (few) read locks on the database, so executing here will deadlock
-  insert_key_task *t;
-  t=psync_new(insert_key_task);
+  insert_folder_key_task *t;
+  t=psync_new(insert_folder_key_task);
   t->key=psync_ssl_copy_encrypted_symmetric_key(enckey);
-  t->sql="REPLACE INTO cryptofolderkey (folderid, enckey) VALUES (?, ?)";
   t->id=folderid;
-  psync_run_thread1("save key to db task", save_task, t);
+  psync_run_thread1("save folder key to db task", save_folder_key_task, t);
 }
 
-static void save_file_key_to_db(psync_fileid_t fileid, psync_encrypted_symmetric_key_t enckey){
-  insert_key_task *t;
-  t=psync_new(insert_key_task);
+typedef struct {
+  psync_encrypted_symmetric_key_t key;
+  psync_fileid_t id;
+  uint64_t hash;
+} insert_file_key_task;
+
+static void save_file_key_task(void *ptr){
+  insert_file_key_task *t;
+  psync_sql_res *res;
+  t=(insert_file_key_task *)ptr;
+  res=psync_sql_prep_statement("REPLACE INTO cryptofilekey (fileid, hash, enckey) VALUES (?, ?, ?)");
+  psync_sql_bind_uint(res, 1, t->id);
+  psync_sql_bind_uint(res, 2, t->hash);
+  psync_sql_bind_blob(res, 3, (const char *)t->key->data, t->key->datalen);
+  psync_sql_run_free(res);
+  psync_free(t->key);
+  psync_free(t);
+}
+
+static void save_file_key_to_db(psync_fileid_t fileid, uint64_t hash, psync_encrypted_symmetric_key_t enckey){
+  insert_file_key_task *t;
+  t=psync_new(insert_file_key_task);
   t->key=psync_ssl_copy_encrypted_symmetric_key(enckey);
-  t->sql="REPLACE INTO cryptofilekey (fileid, enckey) VALUES (?, ?)";
   t->id=fileid;
-  psync_run_thread1("save key to db task", save_task, t);
+  t->hash=hash;
+  psync_run_thread1("save file key to db task", save_file_key_task, t);
 }
 
 static psync_encrypted_symmetric_key_t psync_crypto_download_folder_enc_key(psync_folderid_t folderid){
@@ -728,6 +745,7 @@ static psync_encrypted_symmetric_key_t psync_crypto_download_file_enc_key(psync_
     psync_free(res);
     return (psync_encrypted_symmetric_key_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_API_ERR_INTERNAL));
   }
+  result=psync_find_result(res, "hash", PARAM_NUM)->num;
   b64key=psync_find_result(res, "key", PARAM_STR);
   key=psync_base64_decode((const unsigned char *)b64key->str, b64key->length, &keylen);
   psync_free(res);
@@ -736,7 +754,7 @@ static psync_encrypted_symmetric_key_t psync_crypto_download_file_enc_key(psync_
   ret=psync_ssl_alloc_encrypted_symmetric_key(keylen);
   memcpy(ret->data, key, keylen);
   psync_free(key);
-  save_file_key_to_db(fileid, ret);
+  save_file_key_to_db(fileid, result, ret);
   return ret;
 }
 
@@ -1243,6 +1261,7 @@ psync_crypto_aes256_sector_encoder_decoder_t psync_cloud_crypto_get_file_encoder
   const binresult *b64key;
   unsigned char *key;
   psync_encrypted_symmetric_key_t esym;
+  psync_symmetric_key_t symkey;
   psync_crypto_aes256_sector_encoder_decoder_t enc;
   size_t keylen;
   b64key=psync_find_result(res, "key", PARAM_STR);
@@ -1252,14 +1271,18 @@ psync_crypto_aes256_sector_encoder_decoder_t psync_cloud_crypto_get_file_encoder
   esym=psync_ssl_alloc_encrypted_symmetric_key(keylen);
   memcpy(esym->data, key, keylen);
   psync_free(key);
-  save_file_key_to_db(fileid, esym);
-  psync_free(esym);
+  save_file_key_to_db(fileid, psync_find_result(res, "hash", PARAM_NUM)->num, esym);
   pthread_rwlock_rdlock(&crypto_lock);
   if (!crypto_started_l)
     enc=(psync_crypto_aes256_sector_encoder_decoder_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_NOT_STARTED));
-  else
+  else{
+    // save_file_key_to_db runs thread to save to db, that's why we insert decrypted key to cache, so psync_crypto_get_file_encoder_locked finds it
+    symkey=psync_ssl_rsa_decrypt_symmetric_key(crypto_privkey, esym);
+    psync_crypto_release_file_symkey_locked(fileid, symkey);
     enc=psync_crypto_get_file_encoder_locked(fileid, 0);
+  }
   pthread_rwlock_unlock(&crypto_lock);
+  psync_free(esym);
   return enc;
 }
 

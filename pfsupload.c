@@ -305,16 +305,17 @@ static int handle_upload_api_error(uint64_t result, fsupload_task_t *task){
   return handle_upload_api_error_taskid(result, task->id);
 }
 
-static void set_key_for_fileid(psync_fileid_t fileid, const char *key){
+static void set_key_for_fileid(psync_fileid_t fileid, uint64_t hash, const char *key){
   char buff[16];
   psync_sql_res *res;
   unsigned char *enckey;
   size_t enckeylen;
   enckey=psync_base64_decode((const unsigned char *)key, strlen(key), &enckeylen);
   if (likely_log(enckey)){
-    res=psync_sql_prep_statement("REPLACE INTO cryptofilekey (fileid, enckey) VALUES (?, ?)");
+    res=psync_sql_prep_statement("REPLACE INTO cryptofilekey (fileid, hash, enckey) VALUES (?, ?, ?)");
     psync_sql_bind_uint(res, 1, fileid);
-    psync_sql_bind_blob(res, 2, (char *)enckey, enckeylen);
+    psync_sql_bind_uint(res, 2, hash);
+    psync_sql_bind_blob(res, 3, (char *)enckey, enckeylen);
     psync_sql_run_free(res);
     psync_free(enckey);
   }
@@ -348,7 +349,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
     psync_fstask_file_modified(folderid, taskid, name, fileid);
   }
   if (key)
-    set_key_for_fileid(fileid, key);
+    set_key_for_fileid(fileid, hash, key);
   sql=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
   psync_sql_bind_uint(sql, 1, taskid);
   psync_sql_run_free(sql);
@@ -1048,7 +1049,7 @@ static int psync_send_task_modify(psync_socket *api, fsupload_task_t *task){
 }
 
 static int psync_process_task_creat(fsupload_task_t *task){
-  uint64_t result;
+  uint64_t result, hash;
   const binresult *meta;
   psync_fileid_t fileid;
   result=psync_find_result(task->res, "result", PARAM_NUM)->num;
@@ -1056,15 +1057,16 @@ static int psync_process_task_creat(fsupload_task_t *task){
     return handle_upload_api_error(result, task);
   meta=psync_find_result(task->res, "metadata", PARAM_ARRAY)->array[0];
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
-  if (psync_fs_update_openfile(task->id, task->int1, fileid, psync_find_result(meta, "hash", PARAM_NUM)->num, psync_find_result(meta, "size", PARAM_NUM)->num)){
+  hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  if (psync_fs_update_openfile(task->id, task->int1, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num)){
     debug(D_NOTICE, "file %lu/%s changed while uploading, failing task", (unsigned long)task->folderid, task->text1);
     return -1;
   }
   psync_ops_create_file_in_db(meta);
   psync_fstask_file_created(task->folderid, task->id, task->text1, fileid);
   if (task->text2)
-    set_key_for_fileid(fileid, task->text2);
-  psync_pagecache_creat_to_pagecache(task->id, psync_find_result(meta, "hash", PARAM_NUM)->num);
+    set_key_for_fileid(fileid, hash, task->text2);
+  psync_pagecache_creat_to_pagecache(task->id, hash);
   psync_fs_task_to_file(task->id, fileid);
   task->int2=fileid;
   debug(D_NOTICE, "file %lu/%s uploaded", (unsigned long)task->folderid, task->text1);

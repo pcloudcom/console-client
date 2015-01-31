@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 9
+#define PSYNC_DATABASE_VERSION 10
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, cre
   data TEXT, PRIMARY KEY (hostname, port, prio)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS cryptofolderkey (folderid INTEGER PRIMARY KEY REFERENCES folder(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
-CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
+CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, hash INTEGER NOT NULL, enckey BLOB NOT NULL);\
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
@@ -202,6 +202,11 @@ COMMIT;",
   "BEGIN;\
 ALTER TABLE pagecache ADD crc INTEGER;\
 UPDATE setting SET value=9 WHERE id='dbversion';\
+COMMIT;",
+  "BEGIN;\
+DROP TABLE cryptofilekey;\
+CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, hash INTEGER NOT NULL, enckey BLOB NOT NULL);\
+UPDATE setting SET value=10 WHERE id='dbversion';\
 COMMIT;"
 };
 

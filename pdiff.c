@@ -847,7 +847,7 @@ static void process_modifyfile(const binresult *entry){
   static psync_sql_res *sq=NULL, *st=NULL;
   psync_sql_res *res;
   psync_full_result_int *fres1, *fres2;
-  const binresult *meta, *name;
+  const binresult *meta, *name, *enc;
   const char *oldname;
   size_t oldnamelen;
   psync_variant_row row;
@@ -892,6 +892,13 @@ static void process_modifyfile(const binresult *entry){
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
   parentfolderid=psync_find_result(meta, "parentfolderid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  enc=psync_check_result(meta, "encrypted", PARAM_BOOL);
+  if (enc && enc->num){
+    res=psync_sql_prep_statement("DELETE FROM cryptofilekey WHERE fileid=? AND hash!=?");
+    psync_sql_bind_uint(res, 1, fileid);
+    psync_sql_bind_uint(res, 2, hash);
+    psync_sql_run_free(res);
+  }
   if (psync_find_result(meta, "ismine", PARAM_BOOL)->num){
     userid=psync_my_userid;
     used_quota+=size;
