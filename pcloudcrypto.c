@@ -527,6 +527,17 @@ retry:
   return PSYNC_CRYPTO_START_SUCCESS;
 }
 
+static void psync_fs_refresh_crypto_folders(){
+  psync_folderid_t *fids, *fid;
+  fids=psync_crypto_folderids();
+  fid=fids;
+  while (*fid!=PSYNC_CRYPTO_INVALID_FOLDERID){
+    psync_fs_refresh_folder(*fid);
+    fid++;
+  }
+  psync_free(fids);
+}
+
 int psync_cloud_crypto_stop(){
   crypto_started_un=0;
   pthread_rwlock_wrlock(&crypto_lock);
@@ -542,6 +553,7 @@ int psync_cloud_crypto_stop(){
   pthread_rwlock_unlock(&crypto_lock);
   debug(D_NOTICE, "stopped crypto");
   psync_cache_clean_all();
+  psync_fs_refresh_crypto_folders();
   return PSYNC_CRYPTO_STOP_SUCCESS;
 }
 
