@@ -86,21 +86,23 @@ static void task_wait_no_downloads(){
 }
 
 static int task_mkdir(const char *path){
+  int err;
   while (1){
-    if (likely_log(!psync_mkdir(path))){
+    if (likely(!psync_mkdir(path))){ // don't change to likely_log, as it may overwrite psync_fs_err;
       psync_set_local_full(0);
       return 0;
     }
-    debug(D_WARNING, "mkdir of %s failed, errno=%d", path, (int)psync_fs_err());
-    if (psync_fs_err()==P_NOSPC || psync_fs_err()==P_DQUOT){
+    err=psync_fs_err();
+    debug(D_WARNING, "mkdir of %s failed, errno=%d", path, (int)err);
+    if (err==P_NOSPC || err==P_DQUOT){
       psync_set_local_full(1);
       psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
     }
     else {
       psync_set_local_full(0);
-      if (psync_fs_err()==P_NOENT)
+      if (err==P_NOENT)
         return 0; // do we have a choice? the user deleted the directory
-      else if (psync_fs_err()==P_EXIST){
+      else if (err==P_EXIST){
         psync_stat_t st;
         if (psync_stat(path, &st)){
           debug(D_BUG, "mkdir failed with EEXIST, but stat returned error. race?");
