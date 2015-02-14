@@ -307,8 +307,10 @@ static wchar_t *utf8_to_wchar(const char *str){
 }
 
 static void process_notification(DWORD handleid){
-  if (!FindNextChangeNotification(handles[handleid]))
+  if (!FindNextChangeNotification(handles[handleid])){
     debug(D_ERROR, "FindNextChangeNotification failed");
+    psync_milisleep(PSYNC_LOCALSCAN_RESCAN_INTERVAL*1000);
+  }
   psync_wake_localscan();
 }
 
