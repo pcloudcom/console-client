@@ -1398,7 +1398,7 @@ static int psync_net_get_upload_checksums(psync_socket *api, psync_uploadid_t up
   if (result){
     debug(D_ERROR, "upload_blockchecksums returned error %lu", (unsigned long)result);
     psync_free(res);
-    return psync_handle_api_result(result);
+    return PSYNC_NET_PERMFAIL;
   }
   psync_free(res);
   if (unlikely_log(psync_socket_readall_download(api, &hdr, sizeof(hdr))!=sizeof(hdr)))
