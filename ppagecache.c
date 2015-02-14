@@ -908,9 +908,14 @@ static void clean_cache(){
       return;
     }
   }
+  cnt=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
+  if (!cnt){
+    pthread_mutex_unlock(&clean_cache_mutex);
+    debug("no entries in pagecache, cancelling cache clean");
+    return;
+  }
   clean_cache_in_progress=1;
   psync_sql_sync();
-  cnt=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
   entries=(pagecache_entry *)psync_malloc(cnt*sizeof(pagecache_entry));
   i=0;
   e=0;
