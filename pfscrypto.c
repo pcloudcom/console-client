@@ -1122,7 +1122,7 @@ static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const c
     return 0;
   ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
   if (unlikely_log(ret))
-    return psync_fs_unlock_ret(of, ret);
+    return ret;
   if (unlikely(of->currentsize<offset)){
     ret=psync_fs_newfile_fillzero(of, offset-of->currentsize, of->currentsize);
     if (ret)
@@ -1320,6 +1320,9 @@ int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *b
   debug(D_NOTICE, "off=%lu size=%lu cs=%lu", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
     return -EINVAL;
+  ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
+  if (unlikely_log(ret))
+    return ret;
   if (unlikely(!size))
     return 0;
   if (unlikely(of->currentsize<offset)){
@@ -1547,7 +1550,7 @@ retry:
 static void psync_fs_extender_thread(void *ptr){
   psync_openfile_t *of;
   psync_enc_file_extender_t *ext;
-  uint64_t cs;
+  uint64_t cs, ocs;
   int ret;
   of=(psync_openfile_t *)ptr;
   pthread_mutex_lock(&of->mutex);  
@@ -1562,10 +1565,13 @@ static void psync_fs_extender_thread(void *ptr){
     }
     else
       cs=ext->extendto-ext->extendedto;
+    ocs=of->currentsize;
+    of->currentsize=ext->extendedto;
     if (of->newfile)
       ret=psync_fs_newfile_fillzero(of, cs, ext->extendedto);
     else
       ret=psync_fs_modfile_fillzero(of, cs, ext->extendedto);
+    of->currentsize=ocs;
     if (ret){
       ext->error=ret;
       of->currentsize=ext->extendedto;

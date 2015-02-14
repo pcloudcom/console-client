@@ -453,7 +453,7 @@ static void set_urls(psync_urls_t *urls, binresult *res){
 
 static void psync_pagecache_set_bad_encoder(psync_openfile_t *of){
   pthread_mutex_lock(&of->mutex);
-  if (likely_log(of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)){
+  if (likely(of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)){
     of->encoder=PSYNC_CRYPTO_FAILED_SECTOR_ENCODER;
     pthread_cond_broadcast(&enc_key_cond);
   }
@@ -2538,9 +2538,10 @@ int psync_pagecache_readv_locked(psync_openfile_t *of, psync_pagecache_read_rang
     }
   }
   if (psync_list_isempty(&rq->ranges)){
-    assert(psync_list_isempty(&waiting));
-    psync_free(rq);
-    return 0;
+    if (psync_list_isempty(&waiting)){
+      psync_free(rq);
+      return 0;
+    }
   }
   else{
     rq->of=of;
