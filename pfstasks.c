@@ -1065,7 +1065,8 @@ static uint64_t psync_fstask_delete_folder_if_ex(psync_fsfolderid_t folderid, co
   return taskid;
 }
 
-int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name,  psync_fsfolderid_t to_folderid, const char *new_name){
+int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name,  psync_fsfolderid_t to_folderid, 
+                               const char *new_name, uint32_t targetflags){
   psync_sql_res *res;
   psync_fstask_folder_t *folder;
   psync_fstask_mkdir_t *mk;
@@ -1087,11 +1088,12 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
   psync_sql_bind_lstring(res, 3, name, nlen);
   psync_sql_run_free(res);
   ftaskid=psync_sql_insertid();
-  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1, int1) VALUES ("NTO_STR(PSYNC_FS_TASK_RENFOLDER_TO)", 0, ?, ?, ?, ?)");
+  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, sfolderid, text1, int1, int2) VALUES ("NTO_STR(PSYNC_FS_TASK_RENFOLDER_TO)", 0, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(res, 1, to_folderid);
   psync_sql_bind_int(res, 2, folderid);
   psync_sql_bind_lstring(res, 3, new_name, nnlen);
   psync_sql_bind_uint(res, 4, ftaskid);
+  psync_sql_bind_uint(res, 5, targetflags);
   psync_sql_run_free(res);
   ttaskid=psync_sql_insertid();
   if (folderid<0){
@@ -1147,6 +1149,7 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
   mk=(psync_fstask_mkdir_t *)psync_malloc(offsetof(psync_fstask_mkdir_t, name)+nnlen);
   mk->taskid=ttaskid;
   mk->folderid=folderid;
+  mk->flags=targetflags;
   memcpy(mk->name, new_name, nnlen);
   fill_mkdir_data(folderid, mk);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &mk->tree);
@@ -1639,6 +1642,7 @@ static void psync_init_task_renfolder_to(psync_variant_row row){
   mk=(psync_fstask_mkdir_t *)psync_malloc(offsetof(psync_fstask_mkdir_t, name)+len);
   mk->taskid=taskid;
   mk->folderid=folderid;
+  mk->flags=psync_get_number(row[7]);
   memcpy(mk->name, name, len);
   fill_mkdir_data(mk->folderid, mk);
   psync_fstask_insert_into_tree(&folder->mkdirs, offsetof(psync_fstask_mkdir_t, name), &mk->tree);

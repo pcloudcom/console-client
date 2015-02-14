@@ -2374,10 +2374,10 @@ static int psync_fs_can_move(psync_fsfolderid_t fromfolderid, uint32_t frompermi
 }
 
 static int psync_fs_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions,
-                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, int sameshare){
+                                  psync_fsfolderid_t to_folderid, const char *new_name, uint32_t targetperms, uint32_t targetflags, int sameshare){
   if (!psync_fs_can_move(folderid, srcpermissions, to_folderid, targetperms, sameshare))
     return -EACCES;
-  return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name);
+  return psync_fstask_rename_folder(folderid, parentfolderid, name, to_folderid, new_name, targetflags);
 }
 
 static int psync_fs_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentfolderid, const char *name, uint32_t srcpermissions,
@@ -2537,7 +2537,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
         ret=-ENOTEMPTY;
       else
         ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions, 
-                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fold_path->shareid==fnew_path->shareid);
+                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fnew_path->flags, fold_path->shareid==fnew_path->shareid);
       goto finish;
     }
     else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
@@ -2564,7 +2564,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
         ret=-ENOTEMPTY;
       else
         ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions, 
-                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fold_path->shareid==fnew_path->shareid);
+                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fnew_path->flags, fold_path->shareid==fnew_path->shareid);
       goto finish;
     }
     psync_sql_free_result(res);
@@ -2592,7 +2592,7 @@ finish:
   psync_sql_unlock();
   psync_free(fold_path);
   psync_free(fnew_path);
-  return PRINT_NEG_RETURN_FORMAT(ret, "from %s to %s", old_path, new_path);
+  return PRINT_RETURN_FORMAT(ret, " for rename from %s to %s", old_path, new_path);
 err_enoent:
   if (folder)
     psync_fstask_release_folder_tasks_locked(folder);
