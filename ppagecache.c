@@ -911,7 +911,7 @@ static void clean_cache(){
   cnt=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
   if (!cnt){
     pthread_mutex_unlock(&clean_cache_mutex);
-    debug("no entries in pagecache, cancelling cache clean");
+    debug(D_NOTICE, "no entries in pagecache, cancelling cache clean");
     return;
   }
   clean_cache_in_progress=1;
