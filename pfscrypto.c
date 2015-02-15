@@ -1109,7 +1109,7 @@ fail:
   return PRINT_RETURN(ret);
 }
 
-static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset, int checkextender){
   uint64_t off2, offdiff;
   psync_crypto_sectorid_t sectorid;
   int ret, wrt;
@@ -1120,9 +1120,11 @@ static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const c
     return -EINVAL;
   if (unlikely(!size))
     return 0;
-  ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
-  if (unlikely_log(ret))
-    return ret;
+  if (checkextender){
+    ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
+    if (unlikely_log(ret))
+      return ret;
+  }
   if (unlikely(of->currentsize<offset)){
     ret=psync_fs_newfile_fillzero(of, offset-of->currentsize, of->currentsize);
     if (ret)
@@ -1181,7 +1183,7 @@ static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const c
 }
 
 int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
-  int ret=psync_fs_crypto_write_newfile_locked_nu(of, buf, size, offset);
+  int ret=psync_fs_crypto_write_newfile_locked_nu(of, buf, size, offset, 1);
   pthread_mutex_unlock(&of->mutex);
   return ret;
 }
@@ -1278,9 +1280,9 @@ int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64
   return size;
 }
 
-int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset);
+int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset, int checkextender);
 
-static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset){
+static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64_t offset, int checkextender){
   char buff[PSYNC_CRYPTO_SECTOR_SIZE];
   uint64_t wr;
   int ret;
@@ -1297,7 +1299,7 @@ static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
       else
         wr=size;
     }
-    ret=psync_fs_crypto_write_modified_locked_nu(of, buff, wr, offset);
+    ret=psync_fs_crypto_write_modified_locked_nu(of, buff, wr, offset, checkextender);
     if (ret<=0)
       return ret;
     offset+=ret;
@@ -1306,7 +1308,7 @@ static int psync_fs_modfile_fillzero(psync_openfile_t *of, uint64_t size, uint64
   return 0;
 }
 
-int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
+int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset, int checkextender){
   psync_interval_tree_t *itr, *needtodwl;
   psync_pagecache_read_range *ranges;
   char *tmpbuf;
@@ -1317,16 +1319,18 @@ int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *b
   psync_crypto_sectorid_t firstsectorid, lastsectorid, sectorid, esectorid;
   uint32_t l, asize, aid, icnt;
   int ret;
-  debug(D_NOTICE, "off=%lu size=%lu cs=%lu", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize);
+  debug(D_NOTICE, "off=%lu size=%lu cs=%lu ce=%d", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize, checkextender);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
     return -EINVAL;
-  ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
-  if (unlikely_log(ret))
-    return ret;
+  if (checkextender){
+    ret=psync_fs_crypto_wait_extender_after_locked(of, offset+size);
+    if (unlikely_log(ret))
+      return ret;
+  }
   if (unlikely(!size))
     return 0;
   if (unlikely(of->currentsize<offset)){
-    ret=psync_fs_modfile_fillzero(of, offset-of->currentsize, of->currentsize);
+    ret=psync_fs_modfile_fillzero(of, offset-of->currentsize, of->currentsize, 0);
     if (ret)
       return ret;
   }
@@ -1435,11 +1439,11 @@ retry:
     }
   }
   // now that we have all auth or partial data sectors, we proceed the same way as if it is a new file write
-  return psync_fs_crypto_write_newfile_locked_nu(of, buf, size, offset);
+  return psync_fs_crypto_write_newfile_locked_nu(of, buf, size, offset, checkextender);
 }
 
 int psync_fs_crypto_write_modified_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
-  int ret=psync_fs_crypto_write_modified_locked_nu(of, buf, size, offset);
+  int ret=psync_fs_crypto_write_modified_locked_nu(of, buf, size, offset, 1);
   pthread_mutex_unlock(&of->mutex);
   return ret;
 }
@@ -1550,14 +1554,13 @@ retry:
 static void psync_fs_extender_thread(void *ptr){
   psync_openfile_t *of;
   psync_enc_file_extender_t *ext;
-  uint64_t cs, ocs;
+  uint64_t cs;
   int ret;
   of=(psync_openfile_t *)ptr;
   pthread_mutex_lock(&of->mutex);  
   assert(of->extender);
   ext=of->extender;
   while (!ext->kill && ext->extendedto<ext->extendto){
-    assert(of->modified);
     if (ext->extendto-ext->extendedto>PSYNC_CRYPTO_EXTENDER_STEP){
       cs=PSYNC_CRYPTO_EXTENDER_STEP;
       if (ext->extendedto%PSYNC_CRYPTO_SECTOR_SIZE)
@@ -1565,13 +1568,10 @@ static void psync_fs_extender_thread(void *ptr){
     }
     else
       cs=ext->extendto-ext->extendedto;
-    ocs=of->currentsize;
-    of->currentsize=ext->extendedto;
     if (of->newfile)
       ret=psync_fs_newfile_fillzero(of, cs, ext->extendedto);
     else
-      ret=psync_fs_modfile_fillzero(of, cs, ext->extendedto);
-    of->currentsize=ocs;
+      ret=psync_fs_modfile_fillzero(of, cs, ext->extendedto, 0);
     if (ret){
       ext->error=ret;
       of->currentsize=ext->extendedto;
@@ -1663,7 +1663,7 @@ retry:
     if (of->newfile)
       ret=psync_fs_newfile_fillzero(of, size-of->currentsize, of->currentsize);
     else
-      ret=psync_fs_modfile_fillzero(of, size-of->currentsize, of->currentsize);
+      ret=psync_fs_modfile_fillzero(of, size-of->currentsize, of->currentsize, 0);
   }
   else if (of->currentsize>size){
     if (size==0)
