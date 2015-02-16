@@ -1662,8 +1662,16 @@ retry:
       of->currentsize=size;
       return 0;
     }
-    if (size-of->currentsize>=PSYNC_CRYPTO_RUN_EXTEND_IN_THREAD_OVER)
+    if (size-of->currentsize>=PSYNC_CRYPTO_RUN_EXTEND_IN_THREAD_OVER){
+      if (!of->newfile){
+        // for files that are not new, there is a chance for a network error, better catch it now
+        // there is no any significance in the size of the write, even 1 byte write should download everything that we need
+        ret=psync_fs_modfile_fillzero(of, of->currentsize%PSYNC_CRYPTO_SECTOR_SIZE+PSYNC_CRYPTO_SECTOR_SIZE, of->currentsize, 0);
+        if (ret)
+          return ret;
+      }
       return psync_fs_crypto_run_extender(of, size);
+    }
     if (of->newfile)
       ret=psync_fs_newfile_fillzero(of, size-of->currentsize, of->currentsize);
     else

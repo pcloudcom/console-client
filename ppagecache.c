@@ -1626,6 +1626,10 @@ static void psync_pagecache_send_error(psync_request_t *request, int err){
   psync_pagecache_free_request(request);
 }
 
+#if IS_DEBUG
+#define psync_pagecache_send_error(r, e) do {psync_pagecache_send_error(r, e); debug(D_NOTICE, "sending request error %d", e);} while (0)
+#endif
+
 static int psync_pagecache_read_range_from_sock(psync_request_t *request, psync_request_range_t *range, psync_http_socket *sock){
   uint64_t first_page_id;
   psync_page_wait_t *pw;
