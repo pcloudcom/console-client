@@ -1319,7 +1319,7 @@ int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *b
   psync_crypto_sectorid_t firstsectorid, lastsectorid, sectorid, esectorid;
   uint32_t l, asize, aid, icnt;
   int ret;
-  debug(D_NOTICE, "off=%lu size=%lu cs=%lu ce=%d", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize, checkextender);
+//  debug(D_NOTICE, "off=%lu size=%lu cs=%lu ce=%d", (unsigned long)offset, (unsigned long)size, (unsigned long)of->currentsize, checkextender);
   if (unlikely((size+offset+PSYNC_CRYPTO_SECTOR_SIZE-1)/PSYNC_CRYPTO_SECTOR_SIZE>PSYNC_CRYPTO_MAX_SECTORID))
     return -EINVAL;
   if (checkextender){
@@ -1357,7 +1357,10 @@ retry:
       continue;
     // Here we create offsets by current size as if the file grew, we would have already moved all trailing checksums to a new location and
     // they would be in of->writeintervals anyway.
-    psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
+    if (of->extender)
+      psync_fs_crypto_offsets_by_plainsize(of->extender->extendedto, &offsets);
+    else
+      psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
     for (l=0; l<offsets.treelevels; l++){
       psync_fs_crypto_get_auth_sector_off(sectorid, l, &offsets, &eoffset, &asize, &aid);
       itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);

@@ -775,6 +775,24 @@ static psync_int_t check_page_in_memory_by_hash(uint64_t hash, uint64_t pageid, 
   return ret;
 }
 
+static int switch_memory_page_to_hash(uint64_t oldhash, uint64_t newhash, uint64_t pageid){
+  psync_cache_page_t *page;
+  psync_uint_t ho, hn;
+  ho=pagehash_by_hash_and_pageid(oldhash, pageid);
+  hn=pagehash_by_hash_and_pageid(newhash, pageid);
+  pthread_mutex_lock(&cache_mutex);
+  psync_list_for_each_element(page, &cache_hash[ho], psync_cache_page_t, list)
+    if (page->hash==oldhash && page->pageid==pageid && page->type==PAGE_TYPE_READ){
+      psync_list_del(&page->list);
+      page->hash=newhash;
+      psync_list_add_tail(&cache_hash[hn], &page->list);
+      pthread_mutex_unlock(&cache_mutex);
+      return 1;
+    }
+  pthread_mutex_unlock(&cache_mutex);
+  return 0;
+}
+
 typedef struct {
   time_t lastuse;
   uint32_t id;
@@ -2733,25 +2751,27 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
         psync_pagecache_add_page_if_not_exists(page, hash, pageid);
         break;
       }
-      if (!tstarted){
-        res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=? WHERE hash=? AND pageid=? AND type=?");
-        psync_sql_start_transaction();
-        tstarted=1;
+      if (!switch_memory_page_to_hash(oldhash, hash, pageid)){
+        if (!tstarted){
+          res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=? WHERE hash=? AND pageid=? AND type=?");
+          psync_sql_start_transaction();
+          tstarted=1;
+        }
+        else if (tstarted++>=64){
+          psync_sql_free_result(res);
+          psync_sql_commit_transaction();
+          psync_milisleep(10);
+          psync_check_clean_running();
+          res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=? WHERE hash=? AND pageid=? AND type=?");
+          psync_sql_start_transaction();
+          tstarted=1;
+        }
+        psync_sql_bind_uint(res, 1, hash);
+        psync_sql_bind_uint(res, 2, oldhash);
+        psync_sql_bind_uint(res, 3, pageid);
+        psync_sql_bind_uint(res, 4, PAGE_TYPE_READ);
+        psync_sql_run(res);
       }
-      else if (tstarted++>=64){
-        psync_sql_free_result(res);
-        psync_sql_commit_transaction();
-        psync_milisleep(10);
-        psync_check_clean_running();
-        res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=? WHERE hash=? AND pageid=? AND type=?");
-        psync_sql_start_transaction();
-        tstarted=1;
-      }
-      psync_sql_bind_uint(res, 1, hash);
-      psync_sql_bind_uint(res, 2, oldhash);
-      psync_sql_bind_uint(res, 3, pageid);
-      psync_sql_bind_uint(res, 4, PAGE_TYPE_READ);
-      psync_sql_run(res);
     }
     else{
       if (tstarted){
