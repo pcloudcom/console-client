@@ -1339,10 +1339,10 @@ retry:
   lastsectorid=(offset+size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
   itr=NULL;
   needtodwl=NULL;
-  if (offset==of->initialsize && offset && offset%PSYNC_CRYPTO_SECTOR_SIZE==0)
+  if (offset==of->initialsize && firstsectorid && offset%PSYNC_CRYPTO_SECTOR_SIZE==0)
     lastsectorid=--firstsectorid;
   for (sectorid=firstsectorid; sectorid<=lastsectorid; sectorid++){
-    if ((uint64_t)sectorid*PSYNC_CRYPTO_SECTOR_SIZE>of->initialsize)
+    if ((uint64_t)sectorid*PSYNC_CRYPTO_SECTOR_SIZE>=of->initialsize || (uint64_t)sectorid*PSYNC_CRYPTO_SECTOR_SIZE>=of->currentsize)
       break;
     esectorid=psync_fs_crypto_data_sectorid_by_sectorid(sectorid);
     eoffset=(uint64_t)esectorid*PSYNC_CRYPTO_SECTOR_SIZE;
@@ -1372,7 +1372,10 @@ retry:
   if (needtodwl){
     icnt=0;
     isize=0;
-    eoffset=psync_fs_crypto_crypto_size(of->initialsize);
+    if (of->currentsize<of->initialsize)
+      eoffset=psync_fs_crypto_crypto_size(of->currentsize);
+    else
+      eoffset=psync_fs_crypto_crypto_size(of->initialsize);
     itr=psync_interval_tree_get_first(needtodwl);
     do {
       // if we are past initialsize, we are probably trying to download uncommited auth sector
