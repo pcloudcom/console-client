@@ -1329,12 +1329,12 @@ int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *b
   }
   if (unlikely(!size))
     return 0;
+retry:
   if (unlikely(of->currentsize<offset)){
     ret=psync_fs_modfile_fillzero(of, offset-of->currentsize, of->currentsize, 0);
     if (ret)
       return ret;
   }
-retry:
   firstsectorid=offset/PSYNC_CRYPTO_SECTOR_SIZE;
   lastsectorid=(offset+size-1)/PSYNC_CRYPTO_SECTOR_SIZE;
   itr=NULL;
