@@ -975,7 +975,7 @@ static int psync_fs_crypto_do_finalize_log(psync_openfile_t *of, int fullsync){
 static int psync_fs_crypto_finalize_log(psync_openfile_t *of, int fullsync){
   int ret;
   if (of->extender){
-    assert(of->currentsize=of->extender->extendto);
+    assert(of->currentsize==of->extender->extendto);
     of->currentsize=of->extender->extendedto;
     ret=psync_fs_crypto_do_finalize_log(of, fullsync);
     of->currentsize=of->extender->extendto;
