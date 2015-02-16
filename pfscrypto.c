@@ -1464,6 +1464,7 @@ static int psync_fs_crypto_ftruncate_to_zero(psync_openfile_t *of){
   if (!of->newfile){
     psync_interval_tree_free(of->writeintervals);
     of->writeintervals=NULL;
+    psync_interval_tree_add(&of->writeintervals, 0, psync_fs_crypto_crypto_size(of->initialsize));
   }
   psync_tree_for_each_element_call_safe(of->sectorsinlog, psync_sector_inlog_t, tree, psync_free);
   of->sectorsinlog=PSYNC_TREE_EMPTY;
