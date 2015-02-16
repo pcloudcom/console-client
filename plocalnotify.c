@@ -28,6 +28,7 @@
 #include "pcompat.h"
 #include "plocalnotify.h"
 #include "plocalscan.h"
+#include "psettings.h"
 #include "plist.h"
 #include "plibs.h"
 
