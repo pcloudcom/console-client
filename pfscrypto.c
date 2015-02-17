@@ -604,7 +604,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         newsecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
         sizesecd/=PSYNC_CRYPTO_HASH_TREE_SECTORS;
         level++;
-      } while (oldsecd!=newsecd && (level<ooffsets.treelevels || (ooffsets.needmasterauth && level==ooffsets.treelevels)));
+      } while (oldsecd!=newsecd && level<offsets->treelevels && (level<ooffsets.treelevels || (ooffsets.needmasterauth && level==ooffsets.treelevels)));
     }
   }
   return 0;
