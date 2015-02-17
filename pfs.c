@@ -144,7 +144,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
   psync_fsfileid_t fileid;
   int64_t d;
   int ret;
-  fileid=-taskid;
+  fileid=-(psync_fsfileid_t)taskid;
   psync_sql_lock();
   tr=openfiles;
   while (tr){
@@ -322,7 +322,7 @@ void psync_fs_mark_openfile_deleted(uint64_t taskid){
   psync_tree *tr;
   int64_t d;
   psync_fsfileid_t fileid;
-  fileid=-taskid;
+  fileid=-(psync_fsfileid_t)taskid;
   psync_sql_lock();
   tr=openfiles;
   while (tr){
@@ -353,7 +353,7 @@ int64_t psync_fs_get_file_writeid(uint64_t taskid){
   psync_uint_row row;
   psync_fsfileid_t fileid;
   int64_t d;
-  fileid=-taskid;
+  fileid=-(psync_fsfileid_t)taskid;
   psync_sql_rdlock();
   tr=openfiles;
   while (tr){

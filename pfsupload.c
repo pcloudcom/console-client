@@ -360,7 +360,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   psync_sql_run_free(sql);
   sql=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_sql_bind_uint(sql, 1, fileid);
-  psync_sql_bind_int(sql, 2, -taskid);
+  psync_sql_bind_int(sql, 2, -(psync_fsfileid_t)taskid);
   psync_sql_run_free(sql);
   sql=psync_sql_prep_statement("UPDATE fstask SET status=3 WHERE id=? AND int1=?");
   psync_sql_bind_uint(sql, 1, taskid);
@@ -419,7 +419,7 @@ static void perm_fail_upload_task(uint64_t taskid){
   if (psync_sql_affected_rows())
     psync_fsupload_wake();
   sql=psync_sql_prep_statement("DELETE FROM fstask WHERE fileid=?");
-  psync_sql_bind_int(sql, 1, -taskid);
+  psync_sql_bind_int(sql, 1, -(psync_fsfileid_t)taskid);
   psync_sql_run_free(sql);
   sql=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
   psync_sql_bind_uint(sql, 1, taskid);
@@ -1269,7 +1269,7 @@ static int psync_cancel_task_creat(fsupload_task_t *task){
     debug(D_NOTICE, "cancelled creat task %lu for file %s, changed to fileid %lu", (unsigned long)task->id, task->text1, (unsigned long)fileid);
     res=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
     psync_sql_bind_uint(res, 1, fileid);
-    psync_sql_bind_int(res, 2, -task->id);
+    psync_sql_bind_int(res, 2, -(psync_fsfileid_t)task->id);
     psync_sql_run_free(res);
   }
   return 0;
@@ -1287,7 +1287,7 @@ static int psync_cancel_task_modify(fsupload_task_t *task){
   psync_fstask_file_modified(task->folderid, task->id, task->text1, 0);
   res=psync_sql_prep_statement("UPDATE fstask SET fileid=? WHERE fileid=?");
   psync_sql_bind_uint(res, 1, task->fileid);
-  psync_sql_bind_int(res, 2, -task->id);
+  psync_sql_bind_int(res, 2, -(psync_fsfileid_t)task->id);
   psync_sql_run_free(res);
   debug(D_NOTICE, "cancelled modify task %lu for file %s, changed to fileid %lu", (unsigned long)task->id, task->text1, (unsigned long)task->fileid);
   return 0;

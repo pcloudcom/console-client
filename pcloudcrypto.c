@@ -947,7 +947,7 @@ static psync_crypto_aes256_text_decoder_t psync_crypto_get_folder_decoder_locked
   }
 }
 
-static psync_crypto_aes256_text_encoder_t psync_crypto_get_temp_folder_encoder_locked(psync_folderid_t folderid){
+static psync_crypto_aes256_text_encoder_t psync_crypto_get_temp_folder_encoder_locked(psync_fsfolderid_t folderid){
   psync_crypto_aes256_text_encoder_t enc;
   psync_symmetric_key_t symkey, realkey;
   sym_key_ver1 *skv1;
@@ -999,7 +999,7 @@ static psync_crypto_aes256_text_encoder_t psync_crypto_get_temp_folder_encoder_l
   }
 }
 
-static psync_crypto_aes256_text_decoder_t psync_crypto_get_temp_folder_decoder_locked(psync_folderid_t folderid){
+static psync_crypto_aes256_text_decoder_t psync_crypto_get_temp_folder_decoder_locked(psync_fsfolderid_t folderid){
   psync_crypto_aes256_text_decoder_t dec;
   psync_symmetric_key_t symkey, realkey;
   sym_key_ver1 *skv1;

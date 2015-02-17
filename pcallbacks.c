@@ -179,10 +179,10 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
   
   if (status->filestodownload){
     speed=status->downloadspeed;
-    if (status->status==PSTATUS_PAUSED || status->status==PSTATUS_PAUSED || status->localisfull || speed==0){
+    if (status->status==PSTATUS_PAUSED || status->status==PSTATUS_STOPPED || status->localisfull || speed==0){
       if (status->status==PSTATUS_PAUSED)
         dw=cat_const(dw, "Paused. ");
-      else if (status->status==PSTATUS_PAUSED)
+      else if (status->status==PSTATUS_STOPPED)
         dw=cat_const(dw, "Stopped. ");
       else if (status->localisfull)
         dw=cat_const(dw, "Disk full. ");
@@ -204,10 +204,10 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
   
   if (status->filestoupload){
     speed=status->uploadspeed;
-    if (status->status==PSTATUS_PAUSED || status->status==PSTATUS_PAUSED || status->remoteisfull || speed==0){
+    if (status->status==PSTATUS_PAUSED || status->status==PSTATUS_STOPPED || status->remoteisfull || speed==0){
       if (status->status==PSTATUS_PAUSED)
         up=cat_const(up, "Paused. ");
-      else if (status->status==PSTATUS_PAUSED)
+      else if (status->status==PSTATUS_STOPPED)
         up=cat_const(up, "Stopped. ");
       else if (status->remoteisfull)
         up=cat_const(up, "Account full. ");
