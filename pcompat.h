@@ -328,8 +328,17 @@ typedef HANDLE psync_file_t;
 #error "Need to define types for your operating system"
 #endif
 
+typedef struct _psync_socket_buffer {
+  struct _psync_socket_buffer *next;
+  uint32_t size;
+  uint32_t woffset;
+  uint32_t roffset;
+  char buff[];
+} psync_socket_buffer;
+
 typedef struct {
   void *ssl;
+  psync_socket_buffer *buffer;
   psync_socket_t sock;
   int pending;
 } psync_socket;
@@ -412,12 +421,18 @@ psync_socket_t psync_create_socket(int domain, int type, int protocol);
 psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl);
 void psync_socket_close(psync_socket *sock);
 void psync_socket_close_bad(psync_socket *sock);
+void psync_socket_set_write_buffered(psync_socket *sock);
+void psync_socket_set_write_buffered_thread(psync_socket *sock);
+void psync_socket_clear_write_buffered(psync_socket *sock);
+void psync_socket_clear_write_buffered_thread(psync_socket *sock);
 int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);
 int psync_socket_pendingdata_buf_thread(psync_socket *sock);
+int psync_socket_try_write_buffer(psync_socket *sock);
+int psync_socket_try_write_buffer_thread(psync_socket *sock);
 int psync_socket_readable(psync_socket *sock);
 int psync_socket_writable(psync_socket *sock);
 int psync_socket_read(psync_socket *sock, void *buff, int num);

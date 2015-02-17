@@ -1172,8 +1172,10 @@ int psync_http_next_request(psync_http_socket *sock){
   uint32_t keepalive;
   int rl, rb, isval;
   char ch, lch;
-  if (unlikely_log((rb=psync_socket_read(sock->sock, sock->readbuff, PSYNC_HTTP_RESP_BUFFER-1))<=0))
+  if (unlikely((rb=psync_socket_read(sock->sock, sock->readbuff, PSYNC_HTTP_RESP_BUFFER-1))<=0)){
+    debug(D_WARNING, "read from socket for %d bytes returned %d", (int)(PSYNC_HTTP_RESP_BUFFER-1), rb);
     goto err0;
+  }
   sock->readbuff[rb]=0;
   ptr=sock->readbuff;
   while (*ptr && !isspace(*ptr))
@@ -1398,7 +1400,7 @@ static int psync_net_get_upload_checksums(psync_socket *api, psync_uploadid_t up
   if (result){
     debug(D_ERROR, "upload_blockchecksums returned error %lu", (unsigned long)result);
     psync_free(res);
-    return PSYNC_NET_PERMFAIL;
+    return psync_handle_api_result(result);
   }
   psync_free(res);
   if (unlikely_log(psync_socket_readall_download(api, &hdr, sizeof(hdr))!=sizeof(hdr)))

@@ -1733,6 +1733,7 @@ retry:
       debug(D_NOTICE, "no cached server connections, but got cached API connection, serving request from API");
       if (likely_log(hosts->length && hosts->array[0]->type==PARAM_STR))
         psync_http_connect_and_cache_host(hosts->array[0]->str);
+      psync_socket_set_write_buffered(api);
       psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list){
         debug(D_NOTICE, "sending request for offset %lu, size %lu to API", (unsigned long)range->offset, (unsigned long)range->length);
         if (psync_api_send_read_request(api, request->fileid, request->hash, range->offset, range->length))
@@ -1749,21 +1750,26 @@ retry:
             goto err0;
           }
         }
-      if (pass_shared_api(api))
+      if (pass_shared_api(api)){
+        psync_socket_clear_write_buffered(api);
         psync_apipool_release(api);
+      }
       debug(D_NOTICE, "request from API finished");
       goto ok1;
 err_api1:
+      psync_socket_clear_write_buffered_thread(api);
       psync_apipool_release_bad(api);
       debug(D_WARNING, "error reading range from API, trying from content servers");
     }
     else if ((api=get_shared_api())){
+      psync_socket_set_write_buffered_thread(api);
       debug(D_NOTICE, "no cached server connections, no cached API servers, but got shared API connection sending request to shared API");
       psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list){
         debug(D_NOTICE, "sending request for offset %lu, size %lu to shared API", (unsigned long)range->offset, (unsigned long)range->length);
         if (psync_api_send_read_request_thread(api, request->fileid, request->hash, range->offset, range->length))
           goto err_api2;
       }
+      psync_socket_try_write_buffer_thread(api);
       if (wait_shared_api())
         goto err_api0;
       psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list)
@@ -1776,11 +1782,14 @@ err_api1:
             goto err0;
           }
         }
-      if (pass_shared_api(api))
+      if (pass_shared_api(api)){
+        psync_socket_clear_write_buffered(api);
         psync_apipool_release(api);
+      }
       debug(D_NOTICE, "request from shared API finished");
       goto ok1;
 err_api2:
+      psync_socket_clear_write_buffered_thread(api);
       release_bad_shared_api(api);
 err_api0:
       debug(D_WARNING, "error reading range from API, trying from content servers");
@@ -1792,6 +1801,7 @@ err_api0:
     goto err0;
 //  debug(D_NOTICE, "connected to %s", host);
   path=psync_find_result(urls->urls, "path", PARAM_STR)->str;
+  psync_socket_set_write_buffered(sock->sock);
   psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list){
     debug(D_NOTICE, "sending request for offset %lu, size %lu", (unsigned long)range->offset, (unsigned long)range->length);
     if (psync_http_request(sock, host, path, range->offset, range->offset+range->length-1)){
@@ -1813,6 +1823,7 @@ err_api0:
       else
         goto err1;
     }
+  psync_socket_clear_write_buffered(sock->sock);
   psync_http_close(sock);
   debug(D_NOTICE, "request from %s finished", host);
 ok1:
@@ -1930,6 +1941,8 @@ static void psync_pagecache_read_unmodified_readahead(psync_openfile_t *of, uint
   if (of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC>PSYNC_FS_MIN_READAHEAD_START){
     if (readahead>of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC)
       readahead=size_round_up_to_page(of->currentspeed*PSYNC_FS_MAX_READAHEAD_SEC);
+    if (readahead>PSYNC_FS_MAX_READAHEAD_IF_SEC)
+      readahead=PSYNC_FS_MAX_READAHEAD_IF_SEC;
   }
   else if (readahead>PSYNC_FS_MAX_READAHEAD)
     readahead=PSYNC_FS_MAX_READAHEAD;
