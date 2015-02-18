@@ -2692,8 +2692,10 @@ int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence){
    LARGE_INTEGER li;
    li.QuadPart=offset;
    li.LowPart=SetFilePointer(fd, li.LowPart, &li.HighPart, whence);
-   if (li.LowPart==INVALID_SET_FILE_POINTER && GetLastError()!=NO_ERROR)
+   if (li.LowPart==INVALID_SET_FILE_POINTER && GetLastError()!=NO_ERROR){
+     debug(D_WARNING, "got error %d from SetFilePointer", (int)GetLastError());
      return -1;
+   }
    else
      return li.QuadPart;
 #else
@@ -2721,7 +2723,16 @@ int psync_file_truncate(psync_file_t fd){
   else
     return -1;
 #elif defined(P_OS_WINDOWS)
-   return psync_bool_to_zero(SetEndOfFile(fd));
+#if IS_DEBUG
+  if (SetEndOfFile(fd))
+    return 0;
+  else{
+    debug(D_WARNING, "got error %d from SetEndOfFile", (int)GetLastError());
+    return -1;
+  }
+#else
+  return psync_bool_to_zero(SetEndOfFile(fd));
+#endif
 #else
 #error "Function not implemented for your operating system"
 #endif

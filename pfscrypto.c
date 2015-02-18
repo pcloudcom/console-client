@@ -738,7 +738,7 @@ static int psync_fs_crypto_process_log(psync_file_t lfd, psync_file_t dfd, psync
   off=PSYNC_CRYPTO_SECTOR_SIZE;
   if (unlikely_log(psync_file_seek(dfd, size, P_SEEK_SET)!=size || psync_file_truncate(dfd)))
     return -1;
-  if (ifd!=INVALID_HANDLE_VALUE && unlikely_log(psync_file_seek(ifd, sizeof(psync_fs_index_header), P_SEEK_SET)!=0 || psync_file_truncate(ifd)))
+  if (ifd!=INVALID_HANDLE_VALUE && unlikely_log(psync_file_seek(ifd, sizeof(psync_fs_index_header), P_SEEK_SET)!=sizeof(psync_fs_index_header) || psync_file_truncate(ifd)))
     return -1;
   records=(psync_fs_index_record *)buff;
   recid=0;

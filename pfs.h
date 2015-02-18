@@ -125,7 +125,7 @@ typedef struct {
 } psync_fs_index_record;
 
 typedef struct {
-	int dummy[0];
+  int dummy[0];
 } psync_fs_index_header;
 
 int psync_fs_crypto_err_to_errno(int cryptoerr);
