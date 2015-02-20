@@ -31,6 +31,7 @@
 #include "ptasks.h"
 #include "pfstasks.h"
 #include "psettings.h"
+#include "prunratelimit.h"
 #include <string.h>
 #include <stdarg.h>
 
@@ -199,9 +200,8 @@ static void psync_status_recalc_to_upload_async_thread(){
 }
 
 void psync_status_recalc_to_upload_async(){
-  psync_run_thread("recalc upload", psync_status_recalc_to_upload_async_thread);
+  psync_run_ratelimited("recalc upload", psync_status_recalc_to_upload_async_thread, PSYNC_MIN_INTERVAL_RECALC_UPLOAD, 1);
 }
-
 
 uint32_t psync_status_get(uint32_t statusid){
   pthread_mutex_lock(&statusmutex);

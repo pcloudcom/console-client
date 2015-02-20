@@ -150,8 +150,7 @@ void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t loc
 void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
   create_task3(PSYNC_UPLOAD_FILE, syncid, 0, localfileid, name);
   psync_wake_upload();
-  psync_status_recalc_to_upload();
-  psync_send_status_update();
+  psync_status_recalc_to_upload_async();
 }
 
 void psync_task_upload_file_silent(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){

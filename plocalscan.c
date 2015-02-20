@@ -728,8 +728,7 @@ restart:
   psync_sql_commit_transaction();
   if (w){
     psync_wake_upload();
-    psync_status_recalc_to_upload();
-    psync_send_status_update();
+    psync_status_recalc_to_upload_async();
   }
   for (i=0; i<SCAN_LIST_CNT; i++)
     psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);

@@ -1104,8 +1104,7 @@ static void task_run_upload_file_thread(void *ptr){
   psync_list_del(&ut->upllist.list);
   wake_upload_when_ready();
   pthread_mutex_unlock(&current_uploads_mutex);
-  psync_status_recalc_to_upload();
-  psync_status_send_update();
+  psync_status_recalc_to_upload_async();
   psync_free(ut);
 }
 
@@ -1281,10 +1280,8 @@ void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid){
   psync_sql_bind_uint(res, 1, PSYNC_UPLOAD_FILE);
   psync_sql_bind_uint(res, 2, localfileid);
   psync_sql_run(res);
-  if (psync_sql_affected_rows()){
-    psync_status_recalc_to_upload();
-    psync_send_status_update();
-  }
+  if (psync_sql_affected_rows())
+    psync_status_recalc_to_upload_async();
   psync_sql_free_result(res);
   pthread_mutex_lock(&current_uploads_mutex);
   psync_list_for_each_element(upl, &uploads, upload_list_t, list)
@@ -1299,13 +1296,12 @@ void psync_stop_sync_upload(psync_syncid_t syncid){
   res=psync_sql_prep_statement("DELETE FROM task WHERE syncid=? AND type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_UPLOAD));
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
-  psync_status_recalc_to_upload();
-  psync_send_status_update();
   pthread_mutex_lock(&current_uploads_mutex);
   psync_list_for_each_element(upl, &uploads, upload_list_t, list)
     if (upl->syncid==syncid)
       upl->stop=1;
   pthread_mutex_unlock(&current_uploads_mutex);
+  psync_status_recalc_to_upload_async();
 }
 
 void psync_stop_all_upload(){
