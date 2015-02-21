@@ -57,6 +57,7 @@
 #include <sys/mman.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
+#include <limits.h>
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <dirent.h>
@@ -102,6 +103,8 @@ static gid_t psync_gid;
 static gid_t *psync_gids;
 static int psync_gids_cnt;
 #endif
+
+static int psync_page_size;
 
 PSYNC_THREAD const char *psync_thread_name="no name";
 static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -207,7 +210,19 @@ void psync_compat_init(){
   psync_gids=psync_new_cnt(gid_t, psync_gids_cnt);
   if (unlikely_log(getgroups(psync_gids_cnt, psync_gids)!=psync_gids_cnt))
     psync_gids_cnt=0;
+#if defined(PAGESIZE)
+  psync_page_size=PAGESIZE;
+#else
+  psync_page_size=sysconf(_SC_PAGESIZE);
 #endif
+#elif defined(P_OS_WINDOWS)
+  SYSTEM_INFO si;
+  GetSystemInfo(&si));
+  psync_page_size=si.dwPageSize;
+#else
+  psync_page_size=-1;
+#endif
+  debug(D_NOTICE, "detected page size %d", psync_page_size);
 }
 
 int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits){
@@ -3006,4 +3021,28 @@ void psync_anon_reset(void *ptr, size_t size){
 #elif defined(P_OS_WINDOWS)
   VirtualAlloc(ptr, size, MEM_RESET, PAGE_READWRITE);
 #endif
+}
+
+int psync_mlock(void *ptr, size_t size){
+#if defined(_POSIX_MEMLOCK_RANGE)
+  return mlock(ptr, size);
+#elif defined(P_OS_WINDOWS)
+  return psync_bool_to_zero(VirtualLock(ptr, size));
+#else
+  return -1;
+#endif
+}
+
+int psync_munlock(void *ptr, size_t size){
+#if defined(_POSIX_MEMLOCK_RANGE)
+  return munlock(ptr, size);
+#elif defined(P_OS_WINDOWS)
+  return psync_bool_to_zero(VirtualUnlock(ptr, size));
+#else
+  return -1;
+#endif
+}
+
+int psync_get_page_size(){
+  return psync_page_size;
 }

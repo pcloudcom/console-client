@@ -35,6 +35,7 @@
 #include "pfolder.h"
 #include "pcache.h"
 #include "pfileops.h"
+#include "pmemlock.h"
 #include <string.h>
 
 #define PSYNC_CRYPTO_API_ERR_INTERNAL -511
@@ -78,6 +79,11 @@ typedef struct {
   unsigned char aeskey[PSYNC_AES256_KEY_SIZE];
   unsigned char hmackey[PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN];
 } sym_key_ver1;
+
+void psync_cloud_crypto_clean_cache(){
+  const char *prefixes[]={"DKEY", "FKEY", "FLDE", "FLDD", "SEEN"};
+  psync_cache_clean_starting_with_one_of(prefixes, ARRAY_SIZE(prefixes));
+}
 
 static void psync_cloud_crypto_setup_save_to_db(const unsigned char *rsapriv, size_t rsaprivlen, const unsigned char *rsapub, size_t rsapublen,
                                                 const unsigned char *salt, size_t saltlen, size_t iterations, time_t expires){
@@ -392,7 +398,7 @@ static int crypto_keys_match(){
   }
   res=key->keylen==deckey->keylen && !memcmp(key->key, deckey->key, key->keylen);
   psync_ssl_free_symmetric_key(deckey);
-  psync_ssl_free_symmetric_key(key);
+  psync_free(key);
   if (res)
     debug(D_NOTICE, "encrypt/decrypt operation succeeded");
   return res;
@@ -488,10 +494,12 @@ retry:
   psync_ssl_free_symmetric_key(aeskey);
   rsaprivdec=(unsigned char *)psync_malloc(rsaprivlen);
   memcpy(rsaprivdec, rsapriv, rsaprivlen);
+  psync_mem_lock(rsaprivdec, rsaprivlen);
   psync_crypto_aes256_ctr_encode_decode_inplace(enc, rsaprivdec, rsaprivlen, 0);
   psync_crypto_aes256_ctr_encoder_decoder_free(enc);
   crypto_privkey=psync_ssl_rsa_load_private(rsaprivdec, rsaprivlen);
   psync_ssl_memclean(rsaprivdec, rsaprivlen);
+  psync_mem_unlock(rsaprivdec, rsaprivlen);
   psync_free(rsaprivdec);
   if (crypto_privkey==PSYNC_INVALID_RSA){
     psync_ssl_rsa_free_public(crypto_pubkey);
@@ -552,7 +560,7 @@ int psync_cloud_crypto_stop(){
   crypto_privkey=PSYNC_INVALID_RSA;
   pthread_rwlock_unlock(&crypto_lock);
   debug(D_NOTICE, "stopped crypto");
-  psync_cache_clean_all();
+  psync_cloud_crypto_clean_cache();
   psync_fs_refresh_crypto_folders();
   return PSYNC_CRYPTO_STOP_SUCCESS;
 }
@@ -873,6 +881,7 @@ static psync_symmetric_key_t psync_crypto_sym_key_ver1_to_sym_key(sym_key_ver1 *
   psync_symmetric_key_t key;
   key=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+PSYNC_AES256_KEY_SIZE+PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN);
   key->keylen=PSYNC_AES256_KEY_SIZE+PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN;
+  psync_mem_lock(key->key, PSYNC_AES256_KEY_SIZE+PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN);
   memcpy(key->key, v1->aeskey, PSYNC_AES256_KEY_SIZE);
   memcpy(key->key+PSYNC_AES256_KEY_SIZE, v1->hmackey, PSYNC_CRYPTO_HMAC_SHA512_KEY_LEN);
   return key;

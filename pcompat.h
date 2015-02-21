@@ -496,4 +496,9 @@ void *psync_mmap_anon(size_t size);
 int psync_munmap_anon(void *ptr, size_t size);
 void psync_anon_reset(void *ptr, size_t size);
 
+int psync_mlock(void *ptr, size_t size);
+int psync_munlock(void *ptr, size_t size);
+
+int psync_get_page_size();
+
 #endif

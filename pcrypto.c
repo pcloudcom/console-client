@@ -28,6 +28,7 @@
 #include "plibs.h"
 #include "pcrypto.h"
 #include "psettings.h"
+#include "pmemlock.h"
 #include <string.h>
 
 typedef struct {
@@ -364,6 +365,7 @@ psync_crypto_aes256_text_encoder_t psync_crypto_aes256_text_encoder_create(psync
   ret=(psync_crypto_aes256_text_encoder_t)psync_malloc(offsetof(psync_crypto_aes256_key_var_iv_struct_t, iv)+key->keylen-PSYNC_AES256_KEY_SIZE);
   ret->encoder=enc;
   ret->ivlen=key->keylen-PSYNC_AES256_KEY_SIZE;
+  psync_mem_lock(ret->iv, ret->ivlen);
   memcpy(ret->iv, key->key+PSYNC_AES256_KEY_SIZE, ret->ivlen);
   return ret;
 }
@@ -371,6 +373,7 @@ psync_crypto_aes256_text_encoder_t psync_crypto_aes256_text_encoder_create(psync
 void psync_crypto_aes256_text_encoder_free(psync_crypto_aes256_text_encoder_t enc){
   psync_ssl_aes256_free_encoder(enc->encoder);
   psync_ssl_memclean(enc->iv, enc->ivlen);
+  psync_mem_unlock(enc->iv, enc->ivlen);
   psync_free(enc);
 }
 
@@ -385,6 +388,7 @@ psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync
   ret=(psync_crypto_aes256_text_encoder_t)psync_malloc(offsetof(psync_crypto_aes256_key_var_iv_struct_t, iv)+key->keylen-PSYNC_AES256_KEY_SIZE);
   ret->encoder=enc;
   ret->ivlen=key->keylen-PSYNC_AES256_KEY_SIZE;
+  psync_mem_lock(ret->iv, ret->ivlen);
   memcpy(ret->iv, key->key+PSYNC_AES256_KEY_SIZE, ret->ivlen);
   return ret;
 }
@@ -392,6 +396,7 @@ psync_crypto_aes256_text_decoder_t psync_crypto_aes256_text_decoder_create(psync
 void psync_crypto_aes256_text_decoder_free(psync_crypto_aes256_text_decoder_t enc){
   psync_ssl_aes256_free_encoder(enc->encoder);
   psync_ssl_memclean(enc->iv, enc->ivlen);
+  psync_mem_unlock(enc->iv, enc->ivlen);
   psync_free(enc);
 }
 
@@ -413,6 +418,7 @@ psync_crypto_aes256_sector_encoder_decoder_t psync_crypto_aes256_sector_encoder_
   ret->encoder=enc;
   ret->decoder=dec;
   ret->ivlen=key->keylen-PSYNC_AES256_KEY_SIZE;
+  psync_mem_lock(ret->iv, ret->ivlen);
   memcpy(ret->iv, key->key+PSYNC_AES256_KEY_SIZE, ret->ivlen);
   return ret;
 }
@@ -421,6 +427,7 @@ void psync_crypto_aes256_sector_encoder_decoder_free(psync_crypto_aes256_sector_
   psync_ssl_aes256_free_encoder(enc->encoder);
   psync_ssl_aes256_free_decoder(enc->decoder);
   psync_ssl_memclean(enc->iv, enc->ivlen);
+  psync_mem_unlock(enc->iv, enc->ivlen);
   psync_free(enc);
 }
 

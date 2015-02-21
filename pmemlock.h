@@ -1,5 +1,5 @@
-/* Copyright (c) 2014 Anton Titov.
- * Copyright (c) 2014 pCloud Ltd.
+/* Copyright (c) 2015 Anton Titov.
+ * Copyright (c) 2015 pCloud Ltd.
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,21 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_CACHE_H
-#define _PSYNC_CACHE_H
+#ifndef _PSYNC_MEMLOCK_H
+#define _PSYNC_MEMLOCK_H
 
-#include <time.h>
+#include <stdlib.h>
 
-typedef void (*psync_cache_free_callback)(void *);
-
-void psync_cache_init();
-void *psync_cache_get(const char *key);
-int psync_cache_has(const char *key);
-void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys);
-void psync_cache_add_free(char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys);
-void psync_cache_del(const char *key);
-void psync_cache_clean_all();
-void psync_cache_clean_starting_with(const char *prefix);
-void psync_cache_clean_starting_with_one_of(const char **prefixes, size_t cnt);
+int psync_mem_lock(void *ptr, size_t size);
+int psync_mem_unlock(void *ptr, size_t size);
 
 #endif

@@ -32,6 +32,7 @@
 #include "psettings.h"
 #include "pcache.h"
 #include "ptimer.h"
+#include "pmemlock.h"
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
@@ -41,6 +42,8 @@
 #include <intrin.h>
 #include <wmmintrin.h>
 #endif
+
+#define BIGNUM_LOCK_SIZE 8192
 
 typedef struct {
   SSL *ssl;
@@ -360,6 +363,46 @@ void psync_ssl_rand_weak(unsigned char *buf, int num){
     debug(D_WARNING, "RAND_pseudo_bytes returned weak numbers");
 }
 
+/* this function comes from OpenSSL's crypto/rsa/rsa_lib.c, this version is not (that) buggy and reformatted */
+static int RSA_memory_lock_fixed(RSA *r){
+  int i, j, k, off;
+  char *p;
+  BIGNUM *bn, **t[6], *b;
+  BN_ULONG *ul;
+  if (r->d==NULL)
+    return 1;
+  t[0]=&r->d;
+  t[1]=&r->p;
+  t[2]=&r->q;
+  t[3]=&r->dmp1;
+  t[4]=&r->dmq1;
+  t[5]=&r->iqmp;
+  k=sizeof(BIGNUM)*6;
+  off=k/sizeof(BN_ULONG)+1;
+  j=1;
+  for (i=0; i<6; i++)
+    j+=(*t[i])->top;
+  if ((p=OPENSSL_malloc_locked((off+j)*sizeof(BN_ULONG)))==NULL){
+    RSAerr(RSA_F_RSA_MEMORY_LOCK, ERR_R_MALLOC_FAILURE);
+    return 0;
+  }
+  bn=(BIGNUM *)p;
+  ul=(BN_ULONG *)&p[k];
+  for (i=0; i<6; i++){
+    b= *(t[i]);
+    *(t[i])= &(bn[i]);
+    memcpy((char *)&(bn[i]), (char *)b, sizeof(BIGNUM));
+    bn[i].flags=BN_FLG_STATIC_DATA;
+    bn[i].d=ul;
+    memcpy((char *)ul, b->d, sizeof(BN_ULONG)*b->top);
+    ul+=b->top;
+    BN_clear_free(b);
+  }
+  r->flags&=~(RSA_FLAG_CACHE_PRIVATE|RSA_FLAG_CACHE_PUBLIC);
+  r->bignum_data=p;
+  return 1;
+}
+
 psync_rsa_t psync_ssl_gen_rsa(int bits){
   RSA *rsa;
   BIGNUM *bn;
@@ -369,6 +412,7 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
   rsa=RSA_new();
   if (unlikely_log(!rsa))
     goto err0;
+  psync_mem_lock(rsa, sizeof(RSA));
   bn=BN_new();
   if (unlikely_log(!bn))
     goto err1;
@@ -376,17 +420,41 @@ psync_rsa_t psync_ssl_gen_rsa(int bits){
     goto err2;
   if (unlikely_log(!RSA_generate_key_ex(rsa, bits, bn, NULL)))
     goto err2;
+  RSA_memory_lock_fixed(rsa);
+  if (rsa->bignum_data)
+    psync_mem_lock(rsa->bignum_data, BIGNUM_LOCK_SIZE);
   BN_free(bn);
   return rsa;
 err2:
   BN_free(bn);
 err1:
+  psync_mem_unlock(rsa, sizeof(RSA));
   RSA_free(rsa);
 err0:
   return PSYNC_INVALID_RSA;
 }
 
+static void psync_ssl_lock_rsa(RSA *rsa){
+  psync_mem_lock(rsa, sizeof(RSA));
+  RSA_memory_lock_fixed(rsa);
+  if (rsa->bignum_data)
+    psync_mem_lock(rsa->bignum_data, BIGNUM_LOCK_SIZE);
+}
+
+static void psync_ssl_clean_and_unlock_rsa(RSA *rsa){
+  BN_clear(rsa->d);
+  BN_clear(rsa->p);
+  BN_clear(rsa->q);
+  BN_clear(rsa->dmp1);
+  BN_clear(rsa->dmq1);
+  BN_clear(rsa->iqmp);
+  psync_mem_unlock(rsa, sizeof(RSA));
+  if (rsa->bignum_data)
+    psync_mem_unlock(rsa->bignum_data, BIGNUM_LOCK_SIZE);
+}
+
 void psync_ssl_free_rsa(psync_rsa_t rsa){
+  psync_ssl_clean_and_unlock_rsa(rsa);
   RSA_free(rsa);
 }
 
@@ -399,10 +467,14 @@ void psync_ssl_rsa_free_public(psync_rsa_publickey_t key){
 }
 
 psync_rsa_privatekey_t psync_ssl_rsa_get_private(psync_rsa_t rsa){
-  return RSAPrivateKey_dup(rsa);
+  RSA *rsap=RSAPrivateKey_dup(rsa);
+  if (rsap)
+    psync_ssl_lock_rsa(rsap);
+  return rsap;
 }
 
 void psync_ssl_rsa_free_private(psync_rsa_privatekey_t key){
+  psync_ssl_clean_and_unlock_rsa(key);
   RSA_free(key);
 }
 
@@ -415,8 +487,10 @@ psync_binary_rsa_key_t psync_ssl_rsa_public_to_binary(psync_rsa_publickey_t rsa)
     return PSYNC_INVALID_BIN_RSA;
   ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
   ret->datalen=len;
+  psync_mem_lock(ret->data, len);
   p=ret->data;
   if (unlikely_log(i2d_RSAPublicKey(rsa, &p)!=len)){
+    psync_mem_unlock(ret->data, len);
     psync_free(ret);
     return PSYNC_INVALID_BIN_RSA;
   }
@@ -433,7 +507,9 @@ psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rs
   ret=psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+len);
   ret->datalen=len;
   p=ret->data;
+  psync_mem_lock(ret->data, len);
   if (unlikely_log(i2d_RSAPrivateKey(rsa, &p)!=len)){
+    psync_mem_unlock(ret->data, len);
     psync_free(ret);
     return PSYNC_INVALID_BIN_RSA;
   }
@@ -445,22 +521,24 @@ psync_rsa_publickey_t psync_ssl_rsa_load_public(const unsigned char *keydata, si
 }
 
 psync_rsa_privatekey_t psync_ssl_rsa_load_private(const unsigned char *keydata, size_t keylen){
-  return d2i_RSAPrivateKey(NULL, &keydata, keylen);
+  RSA *rsa=d2i_RSAPrivateKey(NULL, &keydata, keylen);
+  if (rsa)
+    psync_ssl_lock_rsa(rsa);
+  return rsa;
 }
 
 psync_rsa_publickey_t psync_ssl_rsa_binary_to_public(psync_binary_rsa_key_t bin){
-  const unsigned char *p=bin->data;
-  return d2i_RSAPublicKey(NULL, &p, bin->datalen);
+  return psync_ssl_rsa_load_public(bin->data, bin->datalen);
 }
 
 psync_rsa_privatekey_t psync_ssl_rsa_binary_to_private(psync_binary_rsa_key_t bin){
-  const unsigned char *p=bin->data;
-  return d2i_RSAPrivateKey(NULL, &p, bin->datalen);
+  return psync_ssl_rsa_load_private(bin->data, bin->datalen);
 }
 
 psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password, size_t keylen, const unsigned char *salt, size_t saltlen, size_t iterations){
   psync_symmetric_key_t key=(psync_symmetric_key_t)psync_malloc(keylen+offsetof(psync_symmetric_key_struct_t, key));
   key->keylen=keylen;
+  psync_mem_lock(key->key, keylen);
   PKCS5_PBKDF2_HMAC(password, strlen(password), salt, 
                                 saltlen, iterations, EVP_sha512(), keylen, key->key);
   return key;
@@ -518,6 +596,7 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t
   }
   ret=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
   ret->keylen=len;
+  psync_mem_lock(ret->key, len);
   memcpy(ret->key, buff, len);
   return ret;
 }
@@ -527,6 +606,7 @@ static AES_KEY *psync_ssl_get_aligned_aes_key(){
   m=(unsigned char *)psync_malloc(PSYNC_AES256_BLOCK_SIZE+sizeof(AES_KEY));
   a=(unsigned char *)(((((uintptr_t)m)+PSYNC_AES256_BLOCK_SIZE-1)/PSYNC_AES256_BLOCK_SIZE)*PSYNC_AES256_BLOCK_SIZE);
   a[sizeof(AES_KEY)]=a-m;
+  psync_mem_lock(a, sizeof(AES_KEY));
   return (AES_KEY *)a;
 }
 
@@ -535,6 +615,7 @@ static void psync_ssl_free_aligned_aes_key(AES_KEY *aes){
   a=(unsigned char *)aes;
   a-=a[sizeof(AES_KEY)];
   psync_ssl_memclean(aes, sizeof(AES_KEY));
+  psync_mem_unlock(aes, sizeof(AES_KEY));
   psync_free(a);
 }
 

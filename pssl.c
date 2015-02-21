@@ -27,10 +27,12 @@
 
 #include "pssl.h"
 #include "psynclib.h"
+#include "pmemlock.h"
 #include <string.h>
 
 static void psync_ssl_free_psync_encrypted_data_t(psync_encrypted_data_t e){
   psync_ssl_memclean(e->data, e->datalen);
+  psync_mem_unlock(e->data, e->datalen);
   psync_free(e);
 }
 
@@ -40,6 +42,7 @@ void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin){
 
 void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
   psync_ssl_memclean(key->key, key->keylen);
+  psync_mem_unlock(key->key, key->keylen);
   psync_free(key);
 }
 

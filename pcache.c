@@ -245,3 +245,34 @@ void psync_cache_clean_all(){
     pthread_mutex_unlock(&cache_mutexes[hash_to_lock(h)]);
   }
 }
+
+void psync_cache_clean_starting_with(const char *prefix){
+  psync_cache_clean_starting_with_one_of(&prefix, 1);
+}
+
+void psync_cache_clean_starting_with_one_of(const char **prefixes, size_t cnt){
+  psync_list *l1, *l2;
+  hash_element *he;
+  psync_uint_t h;
+  size_t i;
+  psync_def_var_arr(lens, size_t, cnt);
+  for (i=0; i<cnt; i++)
+    lens[i]=strlen(prefixes[i]);
+  for (h=0; h<CACHE_HASH_SIZE; h++){
+    pthread_mutex_lock(&cache_mutexes[hash_to_lock(h)]);
+    psync_list_for_each_safe(l1, l2, &cache_hash[h]){
+      he=psync_list_element(l1, hash_element, list);
+      for (i=0; i<cnt; i++)
+        if (!strncmp(he->key, prefixes[i], lens[i]))
+          break;
+      if (i==cnt)
+        continue;
+      if (!psync_timer_stop(he->timer)){
+        psync_list_del(l1);
+        he->free(he->value);
+        psync_free(he);
+      }
+    }
+    pthread_mutex_unlock(&cache_mutexes[hash_to_lock(h)]);
+  }
+}
