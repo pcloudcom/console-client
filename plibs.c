@@ -1665,6 +1665,11 @@ int psync_task_complete(void *h, void *data){
   return ret;
 }
 
+void psync_try_free_memory(){
+  sqlite3_db_release_memory(psync_db);
+  psync_cache_clean_all();
+}
+
 static void time_format(time_t tm, unsigned long ns, char *result){
   static const char month_names[12][4]={"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   static const char day_names[7][4] ={"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};

@@ -3144,7 +3144,7 @@ void psync_pagecache_init(){
   pthread_mutex_init(&wait_page_mutex, NULL);
   psync_list_init(&free_pages);
   memset(cachepages_to_update, 0, sizeof(cachepages_to_update));
-  pages_base=(char *)psync_mmap_anon(CACHE_PAGES*(PSYNC_FS_PAGE_SIZE+sizeof(psync_cache_page_t)));
+  pages_base=(char *)psync_mmap_anon_safe(CACHE_PAGES*(PSYNC_FS_PAGE_SIZE+sizeof(psync_cache_page_t)));
   page_data=pages_base;
   page=(psync_cache_page_t *)(page_data+CACHE_PAGES*PSYNC_FS_PAGE_SIZE);
   cache_pages_free=CACHE_PAGES;

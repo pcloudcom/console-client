@@ -32,8 +32,7 @@
 
 static void psync_ssl_free_psync_encrypted_data_t(psync_encrypted_data_t e){
   psync_ssl_memclean(e->data, e->datalen);
-  psync_mem_unlock(e->data, e->datalen);
-  psync_free(e);
+  psync_locked_free(e);
 }
 
 void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin){
@@ -42,8 +41,7 @@ void psync_ssl_rsa_free_binary(psync_binary_rsa_key_t bin){
 
 void psync_ssl_free_symmetric_key(psync_symmetric_key_t key){
   psync_ssl_memclean(key->key, key->keylen);
-  psync_mem_unlock(key->key, key->keylen);
-  psync_free(key);
+  psync_locked_free(key);
 }
 
 psync_encrypted_symmetric_key_t psync_ssl_alloc_encrypted_symmetric_key(size_t len){

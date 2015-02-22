@@ -28,6 +28,7 @@
 #include "pmemlock.h"
 #include "pcompat.h"
 #include "ptree.h"
+#include "pintervaltree.h"
 #include "plibs.h"
 #include "pcloudcrypto.h"
 #include <stdint.h>
@@ -39,8 +40,19 @@ typedef struct {
   unsigned long refcnt;
 } locked_page_t;
 
+typedef struct {
+  psync_tree tree;
+  psync_interval_tree_t *freeintervals;
+  char *mem;
+  size_t size;
+  int locked;
+} allocator_range;
+
 static pthread_mutex_t page_mutex=PTHREAD_MUTEX_INITIALIZER;
 static psync_tree *locked_pages=PSYNC_TREE_EMPTY;
+
+static pthread_mutex_t allocator_mutex=PTHREAD_MUTEX_INITIALIZER;
+static psync_tree *allocator_ranges=PSYNC_TREE_EMPTY;
 
 static int lock_page(pageid_t pageid, int page_size){
   psync_tree *tr, **addto;
@@ -159,7 +171,7 @@ int psync_mem_lock(void *ptr, size_t size){
   if (page_size==-1)
     return PRINT_RETURN(-1);
   frompage=(uintptr_t)ptr/page_size;
-  topage=((uintptr_t)ptr+size)/page_size;
+  topage=((uintptr_t)ptr+size-1)/page_size;
   for (i=frompage; i<=topage; i++)
     if (unlikely(lock_page(i, page_size))){
       while (i>frompage)
@@ -176,10 +188,143 @@ int psync_mem_unlock(void *ptr, size_t size){
   if (page_size==-1)
     return PRINT_RETURN(-1);
   frompage=(uintptr_t)ptr/page_size;
-  topage=((uintptr_t)ptr+size)/page_size;
+  topage=((uintptr_t)ptr+size-1)/page_size;
   ret=0;
   for (i=frompage; i<=topage; i++)
     if (unlikely(unlock_page(i, page_size)))
       ret=PRINT_RETURN(-1);
   return ret;
+}
+
+#define LM_ALIGN_TO (sizeof(size_t)*2)
+#define LM_OVERHEAD (sizeof(size_t)*2)
+#define LM_RANGE_OVERHEAD (sizeof(size_t))
+#define LM_END_MARKER (~((size_t)0))
+void *psync_locked_malloc(size_t size){
+  allocator_range *range, *brange;
+  psync_tree *tr, **addto;
+  psync_interval_tree_t *interval;
+  char *ret;
+  uint64_t boffset;
+  size_t intsize, bestsize;
+  int page_size;
+  size=((size+LM_ALIGN_TO-1))/LM_ALIGN_TO*LM_ALIGN_TO+LM_OVERHEAD;
+  debug(D_NOTICE, "size=%lu", (unsigned long)size-LM_OVERHEAD);
+  bestsize=~((size_t)0);
+  brange=NULL;
+  pthread_mutex_lock(&allocator_mutex);
+  psync_tree_for_each_element(range, allocator_ranges, allocator_range, tree)
+    psync_interval_tree_for_each(interval, range->freeintervals){
+      intsize=interval->to-interval->from;
+      if (intsize>=size && intsize<bestsize){
+        bestsize=intsize;
+        brange=range;
+        boffset=interval->from;
+      }
+    }
+  if (brange){
+    if (unlikely(!brange->locked))
+      if (!psync_mem_lock(brange->mem, brange->size))
+        brange->locked=1;
+    psync_interval_tree_remove(&brange->freeintervals, boffset, boffset+size);
+    ret=brange->mem+boffset;
+    *((size_t *)ret)=size;
+    *((size_t *)(ret+size-sizeof(size_t)))=LM_END_MARKER;
+    ret+=sizeof(size_t);
+  }
+  else
+    ret=NULL;
+  pthread_mutex_unlock(&allocator_mutex);
+  if (ret)
+    return ret;
+  page_size=psync_get_page_size();
+  if (unlikely(page_size==-1))
+    page_size=4096;
+  intsize=(size+LM_RANGE_OVERHEAD+page_size-1)/page_size*page_size;
+  brange=psync_new(allocator_range);
+  brange->freeintervals=NULL;
+  brange->mem=psync_mmap_anon_safe(intsize);
+  brange->size=intsize;
+  debug(D_NOTICE, "allocating new locked block of size %lu at %p", (unsigned long)intsize, brange->mem);
+  if (unlikely(psync_mem_lock(brange->mem, intsize))){
+    brange->locked=0;
+    debug(D_WARNING, "could not lock %lu bytes in memory", (unsigned long)intsize);
+  }
+  else
+    brange->locked=1;
+  if (intsize>size+LM_RANGE_OVERHEAD)
+    psync_interval_tree_add(&brange->freeintervals, LM_RANGE_OVERHEAD+size, intsize);
+  ret=brange->mem+LM_RANGE_OVERHEAD;
+  *((size_t *)ret)=size;
+  *((size_t *)(ret+size-sizeof(size_t)))=LM_END_MARKER;
+  ret+=sizeof(size_t);
+  pthread_mutex_lock(&allocator_mutex);
+  tr=allocator_ranges;
+  if (tr){
+    while (1){
+      range=psync_tree_element(tr, allocator_range, tree);
+      if (brange->mem<range->mem){
+        assert(brange->mem+brange->size<=range->mem);
+        if (tr->left)
+          tr=tr->left;
+        else{
+          addto=&tr->left;
+          break;
+        }
+      }
+      else{
+        assert(range->mem+range->size<=brange->mem);
+        if (tr->right)
+          tr=tr->right;
+        else{
+          addto=&tr->right;
+          break;
+        }
+      }
+    }
+  }
+  else
+    addto=&allocator_ranges;
+  *addto=&brange->tree;
+  psync_tree_added_at(&allocator_ranges, tr, &brange->tree);
+  pthread_mutex_unlock(&allocator_mutex);
+  return ret;
+}
+
+void psync_locked_free(void *ptr){
+  allocator_range *range;
+  psync_tree *tr;
+  char *cptr;
+  size_t size;
+  cptr=((char *)ptr)-sizeof(size_t);
+  size=*((size_t *)cptr);
+  debug(D_NOTICE, "size=%lu", (unsigned long)size-LM_OVERHEAD);
+  assert(*((size_t *)(cptr+size-sizeof(size_t)))==LM_END_MARKER);
+  pthread_mutex_lock(&allocator_mutex);
+  tr=allocator_ranges;
+  while (tr){
+    range=psync_tree_element(tr, allocator_range, tree);
+    if (cptr<range->mem)
+      tr=tr->left;
+    else if (cptr>=range->mem+range->size)
+      tr=tr->right;
+    else
+      goto found;
+  }
+  debug(D_CRITICAL, "freeing memory at %p not found in any range", ptr);
+  abort();
+found:
+  psync_interval_tree_add(&range->freeintervals, cptr-range->mem, cptr-range->mem+size);
+  if (range->freeintervals->from==LM_RANGE_OVERHEAD && range->freeintervals->to==range->size)
+    psync_tree_del(&allocator_ranges, &range->tree);
+  else
+    range=NULL;
+  pthread_mutex_unlock(&allocator_mutex);
+  if (range){
+    debug(D_NOTICE, "freeing block of size %lu at %p", (unsigned long)range->size, range->mem);
+    if (range->locked)
+      psync_mem_unlock(range->mem, range->size);
+    psync_munmap_anon(range->mem, range->size);
+    psync_free(range);
+  }
 }

@@ -38,6 +38,7 @@ typedef struct {
 } psync_interval_tree_t;
 
 #define psync_interval_tree_element(a) psync_tree_element(a, psync_interval_tree_t, tree)
+#define psync_interval_tree_for_each(a, l) for (a=psync_interval_tree_get_first(l); a!=NULL; a=psync_interval_tree_get_next(a))
 
 static inline psync_interval_tree_t *psync_interval_tree_get_first(psync_interval_tree_t *tree){
   return psync_interval_tree_element(psync_tree_get_first(&tree->tree));
@@ -78,6 +79,7 @@ static inline psync_interval_tree_t *psync_interval_tree_first_interval_containi
 }
 
 void psync_interval_tree_add(psync_interval_tree_t **tree, uint64_t from, uint64_t to);
+void psync_interval_tree_remove(psync_interval_tree_t **tree, uint64_t from, uint64_t to);
 void psync_interval_tree_free(psync_interval_tree_t *tree);
 void psync_interval_tree_cut_end(psync_interval_tree_t **tree, uint64_t end);
 

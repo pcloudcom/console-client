@@ -60,29 +60,9 @@ typedef struct {
   char str[];
 } string_list;
 
-#if IS_DEBUG
-
 static psync_malloc_t psync_real_malloc=malloc;
-
-static void *debug_malloc(size_t sz){
-  void *ptr;
-  if (unlikely(sz>=PSYNC_DEBUG_LOG_ALLOC_OVER))
-    debug(D_WARNING, "allocating %lu bytes", (unsigned long)sz);
-  assert(sz>0);
-  ptr=psync_real_malloc(sz);
-  if (likely_log(ptr))
-    memset(ptr, 0xfa, sz);
-  return ptr;
-}
-
-psync_malloc_t psync_malloc=debug_malloc;
-
-#else
-psync_malloc_t psync_malloc=malloc;
-#endif
-
-psync_realloc_t psync_realloc=realloc;
-psync_free_t psync_free=free;
+static psync_realloc_t psync_real_realloc=realloc;
+static psync_free_t psync_real_free=free;
 
 const char *psync_database=NULL;
 
@@ -91,6 +71,64 @@ static pthread_mutex_t psync_libstate_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 #define return_error(err) do {psync_error=err; return -1;} while (0)
 #define return_isyncid(err) do {psync_error=err; return PSYNC_INVALID_SYNCID;} while (0)
+
+PSYNC_NOINLINE void *psync_emergency_malloc(size_t size){
+  void *ret;
+  debug(D_WARNING, "could not allocate %lu bytes", (unsigned long)size);
+  psync_try_free_memory();
+  ret=psync_real_malloc(size);
+  if (likely(ret))
+#if IS_DEBUG
+    return memset(ret, 0xfa, size);
+#else
+    return ret;
+#endif
+  else{
+    debug(D_CRITICAL, "could not allocate %lu bytes even after freeing some memory, aborting", (unsigned long)size);
+    abort();
+    return NULL;
+  }
+}
+
+void *psync_malloc(size_t size){
+  void *ret;
+  ret=psync_real_malloc(size);
+  if (likely(ret))
+#if IS_DEBUG
+    return memset(ret, 0xfa, size);
+#else
+    return ret;
+#endif
+  else
+    return psync_emergency_malloc(size);
+}
+
+PSYNC_NOINLINE void *psync_emergency_realloc(void *ptr, size_t size){
+  void *ret;
+  debug(D_WARNING, "could not reallocate %lu bytes", (unsigned long)size);
+  psync_try_free_memory();
+  ret=psync_real_realloc(ptr, size);
+  if (likely(ret))
+    return ret;
+  else{
+    debug(D_CRITICAL, "could not reallocate %lu bytes even after freeing some memory, aborting", (unsigned long)size);
+    abort();
+    return NULL;
+  }
+}
+
+void *psync_realloc(void *ptr, size_t size){
+  void *ret;
+  ret=psync_real_realloc(ptr, size);
+  if (likely(ret))
+    return ret;
+  else
+    return psync_emergency_realloc(ptr, size);
+}
+
+void psync_free(void *ptr){
+  return psync_real_free(ptr);
+}
 
 uint32_t psync_get_last_error(){
   return psync_error;
@@ -101,13 +139,9 @@ void psync_set_database_path(const char *databasepath){
 }
 
 void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call){
-#if IS_DEBUG
   psync_real_malloc=malloc_call;
-#else
-  psync_malloc=malloc_call;
-#endif
-  psync_realloc=realloc_call;
-  psync_free=free_call;
+  psync_real_realloc=realloc_call;
+  psync_real_free=free_call;
 }
 
 static void psync_stop_crypto_on_sleep(){

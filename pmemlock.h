@@ -33,4 +33,7 @@
 int psync_mem_lock(void *ptr, size_t size);
 int psync_mem_unlock(void *ptr, size_t size);
 
+void *psync_locked_malloc(size_t size);
+void psync_locked_free(void *ptr);
+
 #endif

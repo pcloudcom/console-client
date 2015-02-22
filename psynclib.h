@@ -366,9 +366,10 @@ typedef void *(*psync_malloc_t)(size_t);
 typedef void *(*psync_realloc_t)(void *, size_t);
 typedef void (*psync_free_t)(void *);
 
-extern psync_malloc_t psync_malloc;
-extern psync_realloc_t psync_realloc;
-extern psync_free_t psync_free;
+
+void *psync_malloc(size_t size);
+void *psync_realloc(void *ptr, size_t size);
+void psync_free(void *ptr);
 
 /* Status change callback is called every time value is changed. It may be called quite often
  * when there are active uploads/downloads. Callbacks are issued from a special callback thread

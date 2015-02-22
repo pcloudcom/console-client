@@ -3004,6 +3004,29 @@ void *psync_mmap_anon(size_t size){
 #endif
 }
 
+PSYNC_NOINLINE static void *psync_mmap_anon_emergency(size_t size){
+  void *ret;
+  debug(D_WARNING, "could not allocate %lu bytes", (unsigned long)size);
+  psync_try_free_memory();
+  ret=psync_mmap_anon(size);
+  if (likely(ret))
+    return ret;
+  else{
+    debug(D_CRITICAL, "could not allocate %lu bytes even after freeing some memory, aborting", (unsigned long)size);
+    abort();
+    return NULL;
+  }
+}
+
+void *psync_mmap_anon_safe(size_t size){
+  void *ret;
+  ret=psync_mmap_anon(size);
+  if (likely(ret))
+    return ret;
+  else
+    return psync_mmap_anon_emergency(size);
+}
+
 int psync_munmap_anon(void *ptr, size_t size){
 #if defined(PSYNC_MAP_ANONYMOUS)
   return munmap(ptr, size);

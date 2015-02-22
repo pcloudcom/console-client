@@ -103,6 +103,30 @@ void psync_interval_tree_add(psync_interval_tree_t **tree, uint64_t from, uint64
   *tree=psync_interval_tree_get_add(*tree, from, to);
 }
 
+void psync_interval_tree_remove(psync_interval_tree_t **tree, uint64_t from, uint64_t to){
+  psync_interval_tree_t *tr, *ntr;
+  tr=psync_interval_tree_first_interval_containing_or_after(*tree, from);
+  while (tr){
+    if (tr->from<from && tr->to>to){
+      // the only case we have to split interval
+      psync_tree_add_after((psync_tree **)tree, &tr->tree, &psync_interval_new(to, tr->to)->tree);
+      tr->to=from;
+      break;
+    }
+    ntr=psync_interval_tree_get_next(tr);
+    if (from<=tr->from && tr->from<to){
+      tr->from=to;
+      if (tr->from>=tr->to)
+        psync_interval_tree_del(tree, tr);
+    }
+    else if (tr->from<from)
+      tr->to=from;
+    else
+      break;
+    tr=ntr;
+  }
+}
+
 void psync_interval_tree_free(psync_interval_tree_t *tree){
   if (tree)
     psync_tree_for_each_element_call_safe(&tree->tree, psync_interval_tree_t, tree, psync_free);
