@@ -198,8 +198,17 @@ int psync_mem_unlock(void *ptr, size_t size){
 
 #define LM_ALIGN_TO (sizeof(size_t)*2)
 #define LM_OVERHEAD (sizeof(size_t)*2)
-#define LM_RANGE_OVERHEAD (sizeof(size_t))
+#define LM_RANGE_OVERHEAD (LM_ALIGN_TO-sizeof(size_t))
 #define LM_END_MARKER (~((size_t)0))
+
+#if IS_DEBUG
+static void mark_aligment_bytes(char *ptr, size_t from, size_t to){
+  size_t i;
+  for (i=from; i<to; i++)
+    ((unsigned char *)ptr)[i]=((size_t)0xff+from-i)&0xff;
+}
+#endif
+
 void *psync_locked_malloc(size_t size){
   allocator_range *range, *brange;
   psync_tree *tr, **addto;
@@ -207,11 +216,17 @@ void *psync_locked_malloc(size_t size){
   char *ret;
   uint64_t boffset;
   size_t intsize, bestsize;
+#if IS_DEBUG
+  size_t origsize=size;
+#endif
   int page_size;
   size=((size+LM_ALIGN_TO-1))/LM_ALIGN_TO*LM_ALIGN_TO+LM_OVERHEAD;
-  debug(D_NOTICE, "size=%lu", (unsigned long)size-LM_OVERHEAD);
+#if IS_DEBUG
+  debug(D_NOTICE, "size=%lu, size with overhead=%lu", (unsigned long)origsize, (unsigned long)size);
+#endif
   bestsize=~((size_t)0);
   brange=NULL;
+  boffset=0; // just to make compilers happy
   pthread_mutex_lock(&allocator_mutex);
   psync_tree_for_each_element(range, allocator_ranges, allocator_range, tree)
     psync_interval_tree_for_each(interval, range->freeintervals){
@@ -220,17 +235,27 @@ void *psync_locked_malloc(size_t size){
         bestsize=intsize;
         brange=range;
         boffset=interval->from;
+        if (intsize==size)
+          goto foundneededsize;
       }
     }
   if (brange){
+foundneededsize:
     if (unlikely(!brange->locked))
       if (!psync_mem_lock(brange->mem, brange->size))
         brange->locked=1;
     psync_interval_tree_remove(&brange->freeintervals, boffset, boffset+size);
     ret=brange->mem+boffset;
+#if IS_DEBUG
+    *((size_t *)ret)=origsize;
+#else
     *((size_t *)ret)=size;
+#endif
     *((size_t *)(ret+size-sizeof(size_t)))=LM_END_MARKER;
     ret+=sizeof(size_t);
+#if IS_DEBUG
+    mark_aligment_bytes(ret, origsize, size-LM_OVERHEAD);
+#endif
   }
   else
     ret=NULL;
@@ -255,9 +280,16 @@ void *psync_locked_malloc(size_t size){
   if (intsize>size+LM_RANGE_OVERHEAD)
     psync_interval_tree_add(&brange->freeintervals, LM_RANGE_OVERHEAD+size, intsize);
   ret=brange->mem+LM_RANGE_OVERHEAD;
+#if IS_DEBUG
+  *((size_t *)ret)=origsize;
+#else
   *((size_t *)ret)=size;
+#endif
   *((size_t *)(ret+size-sizeof(size_t)))=LM_END_MARKER;
   ret+=sizeof(size_t);
+#if IS_DEBUG
+  mark_aligment_bytes(ret, origsize, size-LM_OVERHEAD);
+#endif
   pthread_mutex_lock(&allocator_mutex);
   tr=allocator_ranges;
   if (tr){
@@ -296,9 +328,19 @@ void psync_locked_free(void *ptr){
   psync_tree *tr;
   char *cptr;
   size_t size;
+#if IS_DEBUG
+  size_t origsize, i;
+#endif
   cptr=((char *)ptr)-sizeof(size_t);
   size=*((size_t *)cptr);
-  debug(D_NOTICE, "size=%lu", (unsigned long)size-LM_OVERHEAD);
+#if IS_DEBUG
+  origsize=size;
+  size=((size+LM_ALIGN_TO-1))/LM_ALIGN_TO*LM_ALIGN_TO;
+  debug(D_NOTICE, "size=%lu", (unsigned long)origsize);
+  for (i=origsize; i<size; i++)
+    assert(((unsigned char *)ptr)[i]==(((size_t)0xff+origsize-i)&0xff));
+  size+=LM_OVERHEAD;
+#endif
   assert(*((size_t *)(cptr+size-sizeof(size_t)))==LM_END_MARKER);
   pthread_mutex_lock(&allocator_mutex);
   tr=allocator_ranges;
