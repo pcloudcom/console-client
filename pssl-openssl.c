@@ -80,7 +80,7 @@ static int openssl_locking_default(int *num, int cnt, int type, const char *file
 static int openssl_locking_add(int *num, int cnt, int type, const char *file, int line){
 #if defined(P_OS_WINDOWS)
   if (sizeof(LONG)==sizeof(int))
-    return InterlockedAdd(num, cnt);
+    return _InterlockedAdd(num, cnt);
   else
     return openssl_locking_default(num, cnt, type, file, line);
 #elif defined(__GNUC__)

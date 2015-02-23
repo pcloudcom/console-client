@@ -217,7 +217,7 @@ void psync_compat_init(){
 #endif
 #elif defined(P_OS_WINDOWS)
   SYSTEM_INFO si;
-  GetSystemInfo(&si));
+  GetSystemInfo(&si);
   psync_page_size=si.dwPageSize;
 #else
   psync_page_size=-1;
