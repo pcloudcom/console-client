@@ -226,7 +226,7 @@ void *psync_locked_malloc(size_t size){
 #endif
   bestsize=~((size_t)0);
   brange=NULL;
-  boffset=0; // just to make compilators happy
+  boffset=0; // just to make compilers happy
   pthread_mutex_lock(&allocator_mutex);
   psync_tree_for_each_element(range, allocator_ranges, allocator_range, tree)
     psync_interval_tree_for_each(interval, range->freeintervals){
