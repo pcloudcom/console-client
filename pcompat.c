@@ -138,12 +138,28 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result){
 }
 #endif
 
-static wchar_t *utf8_to_wchar(const char *str){
+/*static wchar_t *utf8_to_wchar(const char *str){
   int len;
   wchar_t *ret;
   len=MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
   ret=psync_new_cnt(wchar_t, len);
   MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+  return ret;
+}*/
+
+static wchar_t *utf8_to_wchar_path(const char *str){
+  int len;
+  wchar_t *ret;
+  len=MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+  if (len>MAX_PATH){
+    ret=psync_new_cnt(wchar_t, len+4);
+    memcpy(ret, L"\\\\?\\", 4*sizeof(wchar_t));
+    MultiByteToWideChar(CP_UTF8, 0, str, -1, ret+4, len);
+  }
+  else{
+    ret=psync_new_cnt(wchar_t, len);
+    MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+  }
   return ret;
 }
 
@@ -161,7 +177,7 @@ int psync_stat(const char *path, psync_stat_t *st){
   HANDLE fd;
   BOOL ret;
   DWORD flag, attr;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
 retry:
   attr=GetFileAttributesW(wpath);
   if (attr==INVALID_FILE_ATTRIBUTES){
@@ -2095,7 +2111,7 @@ err1:
   WIN32_FIND_DATAW st;
   HANDLE dh;
   spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
-  wpath=utf8_to_wchar(spath);
+  wpath=utf8_to_wchar_path(spath);
   psync_free(spath);
   dh=FindFirstFileW(wpath, &st);
   psync_free(wpath);
@@ -2190,7 +2206,7 @@ err1:
   WIN32_FIND_DATAW st;
   HANDLE dh;
   spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR "*", NULL);
-  wpath=utf8_to_wchar(spath);
+  wpath=utf8_to_wchar_path(spath);
   psync_free(spath);
   dh=FindFirstFileW(wpath, &st);
   psync_free(wpath);
@@ -2227,7 +2243,7 @@ int64_t psync_get_free_space_by_path(const char *path){
   ULARGE_INTEGER free;
   wchar_t *wpath;
   BOOL ret;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   ret=GetDiskFreeSpaceExW(wpath, &free, NULL, NULL);
   psync_free(wpath);
   if (likely_log(ret))
@@ -2245,7 +2261,7 @@ int psync_mkdir(const char *path){
 #elif defined(P_OS_WINDOWS)
   wchar_t *wpath;
   int ret;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   ret=psync_bool_to_zero(CreateDirectoryW(wpath, NULL));
   psync_free(wpath);
   return ret;
@@ -2260,7 +2276,7 @@ int psync_rmdir(const char *path){
 #elif defined(P_OS_WINDOWS)
   wchar_t *wpath;
   int ret;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   ret=psync_bool_to_zero(RemoveDirectoryW(wpath));
   psync_free(wpath);
   return ret;
@@ -2275,8 +2291,8 @@ int psync_file_rename(const char *oldpath, const char *newpath){
 #elif defined(P_OS_WINDOWS) // should we just use rename() here?
   wchar_t *oldwpath, *newwpath;
   int ret;
-  oldwpath=utf8_to_wchar(oldpath);
-  newwpath=utf8_to_wchar(newpath);
+  oldwpath=utf8_to_wchar_path(oldpath);
+  newwpath=utf8_to_wchar_path(newpath);
 retry:
   ret=psync_bool_to_zero(MoveFileW(oldwpath, newwpath));
   if (ret && GetLastError()==ERROR_SHARING_VIOLATION){
@@ -2301,8 +2317,8 @@ int psync_file_rename_overwrite(const char *oldpath, const char *newpath){
   else{
     wchar_t *oldwpath, *newwpath;
     int ret;
-    oldwpath=utf8_to_wchar(oldpath);
-    newwpath=utf8_to_wchar(newpath);
+    oldwpath=utf8_to_wchar_path(oldpath);
+    newwpath=utf8_to_wchar_path(newpath);
 retry:
     ret=psync_bool_to_zero(MoveFileExW(oldwpath, newwpath, MOVEFILE_COPY_ALLOWED|MOVEFILE_REPLACE_EXISTING));
     if (ret && GetLastError()==ERROR_SHARING_VIOLATION){
@@ -2325,7 +2341,7 @@ int psync_file_delete(const char *path){
 #elif defined(P_OS_WINDOWS)
   wchar_t *wpath;
   int ret;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   ret=psync_bool_to_zero(DeleteFileW(wpath));
   psync_free(wpath);
   return ret;
@@ -2367,7 +2383,7 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
     cdis=TRUNCATE_EXISTING;
   else
     cdis=OPEN_EXISTING;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_ATTRIBUTE_NORMAL, NULL);
   if (ret==INVALID_HANDLE_VALUE)
     debug(D_WARNING, "could not open file %s, error %d", path, (int)GetLastError());
@@ -2499,7 +2515,7 @@ int psync_folder_sync(const char *path){
   wchar_t *wpath;
   HANDLE fd;
   int ret;
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
   psync_free(wpath);
   if (fd==INVALID_HANDLE_VALUE){
@@ -2929,7 +2945,7 @@ int psync_invalidate_os_cache(const char *path){
 #if defined(P_OS_WINDOWS)
   wchar_t *wpath;
   debug(D_NOTICE, "got invalidate for path %s", path);
-  wpath=utf8_to_wchar(path);
+  wpath=utf8_to_wchar_path(path);
   SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH, wpath, NULL);
   psync_free(wpath);
   return 0;
