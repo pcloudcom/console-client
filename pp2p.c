@@ -278,9 +278,11 @@ static int check_token(char *token, uint32_t tlen, unsigned char *key, uint32_t 
   if (unlikely_log(!api))
     return 0;
   res=send_command(api, "checkfileownershiptoken", params);
-  psync_apipool_release(api);
-  if (unlikely_log(!res))
+  if (unlikely_log(!res)){
+    psync_apipool_release_bad(api);
     return 0;
+  }
+  psync_apipool_release(api);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
   return result?0:1;
@@ -584,9 +586,11 @@ static int psync_p2p_get_download_token(psync_fileid_t fileid, const unsigned ch
   if (unlikely_log(!api))
     return PSYNC_NET_TEMPFAIL;
   res=send_command(api, "getfileownershiptoken", params);
-  psync_apipool_release(api);
-  if (unlikely_log(!res))
+  if (unlikely_log(!res)){
+    psync_apipool_release_bad(api);
     return PSYNC_NET_TEMPFAIL;
+  }
+  psync_apipool_release(api);
   if (unlikely_log(psync_find_result(res, "result", PARAM_NUM)->num!=0)){
     psync_free(res);
     return PSYNC_NET_PERMFAIL;

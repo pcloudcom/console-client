@@ -623,11 +623,12 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
     goto err_sl_ex;
   }
   res=send_command(api, "getfilelink", params);
-  psync_apipool_release(api);
   if (unlikely_log(!res)){
+    psync_apipool_release_bad(api);
     psync_free(tmpname);
     goto err_sl_ex;
   }
+  psync_apipool_release(api);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (unlikely(result)){
     debug(D_WARNING, "got error %lu from getfilelink", (long unsigned)result);

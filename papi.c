@@ -543,6 +543,33 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
     }
   if (D_CRITICAL<=DEBUG_LEVEL)
     psync_debug(file, function, line, D_CRITICAL, "could not find key %s", name);
+#if IS_DEBUG
+  psync_debug(file, function, line, D_NOTICE, "dumping existing fields of the hash");
+  for (i=0; i<res->length; i++)
+    switch (res->hash[i].value->type){
+      case PARAM_HASH:
+        psync_debug(file, function, line, D_NOTICE, "  %s=[hash]", res->hash[i].key);
+        break;
+      case PARAM_ARRAY:
+        psync_debug(file, function, line, D_NOTICE, "  %s=[array]", res->hash[i].key);
+        break;
+      case PARAM_DATA:
+        psync_debug(file, function, line, D_NOTICE, "  %s=[data]", res->hash[i].key);
+        break;
+      case PARAM_NUM:
+        psync_debug(file, function, line, D_NOTICE, "  %s=%llu", res->hash[i].key, (long long unsigned)res->hash[i].value->num);
+        break;
+      case PARAM_STR:
+        psync_debug(file, function, line, D_NOTICE, "  %s=\"%s\"", res->hash[i].key, res->hash[i].value->str);
+        break;
+      case PARAM_BOOL:
+        psync_debug(file, function, line, D_NOTICE, "  %s=%s", res->hash[i].key, res->hash[i].value->num?"true":"false");
+        break;
+      default:
+        psync_debug(file, function, line, D_NOTICE, "  %s=!unknown type %u", res->hash[i].key, (unsigned)res->hash[i].value->type);
+        break;
+    }
+#endif
   return empty_types[type];
 }
 

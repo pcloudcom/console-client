@@ -136,6 +136,10 @@ psync_socket *psync_apipool_get_from_cache(){
       psync_ret_api(ret);
     else{
       debug(D_NOTICE, "got api connection from cache");
+      if (IS_DEBUG && psync_socket_readable(ret)){
+        debug(D_WARNING, "got socked with pending data to read from cache");
+        abort();
+      }
       return ret;
     }
   }
@@ -158,6 +162,10 @@ void psync_apipool_prepare(){
 }
 
 void psync_apipool_release(psync_socket *api){
+  if (IS_DEBUG && psync_socket_readable(api)){
+    debug(D_WARNING, "released socked with pending data to read");
+    abort();
+  }
   psync_cache_add(API_CACHE_KEY, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
 }
 
@@ -1365,6 +1373,11 @@ static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uin
   if (unlikely_log(psync_http_readall(http, &hdr, sizeof(hdr))!=sizeof(hdr)))
     goto err0;
   i=(hdr.filesize+hdr.blocksize-1)/hdr.blocksize;
+  if ((sizeof(psync_block_checksum)+sizeof(uint32_t))*i>=PSYNC_MAX_CHECKSUMS_SIZE){
+    debug(D_WARNING, "checksums too large %lu", (unsigned long)((sizeof(psync_block_checksum)+sizeof(uint32_t))*i));
+    psync_http_close(http);
+    return PSYNC_NET_OK;
+  }
   cs=(psync_file_checksums *)psync_malloc(offsetof(psync_file_checksums, blocks)+(sizeof(psync_block_checksum)+sizeof(uint32_t))*i);
   cs->filesize=hdr.filesize;
   cs->blocksize=hdr.blocksize;
@@ -1406,6 +1419,11 @@ static int psync_net_get_upload_checksums(psync_socket *api, psync_uploadid_t up
   if (unlikely_log(psync_socket_readall_download(api, &hdr, sizeof(hdr))!=sizeof(hdr)))
     goto err0;
   i=(hdr.filesize+hdr.blocksize-1)/hdr.blocksize;
+  if ((sizeof(psync_block_checksum)+sizeof(uint32_t))*i>=PSYNC_MAX_CHECKSUMS_SIZE){
+    debug(D_WARNING, "checksums too large %lu", (unsigned long)((sizeof(psync_block_checksum)+sizeof(uint32_t))*i));
+    // should we delete the uploadid from db as well so we don't loop constantly?
+    return PSYNC_NET_TEMPFAIL;
+  }
   cs=(psync_file_checksums *)psync_malloc(offsetof(psync_file_checksums, blocks)+(sizeof(psync_block_checksum)+sizeof(uint32_t))*i);
   cs->filesize=hdr.filesize;
   cs->blocksize=hdr.blocksize;

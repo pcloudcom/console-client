@@ -249,6 +249,7 @@ static int clean_uploads_for_task(psync_socket *api, psync_uploadid_t taskid){
   return ret;
 }
 
+/* releases api ONLY on error */
 static int large_upload_check_checksum(psync_socket *api, uint64_t uploadid, const unsigned char *filehash){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid)};
   binresult *res;
@@ -524,11 +525,14 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   if (!key){
     ret=copy_file_if_exists(api, filehash, fsize, folderid, name, taskid, writeid);
     if (ret!=0){
-      psync_apipool_release(api);
-      if (ret==1)
+      if (ret==1){
+        psync_apipool_release(api);
         return 0;
-      else
+      }
+      else{
+        psync_apipool_release_bad(api);
         return -1;
+      }
     }
   }
   if (!uploadid || usize>fsize){

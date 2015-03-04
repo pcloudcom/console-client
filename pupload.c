@@ -868,11 +868,14 @@ restart:
   psync_file_close(fd);
   if (ret==PSYNC_NET_OK)
     ret=upload_save(api, localfileid, localpath, hashhex, fsize, uploadid, folderid, name, upload->taskid, pr);
-  psync_apipool_release(api);
-  if (ret==PSYNC_NET_TEMPFAIL)
+  if (ret==PSYNC_NET_TEMPFAIL){
+    psync_apipool_release_bad(api);
     return -1;
-  else
+  }
+  else{
+    psync_apipool_release(api);
     return 0;
+  }
 err1:
   psync_file_close(fd);
   psync_list_for_each_element_call(&rlist, psync_upload_range_list_t, list, psync_free);
@@ -894,7 +897,10 @@ static void delete_uploadid(psync_uploadid_t uploadid){
   if (unlikely(!api))
     return;
   res=send_command(api, "upload_delete", params);
-  psync_apipool_release(api);
+  if (res)
+    psync_apipool_release(api);
+  else
+    psync_apipool_release_bad(api);
   psync_free(res);
 }
 
