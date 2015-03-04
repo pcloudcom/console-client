@@ -133,7 +133,7 @@ static void copy_iv_and_xor_with_counter(unsigned char *dest, const unsigned cha
 
 psync_symmetric_key_t psync_crypto_aes256_gen_key_len(size_t len){
   psync_symmetric_key_t key;
-  key=(psync_symmetric_key_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
+  key=(psync_symmetric_key_t)psync_locked_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
   key->keylen=len;
   psync_ssl_rand_strong(key->key, len);
   return key;
