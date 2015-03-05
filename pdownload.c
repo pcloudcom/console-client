@@ -632,6 +632,7 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (unlikely(result)){
     debug(D_WARNING, "got error %lu from getfilelink", (long unsigned)result);
+    psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       goto err0;
     else{

@@ -36,6 +36,7 @@
 #include "pcache.h"
 #include "pfileops.h"
 #include "pmemlock.h"
+#include "pstatus.h"
 #include <string.h>
 
 #define PSYNC_CRYPTO_API_ERR_INTERNAL -511
@@ -144,9 +145,12 @@ static int psync_cloud_crypto_setup_do_upload(const unsigned char *rsapriv, size
   psync_free(res);
   if (result!=0)
     debug(D_WARNING, "crypto_setuserkeys returned %u", (unsigned)result);
+  if (result==0)
+    return PSYNC_CRYPTO_SETUP_SUCCESS;
+  psync_process_api_error(result);
   switch (result){
-    case 0:    return PSYNC_CRYPTO_SETUP_SUCCESS;
     case 1000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_NOT_LOGGED_IN);
+    case 2000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
     case 2110: return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_ALREADY_SETUP);
   }
   return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR);
@@ -287,8 +291,10 @@ int psync_cloud_crypto_get_hint(char **hint){
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     psync_free(res);
+    psync_process_api_error(result);
     switch (result){
       case 2122: return PRINT_RETURN_CONST(PSYNC_CRYPTO_HINT_NOT_PROVIDED);
+      case 2000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_HINT_CANT_CONNECT);
       case 1000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_HINT_NOT_LOGGED_IN);
     }
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_HINT_UNKNOWN_ERROR);
@@ -328,8 +334,10 @@ static int psync_cloud_crypto_download_keys(unsigned char **rsapriv, size_t *rsa
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
     psync_free(res);
+    psync_process_api_error(result);
     switch (result){
       case 2111: return PRINT_RETURN_CONST(PSYNC_CRYPTO_START_NOT_SETUP);
+      case 2000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_START_CANT_CONNECT);
       case 1000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_START_NOT_LOGGED_IN);
     }
     return PRINT_RETURN_CONST(PSYNC_CRYPTO_START_UNKNOWN_ERROR);
@@ -605,8 +613,10 @@ int psync_cloud_crypto_reset(){
   psync_free(res);
   if (result)
     debug(D_WARNING, "crypto_reset returned error %u", (unsigned)result);
+  if (result==0)
+    return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_SUCCESS);
+  psync_process_api_error(result);
   switch (result){
-    case 0: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_SUCCESS);
     case 2000: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_LOGGED_IN);
     case 2111: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_NOT_SETUP);
     default: return PRINT_RETURN_CONST(PSYNC_CRYPTO_RESET_UNKNOWN_ERROR);
@@ -714,6 +724,7 @@ static psync_encrypted_symmetric_key_t psync_crypto_download_folder_enc_key(psyn
     crypto_api_errno=result;
     set_crypto_err_msg(res);
     psync_free(res);
+    psync_process_api_error(result);
     return (psync_encrypted_symmetric_key_t)err_to_ptr(PRINT_RETURN_CONST(PSYNC_CRYPTO_API_ERR_INTERNAL));
   }
   b64key=psync_find_result(res, "key", PARAM_STR);
@@ -1413,6 +1424,7 @@ int psync_cloud_crypto_send_mkdir(psync_folderid_t folderid, const char *name, c
     debug(D_NOTICE, "createfolder returned error %lu %s", (unsigned long)result, crypto_api_err);
     psync_free(res);
     *err=crypto_api_err;
+    psync_process_api_error(result);
     return result;
   }
   meta=psync_find_result(res, "metadata", PARAM_HASH);

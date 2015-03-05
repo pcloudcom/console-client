@@ -292,10 +292,11 @@ static int psync_pagecache_read_range_from_api(psync_request_t *request, psync_r
   res=get_result_thread(api);
   if (unlikely_log(!res))
     return -2;
-  i=psync_find_result(res, "result", PARAM_NUM)->num;
-  if (unlikely(i)){
+  dlen=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (unlikely(dlen)){
     psync_free(res);
-    debug(D_WARNING, "readfile returned error %lu", (long unsigned)i);
+    debug(D_WARNING, "readfile returned error %lu", (long unsigned)dlen);
+    psync_process_api_error(dlen);
     return -2;
   }
   dlen=psync_find_result(res, "data", PARAM_DATA)->num;
@@ -506,6 +507,7 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
       psync_free(ret);
       mark_shared_api_bad(api);
       psync_apipool_release_bad(api);
+      psync_process_api_error(result);
       break;
     }
     hosts=psync_find_result(ret, "hosts", PARAM_ARRAY);
@@ -523,6 +525,7 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
       result=psync_find_result(ret, "result", PARAM_NUM)->num;
       if (unlikely(result!=0)){
         debug(D_WARNING, "crypto_getfilekey returned error %lu", result);
+        psync_process_api_error(result);
         goto err4;
       }
       enc=psync_cloud_crypto_get_file_encoder_from_binresult(request->fileid, ret);

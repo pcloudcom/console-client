@@ -317,6 +317,7 @@ static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *pa
     debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
     if (err)
       *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+    psync_process_api_error(result);
   }
   psync_free(res);
   return (int)result;
@@ -823,6 +824,7 @@ static int do_run_command_get_res(const char *cmd, size_t cmdlen, const binparam
     debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
     if (err)
       *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+    psync_process_api_error(result);
   }
   if (result)
     psync_free(res);

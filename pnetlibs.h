@@ -135,4 +135,6 @@ void psync_unlock_file(psync_file_lock_t *lock);
 
 int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, uint64_t *usize);
 
+void psync_process_api_error(uint64_t result);
+
 #endif

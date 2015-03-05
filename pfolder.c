@@ -164,6 +164,7 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
       }
       else{
         psync_free(bres);
+        psync_process_api_error(result);
         if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
           goto errnet;
         else

@@ -101,6 +101,7 @@ static int psync_send_task_mkdir(psync_socket *api, fsupload_task_t *task){
 static void handle_mkdir_api_error(uint64_t result, fsupload_task_t *task){
   psync_sql_res *res;
   debug(D_ERROR, "createfolderifnotexists returned error %u", (unsigned)result);
+  psync_process_api_error(result);
   switch (result){
     case 2002: /* parent does not exists */
     case 2003: /* access denied */
@@ -160,6 +161,7 @@ static int psync_send_task_rmdir(psync_socket *api, fsupload_task_t *task){
 
 static int handle_rmdir_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefolder returned error %u", (unsigned)result);
+  psync_process_api_error(result);
   switch (result){
     case 2005: /* folder does not exist, kind of success */
       //psync_ops_delete_folder_from_db(task->sfolderid);
@@ -253,15 +255,18 @@ static int clean_uploads_for_task(psync_socket *api, psync_uploadid_t taskid){
 static int large_upload_check_checksum(psync_socket *api, uint64_t uploadid, const unsigned char *filehash){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid)};
   binresult *res;
+  uint64_t result;
   res=send_command(api, "upload_info", params);
   if (unlikely_log(!res)){
     psync_apipool_release_bad(api);
     return -1;
   }
-  if (unlikely(psync_find_result(res, "result", PARAM_NUM)->num)){
-    debug(D_WARNING, "upload_info returned %lu", (long unsigned)psync_find_result(res, "result", PARAM_NUM)->num);
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (unlikely(result)){
+    debug(D_WARNING, "upload_info returned %lu", (long unsigned)result);
     psync_free(res);
     psync_apipool_release(api);
+    psync_process_api_error(result);
     return -1;
   }
   if (memcmp(filehash, psync_find_result(res, PSYNC_CHECKSUM, PARAM_STR)->str, PSYNC_HASH_DIGEST_HEXLEN)){
@@ -276,6 +281,7 @@ static int large_upload_check_checksum(psync_socket *api, uint64_t uploadid, con
 
 static int handle_upload_api_error_taskid(uint64_t result, uint64_t taskid){
   psync_sql_res *res;
+  psync_process_api_error(result);
   switch (result){
     case 2005: /* folder does not exists */
     case 2003: /* access denied */
@@ -443,6 +449,7 @@ static int copy_file(psync_socket *api, psync_fileid_t fileid, uint64_t hash, ps
   if (unlikely(result)){
     psync_free(res);
     debug(D_WARNING, "command copyfile returned code %u", (unsigned)result);
+    psync_process_api_error(result);
     return 0;
   }
   meta=psync_find_result(res, "metadata", PARAM_HASH);
@@ -468,6 +475,7 @@ static int copy_file_if_exists(psync_socket *api, const unsigned char *hashhex, 
   if (unlikely(result)){
     psync_free(res);
     debug(D_WARNING, "command getfilesbychecksum returned code %u", (unsigned)result);
+    psync_process_api_error(result);
     return 0;
   }
   metas=psync_find_result(res, "metadata", PARAM_ARRAY);
@@ -546,6 +554,7 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
       psync_free(res);
       psync_apipool_release(api);
       debug(D_WARNING, "upload_create returned %lu", (unsigned long)result);
+      psync_process_api_error(result);
       if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
         return -1;
       else
@@ -601,12 +610,14 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   psync_free(res);
   if (result){
     debug(D_WARNING, "upload_write returned error %lu", (long unsigned)result);
+    psync_process_api_error(result);
     if (result==2068){
       if (clean_uploads_for_task(api, taskid))
         psync_apipool_release_bad(api);
       else
         psync_apipool_release(api);
     }
+    psync_process_api_error(result);
     goto errs;
   }
   // large_upload_check_checksum releases api on failure
@@ -717,6 +728,7 @@ static int upload_modify_read_req(psync_socket *api){
   psync_free(res);
   if (result){
     debug(D_WARNING, "got %lu from upload_writefromfile or upload_write", (unsigned long)result);
+    psync_process_api_error(result);
     return psync_handle_api_result(result);
   }
   else
@@ -771,6 +783,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
     psync_apipool_release(api);
     psync_interval_tree_free(tree);
     debug(D_WARNING, "upload_create returned %lu", (unsigned long)result);
+    psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -1;
     else
@@ -1103,6 +1116,7 @@ static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *ta
 
 static int handle_unlink_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefile returned error %u for fileid %lu", (unsigned)result, (unsigned long)task->fileid);
+  psync_process_api_error(result);
   switch (result){
     case 2009: /* file does not exist, kind of success */
       //psync_ops_delete_file_from_db(task->fileid);
@@ -1190,6 +1204,7 @@ static int psync_send_task_rename_folder(psync_socket *api, fsupload_task_t *tas
 
 static int handle_rename_file_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "renamefile returned error %u", (unsigned)result);
+  psync_process_api_error(result);
   switch (result){
     case 2009: /* file does not exist, skip */
     case 2005: /* destination does not exist, skip */
@@ -1218,6 +1233,7 @@ static int psync_process_task_rename_file(fsupload_task_t *task){
 
 static int handle_rename_folder_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "renamefolder returned error %u parentfolderid=%lu name=%s", (unsigned)result, (unsigned long)task->folderid, task->text1);
+  psync_process_api_error(result);
   switch (result){
     case 2005: /* folder does not exist, skip */
     case 2042: /* moving root, should not happen */

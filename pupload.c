@@ -136,8 +136,10 @@ static int64_t do_run_command_res(const char *cmd, size_t cmdlen, const binparam
   }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
-  if (unlikely(result))
+  if (unlikely(result)){
+    psync_process_api_error(result);
     debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+  }
   return result;
 }
 
@@ -145,6 +147,7 @@ static int do_run_command(const char *cmd, size_t cmdlen, const binparam *params
   uint64_t result;
   result=do_run_command_res(cmd, cmdlen, params, paramscnt);
   if (unlikely(result)){
+    psync_process_api_error(result);
     debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
     return psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL?-1:0;
   }
@@ -199,6 +202,7 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
     if (unlikely(result)){
       psync_diff_unlock();
       debug(D_WARNING, "command createfolderifnotexists returned code %u", (unsigned)result);
+      psync_process_api_error(result);
       if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
         return -1;
       else
@@ -364,6 +368,7 @@ static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t fold
     psync_diff_unlock();
     psync_free(res);
     debug(D_WARNING, "command copyfile returned code %u", (unsigned)result);
+    psync_process_api_error(result);
     return 0;
   }
   meta=psync_find_result(res, "metadata", PARAM_HASH);
@@ -427,6 +432,7 @@ static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psy
   if (unlikely(result)){
     psync_free(res);
     debug(D_WARNING, "command getfilesbychecksum returned code %u", (unsigned)result);
+    psync_process_api_error(result);
     return 0;
   }
   metas=psync_find_result(res, "metadata", PARAM_ARRAY);
@@ -522,6 +528,7 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
   if (unlikely(result)){
     psync_free(res);
     debug(D_WARNING, "command uploadfile returned code %u", (unsigned)result);
+    psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       goto err00;
     else{
@@ -648,6 +655,7 @@ static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char
     result=psync_find_result(res, "result", PARAM_NUM)->num;
     if (unlikely(result)){
       debug(D_WARNING, "command upload_save returned code %u", (unsigned)result);
+      psync_process_api_error(result);
       ret=psync_handle_api_result(result);
     }
     else{
@@ -706,6 +714,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     if (unlikely(result)){
       psync_free(res);
       psync_apipool_release(api);
+      psync_process_api_error(result);
       debug(D_WARNING, "upload_create returned %lu", (unsigned long)result);
       if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
         return -1;
@@ -783,6 +792,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
       if (unlikely(result)){
         id=psync_find_result(res, "id", PARAM_NUM)->num;
         psync_free(res);
+        psync_process_api_error(result);
         if (unlikely_log(!id))
           goto err1;
         while (respwait){
