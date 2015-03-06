@@ -2183,8 +2183,9 @@ int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, u
 
 // this is called when ANY api call returns non zero result
 void psync_process_api_error(uint64_t result){
-  if (result==2000)
-    psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADTOKEN);
+//  comment out for now, as it creates bugs in the GUI
+//  if (result==2000)
+//    psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADTOKEN);
 }
 
 static void psync_netlibs_timer(psync_timer_t timer, void *ptr){
