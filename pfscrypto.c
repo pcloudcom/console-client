@@ -1277,7 +1277,7 @@ int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64
         psync_fs_unlock_ret(of, rfr);
     }
   }
-  return size;
+  return psync_fs_unlock_ret(of, size);
 }
 
 int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset, int checkextender);
