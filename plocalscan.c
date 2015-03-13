@@ -651,33 +651,35 @@ restart:
                                 &scan_lists[SCAN_LIST_RENFOLDERSTO],
                                 compare_inode);
     trn=0;
-    psync_sql_start_transaction();
-    l2=&scan_lists[SCAN_LIST_RENFOLDERSTO];
-    psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFOLDERSROM]){
-      l2=l2->next;
-      scan_rename_folder(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
-      i++;
-      w++;
-      check_for_query_cnt();
+    if (!psync_list_isempty(&scan_lists[SCAN_LIST_RENFOLDERSROM]) || !psync_list_isempty(&scan_lists[SCAN_LIST_NEWFOLDERS])){
+      psync_sql_start_transaction();
+      l2=&scan_lists[SCAN_LIST_RENFOLDERSTO];
+      psync_list_for_each(l1, &scan_lists[SCAN_LIST_RENFOLDERSROM]){
+        l2=l2->next;
+        scan_rename_folder(psync_list_element(l1, sync_folderlist, list), psync_list_element(l2, sync_folderlist, list));
+        i++;
+        w++;
+        check_for_query_cnt();
+      }
+      psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSROM], sync_folderlist, list, psync_free);
+      psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSROM]);
+      psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSTO], sync_folderlist, list, psync_free);
+      psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSTO]);
+      psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list){
+        scan_create_folder(fl);
+        i++;
+        w++;
+        check_for_query_cnt();
+      }
+      psync_sql_commit_transaction();
+      psync_list_init(&newtmp);
+      psync_list_for_each_safe(l1, l2, &scan_lists[SCAN_LIST_NEWFOLDERS]){
+        psync_list_del(l1);
+        psync_list_add_tail(&newtmp, l1);
+      }
+      psync_list_for_each_element_call(&newtmp, sync_folderlist, list, scan_created_folder);
+      psync_list_for_each_element_call(&newtmp, sync_folderlist, list, psync_free);
     }
-    psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSROM], sync_folderlist, list, psync_free);
-    psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSROM]);
-    psync_list_for_each_element_call(&scan_lists[SCAN_LIST_RENFOLDERSTO], sync_folderlist, list, psync_free);
-    psync_list_init(&scan_lists[SCAN_LIST_RENFOLDERSTO]);
-    psync_list_for_each_element(fl, &scan_lists[SCAN_LIST_NEWFOLDERS], sync_folderlist, list){
-      scan_create_folder(fl);
-      i++;
-      w++;
-      check_for_query_cnt();
-    }
-    psync_sql_commit_transaction();
-    psync_list_init(&newtmp);
-    psync_list_for_each_safe(l1, l2, &scan_lists[SCAN_LIST_NEWFOLDERS]){
-      psync_list_del(l1);
-      psync_list_add_tail(&newtmp, l1);
-    }
-    psync_list_for_each_element_call(&newtmp, sync_folderlist, list, scan_created_folder);
-    psync_list_for_each_element_call(&newtmp, sync_folderlist, list, psync_free);
     if (changes){
       i++;
       changes=0;
@@ -765,8 +767,8 @@ static void scanner_thread(){
   lastscan=0;
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatuses, ARRAY_SIZE(requiredstatuses));
-    if (lastscan+2>=psync_current_time){
-      psync_milisleep(600);
+    if (lastscan+5>=psync_current_time){
+      psync_milisleep(2000);
       pthread_mutex_lock(&scan_mutex);
       scan_wakes=0;
       pthread_mutex_unlock(&scan_mutex);

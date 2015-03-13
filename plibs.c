@@ -1439,6 +1439,20 @@ void psync_list_bulder_add_sql(psync_list_builder_t *builder, psync_sql_res *res
   psync_sql_free_result(res);
 }
 
+void *psync_list_bulder_add_element(psync_list_builder_t *builder){
+  if (!builder->last_elements || builder->last_elements->used>=builder->elements_per_list){
+    builder->last_elements=(psync_list_element_list *)psync_malloc(offsetof(psync_list_element_list, elements)+builder->element_size*builder->elements_per_list);
+    psync_list_add_tail(&builder->element_list, &builder->last_elements->list);
+    builder->last_elements->used=0;
+  }
+  builder->current_element=builder->last_elements->elements+builder->last_elements->used*builder->element_size;
+  builder->cstrcnt=psync_list_bulder_push_num(builder);
+  *builder->cstrcnt=0;
+  builder->last_elements->used++;
+  builder->cnt++;
+  return builder->current_element;
+}
+
 void psync_list_add_lstring_offset(psync_list_builder_t *builder, size_t offset, size_t length){
   char **str, *s;
   psync_list_string_list *l;
@@ -1483,7 +1497,10 @@ void *psync_list_builder_finalize(psync_list_builder_t *builder){
   sz=builder->elements_offset+builder->element_size*builder->cnt+builder->stringalloc;
   debug(D_NOTICE, "allocating %lu bytes, %lu of which for strings", (unsigned long)sz, (unsigned long)builder->stringalloc);
   ret=psync_new_cnt(char, sz);
-  memcpy(ret, &builder->cnt, builder->elements_offset);
+  if (builder->elements_offset<=sizeof(builder->cnt))
+    memcpy(ret, &builder->cnt, builder->elements_offset);
+  else
+    memcpy(ret, &builder->cnt, sizeof(builder->cnt));
   elem=ret+builder->elements_offset;
   str=elem+builder->element_size*builder->cnt;
   

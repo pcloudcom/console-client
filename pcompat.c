@@ -341,19 +341,23 @@ char *psync_get_pcloud_path(){
   return path;
 }
 
-char *psync_get_private_tmp_dir(){
+char *psync_get_private_dir(char *name){
   char *path, *rpath;
   psync_stat_t st;
   path=psync_get_pcloud_path();
   if (!path)
     return NULL;
-  rpath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_TMP_DIR, NULL);
+  rpath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
   free(path);
   if (psync_stat(rpath, &st) && psync_mkdir(rpath)){
     psync_free(rpath);
     return NULL;
   }
   return rpath;
+}
+
+char *psync_get_private_tmp_dir(){
+  return psync_get_private_dir(PSYNC_DEFAULT_TMP_DIR);
 }
 
 char *psync_get_default_database_path(){

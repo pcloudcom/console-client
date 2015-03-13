@@ -51,6 +51,7 @@
 #include "pcloudcrypto.h"
 #include "ppagecache.h"
 #include "ppassword.h"
+#include "pnotifications.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -224,6 +225,14 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_p2p_init();
   if (psync_setting_get_bool(_PS(autostartfs)))
     psync_fs_start();
+}
+
+void psync_set_notification_callback(pnotification_callback_t notification_callback, const char *thumbsize){
+  psync_notifications_set_callback(notification_callback, thumbsize);
+}
+
+psync_notification_list_t *psync_get_notifications(){
+  return psync_notifications_get();
 }
 
 uint32_t psync_download_state(){

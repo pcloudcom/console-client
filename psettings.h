@@ -120,6 +120,7 @@
 #define PSYNC_DEFAULT_WINDOWS_DIR "pCloud"
 
 #define PSYNC_DEFAULT_TMP_DIR "temp"
+#define PSYNC_DEFAULT_NTF_THUMB_DIR "ntfthumbs"
 
 #define PSYNC_DB_CHECKPOINT_AT_PAGES 2000
 

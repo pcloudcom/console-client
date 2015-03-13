@@ -265,6 +265,7 @@ uint32_t psync_ato32(const char *str);
 
 psync_list_builder_t *psync_list_builder_create(size_t element_size, size_t offset);
 void psync_list_bulder_add_sql(psync_list_builder_t *builder, psync_sql_res *res, psync_list_builder_sql_callback callback);
+void *psync_list_bulder_add_element(psync_list_builder_t *builder);
 void psync_list_add_string_offset(psync_list_builder_t *builder, size_t offset);
 void psync_list_add_lstring_offset(psync_list_builder_t *builder, size_t offset, size_t length);
 void *psync_list_builder_finalize(psync_list_builder_t *builder);

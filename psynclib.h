@@ -173,6 +173,9 @@ typedef struct {
 #define PEVENT_SHARE_MODIFYIN    (PEVENT_FIRST_SHARE_EVENT+10)
 #define PEVENT_SHARE_MODIFYOUT   (PEVENT_FIRST_SHARE_EVENT+11)
 
+#define PNOTIFICATION_ACTION_NONE          0
+#define PNOTIFICATION_ACTION_GO_TO_FOLDER  1
+
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
 #define PSYNC_FULL           3
@@ -356,6 +359,27 @@ typedef struct {
   uint64_t updatesize;
 } psync_new_version_t;
 
+typedef union {
+  psync_folderid_t folderid;
+} psync_notification_action_t;
+
+typedef struct {
+  const char *text;
+  const char *thumb;
+  time_t mtime;
+  psync_notification_action_t actiondata;
+  uint32_t notificationid;
+  uint8_t actionid;
+  uint8_t isnew;
+  uint8_t iconid;
+} psync_notification_t;
+
+typedef struct {
+  uint32_t notificationcnt;
+  uint32_t newnotificationcnt;
+  psync_notification_t notifications[];
+} psync_notification_list_t;
+
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
 #ifdef __cplusplus
@@ -401,6 +425,22 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
 
 typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t data);
 
+/* Notifications callback is called every time new notificaion arrives (well, with some throttling).
+ * List of notifications is always sorted from latest to oldest. Every notification has the following
+ * fields:
+ *   text - the text to display
+ *   thumb - if available, set to a local path for a thumb, NULL if no thumbnail is available
+ *   mtime - the date/time of notification as UNIX timestamp
+ *   notificationid - id of the notification
+ *   actionid - action to be taken when clicked, one of:
+ *     PNOTIFICATION_ACTION_NONE - do nothing
+ *     PNOTIFICATION_ACTION_GO_TO_FOLDER - go to a folderid set in actiondata.folderid
+ *   isnew - if true, notificaion is new (not seen)  
+ *   iconid - id of the icon to display (when thumb is not available)
+ */
+
+typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newnotificationcnt);
+
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,
  * listing and editing syncs is supported.
@@ -410,6 +450,10 @@ typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t dat
  * psync_start_sync starts remote sync, both callbacks can be NULL, but most of the time setting
  * at least status_callback will make sense. Applications should expect immediate
  * status_callback with status of PSTATUS_LOGIN_REQUIRED after first run of psync_start_sync().
+ * 
+ * psync_set_notification_callback - sets callback for new notifications. Should be called before
+ * psync_start_sync if at all. thumbsize should be string in "WxH" format (e.g. "64x64"). If NULL
+ * no thumbs will be included in listings.
  *
  * psync_download_state is to be called after psync_init but before/instead of psync_start_sync.
  * This function downloads the directory structure into the local state in foreground (e.g. it can
@@ -446,6 +490,8 @@ void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, p
 
 int psync_init();
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
+void psync_set_notification_callback(pnotification_callback_t notification_callback, const char *thumbsize);
+psync_notification_list_t *psync_get_notifications();
 uint32_t psync_download_state();
 void psync_destroy();
 
