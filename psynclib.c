@@ -311,15 +311,22 @@ static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *pa
   psync_socket *api;
   binresult *res;
   uint64_t result;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    goto neterr;
-  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
-  if (likely(res))
-    psync_apipool_release(api);
-  else{
-    psync_apipool_release_bad(api);
-    goto neterr;
+  int tries;
+  tries=0;
+  while (1){
+    api=psync_apipool_get();
+    if (unlikely(!api))
+      goto neterr;
+    res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+    if (likely(res)){
+      psync_apipool_release(api);
+      break;
+    }
+    else{
+      psync_apipool_release_bad(api);
+      if (++tries>=5)
+        goto neterr;
+    }
   }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
@@ -336,8 +343,13 @@ neterr:
   return -1;
 }
 
+int psync_mark_notificaitons_read(uint32_t notificationid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("notificationid", notificationid)};
+  return run_command("readnotifications", params, NULL)?-1:0;
+}
+
 static void psync_invalidate_auth(const char *auth){
-  binparam params[]={P_STR("auth", psync_my_auth)};
+  binparam params[]={P_STR("auth", auth)};
   run_command("logout", params, NULL);
 }
 
