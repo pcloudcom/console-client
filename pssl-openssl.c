@@ -189,31 +189,51 @@ static void psync_set_ssl_error(ssl_connection_t *conn, int err){
   }
 }
 
+static int psync_ssl_cn_match_hostname(X509 *cert, const char *hostname){
+  X509_NAME *sname;
+  X509_NAME_ENTRY *cnentry;
+  ASN1_STRING *cnasn;
+  const char *cnstr;
+  size_t cnstrlen;
+  int idx;
+  sname=X509_get_subject_name(cert);
+  if (unlikely_log(!sname))
+    return -1;
+  idx=X509_NAME_get_index_by_NID(sname, NID_commonName, -1);
+  if (unlikely_log(idx<0))
+    return -1;
+  cnentry=X509_NAME_get_entry(sname, idx);
+  if (unlikely_log(!cnentry))
+    return -1;
+  cnasn=X509_NAME_ENTRY_get_data(cnentry);
+  if (unlikely_log(!cnasn))
+    return -1;
+  cnstr=(const char *)ASN1_STRING_data(cnasn);
+  if (unlikely_log(!cnstr))
+    return -1;
+  cnstrlen=strlen(cnstr);
+  if (unlikely_log(ASN1_STRING_length(cnasn)!=cnstrlen))
+    return -1;
+  debug(D_NOTICE, "got certificate with commonName: %s", cnstr);
+  if (psync_match_pattern(hostname, cnstr, cnstrlen))
+    return 0;
+  else{
+    debug(D_WARNING, "hostname %s does not match certificate common name %s", hostname, cnstr);
+    return -1;
+  }
+}
+
 static int psync_ssl_verify_cert(SSL *ssl, const char *hostname){
   X509 *cert;
-  char buff[256];
+  int ret;
   if (unlikely_log(SSL_get_verify_result(ssl)!=X509_V_OK))
     return -1;
-  if (hostname){
-    cert=SSL_get_peer_certificate(ssl);
-    if (unlikely_log(!cert))
-      return -1;
-    if (unlikely_log(X509_NAME_get_text_by_NID(X509_get_subject_name(cert), OBJ_txt2nid("commonName"), buff, sizeof(buff))==-1)){
-      X509_free(cert);
-      return -1;
-    }
-    debug(D_NOTICE, "got certificate with commonName: %s", buff);
-    if (psync_match_pattern(hostname, buff, strlen(buff))){
-      X509_free(cert);
-      return 0;
-    }
-    else{
-      X509_free(cert);
-      debug(D_WARNING, "hostname %s does not match certificate common name %s", hostname, buff);
-      return -1;
-    }
-  }
-  return 0;
+  cert=SSL_get_peer_certificate(ssl);
+  if (unlikely_log(!cert))
+    return -1;
+  ret=psync_ssl_cn_match_hostname(cert, hostname);
+  X509_free(cert);
+  return ret;
 }
 
 static ssl_connection_t *psync_ssl_alloc_conn(SSL *ssl, const char *hostname){
