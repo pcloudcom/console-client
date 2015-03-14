@@ -1747,6 +1747,7 @@ static void psync_diff_thread(){
   char ex;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
+  notificationid=0;
 restart:
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   sock=get_connected_socket();
@@ -1802,7 +1803,6 @@ restart:
   }
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
-  notificationid=0;
   send_diff_command(sock, diffid, notificationid);
   psync_milisleep(50);
   psync_run_analyze_if_needed();
