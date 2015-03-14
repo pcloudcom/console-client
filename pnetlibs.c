@@ -161,11 +161,83 @@ void psync_apipool_prepare(){
   }
 }
 
-void psync_apipool_release(psync_socket *api){
-  if (IS_DEBUG && psync_socket_readable(api)){
-    debug(D_WARNING, "released socked with pending data to read");
-    abort();
+#if IS_DEBUG
+
+void pident(int ident){
+  char b[ident+1];
+  memset(b, '\t', ident);
+  b[ident]=0;
+  fputs(b, stdout);
+}
+
+static void print_tree(const binresult *tree, int ident){
+  int i;
+  if (tree->type==PARAM_STR)
+    printf("string(%u)\"%s\"", tree->length, tree->str);
+  else if (tree->type==PARAM_NUM)
+    printf("number %llu", (unsigned long long)tree->num);
+  else if (tree->type==PARAM_DATA)
+    printf("data %llu", (unsigned long long)tree->num);
+  else if (tree->type==PARAM_BOOL)
+    printf("bool %s", tree->num?"true":"false");
+  else if (tree->type==PARAM_HASH){
+    printf("hash (%u){\n", tree->length);
+    if (tree->length){
+      pident(ident+1);
+      printf("\"%s\" = ", tree->hash[0].key);
+      print_tree(tree->hash[0].value, ident+1);
+      for (i=1; i<tree->length; i++){
+        printf(",\n");
+        pident(ident+1);
+        printf("\"%s\" = ", tree->hash[i].key);
+        print_tree(tree->hash[i].value, ident+1);
+      }
+    }
+    printf("\n");
+    pident(ident);
+    printf("}");
   }
+  else if (tree->type==PARAM_ARRAY){
+    printf("array (%u)[\n", tree->length);
+    if (tree->length){
+      pident(ident+1);
+      print_tree(tree->array[0], ident+1);
+      for (i=1; i<tree->length; i++){
+        printf(",\n");
+        pident(ident+1);
+        print_tree(tree->array[i], ident+1);
+      }
+    }
+    printf("\n");
+    pident(ident);
+    printf("]");
+  }
+}
+
+PSYNC_NOINLINE static void psync_apipool_dump_socket(psync_socket *api){
+  binresult *res;
+  res=get_result(api);
+  psync_apipool_release_bad(api);
+  if (!res){
+    debug(D_NOTICE, "could not read result from socket, it is probably broken");
+    return;
+  }
+  debug(D_WARNING, "read result from released socket, dumping and aborting");
+  print_tree(res, 0);
+  psync_free(res);
+  abort();
+}
+
+#endif
+
+void psync_apipool_release(psync_socket *api){
+#if IS_DEBUG
+  if (unlikely(psync_socket_readable(api))){
+    debug(D_WARNING, "released socked with pending data to read");
+    psync_apipool_dump_socket(api);
+    return;
+  }
+#endif
   psync_cache_add(API_CACHE_KEY, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
 }
 

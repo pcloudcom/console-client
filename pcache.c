@@ -31,6 +31,7 @@
 #include "ptimer.h"
 #include "plist.h"
 #include "plibs.h"
+#include "pssl.h"
 #include <string.h>
 
 #define CACHE_HASH_SIZE 2048
@@ -55,6 +56,7 @@ typedef struct {
 static psync_list cache_hash[CACHE_HASH_SIZE];
 static pthread_mutex_t cache_mutexes[CACHE_LOCKS];
 static pthread_cond_t cache_cond=PTHREAD_COND_INITIALIZER;
+static uint32_t hash_seed;
 
 void psync_cache_init(){
   pthread_mutexattr_t mattr;
@@ -67,11 +69,12 @@ void psync_cache_init(){
     pthread_mutex_init(&cache_mutexes[i], &mattr);
     pthread_mutexattr_destroy(&mattr);
   }
+  psync_ssl_rand_weak((unsigned char *)&hash_seed, sizeof(hash_seed));
 }
 
 static uint32_t hash_func(const char *key){
   uint32_t c, hash;
-  hash=0;  
+  hash=hash_seed;
   while ((c=(uint32_t)*key++))
     hash=c+(hash<<5)+hash;
   hash+=hash<<3;
@@ -83,7 +86,7 @@ static uint32_t hash_funcl(const char *key, size_t *len){
   const char *k;
   uint32_t c, hash;
   k=key;
-  hash=0;
+  hash=hash_seed;
   while ((c=(uint32_t)*k++))
     hash=c+(hash<<5)+hash;
   hash+=hash<<3;
