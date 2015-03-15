@@ -30,6 +30,12 @@
 #include "ptimer.h"
 #include "plibs.h"
 #include "pnetlibs.h"
+#include "ptree.h"
+
+typedef struct {
+  psync_tree tree;
+  char name[];
+} psync_thumb_list_t;
 
 static char *ntf_thumb_size=NULL;
 static pnotification_callback_t ntf_callback=NULL;
@@ -217,6 +223,66 @@ static void fill_actionid(const binresult *ntf, psync_notification_t *pntf){
     pntf->actionid=PNOTIFICATION_ACTION_NONE;
 }
 
+static void psync_notifications_thumb_dir_list(void *ptr, psync_pstat_fast *st){
+  psync_tree **tree, **addto, *tr;
+  psync_thumb_list_t *tl;
+  size_t len;
+  int cmp;
+  if (st->isfolder)
+    return;
+  tree=(psync_tree **)ptr;
+  tr=*tree;
+  if (tr){
+    while (1){
+      cmp=psync_filename_cmp(st->name, psync_tree_element(tr, psync_thumb_list_t, tree)->name);
+      if (cmp<0){
+        if (tr->left)
+          tr=tr->left;
+        else{
+          addto=&tr->left;
+          break;
+        }
+      }
+      else if (cmp>0){
+        if (tr->right)
+          tr=tr->right;
+        else{
+          addto=&tr->right;
+          break;
+        }
+      }
+      else{
+        debug(D_WARNING, "duplicate name in file list %s, should not happen", st->name);
+        return;
+      }
+    }
+  }
+  else
+    addto=tree;
+  len=strlen(st->name)+1;
+  tl=(psync_thumb_list_t *)psync_malloc(offsetof(psync_thumb_list_t, name)+len);
+  memcpy(tl->name, st->name, len);
+  *addto=&tl->tree;
+  psync_tree_added_at(tree, tr, &tl->tree);
+}
+
+static void psync_notification_remove_from_list(psync_tree **tree, const char *name){
+  psync_tree *tr;
+  int cmp;
+  tr=*tree;
+  while (tr){
+    cmp=psync_filename_cmp(name, psync_tree_element(tr, psync_thumb_list_t, tree)->name);
+    if (cmp<0)
+      tr=tr->left;
+    else if (cmp>0)
+      tr=tr->right;
+    else{
+      psync_tree_del(tree, tr);
+      break;
+    }
+  }
+}
+
 psync_notification_list_t *psync_notifications_get(){
   psync_list_builder_t *builder;
   psync_notification_list_t *res;
@@ -224,11 +290,14 @@ psync_notification_list_t *psync_notifications_get(){
   const char *filename;
   char *thumbpath, *filepath;
   psync_notification_t *pntf;
+  psync_tree *thumbs, *nx;
   psync_stat_t st;
   uint32_t cntnew, cnttotal, i;
   cntnew=0;
-  thumbpath=NULL;
   thumbpath=psync_get_private_dir(PSYNC_DEFAULT_NTF_THUMB_DIR);
+  thumbs=PSYNC_TREE_EMPTY;
+  if (likely(thumbpath))
+    psync_list_dir_fast(thumbpath, psync_notifications_thumb_dir_list, &thumbs);
   builder=psync_list_builder_create(sizeof(psync_notification_t), offsetof(psync_notification_list_t, notifications));
   pthread_mutex_lock(&ntf_mutex);
   if (ntf_processed_result)
@@ -253,13 +322,14 @@ psync_notification_list_t *psync_notifications_get(){
       if (br && thumbpath){
         filename=strrchr(psync_find_result(br, "path", PARAM_STR)->str, '/');
         if (filename++){
+          psync_notification_remove_from_list(&thumbs, filename);
           filepath=psync_strcat(thumbpath, PSYNC_DIRECTORY_SEPARATOR, filename, NULL);
           if (!psync_stat(filepath, &st)){
             pntf->thumb=filepath;
             psync_list_add_string_offset(builder, offsetof(psync_notification_t, thumb));
           }
           else
-            debug(D_WARNING, "could not stat thumb %s which supposed to be downloaded", filename);
+            debug(D_WARNING, "could not stat thumb %s which is supposed to be downloaded", filename);
           psync_free(filepath);
         }
       }
@@ -273,6 +343,16 @@ psync_notification_list_t *psync_notifications_get(){
     }
   }
   pthread_mutex_unlock(&ntf_mutex);
+  thumbs=psync_tree_get_first_safe(thumbs);
+  while (thumbs){
+    nx=psync_tree_get_next_safe(thumbs);
+    debug(D_NOTICE, "deleting unused thumb %s", psync_tree_element(thumbs, psync_thumb_list_t, tree)->name);
+    filepath=psync_strcat(thumbpath, PSYNC_DIRECTORY_SEPARATOR, psync_tree_element(thumbs, psync_thumb_list_t, tree)->name, NULL);
+    psync_file_delete(filepath);
+    psync_free(filepath);
+    psync_free(psync_tree_element(thumbs, psync_thumb_list_t, tree));
+    thumbs=nx;
+  }
   psync_free(thumbpath);
   res=(psync_notification_list_t *)psync_list_builder_finalize(builder);
   res->newnotificationcnt=cntnew;
