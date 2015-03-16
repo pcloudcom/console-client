@@ -484,6 +484,7 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
     api=psync_apipool_get();
     if (unlikely_log(!api))
       continue;
+    psync_socket_set_write_buffered(api);
     if (unlikely(send_command_no_res(api, "getfilelink", params)!=PTR_OK))
       goto err1;
     if (request->needkey && send_key_request(api, request))

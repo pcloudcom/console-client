@@ -189,6 +189,17 @@ static void psync_set_ssl_error(ssl_connection_t *conn, int err){
   }
 }
 
+// Returns non-zero when CN and hostname match.
+// Does case sensititive comparison, fine for now. Replace memcmp with str(n)casecmp if case insensitivity is needed
+static int psync_ssl_compare_cn_hostname(const char *cn, size_t cnlen, const char *hostname, size_t hostnamelen){
+  if (cn[0]=='*' && cn[1]=='.') // assumes valid null terminated string
+    return cnlen<=hostnamelen &&
+    !memcmp(cn+1, hostname+hostnamelen-cnlen+1, cnlen) && //this will also compare the null byte
+    !memchr(hostname, '.', hostnamelen-cnlen+1);
+  else
+    return cnlen==hostnamelen && !memcmp(cn, hostname, cnlen);
+}
+
 static int psync_ssl_cn_match_hostname(X509 *cert, const char *hostname){
   X509_NAME *sname;
   X509_NAME_ENTRY *cnentry;
@@ -215,7 +226,7 @@ static int psync_ssl_cn_match_hostname(X509 *cert, const char *hostname){
   if (unlikely_log(ASN1_STRING_length(cnasn)!=cnstrlen))
     return -1;
   debug(D_NOTICE, "got certificate with commonName: %s", cnstr);
-  if (psync_match_pattern(hostname, cnstr, cnstrlen))
+  if (psync_ssl_compare_cn_hostname(cnstr, cnstrlen, hostname, strlen(hostname)))
     return 0;
   else{
     debug(D_WARNING, "hostname %s does not match certificate common name %s", hostname, cnstr);
