@@ -2028,8 +2028,10 @@ static void psync_fs_throttle(size_t size, uint64_t speed){
   static uint64_t writtenthissec=0;
   static time_t thissec=0;
   time_t currsec;
+  int cnt;
   assert(speed>0);
-  while (1){
+  cnt=0;
+  while (++cnt<=PSYNC_FS_MAX_SHAPER_SLEEP_SEC){
     currsec=psync_timer_time();
     pthread_mutex_lock(&throttle_mutex);
     if (currsec!=thissec){
