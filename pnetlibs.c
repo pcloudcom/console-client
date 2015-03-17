@@ -164,7 +164,7 @@ void psync_apipool_prepare(){
 #if IS_DEBUG
 
 void pident(int ident){
-  char b[ident+1];
+  psync_def_var_arr(b, char, ident+1);
   memset(b, '\t', ident);
   b[ident]=0;
   fputs(b, stdout);
