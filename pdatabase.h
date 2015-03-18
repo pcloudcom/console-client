@@ -137,8 +137,9 @@ COMMIT;\
  *   1 - file is still open, will switch to 0 on close
  *   2 - large upload task
  *   3 - upload task that is finished but still not added to cache
+ *   10- rename tasks are inserted as two rows, first one, the "rename from" is with status 10
  *   11- cancelled task
- * 
+ *   12- file that is new, still open and marked deleted
  * 
  */
 

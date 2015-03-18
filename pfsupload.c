@@ -1322,10 +1322,26 @@ static int psync_cancel_task_modify(fsupload_task_t *task){
 }
 
 static int psync_cancel_task_unlink(fsupload_task_t *task){
-  if (task->fileid>0)
+  psync_sql_res *res;
+  if (unlikely_log(task->fileid>0)){
+    res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=?");
+    psync_sql_bind_uint(res, 1, task->id);
+    upload_wakes++;
+    psync_sql_run_free(res);
     return -1;
+  }
   psync_fstask_file_deleted(task->folderid, task->id, task->text1);
   return 0;
+}
+
+static int psync_cancel_task_unlink_set_rev(fsupload_task_t *task){
+  psync_sql_res *res;
+  debug(D_NOTICE, "converting cancelled unlink_set_rev task %lu to a normal unlink task for file %s", (unsigned long)task->id, task->text1);
+  res=psync_sql_prep_statement("UPDATE fstask SET fileid=int1, status=0, type="NTO_STR(PSYNC_FS_TASK_UNLINK)" WHERE id=?");
+  psync_sql_bind_uint(res, 1, task->id);
+  upload_wakes++;
+  psync_sql_run_free(res);
+  return -1;
 }
 
 typedef int (*psync_send_task_ptr)(psync_socket *, fsupload_task_t *);
@@ -1371,7 +1387,7 @@ static psync_cancel_task_ptr psync_cancel_task_func[]={
   NULL,
   NULL,
   psync_cancel_task_modify,
-  psync_cancel_task_unlink
+  psync_cancel_task_unlink_set_rev
 };
 
 static void pr_del_dep(uint64_t taskid){
