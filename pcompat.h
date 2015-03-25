@@ -483,6 +483,8 @@ ssize_t psync_file_pwrite(psync_file_t fd, const void *buf, size_t count, uint64
 int64_t psync_file_seek(psync_file_t fd, uint64_t offset, int whence);
 int psync_file_truncate(psync_file_t fd);
 int64_t psync_file_size(psync_file_t fd);
+
+void psync_set_software_name(const char *snm);
 char *psync_deviceid();
 
 #if defined(P_OS_WINDOWS) && !defined(gmtime_r)

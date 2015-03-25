@@ -214,8 +214,11 @@ psuggested_folders_t *psync_scanner_scan_folder(const char *path){
     }
     qsort(scnt, PSYNC_SCAN_TYPES_CNT, sizeof(scnt[0]), sort_comp_tuple_rev);
     for (i=0; i<PSYNC_SCAN_TYPES_CNT; i++)
-      if (scnt[i][1] && scnt[i][0]>=PSYNC_SCANNER_MIN_DISPLAY)
-        off+=sprintf(buff+off, "%u %s, ", (unsigned)scnt[i][0], psync_scan_typenames[scnt[i][1]]);
+      if (scnt[i][1] && scnt[i][0]>=PSYNC_SCANNER_MIN_DISPLAY){
+        off+=psync_slprintf(buff+off, sizeof(buff)-off, "%u %s, ", (unsigned)scnt[i][0], psync_scan_typenames[scnt[i][1]]);
+        if (off>=sizeof(buff))
+          break;
+      }
     if (off)
       off-=2;
     buff[off]=0;

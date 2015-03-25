@@ -301,7 +301,7 @@ void psync_set_auth(const char *auth, int save){
   if (save)
     psync_set_string_value("auth", auth);
   else
-    strcpy(psync_my_auth, auth);
+    psync_strlcpy(psync_my_auth, auth, sizeof(psync_my_auth));
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 

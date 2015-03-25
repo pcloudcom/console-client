@@ -38,6 +38,14 @@
 #include <openssl/err.h>
 #include <pthread.h>
 
+#define SSL_CIPHERS \
+  "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"\
+  "DHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-GCM-SHA384:"\
+  "ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:"\
+  "DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:"\
+  "AES256-GCM-SHA384:AES256-SHA256;"
+
+
 #if defined(PSYNC_AES_HW_MSC)
 #include <intrin.h>
 #include <wmmintrin.h>
@@ -150,9 +158,19 @@ int psync_ssl_init(){
   OpenSSL_add_all_ciphers();
   SSL_load_error_strings();
   openssl_thread_setup();
-  globalctx=SSL_CTX_new(SSLv23_method());
-  if (globalctx){
+  globalctx=SSL_CTX_new(TLSv1_2_client_method());
+  if (likely_log(globalctx)){
+    if (unlikely_log(SSL_CTX_set_cipher_list(globalctx, SSL_CIPHERS)!=1)){
+      SSL_CTX_free(globalctx);
+      globalctx=NULL;
+      return -1;
+    }
+    SSL_CTX_set_verify(globalctx, SSL_VERIFY_NONE, NULL);
+    SSL_CTX_set_read_ahead(globalctx, 0); // readahed breaks SSL_Pending 
     SSL_CTX_set_session_cache_mode(globalctx, SSL_SESS_CACHE_CLIENT|SSL_SESS_CACHE_NO_INTERNAL);
+    SSL_CTX_set_options(globalctx, SSL_OP_NO_COMPRESSION);
+    SSL_CTX_set_mode(globalctx, SSL_MODE_RELEASE_BUFFERS);
+    SSL_CTX_set_mode(globalctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
     for (i=0; i<ARRAY_SIZE(psync_ssl_trusted_certs); i++){
       bio=BIO_new(BIO_s_mem());
       BIO_puts(bio, psync_ssl_trusted_certs[i]);

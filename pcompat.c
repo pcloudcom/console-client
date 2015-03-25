@@ -106,6 +106,8 @@ static int psync_gids_cnt;
 
 static int psync_page_size;
 
+static const char *psync_software_name="pCloudSync library "PSYNC_LIB_VERSION;
+
 PSYNC_THREAD const char *psync_thread_name="no name";
 static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -1170,8 +1172,8 @@ psync_socket *psync_socket_connect(const char *host, int unsigned port, int ssl)
   psync_socket *ret;
   void *sslc;
   psync_socket_t sock;
-  char sport[24];
-  sprintf(sport, "%d", port);
+  char sport[8];
+  psync_slprintf(sport, sizeof(sport), "%d", port);
   sock=connect_socket(host, sport);
   if (unlikely_log(sock==INVALID_SOCKET))
     return NULL;
@@ -2084,8 +2086,10 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   }
   pl=strlen(path);
   namelen=pathconf(path, _PC_NAME_MAX);
-  if (namelen==-1)
+  if (unlikely_log(namelen==-1))
     namelen=255;
+  if (namelen<sizeof(de->d_name)-1)
+    namelen=sizeof(de->d_name)-1;
   entrylen=offsetof(struct dirent, d_name)+namelen+1;
   cpath=(char *)psync_malloc(pl+namelen+2);
   entry=(struct dirent *)psync_malloc(entrylen);
@@ -2095,7 +2099,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   pst.path=cpath;
   while (!readdir_r(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
-      strcpy(cpath+pl, de->d_name);
+      psync_strlcpy(cpath+pl, de->d_name, namelen+1);
       if (likely_log(!lstat(cpath, &pst.stat)) && (S_ISREG(pst.stat.st_mode) || S_ISDIR(pst.stat.st_mode))){
         pst.name=de->d_name;
         callback(ptr, &pst);
@@ -2164,6 +2168,8 @@ int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback,
   namelen=pathconf(path, _PC_NAME_MAX);
   if (namelen==-1)
     namelen=255;
+  if (namelen<sizeof(de->d_name)-1)
+    namelen=sizeof(de->d_name)-1;
   entrylen=offsetof(struct dirent, d_name)+namelen+1;
   cpath=(char *)psync_malloc(pl+namelen+2);
   entry=(struct dirent *)psync_malloc(entrylen);
@@ -2175,7 +2181,7 @@ int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback,
 #if defined(DT_UNKNOWN) && defined(DT_DIR) && defined(DT_REG)
       pst.name=de->d_name;
       if (de->d_type==DT_UNKNOWN){
-        strcpy(cpath+pl, de->d_name);
+        psync_strlcpy(cpath+pl, de->d_name, namelen+1);
         if (unlikely_log(lstat(cpath, &st)))
           continue;
         pst.isfolder=S_ISDIR(st.st_mode);
@@ -2188,7 +2194,7 @@ int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback,
         continue;
       callback(ptr, &pst);
 #else
-      strcpy(cpath+pl, de->d_name);
+      psync_strlcpy(cpath+pl, de->d_name, namelen+1);
       if (likely_log(!lstat(cpath, &st))){
         pst.name=de->d_name;
         pst.isfolder=S_ISDIR(st.st_mode);
@@ -2792,6 +2798,10 @@ int64_t psync_file_size(psync_file_t fd){
 #endif
 }
 
+void psync_set_software_name(const char *snm){
+  psync_software_name=snm;
+}
+
 char *psync_deviceid(){
   char *device;
 #if defined(P_OS_WINDOWS)
@@ -2814,7 +2824,7 @@ char *psync_deviceid(){
       case 2: ver="8.0"; break;
       case 1: ver="7.0"; break;
       case 0: ver="Vista"; break;
-      default: sprintf(versbuff, "6.%u", (unsigned int)vminor); ver=versbuff;
+      default: psync_slprintf(versbuff, sizeof(versbuff), "6.%u", (unsigned int)vminor); ver=versbuff;
     }
   }
   else if (vmajor==5){
@@ -2822,14 +2832,20 @@ char *psync_deviceid(){
       case 2: ver="XP 64bit"; break;
       case 1: ver="XP"; break;
       case 0: ver="2000"; break;
-      default: sprintf(versbuff, "5.%u", (unsigned int)vminor); ver=versbuff;
+      default: psync_slprintf(versbuff, sizeof(versbuff), "5.%u", (unsigned int)vminor); ver=versbuff;
+    }
+  }
+  else if (vmajor==10){
+    switch (vminor){
+      case 0: ver="10.0"; break;
+      default: psync_slprintf(versbuff, sizeof(versbuff), "10.%u", (unsigned int)vminor); ver=versbuff;
     }
   }
   else{
-    sprintf(versbuff, "%u.%u", (unsigned int)vmajor, (unsigned int)vminor);
+    psync_slprintf(versbuff, sizeof(versbuff), "%u.%u", (unsigned int)vmajor, (unsigned int)vminor);
     ver=versbuff;
   }
-  device=psync_strcat(hardware, ", Windows ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
+  device=psync_strcat(hardware, ", Windows ", ver, ", ", psync_software_name, NULL);
 #elif defined(P_OS_MACOSX)
   struct utsname un;
   const char *ver;
@@ -2846,13 +2862,14 @@ char *psync_deviceid(){
       case 12: ver="OS X 10.8 Mountain Lion"; break;
       case 11: ver="OS X 10.7 Lion"; break;
       case 10: ver="OS X 10.6 Snow Leopard"; break;
-      default: sprintf(versbuff, "Mac/Darwin %s", un.release); ver=versbuff;
+      default: psync_slprintf(versbuff, sizeof(versbuff), "Mac/Darwin %s", un.release); ver=versbuff;
     }
   }
   len=sizeof(modelname);
   if (sysctlbyname("hw.model", modelname, &len, NULL, 0))
-    strcpy(modelname, "Mac");
-  device=psync_strcat(modelname, ", ", ver, ", pCloudSync library "PSYNC_LIB_VERSION, NULL);
+    psync_strlcpy(modelname, "Mac", sizeof(modelname));
+  versbuff[sizeof(versbuff)-1]=0;
+  device=psync_strcat(modelname, ", ", ver, ", ", psync_software_name, NULL);
 #elif defined(P_OS_LINUX)
   DIR *dh;
   struct dirent entry, *de;
@@ -2878,9 +2895,9 @@ char *psync_deviceid(){
       }
     closedir(dh);
   }
-  device=psync_strcat(hardware, ", Linux, pCloudSync library "PSYNC_LIB_VERSION, NULL);
+  device=psync_strcat(hardware, ", Linux, ", psync_software_name, NULL);
 #else
-  device=psync_strdup("Desktop, pCloudSync library "PSYNC_LIB_VERSION);
+  device=psync_strcat("Desktop, ", psync_software_name, NULL);
 #endif
   debug(D_NOTICE, "detected device: %s", device);
   return device;

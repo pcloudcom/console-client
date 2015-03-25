@@ -59,6 +59,7 @@ typedef struct _localnotify_watch{
   struct _localnotify_watch *next;
   int watchid;
   uint32_t pathlen;
+  uint32_t namelen;
   char path[];
 } localnotify_watch;
 
@@ -87,11 +88,14 @@ static void add_dir_scan(localnotify_dir *dir, const char *path){
   namelen=pathconf(path, _PC_NAME_MAX);
   if (namelen==-1)
     namelen=255;
+  if (namelen<sizeof(de->d_name)-1)
+    namelen=sizeof(de->d_name)-1;
   wch=(localnotify_watch *)psync_malloc(offsetof(localnotify_watch, path)+pl+1+namelen+1);
   wch->next=dir->watches[wid%WATCH_HASH];
   dir->watches[wid%WATCH_HASH]=wch;
   wch->watchid=wid;
   wch->pathlen=pl;
+  wch->namelen=namelen;
   memcpy(wch->path, path, pl+1);
   if (likely_log(dh=opendir(path))){
     entrylen=offsetof(struct dirent, d_name)+namelen+1;
@@ -102,7 +106,7 @@ static void add_dir_scan(localnotify_dir *dir, const char *path){
       cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
     while (!readdir_r(dh, entry, &de) && de)
       if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
-        strcpy(cpath+pl, de->d_name);
+        psync_strlcpy(cpath+pl, de->d_name, namelen+1);
         if (!lstat(cpath, &st) && S_ISDIR(st.st_mode))
           add_dir_scan(dir, cpath);
       }
@@ -203,7 +207,7 @@ static void process_notification(localnotify_dir *dir){
       while (wch){
         if (wch->watchid==ev.wd){
           wch->path[wch->pathlen]='/';
-          strcpy(wch->path+wch->pathlen+1, buff+off+offsetof(struct inotify_event, name));
+          psync_strlcpy(wch->path+wch->pathlen+1, buff+off+offsetof(struct inotify_event, name), wch->namelen+1);
           if (!lstat(wch->path, &st) && S_ISDIR(st.st_mode))
             add_dir_scan(dir, wch->path);
           wch->path[wch->pathlen]=0;
@@ -602,6 +606,8 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
   namelen=pathconf(path, _PC_NAME_MAX);
   if (namelen==-1)
     namelen=255;
+  if (namelen<sizeof(de->d_name)-1)
+    namelen=sizeof(de->d_name)-1;
   if (likely_log(dh=opendir(path))){
     entrylen=offsetof(struct dirent, d_name)+namelen+1;
     cpath=(char *)psync_malloc(len+namelen+1);
@@ -612,7 +618,7 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
       cpath[len++]=PSYNC_DIRECTORY_SEPARATORC;
     while (!readdir_r(dh, entry, &de) && de)
       if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
-        strcpy(cpath+len, de->d_name);
+        psync_strlcpy(cpath+len, de->d_name, namelen+1);
         if (!lstat(cpath, &st) && S_ISDIR(st.st_mode)){
           child=get_dir_scan(cpath, syncid);
           if (child)

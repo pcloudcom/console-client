@@ -181,7 +181,7 @@ static psync_socket *get_connected_socket(){
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     psync_sql_start_transaction();
-    strcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str);
+    psync_strlcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str, sizeof(psync_my_auth));
     if (luserid){
       if (unlikely_log(luserid!=userid)){
         psync_sql_rollback_transaction();

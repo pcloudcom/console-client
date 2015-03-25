@@ -194,6 +194,7 @@ char *psync_strdup(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strnormalize_filename(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strndup(const char *str, size_t len) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strcat(const char *str, ...) PSYNC_MALLOC PSYNC_SENTINEL;
+int psync_slprintf(char *str, size_t size, const char *format, ...) PSYNC_NONNULL(1, 3);
 
 unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size_t *ret_length);
 unsigned char *psync_base32_decode(const unsigned char *str, size_t length, size_t *ret_length);
@@ -294,6 +295,22 @@ static inline void psync_get_string_id(char *dst, const char *prefix, uint64_t i
     id/=64;
   } while (id);
   *dst=0;
+}
+
+static inline size_t psync_strlcpy(char *dst, const char *src, size_t size){
+  size_t len;
+  len=strlen(src);
+  if (likely_log(len<size)){
+    memcpy(dst, src, len+1);
+    return len;
+  }
+  else if (likely_log(size)){
+    memcpy(dst, src, size-1);
+    dst[size-1]=0;
+    return size-1;
+  }
+  else
+    return 0;
 }
 
 #endif

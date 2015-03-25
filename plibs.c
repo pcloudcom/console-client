@@ -150,6 +150,7 @@ char *psync_strcat(const char *str, ...){
   size=len+1;
   i=1;
   while ((ptr=va_arg(ap, const char *))){
+    assert(i<ARRAY_SIZE(strs));
     len=strlen(ptr);
     lengths[i]=len;
     strs[i++]=ptr;
@@ -163,6 +164,17 @@ char *psync_strcat(const char *str, ...){
   }
   *ptr2=0;
   return ptr3;
+}
+
+int psync_slprintf(char *str, size_t size, const char *format, ...){
+  va_list ap;
+  int ret;
+  va_start(ap, format);
+  ret=vsnprintf(str, size, format, ap);
+  va_end(ap);
+  if (unlikely_log(ret>=size))
+    str[size-1]=0;
+  return ret;
 }
 
 unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size_t *ret_length){
@@ -1244,7 +1256,7 @@ int psync_rename_conflicted_file(const char *path){
   num=0;
   while (1){
     if (num)
-      l=sprintf(npath+dotidx, " (conflicted %"P_PRI_I")", num);
+      l=psync_slprintf(npath+dotidx, 32, " (conflicted %"P_PRI_I")", num);
     else{
       l=13;
       memcpy(npath+dotidx, " (conflicted)", l);
