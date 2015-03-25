@@ -468,6 +468,11 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
  * psync_set_alloc can set the allocator to be used by the library. To be called
  * BEFORE psync_init if ever. If allocator is provided, its free() function is to
  * be used to free any memory that is said to be freed when returned by the library.
+ * 
+ * psync_set_software_string can set the name (and version) of the software that is passed
+ * to the server during token creation. Important: library will not make its own copy, so
+ * either pass a static string or make a copy of your dynamic string. This function is to 
+ * be called BEFORE psync_start_sync and it is acceptable to call it even before psync_init().
  *
  * psync_set_database_path can set a full path to database file. If it does not exists
  * it will be created. The function should be only called before psync_init. If
@@ -487,6 +492,7 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
 
 void psync_set_database_path(const char *databasepath);
 void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call);
+void psync_set_software_string(const char *str);
 
 int psync_init();
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
