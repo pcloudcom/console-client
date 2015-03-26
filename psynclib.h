@@ -175,6 +175,8 @@ typedef struct {
 
 #define PNOTIFICATION_ACTION_NONE          0
 #define PNOTIFICATION_ACTION_GO_TO_FOLDER  1
+#define PNOTIFICATION_ACTION_GO_TO_URL     2
+#define PNOTIFICATION_ACTION_SHARE_REQUEST 3
 
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
@@ -361,6 +363,8 @@ typedef struct {
 
 typedef union {
   psync_folderid_t folderid;
+  const char *url;
+  psync_sharerequestid_t sharerequestid;
 } psync_notification_action_t;
 
 typedef struct {
