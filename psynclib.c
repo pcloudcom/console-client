@@ -52,6 +52,7 @@
 #include "ppagecache.h"
 #include "ppassword.h"
 #include "pnotifications.h"
+#include "pmemlock.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -168,6 +169,7 @@ int psync_init(){
       return 0;
     }
   }
+  psync_locked_init();
   psync_cache_init();
   psync_timer_init();
   psync_compat_init();

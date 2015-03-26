@@ -30,6 +30,8 @@
 
 #include <stdlib.h>
 
+void psync_locked_init();
+
 int psync_mem_lock(void *ptr, size_t size);
 int psync_mem_unlock(void *ptr, size_t size);
 

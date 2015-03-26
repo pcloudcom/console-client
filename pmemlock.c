@@ -51,8 +51,16 @@ typedef struct {
 static pthread_mutex_t page_mutex=PTHREAD_MUTEX_INITIALIZER;
 static psync_tree *locked_pages=PSYNC_TREE_EMPTY;
 
-static pthread_mutex_t allocator_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t allocator_mutex;
 static psync_tree *allocator_ranges=PSYNC_TREE_EMPTY;
+
+void psync_locked_init(){
+  pthread_mutexattr_t mattr;
+  pthread_mutexattr_init(&mattr);
+  pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&allocator_mutex, &mattr);
+  pthread_mutexattr_destroy(&mattr);
+}
 
 static int lock_page(pageid_t pageid, int page_size){
   psync_tree *tr, **addto;
@@ -227,6 +235,8 @@ void *psync_locked_malloc(size_t size){
   bestsize=~((size_t)0);
   brange=NULL;
   boffset=0; // just to make compilers happy
+  // psync_mem_lock may call psync_cloud_crypto_clean_cache(), which in turn can call psync_locked_free() on few pointers, therefore
+  // allocator_mutex is recursive
   pthread_mutex_lock(&allocator_mutex);
   psync_tree_for_each_element(range, allocator_ranges, allocator_range, tree)
     psync_interval_tree_for_each(interval, range->freeintervals){
