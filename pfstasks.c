@@ -971,6 +971,8 @@ int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentf
   cr=psync_fstask_find_creat(folder, new_name, 0);
   if (cr){
     debug(D_NOTICE, "renaming over creat of file %s(%ld) in folder %lu", new_name, (long)cr->fileid, (unsigned long)to_folderid);
+    if (cr->fileid<0)
+      psync_fstask_stop_and_delete_file(cr->fileid);
     psync_tree_del(&folder->creats, &cr->tree);
     psync_free(cr);
     folder->taskscnt--;
