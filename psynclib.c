@@ -129,7 +129,7 @@ void *psync_realloc(void *ptr, size_t size){
 }
 
 void psync_free(void *ptr){
-  return psync_real_free(ptr);
+  psync_real_free(ptr);
 }
 
 uint32_t psync_get_last_error(){

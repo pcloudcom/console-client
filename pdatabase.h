@@ -62,10 +62,10 @@ PRAGMA cache_size=8000;\
 BEGIN;\
 CREATE TABLE IF NOT EXISTS setting (id VARCHAR(16) PRIMARY KEY, value TEXT) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS folder (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, permissions INTEGER, \
-  name VARCHAR(1024), ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0, subdircnt INTEGER DEFAULT 0);\
+  name VARCHAR(1024) "PSYNC_TEXT_COL", ctime INTEGER, mtime INTEGER, flags INTEGER DEFAULT 0, subdircnt INTEGER DEFAULT 0);\
 CREATE INDEX IF NOT EXISTS kfolderfolderid ON folder(parentfolderid);\
 CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, parentfolderid INTEGER, userid INTEGER, size INTEGER, hash INTEGER, flags INTEGER DEFAULT 0,\
-  name VARCHAR(1024), ctime INTEGER, mtime INTEGER, category INTEGER, thumb INTEGER, icon VARCHAR(32),\
+  name VARCHAR(1024) "PSYNC_TEXT_COL", ctime INTEGER, mtime INTEGER, category INTEGER, thumb INTEGER, icon VARCHAR(32),\
   artist TEXT, album TEXT, title TEXT, genre TEXT, trackno INTEGER, width INTEGER, height INTEGER, duration REAL,\
   fps REAL, videocodec TEXT, audiocodec TEXT, videobitrate INTEGER, audiobitrate INTEGER, audiosamplerate INTEGER, rotate INTEGER);\
 CREATE INDEX IF NOT EXISTS kfilefolderid ON file(parentfolderid);\
