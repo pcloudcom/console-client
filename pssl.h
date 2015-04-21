@@ -36,6 +36,8 @@
 
 #if defined(P_SSL_OPENSSL)
 #include "pssl-openssl.h"
+#elif defined(P_SSL_MBEDTLS)
+#include "pssl-mbedtls.h"
 #elif defined(P_SSL_SECURETRANSPORT)
 #include "pssl-securetransport.h"
 #else

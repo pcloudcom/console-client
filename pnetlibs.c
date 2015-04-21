@@ -2253,10 +2253,12 @@ int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, u
   return PSYNC_NET_OK;
 }
 
+void psync_logout2(uint32_t auth_status, int doinvauth);
+
 // this is called when ANY api call returns non zero result
 void psync_process_api_error(uint64_t result){
   if (result==2000)
-    psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADTOKEN);
+    psync_logout2(PSTATUS_AUTH_BADTOKEN, 0);
 }
 
 static void psync_netlibs_timer(psync_timer_t timer, void *ptr){

@@ -349,11 +349,8 @@ int psync_ssl_shutdown(void *sslconn){
   if (conn->isbroken)
     goto noshutdown;
   res=SSL_shutdown(conn->ssl);
-  if (res!=-1){
-    SSL_free(conn->ssl);
-    psync_free(conn);
-    return PSYNC_SSL_SUCCESS;
-  }
+  if (res!=-1)
+    goto noshutdown;
   err=SSL_get_error(conn->ssl, res);
   psync_set_ssl_error(conn, err);
   if (likely_log(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE))
@@ -609,33 +606,6 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_data(psync_rsa_privatekey_t rsa, con
   psync_symmetric_key_t ret;
   int len;
   len=RSA_private_decrypt(datalen, data, buff, rsa, RSA_PKCS1_OAEP_PADDING);
-  if (unlikely_log(len==-1))
-    return PSYNC_INVALID_SYM_KEY;
-  ret=(psync_symmetric_key_t)psync_locked_malloc(offsetof(psync_symmetric_key_struct_t, key)+len);
-  ret->keylen=len;
-  memcpy(ret->key, buff, len);
-  psync_ssl_memclean(buff, len);
-  return ret;
-}
-
-psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
-  psync_encrypted_symmetric_key_t ret;
-  int len;
-  ret=(psync_encrypted_symmetric_key_t)psync_malloc(offsetof(psync_encrypted_data_struct_t, data)+RSA_size(rsa));
-  len=RSA_public_encrypt(key->keylen, key->key, ret->data, rsa, RSA_PKCS1_OAEP_PADDING);
-  if (unlikely_log(len==-1)){
-    psync_free(ret);
-    return PSYNC_INVALID_ENC_SYM_KEY;
-  }
-  ret->datalen=len;
-  return ret;
-}
-
-psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t rsa, const psync_encrypted_symmetric_key_t enckey){
-  unsigned char buff[2048];
-  psync_symmetric_key_t ret;
-  int len;
-  len=RSA_private_decrypt(enckey->datalen, enckey->data, buff, rsa, RSA_PKCS1_OAEP_PADDING);
   if (unlikely(len==-1)){
 #if IS_DEBUG
     unsigned long e;
@@ -649,6 +619,14 @@ psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t
   memcpy(ret->key, buff, len);
   psync_ssl_memclean(buff, len);
   return ret;
+}
+
+psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_symmetric_key(psync_rsa_publickey_t rsa, const psync_symmetric_key_t key){
+  return psync_ssl_rsa_encrypt_data(rsa, key->key, key->keylen);
+}
+
+psync_symmetric_key_t psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_privatekey_t rsa, const psync_encrypted_symmetric_key_t enckey){
+  return psync_ssl_rsa_decrypt_data(rsa, enckey->data, enckey->datalen);
 }
 
 static AES_KEY *psync_ssl_get_aligned_aes_key(){
@@ -720,8 +698,8 @@ SSE2FUNC void psync_aes256_encode_block_hw(psync_aes256_encoder enc, const unsig
       "movdqa (%0), %%xmm0\n"
       "1:\n"
       "lea 16(%0), %0\n"
-      AESENC xmm0_xmm1 "\n"
       "dec %3\n"
+      AESENC xmm0_xmm1 "\n"
       "movdqa (%0), %%xmm0\n"
       "jnz 1b\n"
       AESENCLAST xmm0_xmm1 "\n"

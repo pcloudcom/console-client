@@ -219,6 +219,10 @@ static void fill_actionid(const binresult *ntf, psync_notification_t *pntf){
     pntf->actionid=PNOTIFICATION_ACTION_GO_TO_FOLDER;
     pntf->actiondata.folderid=psync_find_result(ntf, "folderid", PARAM_NUM)->num;
   }
+  else if (!strcmp(action, "opensharerequest")){
+    pntf->actionid=PNOTIFICATION_ACTION_SHARE_REQUEST;
+    pntf->actiondata.sharerequestid=psync_find_result(ntf, "sharerequestid", PARAM_NUM)->num;
+  }
   else
     pntf->actionid=PNOTIFICATION_ACTION_NONE;
 }

@@ -30,6 +30,7 @@
 #include "psettings.h"
 #include "pmemlock.h"
 #include <string.h>
+#include <stddef.h>
 
 typedef struct {
   psync_sha512_ctx sha1ctx;

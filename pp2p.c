@@ -105,9 +105,9 @@ static const uint32_t requiredstatuses[]={
 static struct sockaddr_storage paddr;
 static socklen_t paddrlen;
 
-static psync_rsa_publickey_t rsa_public=PSYNC_INVALID_RSA;
-static psync_rsa_privatekey_t rsa_private=PSYNC_INVALID_RSA;
-static psync_binary_rsa_key_t rsa_public_bin=PSYNC_INVALID_BIN_RSA;
+static psync_rsa_publickey_t psync_rsa_public=PSYNC_INVALID_RSA;
+static psync_rsa_privatekey_t psync_rsa_private=PSYNC_INVALID_RSA;
+static psync_binary_rsa_key_t psync_rsa_public_bin=PSYNC_INVALID_BIN_RSA;
 
 PSYNC_PURE static const char *p2p_get_address(void *addr){
   if (((struct sockaddr_in *)addr)->sin_family==AF_INET)
@@ -532,7 +532,7 @@ void psync_p2p_change(){
 static int psync_p2p_check_rsa(){
   static pthread_mutex_t rsa_lock=PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&rsa_lock);
-  if (rsa_private==PSYNC_INVALID_RSA){
+  if (psync_rsa_private==PSYNC_INVALID_RSA){
     psync_rsa_t rsa;
     psync_rsa_privatekey_t rsapriv;
     psync_rsa_publickey_t rsapub;
@@ -550,9 +550,9 @@ static int psync_p2p_check_rsa(){
       rsapubbin=PSYNC_INVALID_BIN_RSA;
     psync_ssl_free_rsa(rsa);
     if (likely_log(rsapriv!=PSYNC_INVALID_RSA && rsapub!=PSYNC_INVALID_RSA && rsapubbin!=PSYNC_INVALID_BIN_RSA)){
-      rsa_private=rsapriv;
-      rsa_public=rsapub;
-      rsa_public_bin=rsapubbin;
+      psync_rsa_private=rsapriv;
+      psync_rsa_public=rsapub;
+      psync_rsa_public_bin=rsapubbin;
       goto ret0;
     }
     else{
@@ -576,7 +576,7 @@ rete:
 static int psync_p2p_get_download_token(psync_fileid_t fileid, const unsigned char *filehashhex, uint64_t fsize, unsigned char **token, size_t *tlen){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("filesize", fsize), 
                      P_LSTR(PSYNC_CHECKSUM, filehashhex, PSYNC_HASH_DIGEST_HEXLEN), 
-                     P_LSTR("keydata", rsa_public_bin->data, rsa_public_bin->datalen)};
+                     P_LSTR("keydata", psync_rsa_public_bin->data, psync_rsa_public_bin->datalen)};
   psync_socket *api;
   binresult *res;
   const binresult *ctoken;
@@ -626,7 +626,7 @@ static int psync_p2p_download(psync_socket_t sock, psync_fileid_t fileid, const 
   }
   ekey=psync_ssl_alloc_encrypted_symmetric_key(keylen);
   if (unlikely_log(socket_read_all(sock, ekey->data, keylen)) || 
-      unlikely_log((key=psync_ssl_rsa_decrypt_symmetric_key(rsa_private, ekey))==PSYNC_INVALID_SYM_KEY)){
+      unlikely_log((key=psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_private, ekey))==PSYNC_INVALID_SYM_KEY)){
     psync_free(ekey);
     return PSYNC_NET_TEMPFAIL;
   }
@@ -808,13 +808,13 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   pct2.type=P2P_GET;
   memcpy(pct2.hashstart, filehashhex, PSYNC_P2P_HEXHASH_BYTES);
   pct2.filesize=fsize;
-  pct2.keylen=rsa_public_bin->datalen;
+  pct2.keylen=psync_rsa_public_bin->datalen;
   pct2.tokenlen=tlen;
   memcpy(pct2.rand, pct1.rand, sizeof(pct1.rand));
   memcpy(pct2.genhash, pct1.genhash, sizeof(pct1.genhash));
   memcpy(pct2.computername, computername, PSYNC_HASH_DIGEST_HEXLEN);
   if (socket_write_all(sock, &pct2, sizeof(pct2)) || 
-      socket_write_all(sock, rsa_public_bin->data, rsa_public_bin->datalen) ||
+      socket_write_all(sock, psync_rsa_public_bin->data, psync_rsa_public_bin->datalen) ||
       socket_write_all(sock, token, tlen)){
     debug(D_WARNING, "writing to socket failed");
     goto err_temp3;

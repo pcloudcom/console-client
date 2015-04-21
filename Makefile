@@ -49,6 +49,10 @@ ifeq ($(USESSL),securetransport)
   OBJ += pssl-securetransport.o
   CFLAGS += -DP_SSL_SECURETRANSPORT
 endif
+ifeq ($(USESSL),mbed)
+  OBJ += pssl-mbedtls.o
+  CFLAGS += -DP_SSL_MBEDTLS -I../../mbedtls-1.3.10/include/
+endif
 
 all: $(LIB_A)
 

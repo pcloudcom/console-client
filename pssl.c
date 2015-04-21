@@ -29,6 +29,7 @@
 #include "psynclib.h"
 #include "pmemlock.h"
 #include <string.h>
+#include <stddef.h>
 
 static void psync_ssl_free_psync_encrypted_data_t(psync_encrypted_data_t e){
   psync_ssl_memclean(e->data, e->datalen);

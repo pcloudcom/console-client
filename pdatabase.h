@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 10
+#define PSYNC_DATABASE_VERSION 11
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -77,13 +77,13 @@ CREATE TABLE IF NOT EXISTS syncfolderdelayed (id INTEGER PRIMARY KEY, localpath 
 CREATE TABLE IF NOT EXISTS syncfolder (id INTEGER PRIMARY KEY, folderid INTEGER REFERENCES folder(id) ON DELETE SET NULL,\
   localpath VARCHAR(4096), synctype INTEGER, flags INTEGER, inode INTEGER, deviceid INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS ksyncfolderfolderidlocalpath ON syncfolder(folderid, localpath);\
-CREATE TABLE IF NOT EXISTS localfolder (id INTEGER PRIMARY KEY, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, folderid INTEGER, \
+CREATE TABLE IF NOT EXISTS localfolder (id INTEGER PRIMARY KEY AUTOINCREMENT, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, folderid INTEGER, \
   syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, inode INTEGER, deviceid INTEGER, mtime INTEGER, mtimenative INTEGER, flags INTEGER, taskcnt INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL");\
 CREATE INDEX IF NOT EXISTS klocalfolderlpfid ON localfolder(localparentfolderid);\
 CREATE UNIQUE INDEX IF NOT EXISTS klocalfolderpsn ON localfolder(syncid, localparentfolderid, name);\
 CREATE INDEX IF NOT EXISTS klocalfolderfolderid ON localfolder(folderid);\
 CREATE INDEX IF NOT EXISTS klocalfoldersyncid ON localfolder(syncid);\
-CREATE TABLE IF NOT EXISTS localfile (id INTEGER PRIMARY KEY, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, fileid INTEGER, hash INTEGER, \
+CREATE TABLE IF NOT EXISTS localfile (id INTEGER PRIMARY KEY AUTOINCREMENT, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, fileid INTEGER, hash INTEGER, \
   syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, size INTEGER, inode INTEGER, mtime INTEGER, mtimenative INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL", checksum TEXT);\
 CREATE INDEX IF NOT EXISTS klocalfilelpfid ON localfile(localparentfolderid);\
 CREATE INDEX IF NOT EXISTS klocalfilefileid ON localfile(fileid);\
@@ -208,7 +208,21 @@ COMMIT;",
 DROP TABLE cryptofilekey;\
 CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, hash INTEGER NOT NULL, enckey BLOB NOT NULL);\
 UPDATE setting SET value=10 WHERE id='dbversion';\
-COMMIT;"
+COMMIT;",
+  "PRAGMA foreign_keys=OFF;\
+BEGIN;\
+CREATE TABLE localfolder_new (id INTEGER PRIMARY KEY AUTOINCREMENT, localparentfolderid INTEGER REFERENCES localfolder(id) ON DELETE CASCADE, folderid INTEGER, \
+  syncid INTEGER REFERENCES syncfolder(id) ON DELETE CASCADE, inode INTEGER, deviceid INTEGER, mtime INTEGER, mtimenative INTEGER, flags INTEGER, taskcnt INTEGER, name VARCHAR(1024) "PSYNC_TEXT_COL");\
+INSERT INTO localfolder_new SELECT * FROM localfolder;\
+DROP TABLE localfolder;\
+ALTER TABLE localfolder_new RENAME TO localfolder;\
+CREATE INDEX IF NOT EXISTS klocalfolderlpfid ON localfolder(localparentfolderid);\
+CREATE UNIQUE INDEX IF NOT EXISTS klocalfolderpsn ON localfolder(syncid, localparentfolderid, name);\
+CREATE INDEX IF NOT EXISTS klocalfolderfolderid ON localfolder(folderid);\
+CREATE INDEX IF NOT EXISTS klocalfoldersyncid ON localfolder(syncid);\
+UPDATE setting SET value=11 WHERE id='dbversion';\
+COMMIT;\
+PRAGMA foreign_keys=ON;"
 };
 
 #endif
