@@ -53,6 +53,7 @@
 #include "ppassword.h"
 #include "pnotifications.h"
 #include "pmemlock.h"
+#include "pexternalstatus.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
