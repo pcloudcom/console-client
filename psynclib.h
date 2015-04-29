@@ -384,6 +384,8 @@ typedef struct {
   psync_notification_t notifications[];
 } psync_notification_list_t;
 
+typedef enum Status {INSYNC, INPROG, NOSYNC} external_status;
+
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
 #ifdef __cplusplus
@@ -930,6 +932,22 @@ time_t psync_crypto_expires();
 int psync_crypto_reset();
 psync_folderid_t psync_crypto_folderid();
 psync_folderid_t *psync_crypto_folderids();
+
+/*
+ * Status functions. 
+ * 
+ * All status functions take path and return corresponding file or folder status. Possible statuses are  INSYNC means everything is OK, 
+ * INPROG - synchronization in progress, NOSYNC - file or folder not synced.  
+ * 
+ * psync_status_file() returns the status of a file in pCloud drive. Path is given from the mount point of the drive.
+ * psync_status_folder() returns the status of a folder in pCloud drive. Path is given from the mount point of the drive.
+ * psync_filesystem_status() returns the status of a folder or a folder in pCloud drive of file system. Path is the absolute path including mount point 
+ * of the drive and/or drive letter. Can be used for synced folders. For files and folders not in drive or sync folder INSYNC is returned.
+ */
+
+external_status psync_filesystem_status(const char *path);
+external_status psync_status_file(const char *path);
+external_status psync_status_folder(const char *path);
 
 #ifdef __cplusplus
 }

@@ -31,7 +31,6 @@
 
 typedef struct {
   int64_t linkid;
-  char *name; 
   char *id; 
   char *code;
   uint64_t traffic; 
@@ -50,7 +49,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
 int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic);
 int64_t do_psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/, 
                                   uint64_t expire, int maxdownloads, int maxtraffic);
-int do_psync_list_links(plink_info_list_t *info /*OUT*/, char **err /*OUT*/);
+int do_psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
 int do_psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 

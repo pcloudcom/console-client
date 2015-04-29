@@ -340,19 +340,21 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   
 }
 
-int do_psync_list_links(plink_info_list_t *info /*OUT*/, char **err /*OUT*/) {
+int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
-  const char *errorret, charfiled;
-  const binresult *publinks, *meta, link;
-  link_info_t *links;
+  const char *errorret;
+  const char *charfiled;
+  const binresult *publinks, *meta;
+  binresult *link;
   int i, linkscnt;
-  
+  plink_info_list_t * info;
   
   *err  = 0;
+  *infop = 0;
  
-  binparam params[] = {P_STR("auth", psync_my_auth)};
+  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
   api = psync_apipool_get();
   if (unlikely(!api)) {
     debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
@@ -389,43 +391,41 @@ int do_psync_list_links(plink_info_list_t *info /*OUT*/, char **err /*OUT*/) {
     return 0;
   }
   
-  links = (link_info_t *) psync_malloc(sizeof(link_info_t)*linkscnt);
-  
-  info = (plink_info_list_t *) psync_malloc(sizeof(plink_info_list_t));
+  info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
   info->entrycnt = linkscnt;
-  info->entries = links;
-  
+
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
     
-    links[i].linkid = psync_find_result(link, "linkid", PARAM_NUM)->num;
-    
-    links[i].traffic = psync_find_result(link, "traffic", PARAM_NUM)->num;
-    
-    links[i].downloads = psync_find_result(link, "downloads", PARAM_NUM)->num;
-    
-    charfiled = psync_find_result(link, "modified", PARAM_STR)->str;
-    int hh, mm, ss;
-struct tm when = {0};
-
-sscanf(date, "%d:%d:%d", &hh, &mm, &ss);
-
-
-when.tm_hour = hh;
-when.tm_min = mm;
-when.tm_sec = ss;
-
-time_t converted;
-converted = mktime(&when);
-    
-    links[i].code = psync_strndup(charfiled, strlen(charfiled));
+    info->entries[i].linkid = psync_find_result(link, "linkid", PARAM_NUM)->num;
+    info->entries[i].traffic = psync_find_result(link, "traffic", PARAM_NUM)->num;
+    info->entries[i].downloads = psync_find_result(link, "downloads", PARAM_NUM)->num;
+    info->entries[i].modified = psync_find_result(link, "modified", PARAM_NUM)->num;
+    info->entries[i].created = psync_find_result(link, "created", PARAM_NUM)->num;
     
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
-    links[i].code = psync_strndup(charfiled, strlen(charfiled));
+    info->entries[i].code = psync_strndup(charfiled, strlen(charfiled));
    
-    
     meta=psync_find_result(link, "metadata", PARAM_HASH);
+    
+    charfiled = psync_find_result(meta, "id", PARAM_STR)->str;
+    info->entries[i].id = psync_strndup(charfiled, strlen(charfiled));
+    
+    charfiled = psync_find_result(meta, "name", PARAM_STR)->str;
+    info->entries[i].meta.name = psync_strndup(charfiled, strlen(charfiled));
+    info->entries[i].meta.namelen = strlen(charfiled);
+    
+    if (psync_find_result(meta, "isfolder", PARAM_STR)->str[0] == 't') {
+      info->entries[i].meta.isfolder = 1;
+      info->entries[i].meta.folder.folderid = psync_find_result(meta, "folderid", PARAM_NUM)->num; 
+      
+    } else {
+      info->entries[i].meta.isfolder = 0;
+      info->entries[i].meta.file.fileid = psync_find_result(meta, "fileid", PARAM_NUM)->num; 
+      info->entries[i].meta.file.size = psync_find_result(meta, "size", PARAM_NUM)->num; 
+    }
   }
+  *infop = info;
   return linkscnt;
 }
 

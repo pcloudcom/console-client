@@ -29,8 +29,7 @@
 
 #include "plist.h"
 #include "pfsfolder.h"
-
-typedef enum Status {INSYNC, INPROG, NOSYNC} external_status;
+#include "psynclib.h"
 
 typedef struct {
   psync_list list;

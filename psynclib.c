@@ -54,6 +54,7 @@
 #include "pnotifications.h"
 #include "pmemlock.h"
 #include "pexternalstatus.h"
+
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -1514,3 +1515,14 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
+external_status psync_filesystem_status(const char *path) {
+  return do_psync_external_status(path);
+}
+
+external_status psync_status_file(const char *path) {
+  return do_psync_external_status_file(path);
+}
+
+external_status psync_status_folder(const char *path) {
+  return do_psync_external_status_folder(path);
+}
