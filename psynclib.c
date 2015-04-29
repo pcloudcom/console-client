@@ -54,6 +54,7 @@
 #include "pnotifications.h"
 #include "pmemlock.h"
 #include "pexternalstatus.h"
+#include "publiclinks.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -1525,4 +1526,24 @@ external_status psync_status_file(const char *path) {
 
 external_status psync_status_folder(const char *path) {
   return do_psync_external_status_folder(path);
+}
+
+int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
+  return do_psync_file_public_link(path, code, err, 0, 0, 0);
+}
+
+int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
+  return do_psync_folder_public_link(path, code, err, 0, 0, 0);
+}
+
+int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/) {
+  return do_psync_tree_public_link(linkname, root, folders, numfolders, files, numfiles, code, err,  0, 0, 0);
+}
+
+int psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/) {
+  return do_psync_list_links(info, err);
+}
+
+int psync_delete_link(int64_t linkid, char **err /*OUT*/) {
+  return do_psync_delete_link(linkid, err);
 }

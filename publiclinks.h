@@ -29,22 +29,6 @@
 
 #include "psynclib.h"
 
-typedef struct {
-  int64_t linkid;
-  char *id; 
-  char *code;
-  uint64_t traffic; 
-  uint64_t downloads; 
-  uint64_t created;
-  uint64_t modified;
-  pentry_t meta;
-} link_info_t;
-
-typedef struct {
-  size_t entrycnt;
-  link_info_t entries[];
-} plink_info_list_t;
-
 int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic);
 int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic);
 int64_t do_psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/, 

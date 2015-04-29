@@ -386,6 +386,22 @@ typedef struct {
 
 typedef enum Status {INSYNC, INPROG, NOSYNC} external_status;
 
+typedef struct {
+  int64_t linkid;
+  char *id; 
+  char *code;
+  uint64_t traffic; 
+  uint64_t downloads; 
+  uint64_t created;
+  uint64_t modified;
+  pentry_t meta;
+} link_info_t;
+
+typedef struct {
+  size_t entrycnt;
+  link_info_t entries[];
+} plink_info_list_t;
+
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
 #ifdef __cplusplus
@@ -948,6 +964,21 @@ psync_folderid_t *psync_crypto_folderids();
 external_status psync_filesystem_status(const char *path);
 external_status psync_status_file(const char *path);
 external_status psync_status_folder(const char *path);
+
+/*
+ * Publik links API functions. 
+ * 
+ * psync_file_public_link() creates public link for a file. Returns link id or negative error number. 
+ *  The path parameter is pcloud drive path. 
+ *  The code is pointer where generated code is returned.
+ *  The err is parameter where printable text of api error if any is returned. 
+ */
+
+int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
+int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
+int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/);
+int psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
+int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 #ifdef __cplusplus
 }
