@@ -48,9 +48,9 @@ static inline const char* print_external_status(external_status stat)
   }
 }
 
-external_status psync_external_status(const char *path);
-external_status psync_external_status_file(const char *path);
-external_status psync_external_status_folder(const char *path);
+external_status do_psync_external_status(const char *path);
+external_status do_psync_external_status_file(const char *path);
+external_status do_psync_external_status_folder(const char *path);
 
 external_status psync_sync_status_folder(const char *path, int syncid);
 string_list_t*  sync_get_sync_folders();
