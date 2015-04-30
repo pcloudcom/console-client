@@ -26,7 +26,6 @@
 
 #include <stddef.h>
 #include <string.h>
-#include <malloc.h>
 
 #include "pcompat.h"
 #include "pexternalstatus.h"

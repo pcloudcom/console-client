@@ -972,6 +972,30 @@ external_status psync_status_folder(const char *path);
  *  The path parameter is pcloud drive path. 
  *  The code is pointer where generated code is returned.
  *  The err is parameter where printable text of api error if any is returned. 
+ *  
+ *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
+ * 
+ * 
+ * psync_folder_public_link() creates public link for a folder. Returns link id or negative error number. 
+ *  The path parameter is pcloud drive path. 
+ *  The code is pointer where generated code is returned.
+ *  The err is parameter where printable text of api error if any is returned. 
+ *  
+ *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
+ * 
+ * psync_tree_public_link() creates public link for a tree. Tree is define by root folder and arrays of folders and file paths. Each entry in the arrays 
+ *  describes a path to file or folder. Number of entries in the arrays is passed separately. The API constructs a virtual folder of this files and folders 
+ *  and if root is passed it will serve as root folder for this virtual folder so name is mandatory. you can omit any of the other parameters.
+ *  Returns link id or negative error number. 
+ *  The code is pointer where generated code is returned.
+ *  The err is parameter where printable text of api error if any is returned. 
+ *  
+ *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
+ * 
+ * psync_delete_link() Deletes a public link by linkid or returns negative number and upon API failure a string representation of the error.
+ * 
+ * psync_list_links() Lists all public links in the account or returns negative number and upon API failure a string representation of the error.
+ * 
  */
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
