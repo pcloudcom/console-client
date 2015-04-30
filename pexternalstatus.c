@@ -27,7 +27,6 @@
 #include <stddef.h>
 #include <string.h>
 #include <malloc.h>
-#include <apr-1.0/apr_poll.h>
 
 #include "pcompat.h"
 #include "pexternalstatus.h"
