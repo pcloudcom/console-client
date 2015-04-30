@@ -996,6 +996,9 @@ external_status psync_status_folder(const char *path);
  * 
  * psync_list_links() Lists all public links in the account or returns negative number and upon API failure a string representation of the error.
  * 
+ * REMINDER. You have to free the out parameters passed as pointers to the library as it reserves memory for them but does not cleans it. You will have to iterate 
+ * though entire entires[] array and free all codes and names before feeing entire info.
+ * 
  */
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
