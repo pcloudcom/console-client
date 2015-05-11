@@ -1,6 +1,11 @@
 #ifndef _PSYNC_SSLCERTS_H
 #define _PSYNC_SSLCERTS_H
 
+static const char *psync_ssl_trusted_pk_sha256[]={
+  "c4fe0872215f16af17c1f2da80ca23863105590a5e64c8ddc9693d21cb835a4e",
+  "cc5e7d264759ce57d8d2616532ddc7224d2ea721433bd3828e9f70fd89fcf81d"
+};
+
 static const char *psync_ssl_trusted_certs[]={
 // SwissSign_Silver_CA_-_G2.crt until Oct 25 08:32:46 2036 GMT
 "-----BEGIN CERTIFICATE-----\n\
@@ -38,6 +43,8 @@ tGMU0gYqZ4yD9c7qB9iaah7s5Aq7KkzrCWA5zspi2C5u\n\
 -----END CERTIFICATE-----\n\
 ",
 // SwissSign_Gold_CA_-_G2.crt until Oct 25 08:30:35 2036 GMT
+// The current (2015-2016) certificate of pCloud uses this CA,
+// remove it to test proper validation
 "-----BEGIN CERTIFICATE-----\n\
 MIIFujCCA6KgAwIBAgIJALtAHEP1Xk+wMA0GCSqGSIb3DQEBBQUAMEUxCzAJBgNV\n\
 BAYTAkNIMRUwEwYDVQQKEwxTd2lzc1NpZ24gQUcxHzAdBgNVBAMTFlN3aXNzU2ln\n\
