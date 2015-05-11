@@ -398,9 +398,11 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
     
     info->entries[i].linkid = psync_find_result(link, "linkid", PARAM_NUM)->num;
     info->entries[i].traffic = psync_find_result(link, "traffic", PARAM_NUM)->num;
+    info->entries[i].maxspace = 0;
     info->entries[i].downloads = psync_find_result(link, "downloads", PARAM_NUM)->num;
     info->entries[i].modified = psync_find_result(link, "modified", PARAM_NUM)->num;
     info->entries[i].created = psync_find_result(link, "created", PARAM_NUM)->num;
+    info->entries[i].comment = 0;
     
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
     info->entries[i].code = psync_strndup(charfiled, strlen(charfiled));
@@ -469,4 +471,216 @@ int do_psync_delete_link(int64_t linkid, char **err /*OUT*/) {
   psync_free(bres);
   
   return 0;
+}
+
+int64_t do_psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxspace, int maxfiles) {
+  psync_socket *api;
+  binresult *bres;
+  uint64_t result;
+  const char *rescode;
+  const char *errorret;
+  
+  *err  = 0;
+  *code = 0;
+
+  if (!expire && !maxspace && !maxfiles) {
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("path", path), P_STR("comment", comment)};
+    api = psync_apipool_get();
+    if (unlikely(!api)) {
+      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      return -2;
+    }
+    
+    bres = send_command(api, "createuploadlink", params);
+ 
+  } else {
+    binparam* t;
+    int numparam = 3 + !!expire + !!maxspace + !!maxfiles;
+    int pind = 1;
+    
+    t = (binparam *) psync_malloc(numparam*sizeof(binparam));
+    init_param_str(t, "auth", psync_my_auth);
+    init_param_str(t + pind++, "path", path);
+    init_param_str(t + pind++, "comment", comment);
+    if (expire) 
+      init_param_num(t + pind++, "expire", expire);
+    if (maxspace) 
+      init_param_num(t + pind++, "maxspace", maxspace);
+    if (maxfiles) 
+      init_param_num(t + pind++, "maxfiles", maxfiles);
+    api=psync_apipool_get();
+    if (unlikely(!api)) {
+      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      return -2;
+    }
+    bres =  do_send_command(api, "createuploadlink", sizeof("createuploadlink") - 1, t, pind, -1, 1);
+    psync_free(t);
+  }
+  
+  if (likely(bres))
+    psync_apipool_release(api);
+  else {
+    psync_apipool_release_bad(api);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    return -2;
+  }
+  result=psync_find_result(bres, "result", PARAM_NUM)->num;
+  if (unlikely(result)) {
+    errorret = psync_find_result(bres, "error", PARAM_STR)->str;
+    *err = psync_strndup(errorret, strlen(errorret));
+    debug(D_WARNING, "command getfilepublink returned error code %u", (unsigned)result);
+    psync_process_api_error(result);
+    if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
+      return -result;
+    else
+      return -1;
+  }
+  
+  rescode = psync_find_result(bres, "code", PARAM_STR)->str;
+  *code = psync_strndup(rescode, strlen(rescode));
+
+  
+  result = 0;
+  result = psync_find_result(bres, "uploadlinkid", PARAM_NUM)->num;
+  
+  psync_free(bres);
+  
+  return result;
+  
+}
+
+int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
+  psync_socket *api;
+  binresult *bres;
+  uint64_t result;
+  const char *errorret;
+  
+  *err  = 0;
+ 
+  binparam params[] = {P_STR("auth", psync_my_auth), P_NUM("uploadlinkid", uploadlinkid)};
+  api = psync_apipool_get();
+  if (unlikely(!api)) {
+    debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+    return -2;
+  }
+  
+  bres = send_command(api, "deleteuploadlink", params);
+     
+  
+  if (likely(bres))
+    psync_apipool_release(api);
+  else {
+    psync_apipool_release_bad(api);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    return -2;
+  }
+  result=psync_find_result(bres, "result", PARAM_NUM)->num;
+  if (unlikely(result)) {
+    errorret = psync_find_result(bres, "error", PARAM_STR)->str;
+    *err = psync_strndup(errorret, strlen(errorret));
+    debug(D_WARNING, "command deletepublink returned error code %u", (unsigned)result);
+    psync_process_api_error(result);
+    if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
+      return -result;
+    else
+      return -1;
+  }
+ 
+  
+  psync_free(bres);
+  
+  return 0;
+}
+
+int do_psync_list_upload_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
+  psync_socket *api;
+  binresult *bres;
+  uint64_t result;
+  const char *errorret;
+  const char *charfiled;
+  const binresult *publinks, *meta;
+  binresult *link;
+  int i, linkscnt;
+  plink_info_list_t * info;
+  
+  *err  = 0;
+  *infop = 0;
+ 
+  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
+  api = psync_apipool_get();
+  if (unlikely(!api)) {
+    debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+    return -2;
+  }
+  
+  bres = send_command(api, "listuploadlinks", params);
+     
+  
+  if (likely(bres))
+    psync_apipool_release(api);
+  else {
+    psync_apipool_release_bad(api);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    return -2;
+  }
+  result=psync_find_result(bres, "result", PARAM_NUM)->num;
+  if (unlikely(result)) {
+    errorret = psync_find_result(bres, "error", PARAM_STR)->str;
+    *err = psync_strndup(errorret, strlen(errorret));
+    debug(D_WARNING, "command listpublinks returned error code %u", (unsigned)result);
+    psync_process_api_error(result);
+    if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
+      return -result;
+    else
+      return -1;
+  }
+  
+  publinks=psync_find_result(bres, "uploadlinks", PARAM_ARRAY);
+  
+  linkscnt = publinks->length;
+  if (!linkscnt){
+    psync_free(bres);
+    return 0;
+  }
+  
+  info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
+  info->entrycnt = linkscnt;
+
+  for (i = 0; i < linkscnt; ++i) {
+    link = publinks->array[i];
+    
+    info->entries[i].linkid = psync_find_result(link, "linkid", PARAM_NUM)->num;
+    info->entries[i].traffic = psync_find_result(link, "space", PARAM_NUM)->num;
+    info->entries[i].maxspace = psync_find_result(link, "maxspace", PARAM_NUM)->num;
+    info->entries[i].downloads = psync_find_result(link, "files", PARAM_NUM)->num;
+    info->entries[i].modified = psync_find_result(link, "modified", PARAM_NUM)->num;
+    info->entries[i].created = psync_find_result(link, "created", PARAM_NUM)->num;
+    
+    charfiled = psync_find_result(link, "code", PARAM_STR)->str;
+    info->entries[i].code = psync_strndup(charfiled, strlen(charfiled));
+    
+    charfiled = psync_find_result(link, "comment", PARAM_STR)->str;
+    info->entries[i].comment = psync_strndup(charfiled, strlen(charfiled));
+   
+    meta=psync_find_result(link, "metadata", PARAM_HASH);
+    
+    charfiled = psync_find_result(meta, "id", PARAM_STR)->str;
+    info->entries[i].id = psync_strndup(charfiled, strlen(charfiled));
+    
+    charfiled = psync_find_result(meta, "name", PARAM_STR)->str;
+    info->entries[i].meta.name = psync_strndup(charfiled, strlen(charfiled));
+    info->entries[i].meta.namelen = strlen(charfiled);
+    
+    if (psync_find_result(meta, "isfolder", PARAM_STR)->str[0] == 't') {
+      info->entries[i].meta.isfolder = 1;
+      info->entries[i].meta.folder.folderid = psync_find_result(meta, "folderid", PARAM_NUM)->num; 
+      
+    } else {
+      info->entries[i].meta.isfolder = 0;
+      info->entries[i].meta.file.fileid = psync_find_result(meta, "fileid", PARAM_NUM)->num; 
+      info->entries[i].meta.file.size = psync_find_result(meta, "size", PARAM_NUM)->num; 
+    }
+  }
+  *infop = info;
+  return linkscnt;
 }

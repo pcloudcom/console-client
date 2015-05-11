@@ -36,5 +36,10 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
 int do_psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
 int do_psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
+int64_t do_psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxspace, int maxfiles);
+int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
+int do_psync_list_upload_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
+
+
 
 #endif //_PUBLIC_LINKS_H

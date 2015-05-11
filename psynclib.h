@@ -390,7 +390,9 @@ typedef struct {
   int64_t linkid;
   char *id; 
   char *code;
-  uint64_t traffic; 
+  char *comment;
+  uint64_t traffic;
+  uint64_t maxspace; 
   uint64_t downloads; 
   uint64_t created;
   uint64_t modified;
@@ -995,9 +997,18 @@ external_status psync_status_folder(const char *path);
  * psync_delete_link() Deletes a public link by linkid or returns negative number and upon API failure a string representation of the error.
  * 
  * psync_list_links() Lists all public links in the account or returns negative number and upon API failure a string representation of the error.
+ *   Same structure used for listing public and upload links only comment and maxspace are set to 0 in public links list.
+ * 
+ * psync_upload_link() Creates upload link to given folder. Comment is mandatory parameter as it's the only information the user sees.  
+ *
+ * psync_delete_upload_link(uploadlinkid) Deletes a upload link by uploadlinkid or returns negative number and upon API failure a string representation of the error.
+ *
+ * psync_list_upload_links() Lists all public links in the account or returns negative number and upon API failure a string representation of the error.
+ *   Same structure used for listing public and upload links only comment and maxspace are set to 0 in public links list. Space parameter is filled in traffic and
+ *   files in downloads.
  * 
  * REMINDER. You have to free the out parameters passed as pointers to the library as it reserves memory for them but does not cleans it. You will have to iterate 
- * though entire entires[] array and free all codes and names before feeing entire info.
+ * though entire entires[] array and free all codes and names and comments if not empty before feeing entire info with separate call.
  * 
  */
 
@@ -1006,6 +1017,10 @@ int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **e
 int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/);
 int psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
 int psync_delete_link(int64_t linkid, char **err /*OUT*/);
+
+int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
+int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
+int psync_list_upload_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
 
 #ifdef __cplusplus
 }
