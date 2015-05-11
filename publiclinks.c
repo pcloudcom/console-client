@@ -266,7 +266,6 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
         row = psync_sql_fetch_rowint(res);
         id = row[0];
       } else {
-        psync_sql_free_result(res);
         psync_sql_rdunlock();
         continue;
       }
