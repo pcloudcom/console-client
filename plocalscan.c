@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -252,7 +252,7 @@ static void add_modified_file(const sync_folderlist *e, psync_folderid_t folderi
   add_element_to_scan_list(SCAN_LIST_MODFILES, copy_folderlist_element(e, folderid, localfolderid, syncid, synctype));
 }
 
-static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid, psync_folderid_t localfolderid, 
+static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid, psync_folderid_t localfolderid,
                                 psync_syncid_t syncid, psync_synctype_t synctype, psync_deviceid_t deviceid){
   psync_list disklist, dblist, *ldisk, *ldb;
   sync_folderlist *l, *fdisk, *fdb;
@@ -580,10 +580,12 @@ retry:
     /* folder is not yet created, folderid is not 0 but NULL actually */
     if (tries>=50)
       return;
-    else if (tries==10)
+    psync_sql_commit_transaction();
+    if (tries==10)
       psync_timer_notify_exception();
     tries++;
     psync_milisleep(20+tries*20);
+    psync_sql_start_transaction();
     goto retry;
   }
   delete_local_folder_rec(fl->localid);
@@ -645,9 +647,9 @@ restart:
     pthread_mutex_unlock(&scan_mutex);
     debug(D_NOTICE, "run checks");
     i=0;
-    psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFOLDERS], 
-                                &scan_lists[SCAN_LIST_NEWFOLDERS], 
-                                &scan_lists[SCAN_LIST_RENFOLDERSROM], 
+    psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFOLDERS],
+                                &scan_lists[SCAN_LIST_NEWFOLDERS],
+                                &scan_lists[SCAN_LIST_RENFOLDERSROM],
                                 &scan_lists[SCAN_LIST_RENFOLDERSTO],
                                 compare_inode);
     trn=0;
@@ -693,9 +695,9 @@ restart:
     goto restart;
   }
   pthread_mutex_unlock(&scan_mutex);
-  psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFILES], 
-                               &scan_lists[SCAN_LIST_NEWFILES], 
-                               &scan_lists[SCAN_LIST_RENFILESFROM], 
+  psync_list_extract_repeating(&scan_lists[SCAN_LIST_DELFILES],
+                               &scan_lists[SCAN_LIST_NEWFILES],
+                               &scan_lists[SCAN_LIST_RENFILESFROM],
                                &scan_lists[SCAN_LIST_RENFILESTO],
                                compare_sizeinodemtime);
   l2=&scan_lists[SCAN_LIST_RENFILESTO];
@@ -813,7 +815,7 @@ void psync_resume_localscan(){
 static void psync_wake_localscan_noscan(){
   pthread_mutex_lock(&scan_mutex);
   pthread_cond_signal(&scan_cond);
-  pthread_mutex_unlock(&scan_mutex);  
+  pthread_mutex_unlock(&scan_mutex);
 }
 
 void psync_localscan_init(){
