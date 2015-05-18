@@ -207,6 +207,7 @@ typedef struct {
 #define PSYNC_PERM_CREATE 2
 #define PSYNC_PERM_MODIFY 4
 #define PSYNC_PERM_DELETE 8
+#define PSYNC_PERM_MANAGE 16
 
 #define PSYNC_PERM_ALL (PSYNC_PERM_READ|PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
 #define PSYNC_PERM_WRITE (PSYNC_PERM_CREATE|PSYNC_PERM_MODIFY|PSYNC_PERM_DELETE)
@@ -304,6 +305,7 @@ typedef struct {
   unsigned char cancreate;
   unsigned char canmodify;
   unsigned char candelete;
+  unsigned char canmanage;
 } psync_share_event_t;
 
 typedef union {

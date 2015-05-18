@@ -1149,6 +1149,45 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
 }
 
+static void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *length /*OUT*/) {
+  psync_socket *sock;
+  binresult *bres;
+  char *ids = NULL;
+  const char *emailret;
+  int k,n,count=0;
+  const binresult *users;
+  const binresult *user;
+  
+  n =  userid;
+  while(n!=0)
+  {
+      n/=10;
+      ++count;
+  }
+  
+  ids = (char *) psync_malloc(n + 1);
+  k = sprintf(ids, "%lld", (long long) userid);
+  if (k != n)
+    debug(D_WARNING, "%d bites allocated but %d bytes written", n + 1, k + 1 );
+  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("userids", ids)};
+  
+  sock =  get_connected_socket();
+  bres = send_command(sock, "account_users", params);
+  
+  users = psync_find_result(bres, "users", PARAM_ARRAY);
+  
+  if (!users->length){
+    psync_free(bres);
+    *email = 0;
+    *length = 0;
+  } else {
+    user =  users->array[0];
+    emailret = psync_find_result(user, "email", PARAM_STR)->str;
+    *length = strlen(emailret);
+    *email = psync_strndup(emailret, *length);
+  } 
+}
+
 #define fill_str(f, s, sl)\
   do {\
     if (s && sl) {\
@@ -1168,13 +1207,20 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   uint64_t ctime;
   size_t stringslen, sharenamelen, emaillen, messagelen;
   int freesharename;
+  int isba = 0;
+  const binresult *permissions;
+  
   if (initialdownload)
     return;
   stringslen=0;
   ctime=0;
   if (!(br=psync_check_result(share, "frommail", PARAM_STR)) && !(br=psync_check_result(share, "tomail", PARAM_STR))){
-    debug(D_WARNING, "Neigher frommail or tomail found for eventtype %u", (unsigned)eventid);
-    return;
+    if(!(br=psync_check_result(share, "fromuserid", PARAM_STR)) && 
+       !(br=psync_check_result(share, "touserid", PARAM_STR)) &&
+       !(br=psync_check_result(share, "toteamid", PARAM_STR)) ) {
+      debug(D_WARNING, "Neigher frommail or tomail nor buissines share found for eventtype %u", (unsigned)eventid);
+      return;
+    } else isba = 1;
   }
   email=br->str;
   emaillen=br->length+1;
@@ -1238,13 +1284,28 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     e->shareid=br->num;
   if ((br=psync_check_result(share, "sharerequestid", PARAM_NUM)))
     e->sharerequestid=br->num;
-  if ((br=psync_check_result(share, "created", PARAM_NUM)))
-    ctime=br->num;
+  if (isba) {
+    if ((br=psync_check_result(share, "shared", PARAM_NUM)))
+      ctime=br->num;
+  } else
+    if ((br=psync_check_result(share, "created", PARAM_NUM)))
+      ctime=br->num;
   e->created=ctime;
-  e->canread=psync_find_result(share, "canread", PARAM_BOOL)->num;
-  e->cancreate=psync_find_result(share, "cancreate", PARAM_BOOL)->num;
-  e->canmodify=psync_find_result(share, "canmodify", PARAM_BOOL)->num;
-  e->candelete=psync_find_result(share, "candelete", PARAM_BOOL)->num;
+  
+  if (isba) {
+    permissions =psync_find_result(share, "permissions", PARAM_HASH);
+    e->canread=psync_find_result(permissions, "canread", PARAM_BOOL)->num;
+    e->cancreate=psync_find_result(permissions, "cancreate", PARAM_BOOL)->num;
+    e->canmodify=psync_find_result(permissions, "canmodify", PARAM_BOOL)->num;
+    e->candelete=psync_find_result(permissions, "candelete", PARAM_BOOL)->num;
+    e->canmanage=psync_find_result(permissions, "canmanage", PARAM_BOOL)->num;
+  }
+  else {
+    e->canread=psync_find_result(share, "canread", PARAM_BOOL)->num;
+    e->cancreate=psync_find_result(share, "cancreate", PARAM_BOOL)->num;
+    e->canmodify=psync_find_result(share, "canmodify", PARAM_BOOL)->num;
+    e->candelete=psync_find_result(share, "candelete", PARAM_BOOL)->num;
+  }
   psync_send_eventdata(eventid, e);
 }
 
@@ -1326,6 +1387,33 @@ static void process_acceptedsharein(const binresult *entry){
   psync_sql_run_free(q);
 }
 
+static void process_establishbsharein(const binresult *entry){
+  psync_sql_res *q;
+  const binresult *share, *br;
+  char *email;
+  uint64_t userid;
+  int emaillen;
+  
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_ACCEPTIN, share);
+  q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
+                                                "VALUES (?, 1, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
+  userid = psync_find_result(share, "fromuserid", PARAM_NUM)->num;
+  psync_sql_bind_uint(q, 5, userid);
+  get_ba_member_email(userid, &email, &emaillen);
+  psync_sql_bind_lstring(q, 6, email, emaillen);
+  br=psync_find_result(share, "sharename", PARAM_STR);
+  psync_sql_bind_lstring(q, 7, br->str, br->length);
+  psync_sql_run_free(q);
+  psync_free(email);
+}
+
 static void process_acceptedshareout(const binresult *entry){
   psync_sql_res *q;
   const binresult *share, *br;
@@ -1348,6 +1436,33 @@ static void process_acceptedshareout(const binresult *entry){
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_run_free(q);
+}
+
+static void process_establishbshareout(const binresult *entry) {
+  psync_sql_res *q;
+  const binresult *share, *br;
+  char *email;
+  uint64_t userid;
+  int emaillen;
+  
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
+  q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
+                                                "VALUES (?, 0, ?, ?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
+  userid = psync_find_result(share, "touserid", PARAM_NUM)->num;
+  psync_sql_bind_uint(q, 5, userid);
+  get_ba_member_email(userid, &email, &emaillen);
+  psync_sql_bind_lstring(q, 6, email, emaillen);
+  br=psync_find_result(share, "sharename", PARAM_STR);
+  psync_sql_bind_lstring(q, 7, br->str, br->length);
+  psync_sql_run_free(q);
+  psync_free(email);
 }
 
 static void delete_share_request(const binresult *share){
@@ -1409,6 +1524,15 @@ static void process_removedsharein(const binresult *entry){
   delete_shared_folder(share);
 }
 
+static void process_removedbsharein(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_REMOVEIN, share);
+  delete_shared_folder(share);
+}
+
 static void process_removedshareout(const binresult *entry){
   const binresult *share;
   if (!entry)
@@ -1418,11 +1542,20 @@ static void process_removedshareout(const binresult *entry){
   delete_shared_folder(share);
 }
 
-static void modify_shared_folder(const binresult *share){
+static void process_removedbshareout(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_REMOVEOUT, share);
+  delete_shared_folder(share);
+}
+
+static void modify_shared_folder(const binresult *share, uint64_t shareid){
   psync_sql_res *q;
   q=psync_sql_prep_statement("UPDATE sharedfolder SET permissions=? WHERE id=?");
   psync_sql_bind_uint(q, 1, psync_get_permissions(share));
-  psync_sql_bind_uint(q, 2, psync_find_result(share, "shareid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 2, shareid);
   psync_sql_run_free(q);
 }
 
@@ -1432,7 +1565,7 @@ static void process_modifiedsharein(const binresult *entry){
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYIN, share);
-  modify_shared_folder(share);
+  modify_shared_folder(share, psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
 static void process_modifiedshareout(const binresult *entry){
@@ -1441,7 +1574,27 @@ static void process_modifiedshareout(const binresult *entry){
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYOUT, share);
-  modify_shared_folder(share);
+  modify_shared_folder(share, psync_find_result(share, "shareid", PARAM_NUM)->num);
+}
+
+static void process_modifybsharein(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_MODIFYIN, share);
+  modify_shared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
+                       psync_find_result(share, "shareid", PARAM_NUM)->num);
+}
+
+static void process_modifybshareout(const binresult *entry){
+  const binresult *share;
+  if (!entry)
+    return;
+  share=psync_find_result(entry, "share", PARAM_HASH);
+  send_share_notify(PEVENT_SHARE_MODIFYOUT, share);
+  modify_shared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
+                       psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
@@ -1470,7 +1623,13 @@ static struct {
   FN(removedsharein),
   FN(removedshareout),
   FN(modifiedsharein),
-  FN(modifiedshareout)
+  FN(modifiedshareout),
+  FN(establishbsharein),
+  FN(establishbshareout),
+  FN(modifybsharein),
+  FN(modifybshareout),
+  FN(removedbsharein),
+  FN(removedbshareout)
 };
 
 #define event_list_size ARRAY_SIZE(event_list)

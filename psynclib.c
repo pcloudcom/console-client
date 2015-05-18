@@ -1103,6 +1103,7 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   share->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
   share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
   share->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
+  share->canmodify=(perms&PSYNC_PERM_MANAGE)/PSYNC_PERM_MANAGE;
   return 0;
 }
 

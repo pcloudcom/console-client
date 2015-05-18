@@ -41,7 +41,8 @@ static inline uint64_t psync_get_permissions(const binresult *meta){
     (psync_find_result(meta, "canread", PARAM_BOOL)->num?PSYNC_PERM_READ:0)+
     (psync_find_result(meta, "canmodify", PARAM_BOOL)->num?PSYNC_PERM_MODIFY:0)+
     (psync_find_result(meta, "candelete", PARAM_BOOL)->num?PSYNC_PERM_DELETE:0)+
-    (psync_find_result(meta, "cancreate", PARAM_BOOL)->num?PSYNC_PERM_CREATE:0);
+    (psync_find_result(meta, "cancreate", PARAM_BOOL)->num?PSYNC_PERM_CREATE:0)+
+    (psync_find_result(meta, "canmanage", PARAM_BOOL)->num?PSYNC_PERM_MANAGE:0);
 }
 
 void psync_ops_create_folder_in_db(const binresult *meta);
