@@ -375,7 +375,7 @@ static void psync_notifications_del_thumb(void *ptr, psync_pstat *st){
   if (psync_stat_isfolder(&st->stat))
     return;
   debug(D_NOTICE, "deleting thumb %s", st->path);
-  psync_unlink(st->path);
+  psync_file_delete(st->path);
 }
 
 void psync_notifications_clean(){
