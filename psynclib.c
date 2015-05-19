@@ -1153,10 +1153,14 @@ int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_
 }
 
 int psync_remove_share(psync_shareid_t shareid, char **err){
+  int result;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid)};
-  return run_command("removeshare", params, err);
+  result = run_command("removeshare", params, err);
+  if (result = 2025)
+    return run_command("removeshare", params, err);
 }
 
+int psync_account_stopshare(psync_shareid_t shareid, char **err) {}
 
 int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid), P_NUM("permissions", convert_perms(permissions))};
