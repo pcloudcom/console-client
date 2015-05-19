@@ -221,7 +221,7 @@ typedef struct {
 
 #define PSYNC_CRYPTO_START_SUCCESS         0
 #define PSYNC_CRYPTO_START_NOT_SUPPORTED   -1
-#define PSYNC_CRYPTO_START_ALREADY_STARTED 1 
+#define PSYNC_CRYPTO_START_ALREADY_STARTED 1
 #define PSYNC_CRYPTO_START_CANT_CONNECT    2
 #define PSYNC_CRYPTO_START_NOT_LOGGED_IN   3
 #define PSYNC_CRYPTO_START_NOT_SETUP       4
@@ -280,7 +280,7 @@ typedef struct {
   const char *name;
   const char *localpath;
   const char *remotepath;
-  psync_syncid_t syncid;                                  
+  psync_syncid_t syncid;
 } psync_file_event_t;
 
 typedef struct {
@@ -288,7 +288,7 @@ typedef struct {
   const char *name;
   const char *localpath;
   const char *remotepath;
-  psync_syncid_t syncid;                                  
+  psync_syncid_t syncid;
 } psync_folder_event_t;
 
 typedef struct {
@@ -394,6 +394,8 @@ typedef void *(*psync_malloc_t)(size_t);
 typedef void *(*psync_realloc_t)(void *, size_t);
 typedef void (*psync_free_t)(void *);
 
+typedef void (*psync_generic_callback_t)();
+
 
 void *psync_malloc(size_t size);
 void *psync_realloc(void *ptr, size_t size);
@@ -410,21 +412,21 @@ typedef void (*pstatus_change_callback_t)(pstatus_t *status);
 /* Event callback is called every time a download/upload is started/finished,
  * quota is changed, folder is shared or similar. Look at the PEVENT_ constants
  * for a list of possible events.
- * 
+ *
  * The type of data parameter is specific to eventtype. That is for PEVENT_FILE_* or
  * PEVENT_*_FILE_* events the type is psync_folder_event_t, for PEVENT_*_FOLDER_*
  * events it is psync_file_event_t, for PEVENT_SHARE_* events is psync_share_event_t.
  * For PEVENT_USERINFO_CHANGED and PEVENT_USEDQUOTA_CHANGED data is NULL. Observe
  * the changes by calling psync_get_*_value() functions.
- * 
- * It is unsafe to use pointers to strings that are passed in the data structure, 
- * if you need to use them this way, strdup() will do the job. Event callbacks will 
+ *
+ * It is unsafe to use pointers to strings that are passed in the data structure,
+ * if you need to use them this way, strdup() will do the job. Event callbacks will
  * not overlap.
  *
  * Do not expect localpath to exist after receiving PEVENT_FILE_DOWNLOAD_STARTED
  * as the file will be created with alternative name first and renamed when download
  * is finished.
- * 
+ *
  */
 
 typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t data);
@@ -439,7 +441,7 @@ typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t dat
  *   actionid - action to be taken when clicked, one of:
  *     PNOTIFICATION_ACTION_NONE - do nothing
  *     PNOTIFICATION_ACTION_GO_TO_FOLDER - go to a folderid set in actiondata.folderid
- *   isnew - if true, notificaion is new (not seen)  
+ *   isnew - if true, notificaion is new (not seen)
  *   iconid - id of the icon to display (when thumb is not available)
  */
 
@@ -454,7 +456,7 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
  * psync_start_sync starts remote sync, both callbacks can be NULL, but most of the time setting
  * at least status_callback will make sense. Applications should expect immediate
  * status_callback with status of PSTATUS_LOGIN_REQUIRED after first run of psync_start_sync().
- * 
+ *
  * psync_set_notification_callback - sets callback for new notifications. Should be called before
  * psync_start_sync if at all. thumbsize should be string in "WxH" format (e.g. "64x64"). If NULL
  * no thumbs will be included in listings.
@@ -472,10 +474,10 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
  * psync_set_alloc can set the allocator to be used by the library. To be called
  * BEFORE psync_init if ever. If allocator is provided, its free() function is to
  * be used to free any memory that is said to be freed when returned by the library.
- * 
+ *
  * psync_set_software_string can set the name (and version) of the software that is passed
  * to the server during token creation. Important: library will not make its own copy, so
- * either pass a static string or make a copy of your dynamic string. This function is to 
+ * either pass a static string or make a copy of your dynamic string. This function is to
  * be called BEFORE psync_start_sync and it is acceptable to call it even before psync_init().
  *
  * psync_set_database_path can set a full path to database file. If it does not exists
@@ -627,7 +629,7 @@ void psync_run_localscan();
  * If err is not NULL in all cases of non-zero return it will be set to point to a
  * psync_malloc-allocated buffer with English language error text, suitable to display
  * to the user. This buffer must be freed by the application.
- * 
+ *
  */
 
 int psync_register(const char *email, const char *password, int termsaccepted, char **err);
@@ -637,7 +639,7 @@ int psync_register(const char *email, const char *password, int termsaccepted, c
 
 int psync_verify_email(char **err);
 
-/* Sends email with link to reset password to the user with specified email, return value and err are 
+/* Sends email with link to reset password to the user with specified email, return value and err are
  * the same as with registering.
  */
 
@@ -668,12 +670,12 @@ const char *psync_get_auth_string();
  *                          * - matches any number of characters (even zero)
  *                          ? - matches exactly one character
  * p2psync (bool) - use or not peer to peer downloads
- * 
+ *
  * fscachesize (uint) - size of filesystem cache, in bytes, sane minimum of few tens of Mb or even hundreds is advised
  * fsroot (string) - where to mount the filesystem
  * autostartfs (bool) - if set starts the fs on app startup
  * sleepstopcrypto (bool) - if set, stops crypto when computer wakes up from sleep
- * 
+ *
  *
  * The following functions operate on settings. The value of psync_get_string_setting does not have to be freed, however if you are
  * going to store it rather than use it right away, you should strdup() it.
@@ -738,20 +740,20 @@ void psync_set_string_value(const char *valuename, const char *value);
 
 /* If your application has a way to detect network change (e.g. wireless access point change), you should subscribe for
  * such notifications and call psync_network_exception() in those cases. There is no harm in calling it too often.
- * 
+ *
  */
 
 void psync_network_exception();
 
 /* The following functions return lists of pending sharerequests in psync_list_sharerequests and
  * list of shared folders in case of psync_list_shares. Memory is to be freed with a single free().
- * 
+ *
  * These functions do not return errors. However, if no user is logged in, they will return empty lists.
- * 
+ *
  * Pass 1 as parameter to list incoming sharerequests/shares and 0 for outgoing.
- * 
+ *
  * Listing shares/sharerequests do not require active network connection.
- * 
+ *
  */
 
 psync_sharerequest_list_t *psync_list_sharerequests(int incoming);
@@ -760,49 +762,49 @@ psync_share_list_t *psync_list_shares(int incoming);
 /* psync_share_folder shares a folder with the user "mail". The "permissions" parameter is bitwise or of
  * PSYNC_PERM_READ, PSYNC_PERM_CREATE, PSYNC_PERM_MODIFY and PSYNC_PERM_DELETE (PSYNC_PERM_READ is actually
  * ignored and always set).
- * 
+ *
  * On success returns 0, otherwise returns API error number (or -1 on network error) and sets err to a string
  * error message if it is not NULL. This string should be freed if the return value is not 0 and err is not NULL.
- * 
- * It is NOT guaranteed that upon successful return psync_list_sharerequests(0) will return the newly created 
+ *
+ * It is NOT guaranteed that upon successful return psync_list_sharerequests(0) will return the newly created
  * share request. Windows showing list of sharerequests/shares are supposed to requery shares/request upon receiving of
  * PEVENT_SHARE_* event. That is true for all share management functions.
- * 
+ *
  */
 
 int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err);
 
 
 /* Cancels a share request (this is to be called for outgoing requests).
- * 
+ *
  * Return value same as psync_share_folder.
  */
 
 int psync_cancel_share_request(psync_sharerequestid_t requestid, char **err);
 
 /* Declines a share request (this is to be called for incoming requests).
- * 
+ *
  * Return value same as psync_share_folder.
  */
 
 int psync_decline_share_request(psync_sharerequestid_t requestid, char **err);
 
 /* Accepts a share request to a folder "tofolderid" under a name "name". If "name" is NULL then the original share name is used.
- * 
+ *
  * Return value same as psync_share_folder.
  */
 
 int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_t tofolderid, const char *name, char **err);
 
 /* Removes established share. Can be called by both receiving and sharing user.
- * 
+ *
  * Return value same as psync_share_folder.
  */
 
 int psync_remove_share(psync_shareid_t shareid, char **err);
 
 /* Removes established share. Can be called by both receiving and sharing user.
- * 
+ *
  * Return value same as psync_share_folder.
  */
 
@@ -816,17 +818,17 @@ int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err
  * MAC
  * LINUX32
  * LINUX64
- * 
+ *
  * String versions are in format "a.b.c", equivalen numeric version is a*10000+b*100+c
- * 
- * The _download version also downloads (and is potentially slow) the update and stores it in 
+ *
+ * The _download version also downloads (and is potentially slow) the update and stores it in
  * (returned value)->localpath.
  *
  * Function psync_run_new_version actually runs the update. On success it exists and does not return.
- * 
+ *
  * Applications are expected to run psync_check_new_version and upon non-NULL return to seek user
  * confirmation for updating and if the user confirms run psync_run_new_version
- * 
+ *
  */
 
 psync_new_version_t *psync_check_new_version_str(const char *os, const char *currentversion);
@@ -836,22 +838,24 @@ psync_new_version_t *psync_check_new_version_download(const char *os, unsigned l
 void psync_run_new_version(psync_new_version_t *ver);
 
 /* Filesystem functions.
- * 
+ *
  * psync_fs_start() - starts the filesystem
  * psync_fs_isstarted() - returns 1 if the filesystem is started and 0 otherwise
  * psync_fs_stop() - stops the filesystem
  * psync_fs_getmountpoint() - returns current mountpoint of the filesystem, or NULL if the filesystem is not mounted,
  *                            you are supposed to free the returned pointer
+ * psync_fs_register_start_callback() - registers a callback that will be called once the drive is started
  * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
  *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
  *                            pointer.
- * 
+ *
  */
 
 int psync_fs_start();
 int psync_fs_isstarted();
 void psync_fs_stop();
 char *psync_fs_getmountpoint();
+void psync_fs_register_start_callback(psync_generic_callback_t callback);
 char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 
 
@@ -868,16 +872,16 @@ int psync_password_quality(const char *password);
  *   0     to  9999 - weak password
  *   10000 to 19999 - moderate password
  *   20000 to 29999 - strong password
- * 
+ *
  * integer division of the result of psync_password_quality10000 by 10000 will give the same result as psync_password_quality()
- * 
+ *
  */
 
 int psync_password_quality10000(const char *password);
 
 /*
  * Crypto functions.
- * 
+ *
  * psync_crypto_setup() - setups crypto with a given password, on error returns one of PSYNC_CRYPTO_SETUP_* errors
  * psync_crypto_get_hint() - if successful sets *hint to point to a string with the user's password hint. In this case
  *                        *hint is to be free-d. On error one of PSYNC_CRYPTO_HINT_* codes is returned and *hint is not
@@ -885,7 +889,7 @@ int psync_password_quality10000(const char *password);
  * psync_crypto_start() - starts crypto with a given password, on error returns one of PSYNC_CRYPTO_START_* errors
  * psync_crypto_stop() - stops crypto, on error returns one of PSYNC_CRYPTO_STOP_* errors
  * psync_crypto_isstarted() - returns 1 if crypto is started and 0 otherwise
- * psync_crypto_mkdir() - creates encrypted folder with name in folderid. If the parent 
+ * psync_crypto_mkdir() - creates encrypted folder with name in folderid. If the parent
  *                        folder is not encrypted itself the folder name will be stored in plaintext
  *                        and only the contents will be encrypted. Returns 0 for success and sets *newfolderid (if newfolderid is
  *                        non-NULL) to the id of the new folder, or non-zero on error. Negative error values are local and positive
@@ -904,8 +908,8 @@ int psync_password_quality10000(const char *password);
  *                        PSYNC_CRYPTO_INVALID_FOLDERID.
  * psync_crypto_folderids() - returns array of the ids of all encrypted folders (but not their subfolders). Last element of the array is
  *                        always PSYNC_CRYPTO_INVALID_FOLDERID. You need to free the memory returned by this function.
- * 
- * 
+ *
+ *
  */
 
 int psync_crypto_setup(const char *password, const char *hint);
