@@ -42,6 +42,7 @@ static pnotification_callback_t ntf_callback=NULL;
 static pthread_mutex_t ntf_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t ntf_cond=PTHREAD_COND_INITIALIZER;
 static int ntf_thread_running=0;
+static int ntf_processing=0;
 static binresult *ntf_result=NULL;
 static binresult *ntf_processed_result=NULL;
 
@@ -131,7 +132,13 @@ static void psync_notifications_set_current_list(binresult *res, const char *thu
   }
   pthread_mutex_lock(&ntf_mutex);
   ores=ntf_processed_result;
-  ntf_processed_result=res;
+  if (ntf_processing==2){
+    ntf_processed_result=NULL;
+    psync_free(res);
+  }
+  else
+    ntf_processed_result=res;
+  ntf_processing=0;
   cb=ntf_callback;
   pthread_mutex_unlock(&ntf_mutex);
   psync_free(ores);
@@ -184,6 +191,7 @@ static void psync_notifications_thread(){
       mininterval=30;*/
     res=ntf_result;
     ntf_result=NULL;
+    ntf_processing=1;
     pthread_mutex_unlock(&ntf_mutex);
 /*    if (first)
       first=0;
@@ -361,4 +369,32 @@ psync_notification_list_t *psync_notifications_get(){
   res=(psync_notification_list_t *)psync_list_builder_finalize(builder);
   res->newnotificationcnt=cntnew;
   return res;
+}
+
+static void psync_notifications_del_thumb(void *ptr, psync_pstat *st){
+  if (psync_stat_isfolder(&st->stat))
+    return;
+  debug(D_NOTICE, "deleting thumb %s", st->path);
+  psync_unlink(st->path);
+}
+
+void psync_notifications_clean(){
+  char *thumbpath;
+  pthread_mutex_lock(&ntf_mutex);
+  thumbpath=psync_get_private_dir(PSYNC_DEFAULT_NTF_THUMB_DIR);
+  if (thumbpath){
+    psync_list_dir(thumbpath, psync_notifications_del_thumb, NULL);
+    psync_free(thumbpath);
+  }
+  if (ntf_processed_result){
+    psync_free(ntf_processed_result);
+    ntf_processed_result=NULL;
+  }
+  if (ntf_result){
+    psync_free(ntf_result);
+    ntf_result=NULL;
+  }
+  if (ntf_processing==1)
+    ntf_processing=2;
+  pthread_mutex_unlock(&ntf_mutex);
 }

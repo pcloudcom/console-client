@@ -1,7 +1,7 @@
 /* Copyright (c) 2015 Anton Titov.
  * Copyright (c) 2015 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -36,5 +36,6 @@ const char *psync_notifications_get_thumb_size();
 void psync_notifications_notify(binresult *res);
 void psync_notifications_set_callback(pnotification_callback_t notification_callback, const char *thumbsize);
 psync_notification_list_t *psync_notifications_get();
+void psync_notifications_clean();
 
 #endif

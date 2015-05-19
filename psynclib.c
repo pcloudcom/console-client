@@ -470,6 +470,7 @@ void psync_unlink(){
   psync_sql_checkpoint_unlock();
   psync_settings_reset();
   psync_cache_clean_all();
+  psync_notifications_clean();
   psync_diff_unlock();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
@@ -690,7 +691,7 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_rowint(res)))
-    psync_delete_local_recursive(syncid, row[0]);  
+    psync_delete_local_recursive(syncid, row[0]);
   psync_sql_free_result(res);
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
@@ -1114,7 +1115,7 @@ psync_share_list_t *psync_list_shares(int incoming){
 }
 
 static uint32_t convert_perms(uint32_t permissions){
-  return 
+  return
     (permissions&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE*1+
     (permissions&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY*2+
     (permissions&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE*4;
