@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -56,7 +56,7 @@ static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid);
 
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
                                            const char *device){
-  binparam params[]={P_STR("timeformat", "timestamp"), 
+  binparam params[]={P_STR("timeformat", "timestamp"),
                       P_LSTR("username", username, userlen),
                       P_LSTR("digest", digest, diglen),
                       P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
@@ -143,7 +143,7 @@ static psync_socket *get_connected_socket(){
     if (user && pass)
       res=get_userinfo_user_pass(sock, user, pass, device);
     else {
-      binparam params[]={P_STR("timeformat", "timestamp"), 
+      binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", auth),
                          P_STR("device", device),
                          P_BOOL("getauth", 1),
@@ -295,7 +295,7 @@ static psync_socket *get_connected_socket(){
       psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
     psync_free(res);
     if (isbusiness){
-      binparam params[]={P_STR("timeformat", "timestamp"), 
+      binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", psync_my_auth)};
       res=send_command(sock, "account_info", params);
       if (unlikely_log(!res)){
@@ -545,7 +545,7 @@ static void process_modifyfolder(const binresult *entry){
     psync_diff_refresh_fs_add_folder(oldparentfolderid);
   }
   if ((oldsync || newsync) && (oldparentfolderid!=parentfolderid || strcmp(name->str, oldname))){
-    if (!oldsync) 
+    if (!oldsync)
       psync_add_folder_to_downloadlist(folderid);
     else if (!newsync){
       res=psync_sql_query("SELECT id FROM syncfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
@@ -715,7 +715,7 @@ static void check_for_deletedfileid(const binresult *meta){
     else\
       psync_sql_bind_null(res, off++);\
   } while (0)
-  
+
 static int bind_meta(psync_sql_res *res, const binresult *meta, int off){
   const binresult *br;
   bind_num("created");
@@ -1068,7 +1068,7 @@ static void start_download(){
   entry.hash=&pair;\
   pair.key="metadata";\
   pair.value=(binresult *)meta;
-  
+
 void psync_diff_update_file(const binresult *meta){
   create_entry();
   process_modifyfile(&entry);
@@ -1554,13 +1554,13 @@ static int send_diff_command(psync_socket *sock, uint64_t diffid, uint32_t notif
   if (psync_notifications_running()){
     const char *ts=psync_notifications_get_thumb_size();
     if (ts){
-      binparam diffparams[]={P_STR("subscribefor", "diff,notifications"), P_STR("timeformat", "timestamp"), 
-                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid), 
+      binparam diffparams[]={P_STR("subscribefor", "diff,notifications"), P_STR("timeformat", "timestamp"),
+                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid),
                             P_NUM("notificationid", notificationid), P_STR("notificationthumbsize", ts)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
     else{
-      binparam diffparams[]={P_STR("subscribefor", "diff,notifications"), P_STR("timeformat", "timestamp"), 
+      binparam diffparams[]={P_STR("subscribefor", "diff,notifications"), P_STR("timeformat", "timestamp"),
                             P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid), P_NUM("notificationid", notificationid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
@@ -1571,22 +1571,22 @@ static int send_diff_command(psync_socket *sock, uint64_t diffid, uint32_t notif
   }
 }
 
-static void handle_exception(psync_socket **sock, uint64_t *diffid, uint32_t notificationid, char ex){
+static void handle_exception(psync_socket **sock, uint64_t *diffid, uint32_t *notificationid, char ex){
   debug(D_NOTICE, "exception handler %c", ex);
-  if (ex=='r' || 
-      psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP || 
+  if (ex=='r' ||
+      psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP ||
       psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED ||
       psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
     psync_socket_close(*sock);
     if (psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED)
-      notificationid=0;
+      *notificationid=0;
     debug(D_NOTICE, "waiting for new socket");
     *sock=get_connected_socket();
     debug(D_NOTICE, "got new socket");
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
     psync_syncer_check_delayed_syncs();
     *diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
-    send_diff_command(*sock, *diffid, notificationid);
+    send_diff_command(*sock, *diffid, *notificationid);
   }
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
@@ -1596,7 +1596,7 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, uint32_t not
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
       psync_syncer_check_delayed_syncs();
-      send_diff_command(*sock, *diffid, notificationid);
+      send_diff_command(*sock, *diffid, *notificationid);
     }
     else{
       debug(D_NOTICE, "diff socket seems to be alive");
@@ -1696,7 +1696,7 @@ static void psync_run_analyze_if_needed(){
       skip:;
     }
     psync_sql_free_result(res);
-    
+
     while (tablecnt){
       --tablecnt;
       debug(D_NOTICE, "running ANALYZE on %s", tablenames[tablecnt]);
@@ -1818,7 +1818,7 @@ restart:
         break;
       if (psync_pipe_read(exceptionsock, &ex, 1)!=1)
         continue;
-      handle_exception(&sock, &diffid, notificationid, ex);
+      handle_exception(&sock, &diffid, &notificationid, ex);
       while (psync_select_in(socks, 1, 0)==0 && psync_pipe_read(exceptionsock, &ex, 1)==1);
       socks[1]=sock->sock;
     }
@@ -1827,7 +1827,7 @@ restart:
       res=get_result(sock);
       if (unlikely_log(!res)){
         psync_timer_notify_exception();
-        handle_exception(&sock, &diffid, notificationid, 'r');
+        handle_exception(&sock, &diffid, &notificationid, 'r');
         socks[1]=sock->sock;
         continue;
       }
@@ -1841,7 +1841,7 @@ restart:
         }
         debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
         psync_free(res);
-        handle_exception(&sock, &diffid, notificationid, 'r');
+        handle_exception(&sock, &diffid, &notificationid, 'r');
         socks[1]=sock->sock;
         continue;
       }
