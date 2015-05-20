@@ -341,7 +341,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
   psync_sql_start_transaction();
-  if (psync_fs_update_openfile(taskid, writeid, fileid, hash, size, psync_find_result(meta, "ctime", PARAM_NUM)->num)){
+  if (psync_fs_update_openfile(taskid, writeid, fileid, hash, size, psync_find_result(meta, "created", PARAM_NUM)->num)){
     psync_sql_rollback_transaction();
     debug(D_NOTICE, "upload of %s cancelled due to writeid mismatch", name);
     return -1;
@@ -1083,7 +1083,7 @@ static int psync_process_task_creat(fsupload_task_t *task){
   meta=psync_find_result(task->res, "metadata", PARAM_ARRAY)->array[0];
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
-  if (psync_fs_update_openfile(task->id, task->int1, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num, psync_find_result(meta, "ctime", PARAM_NUM)->num)){
+  if (psync_fs_update_openfile(task->id, task->int1, fileid, hash, psync_find_result(meta, "size", PARAM_NUM)->num, psync_find_result(meta, "created", PARAM_NUM)->num)){
     debug(D_NOTICE, "file %lu/%s changed while uploading, failing task", (unsigned long)task->folderid, task->text1);
     return -1;
   }
