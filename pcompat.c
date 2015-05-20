@@ -2563,6 +2563,19 @@ psync_file_t psync_file_dup(psync_file_t fd){
 #endif
 }
 
+int psync_file_set_creation(psync_file_t fd, time_t ctime){
+#if defined(P_OS_WINDOWS)
+  FILETIME fctime;
+  uint64_t lctime;
+  lctime=Int32x32To64(ctime, 10000000)+116444736000000000;
+  fctime.dwLowDateTime=(DWORD)lctime;
+  fctime.dwHighDateTime=lctime>>32;
+  return psync_bool_to_zero(SetFileTime(fd, &fctime, NULL, NULL));
+#else
+  return -1;
+#endif
+}
+
 typedef struct {
   uint64_t offset;
   size_t count;

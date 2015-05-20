@@ -137,7 +137,7 @@ static void delete_log_files(psync_openfile_t *of){
   psync_free(filename);
 }
 
-int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size){
+int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size, time_t ctime){
   psync_sql_res *res;
   psync_uint_row row;
   psync_openfile_t *fl;
@@ -179,6 +179,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
         fl->currentsize=size;
         fl->initialsize=size;
         fl->releasedforupload=0;
+        fl->origctime=ctime;
         if (fl->datafile!=INVALID_HANDLE_VALUE){
           psync_file_close(fl->datafile);
           fl->datafile=INVALID_HANDLE_VALUE;
@@ -1149,10 +1150,11 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   psync_crypto_aes256_sector_encoder_decoder_t encoder;
   char *encsymkey;
   size_t encsymkeylen;
+  time_t ctime;
   int ret, status, type;
   psync_fs_set_thread_name();
   debug(D_NOTICE, "open %s", path);
-  fileid=writeid=hash=size=0;
+  fileid=writeid=hash=size=ctime=0;
   psync_sql_lock();
   CHECK_LOGIN_LOCKED();
   fpath=psync_fsfolder_resolve_path(path);
@@ -1177,13 +1179,14 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   row=NULL;
   if ((cr=psync_fstask_find_creat(folder, fpath->name, 0))){
     if (cr->fileid>0){
-      res=psync_sql_query("SELECT id, size, hash FROM file WHERE id=?");
+      res=psync_sql_query("SELECT id, size, hash, ctime FROM file WHERE id=?");
       psync_sql_bind_uint(res, 1, cr->fileid);
       row=psync_sql_fetch_rowint(res);
       if (row){
         fileid=row[0];
         size=row[1];
         hash=row[2];
+        ctime=row[3];
         debug(D_NOTICE, "opening moved regular file %lu %s size %lu hash %lu", (unsigned long)fileid, fpath->name, (unsigned long)size, (unsigned long)hash);
       }
       psync_sql_free_result(res);
@@ -1304,7 +1307,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     }
   }
   if (!row && fpath->folderid>=0 && !psync_fstask_find_unlink(folder, fpath->name, 0)){
-    res=psync_sql_query("SELECT id, size, hash FROM file WHERE parentfolderid=? AND name=?");
+    res=psync_sql_query("SELECT id, size, hash, ctime FROM file WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fpath->folderid);
     psync_sql_bind_string(res, 2, fpath->name);
     row=psync_sql_fetch_rowint(res);
@@ -1312,6 +1315,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       fileid=row[0];
       size=row[1];
       hash=row[2];
+      ctime=row[3];
       debug(D_NOTICE, "opening regular file %lu %s size %lu hash %lu", (unsigned long)fileid, fpath->name, (unsigned long)size, (unsigned long)hash);
     }
     psync_sql_free_result(res);
@@ -1388,6 +1392,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     else
       encoder=PSYNC_CRYPTO_INVALID_ENCODER;
     of=psync_fs_create_file(fileid, fileid, size, hash, 0, 0, psync_fstask_get_ref_locked(folder), fpath->name, encoder);
+    of->origctime=ctime;
     fi->fh=openfile_to_fh(of);
     ret=0;
   }
@@ -1915,6 +1920,8 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
       psync_free(encsymkey);
       return ret;
     }
+    if (of->origctime)
+      psync_file_set_creation(of->datafile, of->origctime);
     if (size){
       ret=psync_pagecache_copy_all_pages_from_cache_to_file_locked(of, of->hash, size);
       psync_pagecache_unlock_pages_from_cache();
@@ -1943,6 +1950,8 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
       ret=-EIO;
     return ret;
   }
+  if (of->origctime)
+    psync_file_set_creation(of->datafile, of->origctime);
   of->modified=1;
   of->indexoff=0;
   of->currentsize=of->initialsize;

@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -92,6 +92,7 @@ typedef struct {
     time_t staticctime;
   };
   time_t currentsec;
+  time_t origctime;
   psync_file_t datafile;
   psync_file_t indexfile;
   uint32_t refcnt;
@@ -129,7 +130,7 @@ typedef struct {
 } psync_fs_index_header;
 
 int psync_fs_crypto_err_to_errno(int cryptoerr);
-int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size);
+int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t newfileid, uint64_t hash, uint64_t size, time_t ctime);
 //void psync_fs_uploading_openfile(uint64_t taskid);
 int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t folderid, const char *name);
 void psync_fs_mark_openfile_deleted(uint64_t taskid);
