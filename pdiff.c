@@ -1241,29 +1241,42 @@ static void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /
 static void send_share_notify(psync_eventtype_t eventid, const binresult *share){
   psync_share_event_t *e;
   char *str, *sharename;
-  const char *email, *message;
+  const char *message;
+  char *email;
   const binresult *br;
   uint64_t ctime;
   size_t stringslen, sharenamelen, emaillen, messagelen;
   int freesharename;
   int isba = 0;
   const binresult *permissions;
+  uint64_t teamid = 0;
   
   if (initialdownload)
     return;
   stringslen=0;
   ctime=0;
   if (!(br=psync_check_result(share, "frommail", PARAM_STR)) && !(br=psync_check_result(share, "tomail", PARAM_STR))){
-    if(!(br=psync_check_result(share, "fromuserid", PARAM_STR)) && 
-       !(br=psync_check_result(share, "touserid", PARAM_STR)) &&
-       !(br=psync_check_result(share, "toteamid", PARAM_STR)) ) {
+    if(!(br=psync_check_result(share, "fromuserid", PARAM_NUM)) && 
+       !(br=psync_check_result(share, "touserid", PARAM_NUM)) &&
+       !(br=psync_check_result(share, "toteamid", PARAM_NUM)) ) {
       debug(D_WARNING, "Neigher frommail or tomail nor buissines share found for eventtype %u", (unsigned)eventid);
       return;
     } else isba = 1;
   }
-  email=br->str;
-  emaillen=br->length+1;
-  stringslen+=br->length+1;
+  if (isba) {
+    teamid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
+    if (teamid) {
+      get_ba_team_name(teamid, &email, (int *) &emaillen);
+      stringslen+= ++emaillen;
+    } else {
+      get_ba_member_email(br->num, &email, (int *) &emaillen);
+      stringslen+= ++emaillen;
+    }
+  } else {
+    email=(char *)br->str;
+    emaillen=br->length+1;
+    stringslen+=br->length+1;
+  }
   if ((br=psync_check_result(share, "message", PARAM_STR))){
     message=br->str;
     messagelen=br->length+1;
@@ -1454,7 +1467,8 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_run_free(q);
   debug(D_WARNING, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
-  //psync_free(email);
+  if (email)
+    psync_free(email);
 }
 
 static void process_acceptedshareout(const binresult *entry){
@@ -1518,7 +1532,8 @@ static void process_establishbshareout(const binresult *entry) {
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_run_free(q);
   debug(D_WARNING, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
- // psync_free(email);
+  if (email)
+    psync_free(email);
 }
 
 static void delete_share_request(const binresult *share){
