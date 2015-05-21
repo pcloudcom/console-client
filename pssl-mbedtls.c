@@ -71,7 +71,7 @@ typedef struct {
 
 static ctr_drbg_context_locked psync_mbed_rng;
 static entropy_context psync_mbed_entropy;
-static x509_crt psync_mbed_trused_certs;
+static x509_crt psync_mbed_trusted_certs_x509;
 
 PSYNC_THREAD int psync_ssl_errno;
 
@@ -131,9 +131,9 @@ int psync_ssl_init(){
   entropy_init(&psync_mbed_entropy);
   if (ctr_drbg_init(&psync_mbed_rng.rnd, entropy_func, &psync_mbed_entropy, NULL, 0))
     return PRINT_RETURN(-1);
-  x509_crt_init(&psync_mbed_trused_certs);
+  x509_crt_init(&psync_mbed_trusted_certs_x509);
   for (i=0; i<ARRAY_SIZE(psync_ssl_trusted_certs); i++)
-    if (x509_crt_parse(&psync_mbed_trused_certs, (const unsigned char *)psync_ssl_trusted_certs[i], strlen(psync_ssl_trusted_certs[i])))
+    if (x509_crt_parse(&psync_mbed_trusted_certs_x509, (const unsigned char *)psync_ssl_trusted_certs[i], strlen(psync_ssl_trusted_certs[i])))
       debug(D_ERROR, "failed to load certificate %lu", (unsigned long)i);
   psync_get_random_seed(seed, NULL, 0, 0);
   ctr_drbg_update(&psync_mbed_rng.rnd, seed, sizeof(seed));
@@ -260,7 +260,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
   ssl_set_endpoint(&conn->ssl, SSL_IS_CLIENT);
   ssl_set_authmode(&conn->ssl, SSL_VERIFY_REQUIRED);
   ssl_set_min_version(&conn->ssl, SSL_MAJOR_VERSION_3, SSL_MINOR_VERSION_3);
-  ssl_set_ca_chain(&conn->ssl, &psync_mbed_trused_certs, NULL, hostname);
+  ssl_set_ca_chain(&conn->ssl, &psync_mbed_trusted_certs_x509, NULL, hostname);
   ssl_set_ciphersuites(&conn->ssl, psync_mbed_ciphersuite);
   ssl_set_rng(&conn->ssl, ctr_drbg_random_locked, &psync_mbed_rng);
   ssl_set_bio(&conn->ssl, psync_mbed_read, conn, psync_mbed_write, conn);
@@ -298,8 +298,8 @@ int psync_ssl_connect_finish(void *sslconn, const char *hostname){
   conn=(ssl_connection_t *)sslconn;
   ret=ssl_handshake(&conn->ssl);
   if (ret==0){
-   if (psync_ssl_check_peer_public_key(conn))
-    goto fail;
+    if (psync_ssl_check_peer_public_key(conn))
+      goto fail;
     psync_ssl_save_session(conn);
     return PSYNC_SSL_SUCCESS;
   }

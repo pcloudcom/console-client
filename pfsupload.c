@@ -387,13 +387,13 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
 }
 
 static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderid_t folderid, const char *name,
-                             uint64_t taskid, uint64_t writeid, int newfile, uint64_t oldhash, const char *key, psync_file_t fd){
+                             uint64_t taskid, uint64_t writeid, int newfile, uint64_t oldhash, const char *key, const char *filepath){
   binresult *res;
   psync_stat_t st;
   uint64_t result;
   int ret;
-  if (psync_fstat(fd, &st)){
-    debug(D_WARNING, "could not fstat file");
+  if (psync_stat(filepath, &st)){
+    debug(D_WARNING, "could not stat file %s", filepath);
     psync_apipool_release(api);
     return -1;
   }
@@ -640,7 +640,7 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
     psync_upload_sub_bytes_uploaded(asize);
     asize=0;
   }
-  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 1, 0, key, fd);
+  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 1, 0, key, filename);
 ret01:
   psync_file_close(fd);
 ret0:
@@ -879,7 +879,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
     psync_apipool_release(api);
     return -1;
   }
-  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 0, hash, key, fd);
+  return large_upload_save(api, uploadid, folderid, name, taskid, writeid, 0, hash, key, filename);
 err3:
   psync_file_close(fd);
 err2:
