@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 pCloud Ltd.
+/* Copyright (c) 2013-2015 pCloud Ltd.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -215,7 +215,7 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   binparam* t;
   *err  = 0;
   *code = 0;
-
+  
   numparam += !!root + !!numfolders + !!numfiles + !!expire + !!maxdownloads + !!maxtraffic;
   
   if (unlikely(!(!!root + !!numfolders + !!numfiles)))

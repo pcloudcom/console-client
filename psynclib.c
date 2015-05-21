@@ -55,6 +55,7 @@
 #include "pmemlock.h"
 #include "pexternalstatus.h"
 #include "publiclinks.h"
+#include "pbusinessaccount.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -1152,15 +1153,23 @@ int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_
   }
 }
 
+static int psync_account_stopshare(psync_shareid_t shareid, char **err) {
+  psync_shareid_t shareidarr[] = {-shareid};
+  debug(D_NOTICE, "shareidarr %lld", (long long)shareidarr[0]);
+  int result =  do_account_stopshare(shareidarr, 1, shareidarr, 1, err);
+  return result;
+}
+
 int psync_remove_share(psync_shareid_t shareid, char **err){
   int result;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid)};
   result = run_command("removeshare", params, err);
-  if (result = 2025)
-    return run_command("removeshare", params, err);
+  if (result == 2025) {
+    result = psync_account_stopshare(shareid, err);
+     debug(D_NOTICE, "erroris  %s", *err);
+  }
+  return result;
 }
-
-int psync_account_stopshare(psync_shareid_t shareid, char **err) {}
 
 int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid), P_NUM("permissions", convert_perms(permissions))};

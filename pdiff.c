@@ -1165,12 +1165,12 @@ static void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *leng
       ++count;
   }
   
-  ids = (char *) psync_malloc(n + 1);
+  ids = (char *) psync_malloc(count + 1);
   k = sprintf(ids, "%lld", (long long) userid);
-  if (k != n)
-    debug(D_WARNING, "%d bites allocated but %d bytes written", n + 1, k + 1 );
+  if (k != count)
+    debug(D_WARNING, "%d bites allocated but %d bytes written", count + 1, k + 1 );
   binparam params[] = {P_STR("auth", psync_my_auth), P_STR("userids", ids)};
-  
+
   sock =  get_connected_socket();
   bres = send_command(sock, "account_users", params);
   
@@ -1185,6 +1185,45 @@ static void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *leng
     emailret = psync_find_result(user, "email", PARAM_STR)->str;
     *length = strlen(emailret);
     *email = psync_strndup(emailret, *length);
+  } 
+}
+
+static void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /*OUT*/) {
+  psync_socket *sock;
+  binresult *bres;
+  char *ids = NULL;
+  const char *emailret;
+  int k,n,count=0;
+  const binresult *users;
+  const binresult *user;
+  
+  n =  teamid;
+  while(n!=0)
+  {
+      n/=10;
+      ++count;
+  }
+  
+  ids = (char *) psync_malloc(count + 1);
+  k = sprintf(ids, "%lld", (long long) teamid);
+  if (k != count)
+    debug(D_WARNING, "%d bites allocated but %d bytes written", count + 1, k + 1 );
+  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("teamids", ids)};
+  
+  sock =  get_connected_socket();
+  bres = send_command(sock, "account_teams", params);
+  
+  users = psync_find_result(bres, "users", PARAM_ARRAY);
+  
+  if (!users->length){
+    psync_free(bres);
+    *name = 0;
+    *length = 0;
+  } else {
+    user =  users->array[0];
+    emailret = psync_find_result(user, "name", PARAM_STR)->str;
+    *length = strlen(emailret);
+    *name = psync_strndup(emailret, *length);
   } 
 }
 
@@ -1375,6 +1414,7 @@ static void process_acceptedsharein(const binresult *entry){
   psync_sql_run_free(q);
   q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?)");
+  debug(D_WARNING, "INSERT NORMAL SHARE IN id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -1400,7 +1440,8 @@ static void process_establishbsharein(const binresult *entry){
   send_share_notify(PEVENT_SHARE_ACCEPTIN, share);
   q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?)");
-  psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 1, - psync_find_result(share, "shareid", PARAM_NUM)->num); //Shareid is not unique amongst BA and normal shares so inserting BA with negative value.
+  debug(D_WARNING, "INSERT BS SHARE IN id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
@@ -1408,10 +1449,12 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_bind_uint(q, 5, userid);
   get_ba_member_email(userid, &email, &emaillen);
   psync_sql_bind_lstring(q, 6, email, emaillen);
+  //psync_sql_bind_lstring(q, 6, "test", 4);
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_run_free(q);
-  psync_free(email);
+  debug(D_WARNING, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+  //psync_free(email);
 }
 
 static void process_acceptedshareout(const binresult *entry){
@@ -1426,6 +1469,7 @@ static void process_acceptedshareout(const binresult *entry){
   psync_sql_run_free(q);
   q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
                                                 "VALUES (?, 0, ?, ?, ?, ?, ?, ?)");
+  debug(D_WARNING, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -1451,18 +1495,30 @@ static void process_establishbshareout(const binresult *entry) {
   send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
   q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
                                                 "VALUES (?, 0, ?, ?, ?, ?, ?, ?)");
-  psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
+  debug(D_WARNING, "INSERT BS SHARE OUT id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 1, - psync_find_result(share, "shareid", PARAM_NUM)->num); //Shareid is not unique amongst BA and normal shares so inserting BA with negative value.
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
-  userid = psync_find_result(share, "touserid", PARAM_NUM)->num;
-  psync_sql_bind_uint(q, 5, userid);
-  get_ba_member_email(userid, &email, &emaillen);
-  psync_sql_bind_lstring(q, 6, email, emaillen);
+  
+  if (psync_find_result(share, "user", PARAM_BOOL)->num) {
+    userid = psync_find_result(share, "touserid", PARAM_NUM)->num;
+    psync_sql_bind_uint(q, 5, userid);
+    get_ba_member_email(userid, &email, &emaillen);
+    psync_sql_bind_lstring(q, 6, email, emaillen);
+    //psync_sql_bind_lstring(q, 6, "tralala", 7);
+  } else if (psync_find_result(share, "team", PARAM_BOOL)->num) {
+    userid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
+    psync_sql_bind_uint(q, 5, userid);
+    get_ba_team_name(userid, &email, &emaillen);
+    psync_sql_bind_lstring(q, 6, email, emaillen);
+   //psync_sql_bind_lstring(q, 6, "tralala", 7);
+  }
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_run_free(q);
-  psync_free(email);
+  debug(D_WARNING, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+ // psync_free(email);
 }
 
 static void delete_share_request(const binresult *share){
@@ -1510,8 +1566,21 @@ static void process_cancelledshareout(const binresult *entry){
 
 static void delete_shared_folder(const binresult *share){
   psync_sql_res *q;
+  uint64_t shareid;
   q=psync_sql_prep_statement("DELETE FROM sharedfolder WHERE id=?");
-  psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
+  shareid =  psync_find_result(share, "shareid", PARAM_NUM)->num;
+  debug(D_WARNING, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
+  psync_sql_bind_uint(q, 1, shareid);
+  psync_sql_run_free(q);
+}
+
+static void delete_bsshared_folder(const binresult *share){
+  psync_sql_res *q;
+  uint64_t shareid;
+  q=psync_sql_prep_statement("DELETE FROM sharedfolder WHERE id=?");
+  shareid =  psync_find_result(share, "shareid", PARAM_NUM)->num;
+  debug(D_WARNING, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
+  psync_sql_bind_uint(q, 1, - shareid);
   psync_sql_run_free(q);
 }
 
@@ -1524,13 +1593,13 @@ static void process_removedsharein(const binresult *entry){
   delete_shared_folder(share);
 }
 
-static void process_removedbsharein(const binresult *entry){
+static void process_removebsharein(const binresult *entry){
   const binresult *share;
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_REMOVEIN, share);
-  delete_shared_folder(share);
+  delete_bsshared_folder(share);
 }
 
 static void process_removedshareout(const binresult *entry){
@@ -1542,13 +1611,13 @@ static void process_removedshareout(const binresult *entry){
   delete_shared_folder(share);
 }
 
-static void process_removedbshareout(const binresult *entry){
+static void process_removebshareout(const binresult *entry){
   const binresult *share;
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_REMOVEOUT, share);
-  delete_shared_folder(share);
+  delete_bsshared_folder(share);
 }
 
 static void modify_shared_folder(const binresult *share, uint64_t shareid){
@@ -1584,7 +1653,7 @@ static void process_modifybsharein(const binresult *entry){
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYIN, share);
   modify_shared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
-                       psync_find_result(share, "shareid", PARAM_NUM)->num);
+                       - psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
 static void process_modifybshareout(const binresult *entry){
@@ -1594,7 +1663,7 @@ static void process_modifybshareout(const binresult *entry){
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYOUT, share);
   modify_shared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
-                       psync_find_result(share, "shareid", PARAM_NUM)->num);
+                       - psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
 #define FN(n) {process_##n, #n, sizeof(#n)-1, 0}
@@ -1628,8 +1697,8 @@ static struct {
   FN(establishbshareout),
   FN(modifybsharein),
   FN(modifybshareout),
-  FN(removedbsharein),
-  FN(removedbshareout)
+  FN(removebsharein),
+  FN(removebshareout)
 };
 
 #define event_list_size ARRAY_SIZE(event_list)
