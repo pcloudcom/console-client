@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 11
+#define PSYNC_DATABASE_VERSION 12
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -222,7 +222,14 @@ CREATE INDEX IF NOT EXISTS klocalfolderfolderid ON localfolder(folderid);\
 CREATE INDEX IF NOT EXISTS klocalfoldersyncid ON localfolder(syncid);\
 UPDATE setting SET value=11 WHERE id='dbversion';\
 COMMIT;\
-PRAGMA foreign_keys=ON;"
+PRAGMA foreign_keys=ON;",
+  "BEGIN;\
+ALTER TABLE sharedfolder ADD bsharedfolderid INTEGER;\
+CREATE TABLE IF NOT EXISTS bsharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, \
+ctime INTEGER, permissions INTEGER, message TEXT, name VARCHAR(1024), isuser INTEGER, \
+touserid INTEGER, isteam INTEGER, toteamid INTEGER, fromuserid INTEGER, folderownerid INTEGER); \
+UPDATE setting SET value=12 WHERE id='dbversion';\
+COMMIT;"
 };
 
 #endif
