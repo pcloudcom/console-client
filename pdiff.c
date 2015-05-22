@@ -43,6 +43,7 @@
 #include "pfs.h"
 #include "pnotifications.h"
 #include <ctype.h>
+#include "pnetlibs.h"
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
@@ -1153,10 +1154,15 @@ static void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *leng
   psync_socket *sock;
   binresult *bres;
   char *ids = NULL;
-  const char *emailret;
+  const char *emailret = "test_email";
   int k,n,count=0;
   const binresult *users;
   const binresult *user;
+  
+//   *length = strlen(emailret);
+//   *email = psync_strndup(emailret, *length);
+//   sleep(4);
+//   return;
   
   n =  userid;
   while(n!=0)
@@ -1171,8 +1177,16 @@ static void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *leng
     debug(D_WARNING, "%d bites allocated but %d bytes written", count + 1, k + 1 );
   binparam params[] = {P_STR("auth", psync_my_auth), P_STR("userids", ids)};
 
-  sock =  get_connected_socket();
+  sock = psync_apipool_get();
   bres = send_command(sock, "account_users", params);
+  if (likely(bres))
+    psync_apipool_release(sock);
+  else {
+    psync_apipool_release_bad(sock);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    return;
+  }
+  
   
   users = psync_find_result(bres, "users", PARAM_ARRAY);
   
@@ -1192,10 +1206,15 @@ static void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /
   psync_socket *sock;
   binresult *bres;
   char *ids = NULL;
-  const char *emailret;
+  const char *emailret = "test_team";
   int k,n,count=0;
   const binresult *users;
   const binresult *user;
+  
+//   *length = strlen(emailret);
+//   *name = psync_strndup(emailret, *length);
+//   sleep(4);
+//   return;
   
   n =  teamid;
   while(n!=0)
@@ -1213,6 +1232,14 @@ static void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /
   sock =  get_connected_socket();
   bres = send_command(sock, "account_teams", params);
   
+  if (likely(bres))
+    psync_apipool_release(sock);
+  else {
+    psync_apipool_release_bad(sock);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    return;
+  }
+  
   users = psync_find_result(bres, "users", PARAM_ARRAY);
   
   if (!users->length){
@@ -1222,6 +1249,7 @@ static void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /
   } else {
     user =  users->array[0];
     emailret = psync_find_result(user, "name", PARAM_STR)->str;
+    
     *length = strlen(emailret);
     *name = psync_strndup(emailret, *length);
   } 
@@ -1499,7 +1527,7 @@ static void process_acceptedshareout(const binresult *entry){
 static void process_establishbshareout(const binresult *entry) {
   psync_sql_res *q;
   const binresult *share, *br;
-  char *email;
+  char *email = 0;
   uint64_t userid;
   int emaillen;
   
@@ -1737,7 +1765,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
     psync_diff_unlock();
     return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
   }
-  psync_sql_start_transaction();
+  //psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
     entry=entries->array[i];
     etype=psync_find_result(entry, "event", PARAM_STR);
@@ -1752,7 +1780,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
       event_list[j].process(NULL);
   psync_set_uint_value("diffid", newdiffid);
   psync_set_uint_value("usedquota", used_quota);
-  psync_sql_commit_transaction();
+  //psync_sql_commit_transaction();
   psync_diff_unlock();
   if (needdownload){
     psync_wake_download();

@@ -1171,9 +1171,23 @@ int psync_remove_share(psync_shareid_t shareid, char **err){
   return result;
 }
 
+static int psync_account_modifyshare(psync_shareid_t shareid, uint32_t permissions, char **err) {
+  psync_shareid_t shareidarr[] = {-shareid};
+  psync_shareid_t permsarr[] = {permissions};
+  debug(D_NOTICE, "shareidarr %lld", (long long)shareidarr[0]);
+  int result =  do_account_modifyshare(shareidarr, 1, permsarr, 1, shareidarr, 1, permsarr, 1, err);
+  return result;
+}
+
 int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err){
+  int result;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid), P_NUM("permissions", convert_perms(permissions))};
-  return run_command("changeshare", params, err);
+  result =  run_command("changeshare", params, err);
+  if (result == 2025) {
+    result = psync_account_modifyshare(shareid, err);
+     debug(D_NOTICE, "erroris  %s", *err);
+  }
+  return result;
 }
 
 static unsigned long psync_parse_version(const char *currentversion){
