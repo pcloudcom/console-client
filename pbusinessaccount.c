@@ -33,6 +33,8 @@
 
 typedef void (*user_visitor)(const binresult *user, void *param); 
 
+typedef struct _email_vis_params {} email_visitor_params;
+
 #define FOLDERID_ENTRY_SIZE 18
 #define INVALID_SHAREDID_RESULT 2025
 
@@ -340,7 +342,7 @@ int do_account_users(psync_userid_t iserids[], int nids, user_visitor *vis, void
   } 
 }
 
-static void copy_email(const binresult* user, char** email /*OUT*/, int *length /*OUT*/) {
+static void copy_email(const binresult *user, void *_this) {
   const char *emailret = "";
   
   emailret = psync_find_result(user, "email", PARAM_STR)->str;
