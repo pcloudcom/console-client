@@ -33,9 +33,4 @@ int do_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync
 int do_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int nushid, 
                            psync_shareid_t tmshrids[], uint32_t tperms[], int ntmshid, char **err);
 
-void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *length /*OUT*/);
-void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /*OUT*/);
-
-
-
 #endif //_PSYNC_BUSINESS_ACCOUNT_H
