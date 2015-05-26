@@ -1105,6 +1105,10 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
   share->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
   share->canmanage=(perms&PSYNC_PERM_MANAGE)/PSYNC_PERM_MANAGE;
+  if(psync_get_number(row[8]))
+    share->isba = 1;
+  else 
+    share->isba = 0;
   return 0;
 }
 
@@ -1113,7 +1117,7 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
   incoming=!!incoming;
-  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name FROM sharedfolder WHERE isincoming=? ORDER BY name");
+  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, bsharedfolderid FROM sharedfolder WHERE isincoming=? ORDER BY name");
   psync_sql_bind_uint(res, 1, incoming);
   psync_list_bulder_add_sql(builder, res, create_share);
   return (psync_share_list_t *)psync_list_builder_finalize(builder);

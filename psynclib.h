@@ -348,6 +348,7 @@ typedef struct {
   unsigned char canmodify;
   unsigned char candelete;
   unsigned char canmanage;
+  size_t isba;
 } psync_share_t;
 
 typedef struct {
