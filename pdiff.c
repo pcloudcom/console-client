@@ -1181,8 +1181,8 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   stringslen=0;
   ctime=0;
   if (!(br=psync_check_result(share, "frommail", PARAM_STR)) && !(br=psync_check_result(share, "tomail", PARAM_STR))){
-    if(!(br=psync_check_result(share, "fromuserid", PARAM_NUM)) && 
-       !(br=psync_check_result(share, "touserid", PARAM_NUM)) &&
+    if(!(br=psync_check_result(share, "touserid", PARAM_NUM)) && 
+       !(br=psync_check_result(share, "fromuserid", PARAM_NUM)) &&
        !(br=psync_check_result(share, "toteamid", PARAM_NUM)) ) {
       debug(D_WARNING, "Neigher frommail or tomail nor buissines share found for eventtype %u", (unsigned)eventid);
       return;
@@ -1371,9 +1371,7 @@ static void process_acceptedsharein(const binresult *entry){
 static void process_establishbsharein(const binresult *entry){
   psync_sql_res *q;
   const binresult *share, *br;
-  char *email;
   uint64_t userid;
-  int emaillen;
   
   if (!entry)
     return;
@@ -1417,8 +1415,6 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_run_free(q);
   
   debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
-  if (email)
-    psync_free(email);
 }
 
 static void process_acceptedshareout(const binresult *entry){
@@ -1451,7 +1447,6 @@ static void process_establishbshareout(const binresult *entry) {
   const binresult *share, *br;
   char *email = 0;
   uint64_t userid;
-  int emaillen;
   
   if (!entry)
     return;

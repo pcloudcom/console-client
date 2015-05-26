@@ -28,10 +28,16 @@
 #define _PSYNC_BUSINESS_ACCOUNT_H
 
 #include "psynclib.h"
+#include "papi.h"
+
+typedef void (*result_visitor)(const binresult *result, void *param); 
 
 int do_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync_shareid_t teamshareids[], int nteamshareid, char **err); 
 int do_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int nushid, 
                            psync_shareid_t tmshrids[], uint32_t tperms[], int ntmshid, char **err);
+
+int do_account_users(psync_userid_t iserids[], int nids, result_visitor vis, void *param);
+int do_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param);
 
 void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *length /*OUT*/);
 void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /*OUT*/);
