@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TE
 CREATE TABLE IF NOT EXISTS sharerequest (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, etime INTEGER, permissions INTEGER,\
   userid INTEGER, mail TEXT, name VARCHAR(1024), message TEXT);\
 CREATE TABLE IF NOT EXISTS sharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, permissions INTEGER,\
-  userid INTEGER, mail TEXT, name VARCHAR(1024));\
+  userid INTEGER, mail TEXT, name VARCHAR(1024), bsharedfolderid INTEGER);\
 CREATE TABLE IF NOT EXISTS pagecache (id INTEGER PRIMARY KEY, hash INTEGER, pageid INTEGER, type INTEGER, flags INTEGER,\
   lastuse INTEGER, usecnt INTEGER, size INTEGER, crc INTEGER);\
 CREATE UNIQUE INDEX IF NOT EXISTS kpagecachehashpageid ON pagecache(hash, pageid);\
@@ -125,6 +125,9 @@ CREATE TABLE IF NOT EXISTS resolver (hostname TEXT, port TEXT, prio INTEGER, cre
 CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRIMARY KEY (objectid, name)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS cryptofolderkey (folderid INTEGER PRIMARY KEY REFERENCES folder(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
 CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, hash INTEGER NOT NULL, enckey BLOB NOT NULL);\
+CREATE TABLE IF NOT EXISTS bsharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, \
+ctime INTEGER, permissions INTEGER, message TEXT, name VARCHAR(1024), isuser INTEGER, \
+touserid INTEGER, isteam INTEGER, toteamid INTEGER, fromuserid INTEGER, folderownerid INTEGER); \
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\

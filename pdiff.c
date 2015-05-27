@@ -1292,8 +1292,8 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   psync_send_eventdata(eventid, e);
 }
 
-static void send_share_notify(psync_eventtype_t eventid, const binresult *share) {
-  notify_paramst params = {eventid, share};
+static void send_share_notify(psync_eventtype_t eventid, psync_share_event_t *e, uint64_t userid, uint64_t teamid) {
+  notify_paramst params = {eventid, e, userid, teamid};
  
   psync_run_thread1("Share notify", do_send_share_notify, &params);
 }
