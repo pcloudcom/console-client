@@ -1286,8 +1286,8 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     e->candelete=psync_find_result(share, "candelete", PARAM_BOOL)->num;
   }
   psync_send_eventdata(eventid, e);
-  if (isba && email)
-    psync_free(email);
+//   if (isba && email)
+//     psync_free(email);
 }
 
 static void process_requestsharein(const binresult *entry){
@@ -1387,6 +1387,7 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   userid = psync_find_result(share, "fromuserid", PARAM_NUM)->num;
   psync_sql_bind_uint(q, 5, userid);
+  psync_sql_bind_uint(q, 6, userid);
   // get_ba_member_email(userid, &email, &emaillen);
   // psync_sql_bind_lstring(q, 6, email, emaillen);
   //psync_sql_bind_lstring(q, 6, "test", 4);
@@ -1742,8 +1743,30 @@ static void update_ba_emails() {
   do_account_users(fres->data, fres->rows, &set_ba_email, fres->data);
 }
 
+static void set_ba_team_name(int i, const binresult *user, void *_this) {
+  const char *emailret = "";
+  //uint64_t *bshareid = (uint64_t *) _this;
+  psync_sql_res *q;
+  
+  emailret = psync_find_result(user, "name", PARAM_STR)->str;
+  
+  q=psync_sql_prep_statement("UPDATE sharedfolder SET mail= ? WHERE id in (SELECT - id FROM bsharedfolder WHERE  toteamid = ?) and mail = ? ");
+  psync_sql_bind_lstring(q, 1, emailret, strlen(emailret));
+  psync_sql_bind_uint(q, 2,psync_find_result(user, "id", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3,psync_find_result(user, "id", PARAM_NUM)->num);
+  psync_sql_run_free(q);
+}
 
-
+static void update_ba_teams() {
+  psync_sql_res *res;
+  psync_full_result_int *fres;
+  
+  res=psync_sql_query("select bf.toteamid from bsharedfolder as bf, sharedfolder as sf where sf.bsharedfolderid = bf.id and bf.isincoming = 0 and ifnull(bf.touserid, 0) == 0");
+  
+  fres = psync_sql_fetchall_int(res);
+  //One column in the result so can use data array directly 
+  do_account_teams(fres->data, fres->rows, &set_ba_team_name, fres->data);
+}
 
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
@@ -1772,7 +1795,8 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_set_uint_value("diffid", newdiffid);
   psync_set_uint_value("usedquota", used_quota);
   psync_sql_commit_transaction();
-  //update_ba_emails();
+  update_ba_emails();
+  update_ba_teams();
   psync_diff_unlock();
   if (needdownload){
     psync_wake_download();
