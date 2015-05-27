@@ -345,7 +345,7 @@ int do_account_users(psync_userid_t iserids[], int nids, result_visitor vis, voi
     return -2;
   } else {
     for (i = 0; i < users->length; ++i)
-       vis(users->array[i], param);
+       vis(i, users->array[i], param);
   }
   
   psync_free(bres);
@@ -353,7 +353,7 @@ int do_account_users(psync_userid_t iserids[], int nids, result_visitor vis, voi
   return 0;
 }
 
-static void copy_email(const binresult *user, void *_this) {
+static void copy_email(int i, const binresult *user, void *_this) {
   const char *emailret = "";
   email_visitor_params *params = (email_visitor_params *) _this;
   emailret = psync_find_result(user, "email", PARAM_STR)->str;
@@ -409,14 +409,14 @@ int do_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, voi
     return -2;
   } else {
     for (i = 0; i < users->length; ++i)
-      vis(users->array[i], param);
+      vis(i, users->array[i], param);
   } 
   psync_free(bres);
   psync_free(ids);
   return 0;
 }
 
-static void copy_team(const binresult *user, void *_this) {
+static void copy_team(int i, const binresult *user, void *_this) {
   const char *emailret = "";
   team_visitor_params *params = (team_visitor_params *) _this;
   emailret = psync_find_result(user, "name", PARAM_STR)->str;

@@ -1167,10 +1167,11 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   psync_share_event_t *e;
   char *str, *sharename;
   const char *message;
-  char *email;
+  char *email = "tralalal@tralala.com";
   const binresult *br;
   uint64_t ctime;
-  size_t stringslen, sharenamelen, emaillen, messagelen;
+  size_t stringslen, sharenamelen, messagelen;
+  size_t emaillen = 20;
   int freesharename;
   int isba = 0;
   const binresult *permissions;
@@ -1191,10 +1192,10 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   if (isba) {
     teamid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
     if (teamid) {
-      get_ba_team_name(teamid, &email, (int *) &emaillen);
+      //get_ba_team_name(teamid, &email, (int *) &emaillen);
       stringslen+= ++emaillen;
     } else {
-      get_ba_member_email(br->num, &email, (int *) &emaillen);
+     /// get_ba_member_email(br->num, &email, (int *) &emaillen);
       stringslen+= ++emaillen;
     }
   } else {
@@ -1463,12 +1464,14 @@ static void process_establishbshareout(const binresult *entry) {
   if (psync_find_result(share, "user", PARAM_BOOL)->num) {
     userid = psync_find_result(share, "touserid", PARAM_NUM)->num;
     psync_sql_bind_uint(q, 5, userid);
+    psync_sql_bind_uint(q, 6, userid);
     //get_ba_member_email(userid, &email, &emaillen);
     //psync_sql_bind_lstring(q, 6, email, emaillen);
     //psync_sql_bind_lstring(q, 6, "tralala", 7);
   } else if (psync_find_result(share, "team", PARAM_BOOL)->num) {
     userid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
     psync_sql_bind_uint(q, 5, userid);
+    psync_sql_bind_uint(q, 6, userid);
     //get_ba_team_name(userid, &email, &emaillen);
     // psync_sql_bind_lstring(q, 6, email, emaillen);
     //psync_sql_bind_lstring(q, 6, "tralala", 7);
@@ -1710,18 +1713,37 @@ void psync_diff_unlock(){
   pthread_mutex_unlock(&diff_mutex);
 }
 
+
+static void set_ba_email(int i, const binresult *user, void *_this) {
+  const char *emailret = "";
+  //uint64_t *bshareid = (uint64_t *) _this;
+  psync_sql_res *q;
+  
+  emailret = psync_find_result(user, "email", PARAM_STR)->str;
+  
+  q=psync_sql_prep_statement("UPDATE sharedfolder SET mail= ? WHERE id in (SELECT - id FROM bsharedfolder WHERE  touserid = ? or fromuserid = ?) and mail = ? ");
+  psync_sql_bind_lstring(q, 1, emailret, strlen(emailret));
+  psync_sql_bind_uint(q, 2,psync_find_result(user, "id", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 3,psync_find_result(user, "id", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 4,psync_find_result(user, "id", PARAM_NUM)->num);
+  psync_sql_run_free(q);
+}
+
 static void update_ba_emails() {
   psync_sql_res *res;
-  psync_uint_row row;
+  psync_full_result_int *fres;
   
   res=psync_sql_query("select bf.fromuserid from bsharedfolder as bf, sharedfolder as sf where sf.bsharedfolderid = bf.id and bf.isincoming = 1 "
                       "union all "
                       "select bf.touserid from bsharedfolder as bf, sharedfolder as sf where sf.bsharedfolderid = bf.id and bf.isincoming = 0 and ifnull(bf.touserid, 0) != 0;");
-  while ((row=psync_sql_fetch_rowint(res))){
-   //  row[0]
-    // row[1]
-  }
+  
+  fres = psync_sql_fetchall_int(res);
+  //One column in the result so can use data array directly 
+  do_account_users(fres->data, fres->rows, &set_ba_email, fres->data);
 }
+
+
+
 
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
@@ -1750,7 +1772,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_set_uint_value("diffid", newdiffid);
   psync_set_uint_value("usedquota", used_quota);
   psync_sql_commit_transaction();
-  update_ba_emails();
+  //update_ba_emails();
   psync_diff_unlock();
   if (needdownload){
     psync_wake_download();

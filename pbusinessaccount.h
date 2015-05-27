@@ -30,7 +30,7 @@
 #include "psynclib.h"
 #include "papi.h"
 
-typedef void (*result_visitor)(const binresult *result, void *param); 
+typedef void (*result_visitor)(int i, const binresult *result, void *param); 
 
 int do_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync_shareid_t teamshareids[], int nteamshareid, char **err); 
 int do_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int nushid, 
