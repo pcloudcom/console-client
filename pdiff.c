@@ -49,6 +49,13 @@
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
 
+typedef struct {
+  psync_eventtype_t eventid;
+  psync_share_event_t *event_data;
+  uint64_t userid;
+  uint64_t teamid;
+} notify_paramst;
+
 static uint64_t used_quota=0, current_quota=0;
 static psync_uint_t needdownload=0;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
@@ -1171,11 +1178,12 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   const binresult *br;
   uint64_t ctime;
   size_t stringslen, sharenamelen, messagelen;
-  size_t emaillen = 20;
+  size_t emaillen = 254;
   int freesharename;
   int isba = 0;
   const binresult *permissions;
   uint64_t teamid = 0;
+  uint64_t userid = 0;
   
   if (initialdownload)
     return;
@@ -1191,13 +1199,9 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   }
   if (isba) {
     teamid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
-    if (teamid) {
-      //get_ba_team_name(teamid, &email, (int *) &emaillen);
-      stringslen+= ++emaillen;
-    } else {
-     /// get_ba_member_email(br->num, &email, (int *) &emaillen);
-      stringslen+= ++emaillen;
-    }
+    if (!teamid)
+      userid = br->num;
+    stringslen+= ++emaillen;
   } else {
     email=(char *)br->str;
     emaillen=br->length+1;
@@ -1286,8 +1290,12 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     e->candelete=psync_find_result(share, "candelete", PARAM_BOOL)->num;
   }
   psync_send_eventdata(eventid, e);
-//   if (isba && email)
-//     psync_free(email);
+}
+
+static void send_share_notify(psync_eventtype_t eventid, const binresult *share) {
+  notify_paramst params = {eventid, share};
+ 
+  psync_run_thread1("Share notify", do_send_share_notify, &params);
 }
 
 static void process_requestsharein(const binresult *entry){
