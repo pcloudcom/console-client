@@ -1418,14 +1418,14 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_bind_int(q, 1, - psync_find_result(share, "shareid", PARAM_NUM)->num); //Shareid is not unique amongst BA and normal shares so inserting BA with negative value.
   debug(D_NOTICE, "INSERT BS SHARE IN id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
+  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
+    psync_sql_bind_uint(q, 3, br->num);
+  else 
+    psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   userid = psync_find_result(share, "fromuserid", PARAM_NUM)->num;
   psync_sql_bind_uint(q, 5, userid);
   psync_sql_bind_uint(q, 6, userid);
-  // get_ba_member_email(userid, &email, &emaillen);
-  // psync_sql_bind_lstring(q, 6, email, emaillen);
-  //psync_sql_bind_lstring(q, 6, "test", 4);
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_bind_int(q, 8, psync_find_result(share, "shareid", PARAM_NUM)->num);
@@ -1494,23 +1494,20 @@ static void process_establishbshareout(const binresult *entry) {
   debug(D_NOTICE, "INSERT BS SHARE OUT id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 1, - psync_find_result(share, "shareid", PARAM_NUM)->num); //Shareid is not unique amongst BA and normal shares so inserting BA with negative value.
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
+  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
+    psync_sql_bind_uint(q, 3, br->num);
+  else 
+    psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   
   if (psync_find_result(share, "user", PARAM_BOOL)->num) {
     userid = psync_find_result(share, "touserid", PARAM_NUM)->num;
     psync_sql_bind_uint(q, 5, userid);
     psync_sql_bind_uint(q, 6, userid);
-    //get_ba_member_email(userid, &email, &emaillen);
-    //psync_sql_bind_lstring(q, 6, email, emaillen);
-    //psync_sql_bind_lstring(q, 6, "tralala", 7);
   } else if (psync_find_result(share, "team", PARAM_BOOL)->num) {
     userid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
     psync_sql_bind_uint(q, 5, userid);
     psync_sql_bind_uint(q, 6, userid);
-    //get_ba_team_name(userid, &email, &emaillen);
-    // psync_sql_bind_lstring(q, 6, email, emaillen);
-    //psync_sql_bind_lstring(q, 6, "tralala", 7);
   }
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
