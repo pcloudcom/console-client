@@ -54,6 +54,7 @@ typedef struct {
   psync_share_event_t *event_data;
   uint64_t userid;
   uint64_t teamid;
+  char *str;
 } notify_paramst;
 
 static uint64_t used_quota=0, current_quota=0;
@@ -63,6 +64,7 @@ static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 
 static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid);
+static void do_send_eventdata(void * param);
 
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
                                            const char *device){
@@ -1259,7 +1261,7 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   fill_str(e->sharename, sharename, sharenamelen);
   if (freesharename)
     psync_free(sharename);
-  fill_str(e->email, email, emaillen);
+  
   fill_str(e->message, message, messagelen);
   if ((br=psync_check_result(share, "userid", PARAM_NUM)))
     e->userid=br->num;
@@ -1289,13 +1291,38 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     e->canmodify=psync_find_result(share, "canmodify", PARAM_BOOL)->num;
     e->candelete=psync_find_result(share, "candelete", PARAM_BOOL)->num;
   }
-  psync_send_eventdata(eventid, e);
+  if (isba) {
+    notify_paramst *params = psync_malloc(sizeof(notify_paramst));
+    params->eventid = eventid;
+    params->event_data = e;
+    params->userid = userid;
+    params->teamid = teamid;
+    params->str = str;
+    psync_run_thread1("Share notify", do_send_eventdata, params);
+  } else {
+    fill_str(e->email, email, emaillen);
+    psync_send_eventdata(eventid, e);
+  }
 }
 
-static void send_share_notify(psync_eventtype_t eventid, psync_share_event_t *e, uint64_t userid, uint64_t teamid) {
-  notify_paramst params = {eventid, e, userid, teamid};
- 
-  psync_run_thread1("Share notify", do_send_share_notify, &params);
+static void do_send_eventdata(void * param) {
+  notify_paramst * data = (notify_paramst *)param;
+  char *email;
+  size_t emaillen;
+  char *str =  data->str;
+
+  if(data->userid)
+    get_ba_member_email(data->userid, &email, &emaillen);
+  else
+    get_ba_team_name(data->teamid, &email, &emaillen);
+  
+  if (email) {
+    psync_diff_lock();
+    fill_str(data->event_data->email, email, emaillen);
+    psync_send_eventdata(data->eventid, data->event_data);
+    psync_diff_unlock();
+  }
+  psync_free(param);
 }
 
 static void process_requestsharein(const binresult *entry){

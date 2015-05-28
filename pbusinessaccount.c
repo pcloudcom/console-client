@@ -33,12 +33,12 @@
 
 typedef struct _email_vis_params {
   char** email;
-  int *length;
+  size_t *length;
 } email_visitor_params;
 
 typedef struct _team_vis_params {
   char** name;
-  int *length;
+  size_t *length;
 } team_visitor_params;
 
 #define FOLDERID_ENTRY_SIZE 18
@@ -361,7 +361,7 @@ static void copy_email(int i, const binresult *user, void *_this) {
   *(params->email) = psync_strndup(emailret, *(params->length));
 }
 
-void get_ba_member_email(uint64_t userid, char** email /*OUT*/, int *length /*OUT*/) {
+void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /*OUT*/) {
   psync_userid_t userids[] = {userid};
   email_visitor_params params = {email, length};
 
@@ -425,7 +425,7 @@ static void copy_team(int i, const binresult *user, void *_this) {
 }
 
 
-void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, int *length /*OUT*/) {
+void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT*/) {
   psync_userid_t teamids[] = {teamid};
   team_visitor_params params = {name, length};
 
