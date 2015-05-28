@@ -40,10 +40,8 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
 int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param);
 
 void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /*OUT*/);
-void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT*/);
+void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT*/); 
 
-
-
-void 
+//void c
 
 #endif //_PSYNC_BUSINESS_ACCOUNT_H

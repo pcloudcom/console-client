@@ -1105,7 +1105,7 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
   share->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
   share->canmanage=(perms&PSYNC_PERM_MANAGE)/PSYNC_PERM_MANAGE;
-  if(psync_get_number(row[8]))
+  if(psync_get_number(row[7]))
     share->isba = 1;
   else 
     share->isba = 0;
