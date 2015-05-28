@@ -1127,7 +1127,8 @@ static uint32_t convert_perms(uint32_t permissions){
   return
     (permissions&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE*1+
     (permissions&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY*2+
-    (permissions&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE*4;
+    (permissions&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE*4+
+    (permissions&PSYNC_PERM_MANAGE)/PSYNC_PERM_MANAGE*8;
 }
 
 int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err){
