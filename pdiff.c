@@ -1772,7 +1772,7 @@ static void update_ba_emails() {
   
   fres = psync_sql_fetchall_int(res);
   //One column in the result so can use data array directly 
-  do_account_users(fres->data, fres->rows, &set_ba_email, fres->data);
+  do_psync_account_users(fres->data, fres->rows, &set_ba_email, fres->data);
 }
 
 static void set_ba_team_name(int i, const binresult *user, void *_this) {
@@ -1797,7 +1797,7 @@ static void update_ba_teams() {
   
   fres = psync_sql_fetchall_int(res);
   //One column in the result so can use data array directly 
-  do_account_teams(fres->data, fres->rows, &set_ba_team_name, fres->data);
+  do_psync_account_teams(fres->data, fres->rows, &set_ba_team_name, fres->data);
 }
 
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){

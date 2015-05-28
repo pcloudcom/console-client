@@ -80,7 +80,7 @@ static int handle_result(const binresult *bres, uint64_t result, char **err)
     return -1;
 }
 
-int do_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync_shareid_t teamshareids[], int nteamshareid, char **err) {
+int do_psync_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync_shareid_t teamshareids[], int nteamshareid, char **err) {
  psync_socket *api;
   binresult *bres;
   uint64_t result,userresult,teamresult;
@@ -178,7 +178,7 @@ int do_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync
   
 }
 
-int do_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int nushid, 
+int do_psync_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int nushid, 
                            psync_shareid_t tmshrids[], uint32_t tperms[], int ntmshid, char **err) {
   psync_socket *api;
   binresult *bres;
@@ -304,7 +304,7 @@ int do_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int n
   return result;
 }
 
-int do_account_users(psync_userid_t iserids[], int nids, result_visitor vis, void *param) {
+int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vis, void *param) {
   psync_socket *sock;
   binresult *bres;
   char *ids = NULL;
@@ -365,10 +365,10 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
   psync_userid_t userids[] = {userid};
   email_visitor_params params = {email, length};
 
-  do_account_users(userids, 1, &copy_email, &params);
+  do_psync_account_users(userids, 1, &copy_email, &params);
 }
 
-int do_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param) {
+int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param) {
   psync_socket *sock;
   binresult *bres;
   char *ids = NULL;
@@ -429,6 +429,6 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
   psync_userid_t teamids[] = {teamid};
   team_visitor_params params = {name, length};
 
-  do_account_teams(teamids, 1, &copy_team, &params);
+  do_psync_account_teams(teamids, 1, &copy_team, &params);
 }
 
