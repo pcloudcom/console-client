@@ -362,10 +362,29 @@ static void copy_email(int i, const binresult *user, void *_this) {
 }
 
 void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /*OUT*/) {
-  psync_userid_t userids[] = {userid};
-  email_visitor_params params = {email, length};
-
-  do_psync_account_users(userids, 1, &copy_email, &params);
+  psync_sql_res *res;
+  psync_variant_row row;
+  const char *cstr;
+  res=psync_sql_query("SELECT mail FROM baccountemail WHERE id=?");
+  psync_sql_bind_uint(res, 1, userid);
+  if ((row=psync_sql_fetch_row(res))){
+      cstr=psync_get_lstring(row[0], length);
+      *email=(char *)psync_malloc(*length);
+      memcpy(*email, cstr, *length);
+  } else {
+    psync_sql_res *q;
+    psync_userid_t userids[] = {userid};
+    email_visitor_params params = {email, length};
+    do_psync_account_users(userids, 1, &copy_email, &params);
+   
+    q=psync_sql_prep_statement("INSERT INTO baccountemail  (id, mail) VALUES (?, ?)");
+    psync_sql_bind_uint(q, 1, userid);
+    psync_sql_bind_lstring(q, 2, *email,  *length);
+    psync_sql_run_free(q);
+  }
+  psync_sql_free_result(res);
+  
+  
 }
 
 int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param) {
@@ -426,9 +445,69 @@ static void copy_team(int i, const binresult *user, void *_this) {
 
 
 void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT*/) {
-  psync_userid_t teamids[] = {teamid};
-  team_visitor_params params = {name, length};
-
-  do_psync_account_teams(teamids, 1, &copy_team, &params);
+  psync_sql_res *res;
+  psync_variant_row row;
+  const char *cstr;
+  res=psync_sql_query("SELECT name FROM baccountteam WHERE id=?");
+  psync_sql_bind_uint(res, 1, teamid);
+  if ((row=psync_sql_fetch_row(res))){
+      cstr=psync_get_lstring(row[0], length);
+      *name=(char *)psync_malloc(*length);
+      memcpy(*name, cstr, *length);
+  } else {
+    psync_sql_res *q;
+    psync_userid_t teamids[] = {teamid};
+    team_visitor_params params = {name, length};
+    do_psync_account_teams(teamids, 1, &copy_team, &params);
+   
+    q=psync_sql_prep_statement("INSERT INTO baccountteam  (id, name) VALUES (?, ?)");
+    psync_sql_bind_uint(q, 1, teamid);
+    psync_sql_bind_lstring(q, 2, *name,  *length);
+    psync_sql_run_free(q);
+  }
+  psync_sql_free_result(res);
 }
 
+static void insert_cache_email(int i, const binresult *user, void *_this) {
+  const char *emailret = 0;
+  emailret = psync_find_result(user, "email", PARAM_STR)->str;
+  uint64_t shareid = 0;
+  psync_sql_res *q;
+  
+  shareid = psync_find_result(user, "id", PARAM_NUM)->num;
+  if (shareid) {
+    q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail) VALUES (?, ?)");
+    psync_sql_bind_uint(q, 1, shareid);
+    psync_sql_bind_lstring(q, 2, emailret, strlen(emailret));
+    psync_sql_run_free(q);
+  }
+}
+
+void cache_account_emails() {
+  psync_userid_t *userids = 0;
+  void *params = 0;
+
+  do_psync_account_users(userids, 0, &insert_cache_email, params);
+}
+
+static void insert_cache_team(int i, const binresult *team, void *_this) {
+  const char *nameret = 0;
+  nameret = psync_find_result(team, "name", PARAM_STR)->str;
+  uint64_t shareid = 0;
+  psync_sql_res *q;
+  
+  shareid = psync_find_result(team, "id", PARAM_NUM)->num;
+  if (shareid) {
+    q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
+    psync_sql_bind_uint(q, 1, shareid);
+    psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
+    psync_sql_run_free(q);
+  }
+}
+
+void cache_account_teams() {
+  psync_userid_t *teamids = 0;
+  void *params = 0;
+
+  do_psync_account_teams(teamids, 0, &insert_cache_team, params);
+}

@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 12
+#define PSYNC_DATABASE_VERSION 13
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -126,8 +126,10 @@ CREATE TABLE IF NOT EXISTS fsxattr (objectid INTEGER, name TEXT, value BLOB, PRI
 CREATE TABLE IF NOT EXISTS cryptofolderkey (folderid INTEGER PRIMARY KEY REFERENCES folder(id) ON DELETE CASCADE, enckey BLOB NOT NULL);\
 CREATE TABLE IF NOT EXISTS cryptofilekey (fileid INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, hash INTEGER NOT NULL, enckey BLOB NOT NULL);\
 CREATE TABLE IF NOT EXISTS bsharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, \
-ctime INTEGER, permissions INTEGER, message TEXT, name VARCHAR(1024), isuser INTEGER, \
-touserid INTEGER, isteam INTEGER, toteamid INTEGER, fromuserid INTEGER, folderownerid INTEGER); \
+  ctime INTEGER, permissions INTEGER, message TEXT, name VARCHAR(1024), isuser INTEGER, \
+  touserid INTEGER, isteam INTEGER, toteamid INTEGER, fromuserid INTEGER, folderownerid INTEGER); \
+CREATE TABLE IF NOT EXISTS baccountemail (id INTEGER PRIMARY KEY, mail TEXT); \
+CREATE TABLE IF NOT EXISTS baccountteam (id INTEGER PRIMARY KEY, name TEXT); \
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
@@ -232,6 +234,11 @@ CREATE TABLE IF NOT EXISTS bsharedfolder (id INTEGER PRIMARY KEY, isincoming INT
 ctime INTEGER, permissions INTEGER, message TEXT, name VARCHAR(1024), isuser INTEGER, \
 touserid INTEGER, isteam INTEGER, toteamid INTEGER, fromuserid INTEGER, folderownerid INTEGER); \
 UPDATE setting SET value=12 WHERE id='dbversion';\
+COMMIT;",
+"BEGIN;\
+CREATE TABLE IF NOT EXISTS baccountemail (id INTEGER PRIMARY KEY, mail TEXT); \
+CREATE TABLE IF NOT EXISTS baccountteam (id INTEGER PRIMARY KEY, name TEXT); \
+UPDATE setting SET value=13 WHERE id='dbversion';\
 COMMIT;"
 };
 

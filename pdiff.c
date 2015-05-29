@@ -1811,6 +1811,8 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
     psync_diff_unlock();
     return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
   }
+  cache_account_emails();
+  cache_account_teams();
   psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
     entry=entries->array[i];
