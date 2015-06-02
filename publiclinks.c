@@ -596,9 +596,12 @@ void do_free_links_list (plink_info_list_t *info)
   if (!info || info->entrycnt)
     debug(D_ERROR, "Empty list scheduled for deletion or double delete.");
   for (i = 0; i < info->entrycnt; ++i) {
-    psync_free(info->entries[i].code);
-    psync_free(info->entries[i].comment);
-    psync_free((char *)info->entries[i].meta.name);
+    if (info->entries[i].code)
+      psync_free(info->entries[i].code);
+    if (info->entries[i].comment)
+      psync_free(info->entries[i].comment);
+    if (info->entries[i].meta.name)
+      psync_free((char *)info->entries[i].meta.name);
   }
   psync_free(info);
 }
