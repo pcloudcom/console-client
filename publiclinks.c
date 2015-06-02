@@ -33,6 +33,7 @@
 
 #define FOLDERID_ENTRY_SIZE 18
 
+
 static void init_param_str(binparam* t, const char *name, const char *val) {
   //{PARAM_STR, strlen(name), strlen(val), (name), {(uint64_t)((uintptr_t)(val))}}
   t->paramtype  = PARAM_STR;
@@ -339,7 +340,7 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   
 }
 
-int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
+static int chache_links(char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
@@ -351,7 +352,6 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
   plink_info_list_t * info;
   
   *err  = 0;
-  *infop = 0;
  
   binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
   api = psync_apipool_get();
@@ -368,7 +368,7 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
-    return -2;
+    return 0;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
   if (unlikely(result)) {
@@ -379,7 +379,7 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
     else
-      return -1;
+      return 0;
   }
   
   publinks=psync_find_result(bres, "publinks", PARAM_ARRAY);
@@ -393,40 +393,38 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
   info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
   info->entrycnt = linkscnt;
 
+  psync_sql_start_transaction();
+  psync_sql_res *q;
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
-    
-    info->entries[i].linkid = psync_find_result(link, "linkid", PARAM_NUM)->num;
-    info->entries[i].traffic = psync_find_result(link, "traffic", PARAM_NUM)->num;
-    info->entries[i].maxspace = 0;
-    info->entries[i].downloads = psync_find_result(link, "downloads", PARAM_NUM)->num;
-    info->entries[i].modified = psync_find_result(link, "modified", PARAM_NUM)->num;
-    info->entries[i].created = psync_find_result(link, "created", PARAM_NUM)->num;
-    info->entries[i].comment = 0;
-    
+
+    q=psync_sql_prep_statement("REPLACE INTO links  (id, code, comment, traffic, maxspace, downloads, created,"
+                                 " modified, name,  isfolder, folderid, fileid, isincomming)"
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)");
+    psync_sql_bind_uint(q, 1, psync_find_result(link, "linkid", PARAM_NUM)->num);
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
-    info->entries[i].code = psync_strndup(charfiled, strlen(charfiled));
-   
+    psync_sql_bind_lstring(q, 2, charfiled, strlen(charfiled));
+    psync_sql_bind_uint(q, 3, 0);
+    psync_sql_bind_uint(q, 4, psync_find_result(link, "traffic", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 5, 0);
+    psync_sql_bind_uint(q, 6, psync_find_result(link, "downloads", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 7, psync_find_result(link, "created", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 8, psync_find_result(link, "modified", PARAM_NUM)->num);
+    charfiled =  psync_find_result(link, "name", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 9, charfiled, strlen(charfiled));
     meta=psync_find_result(link, "metadata", PARAM_HASH);
-    
-    charfiled = psync_find_result(meta, "id", PARAM_STR)->str;
-    info->entries[i].id = psync_strndup(charfiled, strlen(charfiled));
-    
-    charfiled = psync_find_result(meta, "name", PARAM_STR)->str;
-    info->entries[i].meta.name = psync_strndup(charfiled, strlen(charfiled));
-    info->entries[i].meta.namelen = strlen(charfiled);
-    
     if (psync_find_result(meta, "isfolder", PARAM_STR)->str[0] == 't') {
-      info->entries[i].meta.isfolder = 1;
-      info->entries[i].meta.folder.folderid = psync_find_result(meta, "folderid", PARAM_NUM)->num; 
-      
+      psync_sql_bind_uint(q, 10, 1);
+      psync_sql_bind_uint(q, 11, psync_find_result(link, "folderid", PARAM_NUM)->num);
+      psync_sql_bind_uint(q, 12, 0);
     } else {
-      info->entries[i].meta.isfolder = 0;
-      info->entries[i].meta.file.fileid = psync_find_result(meta, "fileid", PARAM_NUM)->num; 
-      info->entries[i].meta.file.size = psync_find_result(meta, "size", PARAM_NUM)->num; 
+      psync_sql_bind_uint(q, 10, 0);
+      psync_sql_bind_uint(q, 11, 0);
+      psync_sql_bind_uint(q, 12, psync_find_result(link, "folderid", PARAM_NUM)->num);
     }
+    psync_sql_run_free(q);
   }
-  *infop = info;
+  psync_sql_commit_transaction();
   return linkscnt;
 }
 
@@ -592,7 +590,86 @@ int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   return 0;
 }
 
-int do_psync_list_upload_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
+void do_free_links_list (plink_info_list_t *info)
+{
+  int i;
+  if (!info || info->entrycnt)
+    debug(D_ERROR, "Empty list scheduled for deletion or double delete.");
+  for (i = 0; i < info->entrycnt; ++i) {
+    psync_free(info->entries[i].code);
+    psync_free(info->entries[i].comment);
+    psync_free((char *)info->entries[i].meta.name);
+  }
+  psync_free(info);
+}
+
+
+int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
+  
+  plink_info_list_t * info;
+  int i, linkscnt = 0;
+  psync_sql_res *res;
+  psync_variant_row row;
+  psync_uint_row irow;
+  
+  const char *cstr;
+  size_t length = 0;
+  
+  *err  = 0;
+  *infop = 0;
+  
+  psync_sql_start_transaction();
+  res=psync_sql_query("SELECT count(*) FROM links");
+  if ((irow = psync_sql_fetch_rowint(res)))
+    linkscnt = irow[0];
+  psync_sql_free_result(res);
+  
+  if (linkscnt) {
+    res=psync_sql_query("SELECT id, code, comment, traffic, maxspace, downloads, created,"
+                        " modified, name,  isfolder, folderid, fileid, isincomming FROM links");
+    
+    info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
+    info->entrycnt = linkscnt;
+
+    for (i = 0; i < linkscnt; ++i) {
+      if ((row=psync_sql_fetch_row(res))){
+        info->entries[i].linkid = psync_get_number(row[0]);
+        cstr=psync_get_lstring(row[1], &length);
+        info->entries[i].code = psync_strndup(cstr, length);
+        cstr=psync_get_lstring(row[2], &length);
+        info->entries[i].comment = psync_strndup(cstr, length);
+        info->entries[i].traffic = psync_get_number(row[3]);
+        info->entries[i].maxspace =  psync_get_number(row[4]);
+        info->entries[i].downloads = psync_get_number(row[5]);
+        info->entries[i].created = psync_get_number(row[6]);
+        info->entries[i].modified = psync_get_number(row[7]);
+        cstr=psync_get_lstring(row[8], &length);
+        info->entries[i].meta.name = psync_strndup(cstr, length);
+        info->entries[i].meta.namelen = length;
+        if (psync_get_number(row[9])) {
+          info->entries[i].meta.isfolder = 1;
+          info->entries[i].meta.folder.folderid = psync_get_number(row[10]);
+          
+        } else {
+          info->entries[i].meta.isfolder = 0;
+          info->entries[i].meta.file.fileid = psync_get_number(row[11]);
+        }
+        info->entries[i].isupload = psync_get_number(row[12]);
+      } else {
+        debug(D_ERROR, "Counted and fetched numbers do not match.");
+        info->entrycnt = i;
+        free_links_list (info);
+        return -2;
+      }
+    }
+    *infop = info;
+  }
+  psync_sql_commit_transaction();
+  return linkscnt;
+}
+
+
+static int chache_upload_links(char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
@@ -601,10 +678,8 @@ int do_psync_list_upload_links(plink_info_list_t **infop /*OUT*/, char **err /*O
   const binresult *publinks, *meta;
   binresult *link;
   int i, linkscnt;
-  plink_info_list_t * info;
   
   *err  = 0;
-  *infop = 0;
  
   binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
   api = psync_apipool_get();
@@ -642,45 +717,47 @@ int do_psync_list_upload_links(plink_info_list_t **infop /*OUT*/, char **err /*O
     psync_free(bres);
     return 0;
   }
-  
-  info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
-  info->entrycnt = linkscnt;
-
+  psync_sql_start_transaction();
+  psync_sql_res *q;
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
-    
-    info->entries[i].linkid = psync_find_result(link, "linkid", PARAM_NUM)->num;
-    info->entries[i].traffic = psync_find_result(link, "space", PARAM_NUM)->num;
-    info->entries[i].maxspace = psync_find_result(link, "maxspace", PARAM_NUM)->num;
-    info->entries[i].downloads = psync_find_result(link, "files", PARAM_NUM)->num;
-    info->entries[i].modified = psync_find_result(link, "modified", PARAM_NUM)->num;
-    info->entries[i].created = psync_find_result(link, "created", PARAM_NUM)->num;
-    
+
+    q=psync_sql_prep_statement("REPLACE INTO links  (id, code, comment, traffic, maxspace, downloads, created,"
+                                 " modified, name,  isfolder, folderid, fileid, isincomming)"
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+    psync_sql_bind_uint(q, 1, psync_find_result(link, "linkid", PARAM_NUM)->num);
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
-    info->entries[i].code = psync_strndup(charfiled, strlen(charfiled));
-    
-    charfiled = psync_find_result(link, "comment", PARAM_STR)->str;
-    info->entries[i].comment = psync_strndup(charfiled, strlen(charfiled));
-   
+    psync_sql_bind_lstring(q, 2, charfiled, strlen(charfiled));
+    charfiled =  psync_find_result(link, "comment", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 3, charfiled, strlen(charfiled));
+    psync_sql_bind_uint(q, 4, psync_find_result(link, "space", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 5, psync_find_result(link, "maxspace", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 6, psync_find_result(link, "files", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 7, psync_find_result(link, "created", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 8, psync_find_result(link, "modified", PARAM_NUM)->num);
+    charfiled =  psync_find_result(link, "name", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 9, charfiled, strlen(charfiled));
     meta=psync_find_result(link, "metadata", PARAM_HASH);
-    
-    charfiled = psync_find_result(meta, "id", PARAM_STR)->str;
-    info->entries[i].id = psync_strndup(charfiled, strlen(charfiled));
-    
-    charfiled = psync_find_result(meta, "name", PARAM_STR)->str;
-    info->entries[i].meta.name = psync_strndup(charfiled, strlen(charfiled));
-    info->entries[i].meta.namelen = strlen(charfiled);
-    
     if (psync_find_result(meta, "isfolder", PARAM_STR)->str[0] == 't') {
-      info->entries[i].meta.isfolder = 1;
-      info->entries[i].meta.folder.folderid = psync_find_result(meta, "folderid", PARAM_NUM)->num; 
-      
+      psync_sql_bind_uint(q, 10, 1);
+      psync_sql_bind_uint(q, 11, psync_find_result(link, "folderid", PARAM_NUM)->num);
+      psync_sql_bind_uint(q, 12, 0);
     } else {
-      info->entries[i].meta.isfolder = 0;
-      info->entries[i].meta.file.fileid = psync_find_result(meta, "fileid", PARAM_NUM)->num; 
-      info->entries[i].meta.file.size = psync_find_result(meta, "size", PARAM_NUM)->num; 
+      psync_sql_bind_uint(q, 10, 0);
+      psync_sql_bind_uint(q, 11, 0);
+      psync_sql_bind_uint(q, 12, psync_find_result(link, "folderid", PARAM_NUM)->num);
     }
+    psync_sql_run_free(q);
   }
-  *infop = info;
+  psync_sql_commit_transaction();
   return linkscnt;
+}
+
+int cache_links_all(char **err /*OUT*/)
+{
+  int ret =0;
+  ret = chache_upload_links(err);
+   if (ret >= 0)
+     ret += chache_links(err);
+  return ret;
 }

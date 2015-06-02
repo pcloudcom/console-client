@@ -312,26 +312,33 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
   int k,i;
   const binresult *users;
   
-  ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
-  idsp = ids;
-  for (i = 0; i < nids; ++i) {
-    k = sprintf(idsp, "%lld", (long long) iserids[i]);
-    if (unlikely(k <= 0 )) break;
-    idsp[k] = ',';
-    idsp = idsp + k + 1;
-  }
-  if (i > 0)
-    *(idsp - 1) = '\0';
-  
-  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("userids", ids)};
+  if (nids) { 
+    ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
+    idsp = ids;
+    for (i = 0; i < nids; ++i) {
+      k = sprintf(idsp, "%lld", (long long) iserids[i]);
+      if (unlikely(k <= 0 )) break;
+      idsp[k] = ',';
+      idsp = idsp + k + 1;
+    }
+    if (i > 0)
+      *(idsp - 1) = '\0';
+    
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("userids", ids)};
 
-  sock = psync_apipool_get();
-  bres = send_command(sock, "account_users", params);
+    sock = psync_apipool_get();
+    bres = send_command(sock, "account_users", params);
+  } else {
+    binparam params[] = {P_STR("auth", psync_my_auth)};
+
+    sock = psync_apipool_get();
+    bres = send_command(sock, "account_users", params);
+  }
   if (likely(bres))
     psync_apipool_release(sock);
   else {
     psync_apipool_release_bad(sock);
-    debug(D_WARNING, "Send command returned in valid result.\n");
+    debug(D_WARNING, "Send command returned invalid result.\n");
     return -1;
   }
   
@@ -395,21 +402,30 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
   int k,i;
   const binresult *users;
   
-  ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
-  idsp = ids;
-  for (i = 0; i < nids; ++i) {
-    k = sprintf(idsp, "%lld", (long long) teamids[i]);
-    if (unlikely(k <= 0 )) break;
-    idsp[k] = ',';
-    idsp = idsp + k + 1;
-  }
-  if (i > 0)
-    *(idsp - 1) = '\0';
-  
-  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("teamids", ids)};
+  if (nids) {
+    ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
+    idsp = ids;
+    for (i = 0; i < nids; ++i) {
+      k = sprintf(idsp, "%lld", (long long) teamids[i]);
+      if (unlikely(k <= 0 )) break;
+      idsp[k] = ',';
+      idsp = idsp + k + 1;
+    }
+    if (i > 0)
+      *(idsp - 1) = '\0';
+    
+    debug(D_NOTICE, "Account_teams numids %d\n", nids);
+    
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("teamids", ids)};
 
-  sock = psync_apipool_get();
-  bres = send_command(sock, "account_teams", params);
+    sock = psync_apipool_get();
+    bres = send_command(sock, "account_teams", params);
+  } else {
+    binparam params[] = {P_STR("auth", psync_my_auth)};
+
+    sock = psync_apipool_get();
+    bres = send_command(sock, "account_teams", params);
+  } 
   if (likely(bres))
     psync_apipool_release(sock);
   else {
@@ -420,6 +436,8 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
   
   
   users = psync_find_result(bres, "teams", PARAM_ARRAY);
+  
+  debug(D_NOTICE, "Result contains %d teams\n", users->length);
   
   if (!users->length){
     psync_free(bres);
@@ -486,7 +504,11 @@ static void insert_cache_email(int i, const binresult *user, void *_this) {
 void cache_account_emails() {
   psync_userid_t *userids = 0;
   void *params = 0;
-
+  psync_sql_res *q;
+  
+  q=psync_sql_prep_statement("DELETE FROM baccountemail ");
+  psync_sql_run_free(q);
+  
   do_psync_account_users(userids, 0, &insert_cache_email, params);
 }
 
@@ -497,6 +519,8 @@ static void insert_cache_team(int i, const binresult *team, void *_this) {
   psync_sql_res *q;
   
   shareid = psync_find_result(team, "id", PARAM_NUM)->num;
+  
+  debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)shareid);
   if (shareid) {
     q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
     psync_sql_bind_uint(q, 1, shareid);
@@ -508,6 +532,10 @@ static void insert_cache_team(int i, const binresult *team, void *_this) {
 void cache_account_teams() {
   psync_userid_t *teamids = 0;
   void *params = 0;
-
+  psync_sql_res *q;
+  
+  q=psync_sql_prep_statement("DELETE FROM baccountteam ");
+  psync_sql_run_free(q);
+  
   do_psync_account_teams(teamids, 0, &insert_cache_team, params);
 }

@@ -45,6 +45,7 @@
 #include <ctype.h>
 #include "pnetlibs.h"
 #include "pbusinessaccount.h"
+#include "publiclinks.h"
 
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -1811,8 +1812,6 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
     psync_diff_unlock();
     return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
   }
-  cache_account_emails();
-  cache_account_teams();
   psync_sql_start_transaction();
   for (i=0; i<entries->length; i++){
     entry=entries->array[i];
@@ -2072,6 +2071,8 @@ static void psync_diff_thread(){
   uint32_t notificationid;
   int sel;
   char ex;
+  char *err;
+  int links = 0;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
   notificationid=0;
@@ -2084,6 +2085,10 @@ restart:
   if (diffid==0)
     initialdownload=1;
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
+  cache_account_emails();
+  cache_account_teams();
+  links = cache_links_all(&err);
+  debug(D_NOTICE, "Cached %d links", links);
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};
     if (!psync_do_run)

@@ -38,8 +38,8 @@ int do_psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 int64_t do_psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxspace, int maxfiles);
 int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
-int do_psync_list_upload_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
 
-
+int cache_links_all(char **err /*OUT*/);
+void do_free_links_list (plink_info_list_t * info);
 
 #endif //_PUBLIC_LINKS_H

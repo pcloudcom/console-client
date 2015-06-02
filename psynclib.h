@@ -401,6 +401,7 @@ typedef struct {
   uint64_t created;
   uint64_t modified;
   pentry_t meta;
+  size_t isupload;
 } link_info_t;
 
 typedef struct {
@@ -1024,7 +1025,7 @@ int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
-int psync_list_upload_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
+void free_links_list(plink_info_list_t *info);
 
 #ifdef __cplusplus
 }

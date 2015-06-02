@@ -1589,6 +1589,6 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   return do_psync_delete_upload_link(uploadlinkid, err);
 }
 
-int psync_list_upload_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/) {
-  return do_psync_list_upload_links(info, err);
+void free_links_list(plink_info_list_t *info) {
+  return do_free_links_list(info);
 }
