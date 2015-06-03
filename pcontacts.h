@@ -27,4 +27,8 @@
 #ifndef _PSYNC_CONTACTS_H
 #define _PSYNC_CONTACTS_H
 
+#include "ptypes.h"
+
+int do_psync_list_contacts(result_visitor vis, void *param);
+
 #endif

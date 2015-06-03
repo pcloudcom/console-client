@@ -28,3 +28,74 @@
 #include "papi.h"
 #include "plibs.h"
 #include "pnetlibs.h"
+
+#include <stdio.h>
+
+int do_psync_list_contacts(result_visitor vis, void *param) {
+  psync_socket *sock;
+  binresult *bres;
+  char *ids = NULL;
+  char *idsp = 0;
+  int k,i;
+  const binresult *users;
+  
+  binparam params[] = {P_STR("auth", psync_my_auth)};
+
+  sock = psync_apipool_get();
+  bres = send_command(sock, "contactlist", params);
+  
+  if (likely(bres))
+    psync_apipool_release(sock);
+  else {
+    psync_apipool_release_bad(sock);
+    debug(D_WARNING, "Send command returned invalid result.\n");
+    return -1;
+  }
+  
+  
+  users = psync_find_result(bres, "contacts", PARAM_ARRAY);
+  
+  if (!users->length){
+    psync_free(bres);
+    psync_free(ids);
+    debug(D_WARNING, "Account_users returned empty result!\n");
+    return -2;
+  } else {
+    for (i = 0; i < users->length; ++i)
+       vis(i, users->array[i], param);
+  }
+  
+  psync_free(bres);
+  psync_free(ids);
+  return 0;
+}
+
+static void insert_cache_contact(int i, const binresult *user, void *_this) {
+  const char *char_field = 0;
+  char_field = psync_find_result(user, "email", PARAM_STR)->str;
+  uint64_t shareid = 0;
+  psync_sql_res *q;
+  
+  shareid = psync_find_result(user, "id", PARAM_NUM)->num;
+  if (shareid) {
+    q=psync_sql_prep_statement("REPLACE INTO contacts  (id, mail, name) VALUES (?, ?, ?, ?)");
+    psync_sql_bind_uint(q, 1, shareid);
+    psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
+    char_field = psync_find_result(user, "firstname", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 3, char_field, strlen(char_field));
+    char_field = psync_find_result(user, "lastname", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 4, char_field, strlen(char_field));
+    psync_sql_run_free(q);
+  }
+}
+
+void cache_contacts() {
+  psync_userid_t *userids = 0;
+  void *params = 0;
+  psync_sql_res *q;
+  
+  q=psync_sql_prep_statement("DELETE FROM contacts ");
+  psync_sql_run_free(q);
+  
+  do_psync_list_contacts(&insert_cache_contact, params);
+}

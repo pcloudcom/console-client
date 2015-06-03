@@ -148,7 +148,7 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
   int i =0;
   
   psync_sql_rdlock();
-  res=psync_sql_query_rdlock("select localpath, id, folderid from syncfolder;");
+  res=psync_sql_query_nolock("select localpath, id, folderid from syncfolder;");
   while ((row = psync_sql_fetch_row(res))){
     syncfolder = psync_get_lstring(row[0], &len);
     i = strncmp(syncfolder, path, len);

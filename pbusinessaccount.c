@@ -466,6 +466,7 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
   psync_sql_res *res;
   psync_variant_row row;
   const char *cstr;
+  
   res=psync_sql_query("SELECT name FROM baccountteam WHERE id=?");
   psync_sql_bind_uint(res, 1, teamid);
   if ((row=psync_sql_fetch_row(res))){
@@ -510,6 +511,7 @@ void cache_account_emails() {
   void *params = 0;
   psync_sql_res *q;
   
+  
   q=psync_sql_prep_statement("DELETE FROM baccountemail ");
   psync_sql_run_free(q);
   
@@ -540,6 +542,5 @@ void cache_account_teams() {
   
   q=psync_sql_prep_statement("DELETE FROM baccountteam ");
   psync_sql_run_free(q);
-  
   do_psync_account_teams(teamids, 0, &insert_cache_team, params);
 }

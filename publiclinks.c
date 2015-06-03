@@ -393,7 +393,6 @@ static int chache_links(char **err /*OUT*/) {
   info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
   info->entrycnt = linkscnt;
 
-  psync_sql_start_transaction();
   psync_sql_res *q;
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
@@ -424,7 +423,6 @@ static int chache_links(char **err /*OUT*/) {
     }
     psync_sql_run_free(q);
   }
-  psync_sql_commit_transaction();
   return linkscnt;
 }
 
@@ -622,13 +620,13 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
   *infop = 0;
   
   psync_sql_start_transaction();
-  res=psync_sql_query("SELECT count(*) FROM links");
+  res=psync_sql_query_nolock("SELECT count(*) FROM links");
   if ((irow = psync_sql_fetch_rowint(res)))
     linkscnt = irow[0];
   psync_sql_free_result(res);
   
   if (linkscnt) {
-    res=psync_sql_query("SELECT id, code, comment, traffic, maxspace, downloads, created,"
+    res=psync_sql_query_nolock("SELECT id, code, comment, traffic, maxspace, downloads, created,"
                         " modified, name,  isfolder, folderid, fileid, isincomming FROM links");
     
     info = (plink_info_list_t *) psync_malloc(sizeof(link_info_t)*linkscnt + sizeof(size_t));
@@ -667,6 +665,7 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
     }
     *infop = info;
   }
+  psync_sql_free_result(res);
   psync_sql_commit_transaction();
   return linkscnt;
 }
@@ -720,7 +719,6 @@ static int chache_upload_links(char **err /*OUT*/) {
     psync_free(bres);
     return 0;
   }
-  psync_sql_start_transaction();
   psync_sql_res *q;
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
@@ -752,7 +750,6 @@ static int chache_upload_links(char **err /*OUT*/) {
     }
     psync_sql_run_free(q);
   }
-  psync_sql_commit_transaction();
   return linkscnt;
 }
 
