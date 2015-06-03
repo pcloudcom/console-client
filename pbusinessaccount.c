@@ -324,12 +324,12 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
     if (i > 0)
       *(idsp - 1) = '\0';
     
-    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("userids", ids)};
+    binparam params[] = {P_STR("auth", psync_my_auth),P_STR("timeformat", "timestamp"), P_STR("userids", ids)};
 
     sock = psync_apipool_get();
     bres = send_command(sock, "account_users", params);
   } else {
-    binparam params[] = {P_STR("auth", psync_my_auth)};
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
 
     sock = psync_apipool_get();
     bres = send_command(sock, "account_users", params);
@@ -416,12 +416,12 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
     
     debug(D_NOTICE, "Account_teams numids %d\n", nids);
     
-    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("teamids", ids)};
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("teamids", ids)};
 
     sock = psync_apipool_get();
     bres = send_command(sock, "account_teams", params);
   } else {
-    binparam params[] = {P_STR("auth", psync_my_auth)};
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
 
     sock = psync_apipool_get();
     bres = send_command(sock, "account_teams", params);
@@ -487,16 +487,20 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
 }
 
 static void insert_cache_email(int i, const binresult *user, void *_this) {
-  const char *emailret = 0;
-  emailret = psync_find_result(user, "email", PARAM_STR)->str;
+  const char *char_field = 0;
+  char_field = psync_find_result(user, "email", PARAM_STR)->str;
   uint64_t shareid = 0;
   psync_sql_res *q;
   
   shareid = psync_find_result(user, "id", PARAM_NUM)->num;
   if (shareid) {
-    q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail) VALUES (?, ?)");
+    q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail, firstname, lastname) VALUES (?, ?, ?, ?)");
     psync_sql_bind_uint(q, 1, shareid);
-    psync_sql_bind_lstring(q, 2, emailret, strlen(emailret));
+    psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
+    char_field = psync_find_result(user, "firstname", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 3, char_field, strlen(char_field));
+    char_field = psync_find_result(user, "lastname", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 4, char_field, strlen(char_field));
     psync_sql_run_free(q);
   }
 }
