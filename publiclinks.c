@@ -409,9 +409,9 @@ static int chache_links(char **err /*OUT*/) {
     psync_sql_bind_uint(q, 6, psync_find_result(link, "downloads", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 7, psync_find_result(link, "created", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 8, psync_find_result(link, "modified", PARAM_NUM)->num);
-    charfiled =  psync_find_result(link, "name", PARAM_STR)->str;
-    psync_sql_bind_lstring(q, 9, charfiled, strlen(charfiled));
     meta=psync_find_result(link, "metadata", PARAM_HASH);
+    charfiled =  psync_find_result(meta, "name", PARAM_STR)->str;
+    psync_sql_bind_lstring(q, 9, charfiled, strlen(charfiled));
     if (psync_find_result(meta, "isfolder", PARAM_STR)->str[0] == 't') {
       psync_sql_bind_uint(q, 10, 1);
       psync_sql_bind_uint(q, 11, psync_find_result(link, "folderid", PARAM_NUM)->num);
@@ -619,7 +619,7 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
   *err  = 0;
   *infop = 0;
   
-  psync_sql_start_transaction();
+  psync_sql_rdlock();
   res=psync_sql_query_nolock("SELECT count(*) FROM links");
   if ((irow = psync_sql_fetch_rowint(res)))
     linkscnt = irow[0];
@@ -666,7 +666,7 @@ int do_psync_list_links(plink_info_list_t **infop /*OUT*/, char **err /*OUT*/) {
     *infop = info;
   }
   psync_sql_free_result(res);
-  psync_sql_commit_transaction();
+  psync_sql_rdunlock();
   return linkscnt;
 }
 

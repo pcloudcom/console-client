@@ -29,6 +29,8 @@
 
 #include "ptypes.h"
 
-int do_psync_list_contacts(result_visitor vis, void *param);
+int do_psync_list_contacts();
+int do_call_contactlist(result_visitor vis, void *param);
+void cache_contacts();
 
 #endif

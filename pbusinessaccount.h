@@ -28,7 +28,6 @@
 #define _PSYNC_BUSINESS_ACCOUNT_H
 
 #include "psynclib.h"
-#include "papi.h"
 #include "ptypes.h"
 
 int do_psync_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync_shareid_t teamshareids[], int nteamshareid, char **err); 

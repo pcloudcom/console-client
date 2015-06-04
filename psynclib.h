@@ -409,6 +409,20 @@ typedef struct {
   link_info_t entries[];
 } plink_info_list_t;
 
+
+typedef struct {
+  uint64_t id;
+  char *mail;
+  char *name;
+  size_t isteam;
+} contact_info_t;
+
+
+typedef struct {
+  size_t entrycnt;
+  contact_info_t entries[];
+} pcontacts_list_t;
+
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
 #ifdef __cplusplus

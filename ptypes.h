@@ -26,7 +26,7 @@
 
 #ifndef _PSYNC_TYPES_H
 #define _PSYNC_TYPES_H
-
+#include "papi.h"
 typedef void (*result_visitor)(int i, const binresult *result, void *param); 
 
 #endif
