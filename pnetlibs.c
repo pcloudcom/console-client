@@ -1620,10 +1620,10 @@ static void psync_net_hash_remove(psync_file_checksum_hash *restrict hash, psync
           bp=0;
       }
     }
-  }  
+  }
 }
 
-static void psync_net_block_match_found(psync_file_checksum_hash *restrict hash, psync_file_checksums *restrict checksums, 
+static void psync_net_block_match_found(psync_file_checksum_hash *restrict hash, psync_file_checksums *restrict checksums,
                                         psync_block_action *restrict blockactions, uint32_t idx, uint32_t fileidx, uint64_t fileoffset){
   uint32_t cidx;
   idx--;
@@ -1720,7 +1720,7 @@ static uint32_t adler32_roll(uint32_t adler, unsigned char byteout, unsigned cha
   return adler|(sum<<16);
 }
 
-static void psync_net_check_file_for_blocks(const char *name, psync_file_checksums *restrict checksums, 
+static void psync_net_check_file_for_blocks(const char *name, psync_file_checksums *restrict checksums,
                                             psync_file_checksum_hash *restrict hash, psync_block_action *restrict blockactions,
                                             uint32_t fileidx){
   unsigned char *buff;
@@ -1852,7 +1852,7 @@ int psync_net_download_ranges(psync_list *ranges, psync_fileid_t fileid, uint64_
     }
     else
       bs=checksums->blocksize;
-    if (blockactions[i].type!=range->type || (range->type==PSYNC_RANGE_COPY && 
+    if (blockactions[i].type!=range->type || (range->type==PSYNC_RANGE_COPY &&
          (range->filename!=files[blockactions[i].idx] || range->off+range->len!=blockactions[i].off))){
       range=psync_new(psync_range_list_t);
       range->len=bs;
@@ -1880,7 +1880,7 @@ fulldownload:
   return PSYNC_NET_OK;
 }
 
-static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_checksum_hash *hash, 
+static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_checksum_hash *hash,
                                   uint64_t off, uint64_t len, psync_file_t fd, psync_list *nr){
   unsigned char *buff;
   psync_upload_range_list_t *ur;
@@ -2010,7 +2010,7 @@ static void merge_list_to_element(psync_upload_range_list_t *le, psync_list *rli
     assertw(ur->uploadoffset>=le->uploadoffset);
     assertw(ur->uploadoffset+ur->len<=le->uploadoffset+le->len);
     if (IS_DEBUG && (!(ur->len<=le->len) || !(ur->uploadoffset>=le->uploadoffset) || !(ur->uploadoffset+ur->len<=le->uploadoffset+le->len)))
-      debug(D_ERROR, "ur->len=%lu, le->len=%lu, ur->uploadoffset=%lu, le->uploadoffset=%lu", (unsigned long)ur->len, 
+      debug(D_ERROR, "ur->len=%lu, le->len=%lu, ur->uploadoffset=%lu, le->uploadoffset=%lu", (unsigned long)ur->len,
             (unsigned long)le->len, (unsigned long)ur->uploadoffset, (unsigned long)le->uploadoffset);
     if (ur->len==le->len){
       assertw(ur->uploadoffset==le->uploadoffset);
