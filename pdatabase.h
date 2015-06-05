@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS baccountteam (id INTEGER PRIMARY KEY, name TEXT); \
 CREATE TABLE IF NOT EXISTS links ( \
 id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxspace INTEGER, \
 downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER); \
+CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048), name TEXT); \
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
@@ -244,6 +245,7 @@ CREATE TABLE IF NOT EXISTS baccountteam (id INTEGER PRIMARY KEY, name TEXT); \
 CREATE TABLE IF NOT EXISTS links ( \
 id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxspace INTEGER, \
 downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER); \
+CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048), name TEXT); \
 UPDATE setting SET value=13 WHERE id='dbversion'; \
 COMMIT;"
 };

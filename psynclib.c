@@ -1117,9 +1117,25 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
   incoming=!!incoming;
-  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, bsharedfolderid FROM sharedfolder WHERE isincoming=? ORDER BY name");
-  psync_sql_bind_uint(res, 1, incoming);
+  if (incoming) {
+  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, bsharedfolderid FROM sharedfolder WHERE isincoming=1 AND id >= 0 "
+                             " UNION ALL "
+                             "select id, folderid, ctime, permissions, fromuserid as userid ,"
+                               " (select mail from baccountemail where id = fromuserid) as mail,name, id as bsharedfolderid from bsharedfolder where isincoming = 1 "
+                               " ORDER BY name"
+  );
   psync_list_bulder_add_sql(builder, res, create_share);
+  
+  } else {
+    res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, bsharedfolderid FROM sharedfolder WHERE isincoming=0 AND id >= 0 "
+                             " UNION ALL "
+                             "select id, folderid, ctime, permissions, case when isincoming = 0 and isteam = 1 then toteamid else touserid end as userid , "
+                               "case when isincoming = 0 and isteam = 1 then (select name from baccountteam where id = toteamid) "
+                               "else (select mail from baccountemail where id = touserid) end as mail,name, id from bsharedfolder where isincoming = 0 "
+                             " ORDER BY name");
+    psync_list_bulder_add_sql(builder, res, create_share);
+  }
+  
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
 }
 
@@ -1159,7 +1175,7 @@ int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_
 }
 
 static int psync_account_stopshare(psync_shareid_t shareid, char **err) {
-  psync_shareid_t shareidarr[] = {-shareid};
+  psync_shareid_t shareidarr[] = {shareid};
   debug(D_NOTICE, "shareidarr %lld", (long long)shareidarr[0]);
   int result =  do_psync_account_stopshare(shareidarr, 1, shareidarr, 1, err);
   return result;
@@ -1177,7 +1193,7 @@ int psync_remove_share(psync_shareid_t shareid, char **err){
 }
 
 static int psync_account_modifyshare(psync_shareid_t shareid, uint32_t permissions, char **err) {
-  psync_shareid_t shareidarr[] = {-shareid};
+  psync_shareid_t shareidarr[] = {shareid};
   uint32_t permsarr[] = {permissions};
   debug(D_NOTICE, "shareidarr %lld", (long long)shareidarr[0]);
   int result =  do_psync_account_modifyshare(shareidarr, permsarr, 1, shareidarr, permsarr, 1, err);

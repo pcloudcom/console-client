@@ -77,7 +77,7 @@ static void insert_cache_contact(int i, const binresult *user, void *_this) {
   char_field = psync_find_result(user, "name", PARAM_STR)->str;
   shareid = psync_find_result(user, "source", PARAM_NUM)->num;
   if (shareid == 1) {
-    q=psync_sql_prep_statement("REPLACE INTO contacts  (mail, name) VALUES (?, ?)");
+    q=psync_sql_prep_statement("REPLACE INTO contacts  (name, mail) VALUES (?, ?)");
     psync_sql_bind_lstring(q, 1, char_field, strlen(char_field));
     char_field = psync_find_result(user, "value", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
@@ -93,4 +93,9 @@ void cache_contacts() {
   psync_sql_run_free(q);
   
   do_call_contactlist(&insert_cache_contact, params);
+}
+
+pcontacts_list_t *do_psync_list_contacts() {
+  psync_notification_list_t *res = NULL;
+  return (pcontacts_list_t *)res;
 }

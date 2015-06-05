@@ -46,6 +46,7 @@
 #include "pnetlibs.h"
 #include "pbusinessaccount.h"
 #include "publiclinks.h"
+#include "pcontacts.h"
 
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -1408,44 +1409,29 @@ static void process_acceptedsharein(const binresult *entry){
 static void process_establishbsharein(const binresult *entry){
   psync_sql_res *q;
   const binresult *share, *br;
-  uint64_t userid;
   
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_ACCEPTIN, share);
-  q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name, bsharedfolderid) "
-                                                "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)");
-  psync_sql_bind_int(q, 1, - psync_find_result(share, "shareid", PARAM_NUM)->num); //Shareid is not unique amongst BA and normal shares so inserting BA with negative value.
-  debug(D_NOTICE, "INSERT BS SHARE IN id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
-    psync_sql_bind_uint(q, 3, br->num);
-  else 
-    psync_sql_bind_uint(q, 3, 0);
-  psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
-  userid = psync_find_result(share, "fromuserid", PARAM_NUM)->num;
-  psync_sql_bind_uint(q, 5, userid);
-  psync_sql_bind_uint(q, 6, userid);
-  br=psync_find_result(share, "sharename", PARAM_STR);
-  psync_sql_bind_lstring(q, 7, br->str, br->length);
-  psync_sql_bind_int(q, 8, psync_find_result(share, "shareid", PARAM_NUM)->num);
-  psync_sql_run_free(q);
   
   q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, isincoming, folderid, ctime, permissions, message, name, isuser, "
                                                           "touserid, isteam, toteamid, fromuserid, folderownerid)"
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
+  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
+    psync_sql_bind_uint(q, 3, br->num);
+  else 
+    psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   br=psync_find_result(share, "message", PARAM_STR);
   psync_sql_bind_lstring(q, 5, br->str, br->length);
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
-  psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_BOOL)->num);
   psync_sql_bind_int(q, 8, psync_find_result(share, "touserid", PARAM_NUM)->num);
-  psync_sql_bind_int(q, 9, psync_find_result(share, "team", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 9, psync_find_result(share, "team", PARAM_BOOL)->num);
   psync_sql_bind_int(q, 10, psync_find_result(share, "toteamid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 11, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 12, psync_find_result(share, "folderownerid", PARAM_NUM)->num);
@@ -1484,43 +1470,21 @@ static void process_establishbshareout(const binresult *entry) {
   psync_sql_res *q;
   const binresult *share, *br;
   char *email = 0;
-  uint64_t userid;
   
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
-  q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name, bsharedfolderid) "
-                                                "VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?)");
-  debug(D_NOTICE, "INSERT BS SHARE OUT id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
-  psync_sql_bind_int(q, 1, - psync_find_result(share, "shareid", PARAM_NUM)->num); //Shareid is not unique amongst BA and normal shares so inserting BA with negative value.
-  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
-    psync_sql_bind_uint(q, 3, br->num);
-  else 
-    psync_sql_bind_uint(q, 3, 0);
-  psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
-  
-  if (psync_find_result(share, "user", PARAM_BOOL)->num) {
-    userid = psync_find_result(share, "touserid", PARAM_NUM)->num;
-    psync_sql_bind_uint(q, 5, userid);
-    psync_sql_bind_uint(q, 6, userid);
-  } else if (psync_find_result(share, "team", PARAM_BOOL)->num) {
-    userid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
-    psync_sql_bind_uint(q, 5, userid);
-    psync_sql_bind_uint(q, 6, userid);
-  }
-  br=psync_find_result(share, "sharename", PARAM_STR);
-  psync_sql_bind_lstring(q, 7, br->str, br->length);
-  psync_sql_bind_int(q, 8, psync_find_result(share, "shareid", PARAM_NUM)->num); 
-  psync_sql_run_free(q);
   
   q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, isincoming, folderid, ctime, permissions, message, name, isuser, "
                                                           "touserid, isteam, toteamid, fromuserid, folderownerid)"
                                                 "VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "shared", PARAM_NUM)->num);
+  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
+    psync_sql_bind_uint(q, 3, br->num);
+  else 
+    psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   br=psync_find_result(share, "message", PARAM_STR);
   psync_sql_bind_lstring(q, 5, br->str, br->length);
@@ -1596,10 +1560,6 @@ static void delete_bsshared_folder(const binresult *share){
   psync_sql_res *q;
   uint64_t shareid;
   shareid =  psync_find_result(share, "shareid", PARAM_NUM)->num;
-  
-  q=psync_sql_prep_statement("DELETE FROM sharedfolder WHERE id=?");
-  psync_sql_bind_uint(q, 1, - shareid);
-  psync_sql_run_free(q);
   
   q=psync_sql_prep_statement("DELETE FROM bsharedfolder WHERE id=?");
   psync_sql_bind_uint(q, 1, shareid);
@@ -1684,8 +1644,6 @@ static void process_modifybsharein(const binresult *entry){
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYIN, share);
-  modify_shared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
-                       - psync_find_result(share, "shareid", PARAM_NUM)->num);
   modify_bshared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
                         psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
@@ -1696,8 +1654,6 @@ static void process_modifybshareout(const binresult *entry){
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYOUT, share);
-  modify_shared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
-                       - psync_find_result(share, "shareid", PARAM_NUM)->num);
   modify_bshared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
                         psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
@@ -1827,9 +1783,9 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
       event_list[j].process(NULL);
   psync_set_uint_value("diffid", newdiffid);
   psync_set_uint_value("usedquota", used_quota);
+  //update_ba_emails();
+  //update_ba_teams();
   psync_sql_commit_transaction();
-  update_ba_emails();
-  update_ba_teams();
   psync_diff_unlock();
   if (needdownload){
     psync_wake_download();
@@ -2089,6 +2045,7 @@ restart:
   cache_account_teams();
   links = cache_links_all(&err);
   debug(D_NOTICE, "Cached %d links", links);
+  cache_contacts();
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};
     if (!psync_do_run)

@@ -411,10 +411,9 @@ typedef struct {
 
 
 typedef struct {
-  uint64_t id;
+  uint64_t teamid;
   char *mail;
   char *name;
-  size_t isteam;
 } contact_info_t;
 
 

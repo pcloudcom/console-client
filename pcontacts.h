@@ -28,8 +28,9 @@
 #define _PSYNC_CONTACTS_H
 
 #include "ptypes.h"
+#include "psynclib.h"
 
-int do_psync_list_contacts();
+pcontacts_list_t *do_psync_list_contacts();
 int do_call_contactlist(result_visitor vis, void *param);
 void cache_contacts();
 
