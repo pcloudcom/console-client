@@ -33,13 +33,12 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
 int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic);
 int64_t do_psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/, 
                                   uint64_t expire, int maxdownloads, int maxtraffic);
-int do_psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
+plink_info_list_t *do_psync_list_links(char **err /*OUT*/);
 int do_psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 int64_t do_psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxspace, int maxfiles);
 int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
 int cache_links_all(char **err /*OUT*/);
-void do_free_links_list (plink_info_list_t * info);
 
 #endif //_PUBLIC_LINKS_H

@@ -1703,60 +1703,6 @@ void psync_diff_unlock(){
   pthread_mutex_unlock(&diff_mutex);
 }
 
-
-static void set_ba_email(int i, const binresult *user, void *_this) {
-  const char *emailret = "";
-  //uint64_t *bshareid = (uint64_t *) _this;
-  psync_sql_res *q;
-  
-  emailret = psync_find_result(user, "email", PARAM_STR)->str;
-  
-  q=psync_sql_prep_statement("UPDATE sharedfolder SET mail= ? WHERE id in (SELECT - id FROM bsharedfolder WHERE  touserid = ? or fromuserid = ?) and mail = ? ");
-  psync_sql_bind_lstring(q, 1, emailret, strlen(emailret));
-  psync_sql_bind_uint(q, 2,psync_find_result(user, "id", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3,psync_find_result(user, "id", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4,psync_find_result(user, "id", PARAM_NUM)->num);
-  psync_sql_run_free(q);
-}
-
-static void update_ba_emails() {
-  psync_sql_res *res;
-  psync_full_result_int *fres;
-  
-  res=psync_sql_query("select bf.fromuserid from bsharedfolder as bf, sharedfolder as sf where sf.bsharedfolderid = bf.id and bf.isincoming = 1 "
-                      "union all "
-                      "select bf.touserid from bsharedfolder as bf, sharedfolder as sf where sf.bsharedfolderid = bf.id and bf.isincoming = 0 and ifnull(bf.touserid, 0) != 0;");
-  
-  fres = psync_sql_fetchall_int(res);
-  //One column in the result so can use data array directly 
-  do_psync_account_users(fres->data, fres->rows, &set_ba_email, fres->data);
-}
-
-static void set_ba_team_name(int i, const binresult *user, void *_this) {
-  const char *emailret = "";
-  //uint64_t *bshareid = (uint64_t *) _this;
-  psync_sql_res *q;
-  
-  emailret = psync_find_result(user, "name", PARAM_STR)->str;
-  
-  q=psync_sql_prep_statement("UPDATE sharedfolder SET mail= ? WHERE id in (SELECT - id FROM bsharedfolder WHERE  toteamid = ?) and mail = ? ");
-  psync_sql_bind_lstring(q, 1, emailret, strlen(emailret));
-  psync_sql_bind_uint(q, 2,psync_find_result(user, "id", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3,psync_find_result(user, "id", PARAM_NUM)->num);
-  psync_sql_run_free(q);
-}
-
-static void update_ba_teams() {
-  psync_sql_res *res;
-  psync_full_result_int *fres;
-  
-  res=psync_sql_query("select bf.toteamid from bsharedfolder as bf, sharedfolder as sf where sf.bsharedfolderid = bf.id and bf.isincoming = 0 and ifnull(bf.touserid, 0) == 0");
-  
-  fres = psync_sql_fetchall_int(res);
-  //One column in the result so can use data array directly 
-  do_psync_account_teams(fres->data, fres->rows, &set_ba_team_name, fres->data);
-}
-
 static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   const binresult *entry, *etype;
   uint64_t oused_quota;

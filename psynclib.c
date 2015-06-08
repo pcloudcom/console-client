@@ -1589,8 +1589,8 @@ int64_t psync_tree_public_link(const char *linkname, const char *root, char **fo
   return do_psync_tree_public_link(linkname, root, folders, numfolders, files, numfiles, code, err,  0, 0, 0);
 }
 
-int psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/) {
-  return do_psync_list_links(info, err);
+plink_info_list_t *psync_list_links(char **err /*OUT*/) {
+  return do_psync_list_links(err);
 }
 
 int psync_delete_link(int64_t linkid, char **err /*OUT*/) {
@@ -1603,8 +1603,4 @@ int64_t psync_upload_link(const char *path, const char *comment, char **code /*O
 
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   return do_psync_delete_upload_link(uploadlinkid, err);
-}
-
-void free_links_list(plink_info_list_t *info) {
-  return do_free_links_list(info);
 }

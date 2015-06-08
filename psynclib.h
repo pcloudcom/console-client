@@ -391,29 +391,30 @@ typedef struct {
 typedef enum Status {INSYNC, INPROG, NOSYNC} external_status;
 
 typedef struct {
-  int64_t linkid;
-  char *id; 
-  char *code;
-  char *comment;
+  uint64_t linkid;
+  const char *name;
+  const char *code;
+  const char *comment;
   uint64_t traffic;
   uint64_t maxspace; 
   uint64_t downloads; 
   uint64_t created;
   uint64_t modified;
-  pentry_t meta;
-  size_t isupload;
+  uint64_t itemid;
+  uint8_t isfolder;
+  uint8_t isupload;
 } link_info_t;
 
 typedef struct {
-  size_t entrycnt;
+  uint8_t entrycnt;
   link_info_t entries[];
 } plink_info_list_t;
 
 
 typedef struct {
   uint64_t teamid;
-  char *mail;
-  char *name;
+  const char *mail;
+  const char *name;
 } contact_info_t;
 
 
@@ -1033,12 +1034,11 @@ external_status psync_status_folder(const char *path);
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
 int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
 int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/);
-int psync_list_links(plink_info_list_t **info /*OUT*/, char **err /*OUT*/);
+plink_info_list_t *psync_list_links(char **err /*OUT*/);
 int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
-void free_links_list(plink_info_list_t *info);
 
 #ifdef __cplusplus
 }
