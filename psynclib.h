@@ -410,6 +410,18 @@ typedef struct {
   link_info_t entries[];
 } plink_info_list_t;
 
+typedef struct {
+  const char *name;
+  uint64_t created;
+  uint64_t modified;
+  uint8_t isfolder;
+  uint64_t itemid;
+} link_cont_t;
+
+typedef struct {
+  uint8_t entrycnt;
+  link_cont_t entries[];
+} plink_contents_t;
 
 typedef struct {
   uint64_t teamid;
@@ -1026,6 +1038,8 @@ external_status psync_status_folder(const char *path);
  *   Same structure used for listing public and upload links only comment and maxspace are set to 0 in public links list. Space parameter is filled in traffic and
  *   files in downloads.
  * 
+ * psync_sow_link() Lists link contents. Returns list of contents for folders and virtial folders or empty pointer and err is filled with string representation of the error.
+ * 
  * REMINDER. You have to free the out parameters passed as pointers to the library as it reserves memory for them but does not cleans it. You will have to iterate 
  * though entire entires[] array and free all codes and names and comments if not empty before feeing entire info with separate call.
  * 
@@ -1035,10 +1049,20 @@ int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err
 int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
 int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/);
 plink_info_list_t *psync_list_links(char **err /*OUT*/);
+plink_contents_t *psync_sow_link(const char *code, char **err /*OUT*/);
 int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
+
+/*
+ * Publik links API functions. 
+ * 
+ * psync_list_contacts() Lists cached contacts emails from the buissiness account and team names.
+ * */
+
+
+pcontacts_list_t *psync_list_contacts();
 
 #ifdef __cplusplus
 }

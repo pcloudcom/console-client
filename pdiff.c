@@ -1973,8 +1973,6 @@ static void psync_diff_thread(){
   uint32_t notificationid;
   int sel;
   char ex;
-  char *err;
-  int links = 0;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
   notificationid=0;
@@ -1989,8 +1987,7 @@ restart:
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   cache_account_emails();
   cache_account_teams();
-  links = cache_links_all(&err);
-  debug(D_NOTICE, "Cached %d links", links);
+  cache_links_all();
   cache_contacts();
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};

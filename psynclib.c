@@ -56,6 +56,7 @@
 #include "pexternalstatus.h"
 #include "publiclinks.h"
 #include "pbusinessaccount.h"
+#include "pcontacts.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -1593,6 +1594,10 @@ plink_info_list_t *psync_list_links(char **err /*OUT*/) {
   return do_psync_list_links(err);
 }
 
+plink_contents_t *psync_sow_link(const char *code, char **err /*OUT*/) {
+  return do_sow_link(code, err);
+}
+
 int psync_delete_link(int64_t linkid, char **err /*OUT*/) {
   return do_psync_delete_link(linkid, err);
 }
@@ -1603,4 +1608,8 @@ int64_t psync_upload_link(const char *path, const char *comment, char **code /*O
 
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   return do_psync_delete_upload_link(uploadlinkid, err);
+}
+
+pcontacts_list_t *psync_list_contacts() {
+  return do_psync_list_contacts();
 }
