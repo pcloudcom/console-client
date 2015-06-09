@@ -1594,8 +1594,8 @@ plink_info_list_t *psync_list_links(char **err /*OUT*/) {
   return do_psync_list_links(err);
 }
 
-plink_contents_t *psync_sow_link(const char *code, char **err /*OUT*/) {
-  return do_sow_link(code, err);
+plink_contents_t *psync_show_link(const char *code, char **err /*OUT*/) {
+  return do_show_link(code, err);
 }
 
 int psync_delete_link(int64_t linkid, char **err /*OUT*/) {

@@ -634,7 +634,7 @@ plink_info_list_t * do_psync_list_links(char **err /*OUT*/) {
   return (plink_info_list_t *)psync_list_builder_finalize(builder);
 }
 
-plink_contents_t *do_sow_link(const char *code, char **err /*OUT*/) { 
+plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) { 
   psync_socket *api;
   binresult *bres;
   psync_list_builder_t *builder;

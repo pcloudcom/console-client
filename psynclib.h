@@ -406,7 +406,7 @@ typedef struct {
 } link_info_t;
 
 typedef struct {
-  uint8_t entrycnt;
+  uint32_t entrycnt;
   link_info_t entries[];
 } plink_info_list_t;
 
@@ -419,7 +419,7 @@ typedef struct {
 } link_cont_t;
 
 typedef struct {
-  uint8_t entrycnt;
+  uint32_t entrycnt;
   link_cont_t entries[];
 } plink_contents_t;
 
@@ -1049,7 +1049,7 @@ int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err
 int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
 int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/);
 plink_info_list_t *psync_list_links(char **err /*OUT*/);
-plink_contents_t *psync_sow_link(const char *code, char **err /*OUT*/);
+plink_contents_t *psync_show_link(const char *code, char **err /*OUT*/);
 int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 
 int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);

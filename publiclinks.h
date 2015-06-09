@@ -39,7 +39,7 @@ int do_psync_delete_link(int64_t linkid, char **err /*OUT*/);
 int64_t do_psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxspace, int maxfiles);
 int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
-plink_contents_t *do_sow_link(const char *code, char **err /*OUT*/);
+plink_contents_t *do_show_link(const char *code, char **err /*OUT*/);
 
 void cache_links_all();
 
