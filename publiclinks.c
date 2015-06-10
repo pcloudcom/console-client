@@ -395,7 +395,7 @@ static int chache_links(char **err /*OUT*/) {
 
     q=psync_sql_prep_statement("REPLACE INTO links  (id, code, comment, traffic, maxspace, downloads, created,"
                                  " modified, name,  isfolder, folderid, fileid, isincomming)"
-                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)");
     psync_sql_bind_uint(q, 1, psync_find_result(link, "linkid", PARAM_NUM)->num);
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 2, charfiled, strlen(charfiled));
@@ -740,7 +740,7 @@ static int chache_upload_links(char **err /*OUT*/) {
     q=psync_sql_prep_statement("REPLACE INTO links  (id, code, comment, traffic, maxspace, downloads, created,"
                                  " modified, name,  isfolder, folderid, fileid, isincomming)"
                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
-    psync_sql_bind_uint(q, 1, psync_find_result(link, "linkid", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 1, psync_find_result(link, "uploadlinkid", PARAM_NUM)->num);
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 2, charfiled, strlen(charfiled));
     charfiled =  psync_find_result(link, "comment", PARAM_STR)->str;
