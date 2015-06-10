@@ -2176,8 +2176,10 @@ static int download_file_revisions(psync_fileid_t fileid){
     psync_sql_run(hc);
   }
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
+  psync_sql_bind_uint(fr, 1, fileid);
   psync_sql_bind_uint(fr, 2, hash);
   psync_sql_bind_uint(fr, 3, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_bind_uint(fr, 4, psync_find_result(meta, "size", PARAM_NUM)->num);
   psync_sql_run_free(fr);
   psync_sql_bind_uint(hc, 1, hash);
   psync_sql_bind_uint(hc, 2, psync_find_result(meta, "size", PARAM_NUM)->num);
