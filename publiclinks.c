@@ -410,12 +410,12 @@ static int chache_links(char **err /*OUT*/) {
     psync_sql_bind_lstring(q, 9, charfiled, strlen(charfiled));
     if (psync_find_result(meta, "isfolder", PARAM_BOOL)->num) {
       psync_sql_bind_uint(q, 10, 1);
-      psync_sql_bind_uint(q, 11, psync_find_result(link, "folderid", PARAM_NUM)->num);
+      psync_sql_bind_uint(q, 11, psync_find_result(meta, "folderid", PARAM_NUM)->num);
       psync_sql_bind_uint(q, 12, 0);
     } else {
       psync_sql_bind_uint(q, 10, 0);
       psync_sql_bind_uint(q, 11, 0);
-      psync_sql_bind_uint(q, 12, psync_find_result(link, "fileid", PARAM_NUM)->num);
+      psync_sql_bind_uint(q, 12, psync_find_result(meta, "fileid", PARAM_NUM)->num);
     }
     psync_sql_run_free(q);
   }
@@ -756,12 +756,12 @@ static int chache_upload_links(char **err /*OUT*/) {
     psync_sql_bind_lstring(q, 9, charfiled, strlen(charfiled));
     if (psync_find_result(meta, "isfolder", PARAM_BOOL)->num) {
       psync_sql_bind_uint(q, 10, 1);
-      psync_sql_bind_uint(q, 11, psync_find_result(link, "folderid", PARAM_NUM)->num);
+      psync_sql_bind_uint(q, 11, psync_find_result(meta, "folderid", PARAM_NUM)->num);
       psync_sql_bind_uint(q, 12, 0);
     } else {
       psync_sql_bind_uint(q, 10, 0);
       psync_sql_bind_uint(q, 11, 0);
-      psync_sql_bind_uint(q, 12, psync_find_result(link, "fileid", PARAM_NUM)->num);
+      psync_sql_bind_uint(q, 12, psync_find_result(meta, "fileid", PARAM_NUM)->num);
     }
     psync_sql_run_free(q);
   }
