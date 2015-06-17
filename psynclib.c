@@ -1154,6 +1154,12 @@ int psync_share_folder(psync_folderid_t folderid, const char *name, const char *
   return run_command("sharefolder", params, err);
 }
 
+int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char **err){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("teamid", teamid),
+                     P_STR("message", message), P_NUM("permissions", convert_perms(permissions))};
+  return run_command("account_teamshare", params, err);
+}
+
 int psync_cancel_share_request(psync_sharerequestid_t requestid, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid)};
   return run_command("cancelsharerequest", params, err);

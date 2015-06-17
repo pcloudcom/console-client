@@ -43,6 +43,7 @@ typedef uint64_t psync_fileorfolderid_t;
 typedef uint64_t psync_userid_t;
 typedef uint64_t psync_shareid_t;
 typedef uint64_t psync_sharerequestid_t;
+typedef uint64_t psync_teamid_t;
 typedef uint32_t psync_syncid_t;
 typedef uint32_t psync_eventtype_t;
 typedef uint32_t psync_synctype_t;
@@ -1063,6 +1064,22 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
 
 pcontacts_list_t *psync_list_contacts();
+
+/* account_teamshare shares a folder with business account team a. The "permissions" parameter is bitwise or of
+ * PSYNC_PERM_READ, PSYNC_PERM_CREATE, PSYNC_PERM_MODIFY and PSYNC_PERM_DELETE (PSYNC_PERM_READ is actually
+ * ignored and always set) and PSYNC_PERM_MANAGE.
+ *
+ * On success returns 0, otherwise returns API error number (or -1 on network error) and sets err to a string
+ * error message if it is not NULL. This string should be freed if the return value is not 0 and err is not NULL.
+ *
+ * It is NOT guaranteed that upon successful return psync_list_sharerequests(0) will return the newly created
+ * share request. Windows showing list of sharerequests/shares are supposed to requery shares/request upon receiving of
+ * PEVENT_SHARE_* event. That is true for all share management functions.
+ *
+ */
+
+int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char **err);
+
 
 #ifdef __cplusplus
 }
