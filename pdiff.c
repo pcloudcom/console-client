@@ -1719,6 +1719,7 @@ static void psync_run_analyze_if_needed(){
 static int psync_diff_check_quota(psync_socket *sock){
   binparam diffparams[]={P_STR("timeformat", "timestamp")};
   binresult *res;
+  const binresult *uq;
   uint64_t oused_quota, result;
   oused_quota=used_quota;
   res=send_command(sock, "userinfo", diffparams);
@@ -1727,8 +1728,11 @@ static int psync_diff_check_quota(psync_socket *sock){
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (unlikely(result))
     debug(D_WARNING, "userinfo returned error %u: %s", (unsigned)result, psync_find_result(res, "error", PARAM_STR)->str);
-  else
-    used_quota=psync_find_result(res, "usedquota", PARAM_NUM)->num;
+  else{
+    uq=psync_check_result(res, "usedquota", PARAM_NUM);
+    if (likely_log(uq))
+      used_quota=uq->num;
+  }
   if (used_quota!=oused_quota){
     debug(D_WARNING, "corrected locally calculated quota from %lu to %lu", (unsigned long)oused_quota, (unsigned long)used_quota);
     psync_set_uint_value("usedquota", used_quota);
