@@ -1545,7 +1545,7 @@ static void psync_fsupload_run_tasks(psync_list *tasks){
   if (np){
     psync_sql_start_transaction();
     psync_list_for_each_element (task, tasks, fsupload_task_t, list)
-      if (task->needprocessing)
+      if (task->needprocessing && task->status!=11)
         psync_send_task_func[task->type](NULL, task);
     psync_sql_commit_transaction();
   }
