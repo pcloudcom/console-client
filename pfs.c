@@ -943,7 +943,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
       psync_fstask_release_folder_tasks_locked(folder);
       psync_sql_unlock();
       if (encoder!=PSYNC_CRYPTO_INVALID_ENCODER && encoder!=PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)
-        psync_cloud_crypto_release_file_encoder(fileid, encoder);
+        psync_cloud_crypto_release_file_encoder(fileid, hash, encoder);
       debug(D_NOTICE, "found open file %ld, refcnt %u, currentsize=%lu", (long int)fileid, (unsigned)fl->refcnt, (unsigned long)fl->currentsize);
       return fl;
     }
@@ -1215,7 +1215,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       if (type==PSYNC_FS_TASK_CREAT){
         fileid=cr->fileid;
         if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
-          encoder=psync_cloud_crypto_get_file_encoder(fileid, 1);
+          encoder=psync_cloud_crypto_get_file_encoder(fileid, hash, 1);
           if (unlikely_log(psync_crypto_is_error(encoder))){
             ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
             goto ex0;
@@ -1265,7 +1265,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
         goto ex0;
       }
       if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
-        encoder=psync_cloud_crypto_get_file_encoder(fileid, 1);
+        encoder=psync_cloud_crypto_get_file_encoder(fileid, hash, 1);
         if (unlikely_log(psync_crypto_is_error(encoder))){
           ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
           goto ex0;
@@ -1327,14 +1327,14 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       debug(D_NOTICE, "creating file %s", path);
     if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
       if (row){
-        encoder=psync_cloud_crypto_get_file_encoder(fileid, 0);
+        encoder=psync_cloud_crypto_get_file_encoder(fileid, hash, 0);
         if (unlikely_log(psync_crypto_is_error(encoder))){
           ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
           goto ex0;
         }
-        encsymkey=psync_cloud_crypto_get_file_encoded_key(fileid, &encsymkeylen);
+        encsymkey=psync_cloud_crypto_get_file_encoded_key(fileid, hash, &encsymkeylen);
         if (unlikely_log(psync_crypto_is_error(encsymkey))){
-          psync_cloud_crypto_release_file_encoder(fileid, encoder);
+          psync_cloud_crypto_release_file_encoder(fileid, hash, encoder);
           ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encsymkey));
           goto ex0;
         }
@@ -1383,7 +1383,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
   }
   else if (row){
     if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
-      encoder=psync_cloud_crypto_get_file_encoder(fileid, 1);
+      encoder=psync_cloud_crypto_get_file_encoder(fileid, hash, 1);
       if (unlikely_log(psync_crypto_is_error(encoder))){
         ret=-psync_fs_crypto_err_to_errno(psync_crypto_to_error(encoder));
         goto ex0;
@@ -1857,14 +1857,14 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     psync_crypto_aes256_sector_encoder_decoder_t enc;
     // we should unlock of->mutex as it can deadlock with sqllock and taking sqllock before network operation is not a good idea
     pthread_mutex_unlock(&of->mutex);
-    enc=psync_cloud_crypto_get_file_encoder(of->remotefileid, 0);
+    enc=psync_cloud_crypto_get_file_encoder(of->remotefileid, of->hash, 0);
     if (unlikely(psync_crypto_is_error(enc)))
       return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(enc));
     pthread_mutex_lock(&of->mutex);
     if (of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)
       of->encoder=enc;
     else
-      psync_cloud_crypto_release_file_encoder(of->remotefileid, enc);
+      psync_cloud_crypto_release_file_encoder(of->remotefileid, of->hash, enc);
     if (of->newfile || of->modified)
       return 1;
   }
@@ -1885,7 +1885,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
       return -PRINT_RETURN_CONST(PSYNC_FS_ERR_CRYPTO_EXPIRED);
     }
     size=psync_fs_crypto_crypto_size(of->initialsize);
-    encsymkey=psync_cloud_crypto_get_file_encoded_key(of->fileid, &encsymkeylen);
+    encsymkey=psync_cloud_crypto_get_file_encoded_key(of->fileid, of->hash, &encsymkeylen);
     if (unlikely_log(psync_crypto_is_error(encsymkey))){
       psync_sql_unlock();
       pthread_mutex_unlock(&of->mutex);

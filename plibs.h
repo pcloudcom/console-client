@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -124,8 +124,8 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0]))
 
-#define psync_new(type) (type *)psync_malloc(sizeof(type)) 
-#define psync_new_cnt(type, cnt) (type *)psync_malloc(sizeof(type)*(cnt)) 
+#define psync_new(type) (type *)psync_malloc(sizeof(type))
+#define psync_new_cnt(type, cnt) (type *)psync_malloc(sizeof(type)*(cnt))
 
 #define psync_binhex(dst, src, cnt) \
   do {\
@@ -136,7 +136,7 @@
     for (it__=0; it__<cnt__; it__++)\
       dst__[it__]=__hex_lookup[src__[it__]];\
   } while (0)
-  
+
 #define psync_get_result_cell(res, row, col) (res)->data[(row)*(res)->cols+(col)]
 
 typedef struct {
@@ -290,10 +290,27 @@ static inline void psync_get_string_id(char *dst, const char *prefix, uint64_t i
   size_t plen;
   plen=strlen(prefix);
   dst=(char *)memcpy(dst, prefix, plen)+plen;
-  do{
+  do {
     *dst++=base64_table[id%64];
     id/=64;
   } while (id);
+  *dst=0;
+}
+
+/* needs 24 characters of buffer space on top of the length of the prefix */
+static inline void psync_get_string_id2(char *dst, const char *prefix, uint64_t id1, uint64_t id2){
+  size_t plen;
+  plen=strlen(prefix);
+  dst=(char *)memcpy(dst, prefix, plen)+plen;
+  do {
+    *dst++=base64_table[id1%64];
+    id1/=64;
+  } while (id1);
+  *dst++='.';
+  do {
+    *dst++=base64_table[id2%64];
+    id2/=64;
+  } while (id2);
   *dst=0;
 }
 

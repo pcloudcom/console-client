@@ -540,7 +540,7 @@ static int get_urls(psync_request_t *request, psync_urls_t *urls){
         pthread_cond_broadcast(&enc_key_cond);
       }
       else
-        psync_cloud_crypto_release_file_encoder(request->fileid, enc);
+        psync_cloud_crypto_release_file_encoder(request->fileid, request->hash, enc);
       pthread_mutex_unlock(&request->of->mutex);
       request->needkey=0;
     }
@@ -1709,7 +1709,7 @@ retry:
     return;
   }
   if (unlikely(request->needkey)){
-    enc=psync_cloud_crypto_get_file_encoder(request->fileid, 0);
+    enc=psync_cloud_crypto_get_file_encoder(request->fileid, request->hash, 0);
     if (psync_crypto_to_error(enc)){
       psync_pagecache_send_error(request, -EIO);
       return;
@@ -1720,7 +1720,7 @@ retry:
       pthread_cond_broadcast(&enc_key_cond);
     }
     else
-      psync_cloud_crypto_release_file_encoder(request->fileid, enc);
+      psync_cloud_crypto_release_file_encoder(request->fileid, request->hash, enc);
     pthread_mutex_unlock(&request->of->mutex);
     request->needkey=0;
   }
