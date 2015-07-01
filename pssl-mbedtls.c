@@ -447,6 +447,7 @@ psync_binary_rsa_key_t psync_ssl_rsa_private_to_binary(psync_rsa_privatekey_t rs
   pk_context ctx;
   psync_binary_rsa_key_t ret;
   int len;
+  pk_init(&ctx);
   if (pk_init_ctx(&ctx, pk_info_from_type(POLARSSL_PK_RSA)) || rsa_copy(pk_rsa(ctx), rsa))
     return PSYNC_INVALID_BIN_RSA;
   len=pk_write_key_der(&ctx, buff, sizeof(buff));
