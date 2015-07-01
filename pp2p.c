@@ -165,7 +165,7 @@ static psync_fileid_t psync_p2p_has_file(const unsigned char *hashstart, const u
   return 0;
 }
 
-static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsigned char *genhash, const unsigned char *rand, uint64_t filesize, 
+static int psync_p2p_is_downloading(const unsigned char *hashstart, const unsigned char *genhash, const unsigned char *rand, uint64_t filesize,
                                     unsigned char *realhash){
   downloading_files_hashes *hashes;
   unsigned char hashsource[PSYNC_HASH_BLOCK_SIZE], hashbin[PSYNC_HASH_DIGEST_LEN], hashhex[PSYNC_HASH_DIGEST_HEXLEN];
@@ -269,7 +269,7 @@ static int socket_read_all(psync_socket_t sock, void *buff, size_t len){
 }
 
 static int check_token(char *token, uint32_t tlen, unsigned char *key, uint32_t keylen, unsigned char *hashhex){
-  binparam params[]={P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN), 
+  binparam params[]={P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN),
                      P_LSTR("keydata", key, keylen), P_LSTR("token", token, tlen)};
   psync_socket *api;
   binresult *res;
@@ -349,7 +349,7 @@ static void psync_p2p_tcphandler(void *ptr){
   keylen=encaeskey->datalen;
   enctype=P2P_ENCTYPE_RSA_AES;
   if (unlikely_log(encaeskey==PSYNC_INVALID_ENC_SYM_KEY) || unlikely_log(encoder==PSYNC_CRYPTO_INVALID_ENCODER) ||
-      unlikely_log(socket_write_all(sock, &keylen, sizeof(keylen)) || socket_write_all(sock, &enctype, sizeof(enctype)) || 
+      unlikely_log(socket_write_all(sock, &keylen, sizeof(keylen)) || socket_write_all(sock, &enctype, sizeof(enctype)) ||
                    socket_write_all(sock, encaeskey->data, encaeskey->datalen))){
     if (encaeskey!=PSYNC_INVALID_ENC_SYM_KEY)
       psync_free(encaeskey);
@@ -358,7 +358,7 @@ static void psync_p2p_tcphandler(void *ptr){
     psync_file_close(fd);
     goto err0;
   }
-  psync_free(encaeskey);  
+  psync_free(encaeskey);
   off=0;
   while (off<packet.filesize){
     if (packet.filesize-off<sizeof(buff))
@@ -426,7 +426,7 @@ static void psync_p2p_thread(){
     sl=sizeof(addr4);
     if (unlikely_log(getsockname(tcpsock, (struct sockaddr *)&addr4, &sl)==SOCKET_ERROR))
       goto ex;
-    tcpport=ntohs(addr4.sin_port);    
+    tcpport=ntohs(addr4.sin_port);
 /*  }
   else{
     setsockopt(tcpsock, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
@@ -439,7 +439,7 @@ static void psync_p2p_thread(){
     sl=sizeof(addr);
     if (unlikely_log(getsockname(tcpsock, (struct sockaddr *)&addr, &sl)==SOCKET_ERROR))
       goto ex;
-    tcpport=ntohs(addr.sin6_port);    
+    tcpport=ntohs(addr.sin6_port);
   }*/
   if (unlikely_log(listen(tcpsock, 2)))
     goto ex;
@@ -563,7 +563,7 @@ static int psync_p2p_check_rsa(){
       if (rsapubbin!=PSYNC_INVALID_BIN_RSA)
         psync_ssl_rsa_free_binary(rsapubbin);
       goto rete;
-    } 
+    }
   }
 ret0:
   pthread_mutex_unlock(&rsa_lock);
@@ -574,8 +574,8 @@ rete:
 }
 
 static int psync_p2p_get_download_token(psync_fileid_t fileid, const unsigned char *filehashhex, uint64_t fsize, unsigned char **token, size_t *tlen){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("filesize", fsize), 
-                     P_LSTR(PSYNC_CHECKSUM, filehashhex, PSYNC_HASH_DIGEST_HEXLEN), 
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("filesize", fsize),
+                     P_LSTR(PSYNC_CHECKSUM, filehashhex, PSYNC_HASH_DIGEST_HEXLEN),
                      P_LSTR("keydata", psync_rsa_public_bin->data, psync_rsa_public_bin->datalen)};
   psync_socket *api;
   binresult *res;
@@ -625,7 +625,7 @@ static int psync_p2p_download(psync_socket_t sock, psync_fileid_t fileid, const 
     return PSYNC_NET_PERMFAIL;
   }
   ekey=psync_ssl_alloc_encrypted_symmetric_key(keylen);
-  if (unlikely_log(socket_read_all(sock, ekey->data, keylen)) || 
+  if (unlikely_log(socket_read_all(sock, ekey->data, keylen)) ||
       unlikely_log((key=psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_private, ekey))==PSYNC_INVALID_SYM_KEY)){
     psync_free(ekey);
     return PSYNC_NET_TEMPFAIL;
@@ -639,7 +639,7 @@ static int psync_p2p_download(psync_socket_t sock, psync_fileid_t fileid, const 
   if (unlikely(fd==INVALID_HANDLE_VALUE)){
     psync_crypto_aes256_ctr_encoder_decoder_free(decoder);
     debug(D_ERROR, "could not open %s", filename);
-    
+    return PSYNC_NET_PERMFAIL;
   }
   off=0;
   psync_hash_init(&hashctx);
@@ -667,7 +667,6 @@ static int psync_p2p_download(psync_socket_t sock, psync_fileid_t fileid, const 
   }
   else
     return PSYNC_NET_OK;
-  
 err0:
   psync_crypto_aes256_ctr_encoder_decoder_free(decoder);
   psync_file_close(fd);
@@ -813,7 +812,7 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   memcpy(pct2.rand, pct1.rand, sizeof(pct1.rand));
   memcpy(pct2.genhash, pct1.genhash, sizeof(pct1.genhash));
   memcpy(pct2.computername, computername, PSYNC_HASH_DIGEST_HEXLEN);
-  if (socket_write_all(sock, &pct2, sizeof(pct2)) || 
+  if (socket_write_all(sock, &pct2, sizeof(pct2)) ||
       socket_write_all(sock, psync_rsa_public_bin->data, psync_rsa_public_bin->datalen) ||
       socket_write_all(sock, token, tlen)){
     debug(D_WARNING, "writing to socket failed");
