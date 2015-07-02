@@ -192,7 +192,7 @@ retry:
   if (attr&FILE_ATTRIBUTE_DIRECTORY)
     flag=FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_POSIX_SEMANTICS;
   else
-    flag=FILE_FLAG_POSIX_SEMANTICS;
+    flag=FILE_ATTRIBUTE_NORMAL|FILE_FLAG_POSIX_SEMANTICS;
 
   fd=CreateFileW(wpath, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flag, NULL);
   if (unlikely_log(fd==INVALID_HANDLE_VALUE)){
@@ -2397,7 +2397,7 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
   else
     cdis=OPEN_EXISTING;
   wpath=utf8_to_wchar_path(path);
-  ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_FLAG_POSIX_SEMANTICS, NULL);
+  ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_FLAG_POSIX_SEMANTICS|FILE_ATTRIBUTE_NORMAL, NULL);
   if (ret==INVALID_HANDLE_VALUE)
     debug(D_WARNING, "could not open file %s, error %d", path, (int)GetLastError());
   psync_free(wpath);
