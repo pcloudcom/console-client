@@ -163,6 +163,13 @@ static void psync_stop_crypto_on_sleep(){
   }
 }
 
+static void psync_cache_contacts() {
+  cache_account_emails();
+  cache_account_teams();
+  cache_links_all();
+  cache_contacts();
+}
+
 int psync_init(){
   psync_thread_name="main app thread";
   debug(D_NOTICE, "initializing");
