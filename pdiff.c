@@ -42,11 +42,11 @@
 #include "pfsxattr.h"
 #include "pfs.h"
 #include "pnotifications.h"
-#include <ctype.h>
 #include "pnetlibs.h"
 #include "pbusinessaccount.h"
 #include "publiclinks.h"
 #include "pcontacts.h"
+#include <ctype.h>
 
 
 #define PSYNC_SQL_DOWNLOAD "synctype&"NTO_STR(PSYNC_DOWNLOAD_ONLY)"="NTO_STR(PSYNC_DOWNLOAD_ONLY)
@@ -58,6 +58,13 @@ typedef struct {
   uint64_t teamid;
   char *str;
 } notify_paramst;
+
+typedef struct {
+  uint64_t diffid;
+  uint32_t notificationid;
+  uint32_t publinkid;
+  uint32_t uploadlinkid;
+} subscribed_ids;
 
 static uint64_t used_quota=0, current_quota=0;
 static psync_uint_t needdownload=0;
@@ -1772,29 +1779,31 @@ static psync_socket_t setup_exeptions(){
   return pfds[0];
 }
 
-static int send_diff_command(psync_socket *sock, uint64_t diffid, uint32_t notificationid, u_int32_t publinkid){
+static int send_diff_command(psync_socket *sock, subscribed_ids ids){
   if (psync_notifications_running()){
     const char *ts=psync_notifications_get_thumb_size();
     if (ts){
-      binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks"), P_STR("timeformat", "timestamp"),
-                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid),
-                            P_NUM("notificationid", notificationid), P_STR("notificationthumbsize", ts), P_NUM("publinkid", publinkid)};
+      binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"),
+                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid),
+                            P_NUM("notificationid", ids.notificationid), P_STR("notificationthumbsize", ts), P_NUM("publinkid", ids.publinkid),
+                            P_NUM("uploadlinkid", ids.uploadlinkid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
     else{
-      binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks"), P_STR("timeformat", "timestamp"),
-                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid), P_NUM("notificationid", notificationid), P_NUM("publinkid", publinkid)};
+      binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"),
+                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid), P_NUM("notificationid", ids.notificationid), P_NUM("publinkid", ids.publinkid),
+                            P_NUM("uploadlinkid", ids.uploadlinkid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
   }
   else{
-    binparam diffparams[]={P_STR("subscribefor", "diff,publinks"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid),
-                           P_NUM("publinkid", publinkid)};
+    binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), 
+                           P_NUM("diffid", ids.diffid), P_NUM("publinkid", ids.publinkid), P_NUM("uploadlinkid", ids.uploadlinkid)};
     return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
   }
 }
 
-static void handle_exception(psync_socket **sock, uint64_t *diffid, uint32_t *notificationid, uint32_t* publinkid, char ex){
+static void handle_exception(psync_socket **sock, subscribed_ids *ids, char ex){
   debug(D_NOTICE, "exception handler %c", ex);
   if (ex=='r' ||
       psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP ||
@@ -1802,14 +1811,14 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, uint32_t *no
       psync_setting_get_bool(_PS(usessl))!=psync_socket_isssl(*sock)){
     psync_socket_close(*sock);
     if (psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED)
-      *notificationid=0;
+      ids->notificationid=0;
     debug(D_NOTICE, "waiting for new socket");
     *sock=get_connected_socket();
     debug(D_NOTICE, "got new socket");
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
     psync_syncer_check_delayed_syncs();
-    *diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
-    send_diff_command(*sock, *diffid, *notificationid, *publinkid);
+    ids->diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+    send_diff_command(*sock, *ids);
   }
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
@@ -1819,7 +1828,7 @@ static void handle_exception(psync_socket **sock, uint64_t *diffid, uint32_t *no
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
       psync_syncer_check_delayed_syncs();
-      send_diff_command(*sock, *diffid, *notificationid, *publinkid);
+      send_diff_command(*sock, *ids);
     }
     else{
       debug(D_NOTICE, "diff socket seems to be alive");
@@ -1969,24 +1978,21 @@ static void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
   const binresult *entries;
-  uint64_t diffid, newdiffid, result;
+  uint64_t newdiffid, result;
   psync_socket_t exceptionsock, socks[2];
-  uint32_t notificationid;
-  uint32_t publinkid;
+  subscribed_ids ids = {0,0,0,0};
   int sel,ret = 0;
   char ex;
   char *err = NULL;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
-  notificationid=0;
-  publinkid=0;
 restart:
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   sock=get_connected_socket();
   debug(D_NOTICE, "connected");
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_SCANNING);
-  diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
-  if (diffid==0)
+  ids.diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+  if (ids.diffid==0)
     initialdownload=1;
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
   cache_account_emails();
@@ -1994,7 +2000,7 @@ restart:
   cache_links_all();
   cache_contacts();
   do{
-    binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", diffid)};
+    binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid)};
     if (!psync_do_run)
       break;
     res=send_command(sock, "diff", diffparams);
@@ -2014,9 +2020,9 @@ restart:
     if (entries->length){
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
       debug(D_NOTICE, "processing diff with %u entries", (unsigned)entries->length);
-      diffid=process_entries(entries, newdiffid);
+      ids.diffid=process_entries(entries, newdiffid);
       psync_diff_refresh_fs(entries);
-      debug(D_NOTICE, "got diff with %u entries, new diffid %lu", (unsigned)entries->length, (unsigned long)diffid);
+      debug(D_NOTICE, "got diff with %u entries, new diffid %lu", (unsigned)entries->length, (unsigned long)ids.diffid);
     }
     result=entries->length;
     psync_free(res);
@@ -2039,7 +2045,7 @@ restart:
   }
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
-  send_diff_command(sock, diffid, notificationid, publinkid);
+  send_diff_command(sock, ids);
   psync_milisleep(50);
   psync_run_analyze_if_needed();
   while (psync_do_run){
@@ -2052,7 +2058,7 @@ restart:
         break;
       if (psync_pipe_read(exceptionsock, &ex, 1)!=1)
         continue;
-      handle_exception(&sock, &diffid, &notificationid, &publinkid, ex);
+      handle_exception(&sock, &ids, ex);
       while (psync_select_in(socks, 1, 0)==0 && psync_pipe_read(exceptionsock, &ex, 1)==1);
       socks[1]=sock->sock;
     }
@@ -2061,7 +2067,7 @@ restart:
       res=get_result(sock);
       if (unlikely_log(!res)){
         psync_timer_notify_exception();
-        handle_exception(&sock, &diffid, &notificationid, &publinkid, 'r');
+        handle_exception(&sock, &ids, 'r');
         socks[1]=sock->sock;
         continue;
       }
@@ -2070,12 +2076,12 @@ restart:
         if (result==6003 || result==6002){ // timeout or cancel
           debug(D_NOTICE, "got \"%s\" from the socket", psync_find_result(res, "error", PARAM_STR)->str);
           psync_free(res);
-          send_diff_command(sock, diffid, notificationid, publinkid);
+          send_diff_command(sock, ids);
           continue;
         }
         debug(D_ERROR, "diff returned error %u: %s", (unsigned int)result, psync_find_result(res, "error", PARAM_STR)->str);
         psync_free(res);
-        handle_exception(&sock, &diffid, &notificationid, &publinkid, 'r');
+        handle_exception(&sock, &ids, 'r');
         socks[1]=sock->sock;
         continue;
       }
@@ -2085,7 +2091,7 @@ restart:
           entries=psync_find_result(res, "entries", PARAM_ARRAY);
           if (entries->length){
             newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
-            diffid=process_entries(entries, newdiffid);
+            ids.diffid=process_entries(entries, newdiffid);
             psync_diff_refresh_fs(entries);
             psync_diff_check_quota(sock);
             check_overquota();
@@ -2095,21 +2101,36 @@ restart:
           psync_free(res);
         }
         else if (entries->length==13 && !strcmp(entries->str, "notifications")){
-          notificationid=psync_find_result(res, "notificationid", PARAM_NUM)->num;
+          ids.notificationid=psync_find_result(res, "notificationid", PARAM_NUM)->num;
           // do not free res
           psync_notifications_notify(res);
         }
-        else if (entries->length==13 && !strcmp(entries->str, "publinks")){
-          publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num; 
+        else if (entries->length==8 && !strcmp(entries->str, "publinks")){
+          ids.publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num; 
           ret = chache_links(&err);
           if (ret < 0)
             debug(D_ERROR, "Cacheing links faild with err %s", err);
+        }
+        else if (entries->length==11 && !strcmp(entries->str, "uploadlinks")){
+          ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num; 
+          ret = chache_upload_links(&err);
+          if (ret < 0)
+            debug(D_ERROR, "Cacheing upload links faild with err %s", err);
+        }
+        else if (entries->length==5 && !strcmp(entries->str, "teams")){
+          cache_account_teams();
+        }
+        else if (entries->length==5 && !strcmp(entries->str, "users")){
+          cache_account_emails();
+        }
+         else if (entries->length==8 && !strcmp(entries->str, "contacts")){
+          cache_contacts();
         }
         else{
           debug(D_NOTICE, "got no from, did we send a nop recently?");
           psync_free(res);
         }
-        send_diff_command(sock, diffid, notificationid, publinkid);
+        send_diff_command(sock, ids);
       }
       else{
         psync_free(res);
