@@ -340,7 +340,7 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   
 }
 
-static int chache_links(char **err /*OUT*/) {
+int chache_links(char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
@@ -685,7 +685,7 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
   return 0;
 } 
 
-static int chache_upload_links(char **err /*OUT*/) {
+int chache_upload_links(char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
