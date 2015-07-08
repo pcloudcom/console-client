@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -182,13 +182,13 @@ unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size
   unsigned char *result;
   unsigned char *p;
   uint32_t bits, buff;
-  
+
   result=(unsigned char *)psync_malloc(((length+4)/5)*8+1);
   p=result;
-  
+
   bits=0;
   buff=0; // don't really have to initialize this one, but a compiler that will detect that this is safe is yet to be born
-  
+
   while (length){
     if (bits<5){
       buff=(buff<<8)|(*str++);
@@ -207,7 +207,7 @@ unsigned char *psync_base32_encode(const unsigned char *str, size_t length, size
     bits-=5;
     *p++=table[0x1f&(buff>>bits)];
   }
-  
+
   *ret_length=p-result;
   *p=0;
   return result;
@@ -260,7 +260,7 @@ unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size
     current+=3;
     length-=3;
   }
-  
+
   if (length!=0){
     *p++=base64_table[current[0] >> 2];
     if (length>1){
@@ -270,7 +270,7 @@ unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size
     else
       *p++=base64_table[(current[0] & 0x03) << 4];
   }
-  
+
   *ret_length=p-result;
   *p=0;
   return result;
@@ -576,6 +576,10 @@ int psync_sql_has_waiters(){
 
 int psync_sql_isrdlocked(){
   return psync_rwlock_holding_rdlock(&psync_db_lock);
+}
+
+int psync_sql_islocked(){
+  return psync_rwlock_holding_lock(&psync_db_lock);
 }
 
 int psync_sql_tryupgradelock(){
@@ -1515,10 +1519,10 @@ void *psync_list_builder_finalize(psync_list_builder_t *builder){
     memcpy(ret, &builder->cnt, sizeof(builder->cnt));
   elem=ret+builder->elements_offset;
   str=elem+builder->element_size*builder->cnt;
-  
+
   builder->last_numbers=psync_list_element(builder->number_list.next, psync_list_num_list, list);
   builder->popoff=0;
-  
+
   psync_list_for_each_element(el, &builder->element_list, psync_list_element_list, list){
     for (i=0; i<el->used; i++){
       memcpy(elem, el->elements+(i*builder->element_size), builder->element_size);
@@ -1534,7 +1538,7 @@ void *psync_list_builder_finalize(psync_list_builder_t *builder){
       elem+=builder->element_size;
     }
   }
-  
+
   psync_list_for_each_element_call(&builder->element_list, psync_list_element_list, list, psync_free);
   psync_list_for_each_element_call(&builder->string_list, psync_list_string_list, list, psync_free);
   psync_list_for_each_element_call(&builder->number_list, psync_list_num_list, list, psync_free);
@@ -1636,7 +1640,7 @@ void *psync_task_get_result(psync_task_manager_t tm, int id){
   else{
     debug(D_BUG, "invalid status %d of task id %d", (int)tm->tasks[id].status, id);
     ret=NULL;
-  }  
+  }
   pthread_mutex_unlock(&tm->mutex);
   return ret;
 }

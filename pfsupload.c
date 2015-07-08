@@ -296,9 +296,16 @@ static int handle_upload_api_error_taskid(uint64_t result, uint64_t taskid){
       psync_sql_bind_uint(res, 1, taskid);
       psync_sql_run_free(res);
       return -1;
-    case 2008: /* overquota */
+    case 2008:{ /* overquota */
+      int locked=psync_sql_islocked();
+      if (locked)
+        psync_sql_commit_transaction();
+      assert(!psync_sql_islocked());
       psync_milisleep(PSYNC_SLEEP_ON_DISK_FULL);
+      if (locked)
+        psync_sql_start_transaction();
       return -1;
+    }
     case 2124: /* crypto expired */
       res=psync_sql_prep_statement("UPDATE fstask SET status=1 WHERE id=?");
       psync_sql_bind_uint(res, 1, taskid);
