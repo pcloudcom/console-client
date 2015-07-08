@@ -490,13 +490,15 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
 static void insert_cache_email(int i, const binresult *user, void *_this) {
   const char *char_field = 0;
   char_field = psync_find_result(user, "email", PARAM_STR)->str;
-  uint64_t shareid = 0;
+  uint64_t id = 0;
   psync_sql_res *q;
+  int active = 0;
   
-  shareid = psync_find_result(user, "id", PARAM_NUM)->num;
-  if (shareid) {
+  active = psync_find_result(user, "active", PARAM_BOOL)->num;
+  id = psync_find_result(user, "id", PARAM_NUM)->num;
+  if (id && active) {
     q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail, firstname, lastname) VALUES (?, ?, ?, ?)");
-    psync_sql_bind_uint(q, 1, shareid);
+    psync_sql_bind_uint(q, 1, id);
     psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
     char_field = psync_find_result(user, "firstname", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 3, char_field, strlen(char_field));
