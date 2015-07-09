@@ -129,14 +129,14 @@ int psync_ssl_init(){
   if (pthread_mutex_init(&psync_mbed_rng.mutex, NULL))
     return PRINT_RETURN(-1);
   entropy_init(&psync_mbed_entropy);
+  psync_get_random_seed(seed, seed, sizeof(seed), 0);
+  entropy_update_manual(&psync_mbed_entropy, seed, sizeof(seed));
   if (ctr_drbg_init(&psync_mbed_rng.rnd, entropy_func, &psync_mbed_entropy, NULL, 0))
     return PRINT_RETURN(-1);
   x509_crt_init(&psync_mbed_trusted_certs_x509);
   for (i=0; i<ARRAY_SIZE(psync_ssl_trusted_certs); i++)
     if (x509_crt_parse(&psync_mbed_trusted_certs_x509, (const unsigned char *)psync_ssl_trusted_certs[i], strlen(psync_ssl_trusted_certs[i])))
       debug(D_ERROR, "failed to load certificate %lu", (unsigned long)i);
-  psync_get_random_seed(seed, NULL, 0, 0);
-  ctr_drbg_update(&psync_mbed_rng.rnd, seed, sizeof(seed));
   return 0;
 }
 

@@ -611,7 +611,7 @@ static void scanner_scan(int first){
   psync_list slist, newtmp, *l1, *l2;
   sync_folderlist *fl;
   sync_list *l;
-  psync_uint_t i, w, trn;
+  psync_uint_t i, w, trn, restartsleep;
   if (first)
     localsleepperfolder=0;
   else{
@@ -625,6 +625,7 @@ static void scanner_scan(int first){
       localsleepperfolder=1;
   }
   starttime=psync_current_time;
+  restartsleep=1000;
 restart:
   pthread_mutex_lock(&scan_mutex);
   while (scan_stoppers)
@@ -647,6 +648,9 @@ restart:
       pthread_mutex_unlock(&scan_mutex);
       for (i=0; i<SCAN_LIST_CNT; i++)
         psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
+      psync_milisleep(restartsleep);
+      if (restartsleep<16000)
+        restartsleep*=2;
       goto restart;
     }
     pthread_mutex_unlock(&scan_mutex);
@@ -697,6 +701,9 @@ restart:
     pthread_mutex_unlock(&scan_mutex);
     for (i=0; i<SCAN_LIST_CNT; i++)
       psync_list_for_each_element_call(&scan_lists[i], sync_folderlist, list, psync_free);
+    psync_milisleep(restartsleep);
+    if (restartsleep<16000)
+      restartsleep*=2;
     goto restart;
   }
   pthread_mutex_unlock(&scan_mutex);
