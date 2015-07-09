@@ -71,16 +71,15 @@ int do_call_contactlist(result_visitor vis, void *param) {
 
 static void insert_cache_contact(int i, const binresult *user, void *_this) {
   const char *char_field = 0;
-  uint64_t shareid = 0;
+  uint64_t id = 0;
   psync_sql_res *q;
   
   char_field = psync_find_result(user, "name", PARAM_STR)->str;
-  shareid = psync_find_result(user, "source", PARAM_NUM)->num;
-  if (shareid == 1) {
-    q=psync_sql_prep_statement("REPLACE INTO contacts  (name, mail) VALUES (?, ?)");
-    psync_sql_bind_lstring(q, 1, char_field, strlen(char_field));
+  id = psync_find_result(user, "source", PARAM_NUM)->num;
+  if (id == 1) {
+    q=psync_sql_prep_statement("REPLACE INTO contacts  (mail) VALUES (?)");
     char_field = psync_find_result(user, "value", PARAM_STR)->str;
-    psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
+    psync_sql_bind_lstring(q, 1, char_field, strlen(char_field));
     psync_sql_run_free(q);
   }
 }
