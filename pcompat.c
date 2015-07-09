@@ -484,11 +484,11 @@ void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr){
   pthread_attr_destroy(&attr);
 }
 
-static void psync_check_no_sql_lock(){
+static void psync_check_no_sql_lock(uint64_t millisec){
 #if IS_DEBUG
   if (psync_sql_islocked()){
     debug(D_CRITICAL, "trying to sleep while holding sql lock, aborting");
-  abort();
+    abort();
   }
 #endif
 }
@@ -496,12 +496,12 @@ static void psync_check_no_sql_lock(){
 void psync_milisleep(uint64_t millisec){
 #if defined(P_OS_POSIX)
   struct timespec tm;
-  psync_check_no_sql_lock();
+  psync_check_no_sql_lock(millisec);
   tm.tv_sec=millisec/1000;
   tm.tv_nsec=(millisec%1000)*1000000;
   nanosleep(&tm, NULL);
 #elif defined(P_OS_WINDOWS)
-  psync_check_no_sql_lock();
+  psync_check_no_sql_lock(millisec);
   Sleep(millisec);
 #else
 #error "Function not implemented for your operating system"
