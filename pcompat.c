@@ -486,8 +486,10 @@ void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr){
 
 static void psync_check_no_sql_lock(uint64_t millisec){
 #if IS_DEBUG
-  if (psync_sql_islocked())
-    debug(D_CRITICAL, "trying to sleep for %lu millisec while holding sql lock", (unsigned long)millisec);
+  if (psync_sql_islocked()){
+    debug(D_CRITICAL, "trying to sleep while holding sql lock, aborting");
+    abort();
+  }
 #endif
 }
 
