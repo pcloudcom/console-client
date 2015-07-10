@@ -76,7 +76,7 @@ static void insert_cache_contact(int i, const binresult *user, void *_this) {
   
   char_field = psync_find_result(user, "name", PARAM_STR)->str;
   id = psync_find_result(user, "source", PARAM_NUM)->num;
-  if (id == 1) {
+  if ((id == 1) || (id == 3)) {
     q=psync_sql_prep_statement("REPLACE INTO contacts  (mail) VALUES (?)");
     char_field = psync_find_result(user, "value", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 1, char_field, strlen(char_field));
