@@ -766,7 +766,7 @@ int chache_upload_links(char **err /*OUT*/) {
       psync_sql_bind_uint(q, 11, 0);
       psync_sql_bind_uint(q, 12, psync_find_result(meta, "fileid", PARAM_NUM)->num);
     }
-    psync_sql_bind_uint(q, 8, psync_find_result(meta, "icon", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 13, psync_find_result(meta, "icon", PARAM_NUM)->num);
     psync_sql_run_free(q);
   }
   return linkscnt;
