@@ -417,7 +417,7 @@ int chache_links(char **err /*OUT*/) {
       psync_sql_bind_uint(q, 11, 0);
       psync_sql_bind_uint(q, 12, psync_find_result(meta, "fileid", PARAM_NUM)->num);
     }
-    psync_sql_bind_uint(q, 13, psync_find_result(link, "icon", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 13, psync_find_result(meta, "icon", PARAM_NUM)->num);
     psync_sql_run_free(q);
   }
   return linkscnt;
@@ -645,7 +645,7 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
   uint32_t concnt = 0, i = 0;
   *err = 0;
   
-  binparam params[] = {P_STR("auth", psync_my_auth),P_STR("timeformat", "timestamp"), P_STR("code", code)};
+  binparam params[] = {P_STR("auth", psync_my_auth),P_STR("timeformat", "timestamp"), P_STR("iconformat","id"), P_STR("code", code)};
   api = psync_apipool_get();
   if (unlikely(!api)) {
     debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
@@ -679,6 +679,7 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
          pcont->isfolder = 0;
         pcont->itemid = psync_find_result(link, "fileid", PARAM_NUM)->num;
       }
+      pcont->icon = psync_find_result(link, "icon", PARAM_NUM)->num;
     }
     psync_free(bres);
     return (plink_contents_t *)psync_list_builder_finalize(builder);
@@ -699,7 +700,7 @@ int chache_upload_links(char **err /*OUT*/) {
   
   *err  = 0;
  
-  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
+  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
   api = psync_apipool_get();
   if (unlikely(!api)) {
     debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
@@ -740,8 +741,8 @@ int chache_upload_links(char **err /*OUT*/) {
     link = publinks->array[i];
 
     q=psync_sql_prep_statement("REPLACE INTO links  (id, code, comment, traffic, maxspace, downloads, created,"
-                                 " modified, name,  isfolder, folderid, fileid, isincomming)"
-                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+                                 " modified, name,  isfolder, folderid, fileid, isincomming, icon)"
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)");
     psync_sql_bind_uint(q, 1, psync_find_result(link, "uploadlinkid", PARAM_NUM)->num);
     charfiled = psync_find_result(link, "code", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 2, charfiled, strlen(charfiled));
@@ -765,6 +766,7 @@ int chache_upload_links(char **err /*OUT*/) {
       psync_sql_bind_uint(q, 11, 0);
       psync_sql_bind_uint(q, 12, psync_find_result(meta, "fileid", PARAM_NUM)->num);
     }
+    psync_sql_bind_uint(q, 8, psync_find_result(meta, "icon", PARAM_NUM)->num);
     psync_sql_run_free(q);
   }
   return linkscnt;

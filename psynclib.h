@@ -418,6 +418,7 @@ typedef struct {
   uint64_t modified;
   uint8_t isfolder;
   uint64_t itemid;
+  uint8_t icon;
 } link_cont_t;
 
 typedef struct {
