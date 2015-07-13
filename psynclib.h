@@ -404,6 +404,7 @@ typedef struct {
   uint64_t itemid;
   uint8_t isfolder;
   uint8_t isupload;
+  uint8_t icon;
 } link_info_t;
 
 typedef struct {

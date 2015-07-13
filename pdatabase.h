@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 13
+#define PSYNC_DATABASE_VERSION 14
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS baccountemail (id INTEGER PRIMARY KEY, mail TEXT, fir
 CREATE TABLE IF NOT EXISTS baccountteam (id INTEGER PRIMARY KEY, name TEXT); \
 CREATE TABLE IF NOT EXISTS links ( \
 id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxspace INTEGER, \
-downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER); \
+downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER, icon INTEGER); \
 CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048), name TEXT); \
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
@@ -247,6 +247,10 @@ id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxsp
 downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER); \
 CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048), name TEXT); \
 UPDATE setting SET value=13 WHERE id='dbversion'; \
+COMMIT;"
+"BEGIN;\
+ALTER TABLE links ADD icon INTEGER; \
+UPDATE setting SET value=14 WHERE id='dbversion'; \
 COMMIT;"
 };
 
