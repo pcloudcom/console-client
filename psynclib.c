@@ -1199,11 +1199,19 @@ static int psync_account_stopshare(psync_shareid_t shareid, char **err) {
 
 int psync_remove_share(psync_shareid_t shareid, char **err){
   int result;
+  char *err1 = NULL;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid)};
   result = run_command("removeshare", params, err);
   if (result == 2025) {
-    result = psync_account_stopshare(shareid, err);
-     debug(D_NOTICE, "erroris  %s", *err);
+    result = psync_account_stopshare(shareid, &err1);
+    if(result == 2075) { 
+      result = 2025;
+      psync_free(err1);
+    } else {
+      psync_free(*err);
+      *err = err1;
+    }
+    debug(D_NOTICE, "erroris  %s", *err);
   }
   return result;
 }
@@ -1218,10 +1226,18 @@ static int psync_account_modifyshare(psync_shareid_t shareid, uint32_t permissio
 
 int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err){
   int result;
+  char *err1 = NULL;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid), P_NUM("permissions", convert_perms(permissions))};
   result =  run_command("changeshare", params, err);
   if (result == 2025) {
-    result = psync_account_modifyshare(shareid, convert_perms(permissions), err);
+    result = psync_account_modifyshare(shareid, convert_perms(permissions), &err1);
+    if(result == 2075) { 
+      result = 2025;
+      psync_free(err1);
+    } else {
+      psync_free(*err);
+      *err = err1;
+    }
      debug(D_NOTICE, "erroris  %s", *err);
   }
   return result;
