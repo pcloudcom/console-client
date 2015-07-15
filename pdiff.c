@@ -1974,6 +1974,13 @@ static int psync_diff_check_quota(psync_socket *sock){
   return 0;
 }
 
+static void psync_cache_contacts() {
+  cache_account_emails();
+  cache_account_teams();
+  cache_links_all();
+  cache_contacts();
+}
+
 static void psync_diff_thread(){
   psync_socket *sock;
   binresult *res;
@@ -1995,10 +2002,7 @@ restart:
   if (ids.diffid==0)
     initialdownload=1;
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
-  cache_account_emails();
-  cache_account_teams();
-  cache_links_all();
-  cache_contacts();
+  psync_cache_contacts();
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid)};
     if (!psync_do_run)
@@ -2049,6 +2053,10 @@ restart:
   psync_milisleep(50);
   psync_run_analyze_if_needed();
   while (psync_do_run){
+    if(psync_recache_contacts) {
+      psync_cache_contacts();
+      psync_recache_contacts = 0;
+    }
     if (psync_socket_pendingdata(sock))
       sel=1;
     else

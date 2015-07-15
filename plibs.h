@@ -182,6 +182,7 @@ typedef int (*psync_list_builder_sql_callback)(psync_list_builder_t *, void *, p
 typedef void (*psync_task_callback_t)(void *, void *);
 
 extern int psync_do_run;
+extern int psync_recache_contacts;
 extern pstatus_t psync_status;
 extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
 extern uint64_t psync_my_userid;

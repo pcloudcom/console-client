@@ -329,10 +329,15 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
     sock = psync_apipool_get();
     bres = send_command(sock, "account_users", params);
   } else {
-    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
-
-    sock = psync_apipool_get();
-    bres = send_command(sock, "account_users", params);
+    if (psync_my_auth[0]) {
+      binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
+      sock = psync_apipool_get();
+      bres = send_command(sock, "account_users", params);
+    } else {
+      binparam params[] =  {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
+      sock = psync_apipool_get();
+      bres = send_command(sock, "account_users", params);
+    }
   }
   if (likely(bres))
     psync_apipool_release(sock);
@@ -421,10 +426,15 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
     sock = psync_apipool_get();
     bres = send_command(sock, "account_teams", params);
   } else {
-    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
-
-    sock = psync_apipool_get();
-    bres = send_command(sock, "account_teams", params);
+    if (psync_my_auth[0]) {
+      binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
+      sock = psync_apipool_get();
+      bres = send_command(sock, "account_teams", params);
+    } else {
+      binparam params[] =  {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
+      sock = psync_apipool_get();
+      bres = send_command(sock, "account_teams", params);
+    }
   } 
   if (likely(bres))
     psync_apipool_release(sock);

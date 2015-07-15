@@ -351,17 +351,23 @@ int chache_links(char **err /*OUT*/) {
   int i, linkscnt;
   
   *err  = 0;
- 
-  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("iconformat","id")};
-  api = psync_apipool_get();
-  if (unlikely(!api)) {
-    debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
-    return -2;
+  if(psync_my_auth[0]) {
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("iconformat","id")};
+    api = psync_apipool_get();
+    if (unlikely(!api)) {
+      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      return -2;
+    }
+    bres = send_command(api, "listpublinks", params);
+  } else {
+    binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
+    api = psync_apipool_get();
+    if (unlikely(!api)) {
+      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      return -2;
+    }
+    bres = send_command(api, "listpublinks", params);
   }
-  
-  bres = send_command(api, "listpublinks", params);
-     
-  
   if (likely(bres))
     psync_apipool_release(api);
   else {
@@ -700,16 +706,24 @@ int chache_upload_links(char **err /*OUT*/) {
   
   *err  = 0;
  
-  binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
-  api = psync_apipool_get();
-  if (unlikely(!api)) {
-    debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
-    return -2;
+  
+  if(psync_my_auth[0]) {
+    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
+    api = psync_apipool_get();
+    if (unlikely(!api)) {
+      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      return -2;
+    }
+    bres = send_command(api, "listuploadlinks", params);
+  } else {
+  binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
+    api = psync_apipool_get();
+    if (unlikely(!api)) {
+      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      return -2;
+    }
+    bres = send_command(api, "listuploadlinks", params);
   }
-  
-  bres = send_command(api, "listuploadlinks", params);
-     
-  
   if (likely(bres))
     psync_apipool_release(api);
   else {

@@ -163,13 +163,6 @@ static void psync_stop_crypto_on_sleep(){
   }
 }
 
-static void psync_cache_contacts() {
-  cache_account_emails();
-  cache_account_teams();
-  cache_links_all();
-  cache_contacts();
-}
-
 int psync_init(){
   psync_thread_name="main app thread";
   debug(D_NOTICE, "initializing");
@@ -303,7 +296,7 @@ void psync_set_user_pass(const char *username, const char *password, int save){
     pthread_mutex_unlock(&psync_my_auth_mutex);
   }
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
-  psync_cache_contacts();
+  psync_recache_contacts=1;
 }
 
 void psync_set_pass(const char *password, int save){
