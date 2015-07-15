@@ -493,10 +493,13 @@ static void insert_cache_email(int i, const binresult *user, void *_this) {
   uint64_t id = 0;
   psync_sql_res *q;
   int active = 0;
+  int frozen = 0;
   
   active = psync_find_result(user, "active", PARAM_BOOL)->num;
+  frozen = psync_find_result(user, "frozen", PARAM_BOOL)->num;
   id = psync_find_result(user, "id", PARAM_NUM)->num;
-  if (id && active) {
+
+  if (id && (active || frozen)) {
     q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail, firstname, lastname) VALUES (?, ?, ?, ?)");
     psync_sql_bind_uint(q, 1, id);
     psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
