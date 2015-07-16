@@ -1,7 +1,7 @@
-/* Copyright (c) 2013 Anton Titov.
- * Copyright (c) 2013 pCloud Ltd.
+/*
+ * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -25,22 +25,21 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PSYNC_DIFF_H
-#define _PSYNC_DIFF_H
+#ifndef _PACCOUNTEVENTS_H
+#define _PACCOUNTEVENTS_H
 
-#include "papi.h"
-#include "paccountevents.h"
+#include <stdint.h>
 
-void psync_diff_init();
-void psync_diff_lock();
-void psync_diff_unlock();
-void psync_diff_create_file(const binresult *meta);
-void psync_diff_update_file(const binresult *meta);
-void psync_diff_delete_file(const binresult *meta);
-void psync_diff_update_folder(const binresult *meta);
-void psync_diff_delete_folder(const binresult *meta);
+typedef uint32_t psync_changetype_t;
 
-void do_register_account_events_callback(paccount_cache_callback_t callback);
+#define PACCOUNT_CHANGE_ALL 1
+#define PACCOUNT_CHANGE_LINKS 2
+#define PACCOUNT_CHANGE_CONTACTS 3
+#define PACCOUNT_CHANGE_TEAMS 4
+#define PACCOUNT_CHANGE_EMAILS 5
 
+/* Account cache change callback is called every time account team, members, contacts or links has been change.*/
 
-#endif
+typedef void (*paccount_cache_callback_t)(psync_changetype_t event);
+
+#endif //_PACCOUNTEVENTS_H

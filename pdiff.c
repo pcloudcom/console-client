@@ -71,6 +71,20 @@ static psync_uint_t needdownload=0;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
+static paccount_cache_callback_t psync_cache_callback=NULL;
+
+void do_register_account_events_callback(paccount_cache_callback_t callback)
+{
+  psync_cache_callback=callback;
+}
+
+static void psync_notify_cache_change(psync_changetype_t event){
+  paccount_cache_callback_t callback;
+  callback=psync_cache_callback;
+  if (callback)
+    psync_run_thread("cache start callback", callback);
+}
+
 
 static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid);
 static void do_send_eventdata(void * param);
@@ -1979,6 +1993,7 @@ static void psync_cache_contacts() {
   cache_account_teams();
   cache_links_all();
   cache_contacts();
+  psync_notify_cache_change(PACCOUNT_CHANGE_ALL);
 }
 
 static void psync_diff_thread(){
@@ -2123,16 +2138,22 @@ restart:
           ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num; 
           ret = chache_upload_links(&err);
           if (ret < 0)
-            debug(D_ERROR, "Cacheing upload links faild with err %s", err);
+            debug(D_ERROR, "Cacheing upload links failed with err %s", err);
+          else
+            psync_notify_cache_change(PACCOUNT_CHANGE_LINKS);
+          
         }
         else if (entries->length==5 && !strcmp(entries->str, "teams")){
           cache_account_teams();
+           psync_notify_cache_change(PACCOUNT_CHANGE_TEAMS);
         }
         else if (entries->length==5 && !strcmp(entries->str, "users")){
           cache_account_emails();
+          psync_notify_cache_change(PACCOUNT_CHANGE_EMAILS);
         }
          else if (entries->length==8 && !strcmp(entries->str, "contacts")){
           cache_contacts();
+          psync_notify_cache_change(PACCOUNT_CHANGE_CONTACTS);
         }
         else{
           debug(D_NOTICE, "got no from, did we send a nop recently?");

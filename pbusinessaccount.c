@@ -30,7 +30,6 @@
 #include "pnetlibs.h"
 
 #include <stdio.h>
-
 typedef struct _email_vis_params {
   char** email;
   size_t *length;
