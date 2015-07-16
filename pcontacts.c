@@ -92,10 +92,12 @@ void cache_contacts() {
   void *params = 0;
   psync_sql_res *q;
   
+  psync_sql_lock();
   q=psync_sql_prep_statement("DELETE FROM contacts ");
   psync_sql_run_free(q);
   
   do_call_contactlist(&insert_cache_contact, params);
+  psync_sql_unlock();
 }
 
 

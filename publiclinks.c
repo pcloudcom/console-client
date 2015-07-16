@@ -790,10 +790,11 @@ void cache_links_all()
 {
   char *err /*OUT*/ = NULL;
   int ret =0;
+  psync_sql_lock();
   ret = chache_upload_links(&err);
   if (ret >= 0)
     ret += chache_links(&err);
-  
+  psync_sql_unlock();
   
   if (ret < 0) {
     if (*err)

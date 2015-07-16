@@ -190,13 +190,14 @@ int psync_init(){
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_DATABASE_OPEN);
   }
-  psync_timer_init();
   psync_sql_statement("UPDATE task SET inprogress=0 WHERE inprogress=1");
+  psync_timer_init();
   if (unlikely_log(psync_ssl_init())){
     if (IS_DEBUG)
       pthread_mutex_unlock(&psync_libstate_mutex);
     return_error(PERROR_SSL_INIT_FAILED);
   }
+
   psync_libs_init();
   psync_settings_init();
   psync_status_init();

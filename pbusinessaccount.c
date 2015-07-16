@@ -526,11 +526,12 @@ void cache_account_emails() {
   void *params = 0;
   psync_sql_res *q;
   
-  
+  psync_sql_lock();
   q=psync_sql_prep_statement("DELETE FROM baccountemail ");
   psync_sql_run_free(q);
   
   do_psync_account_users(userids, 0, &insert_cache_email, params);
+  psync_sql_unlock();
 }
 
 static void insert_cache_team(int i, const binresult *team, void *_this) {
@@ -555,7 +556,9 @@ void cache_account_teams() {
   void *params = 0;
   psync_sql_res *q;
   
+  psync_sql_lock();
   q=psync_sql_prep_statement("DELETE FROM baccountteam ");
   psync_sql_run_free(q);
   do_psync_account_teams(teamids, 0, &insert_cache_team, params);
+  psync_sql_unlock();
 }
