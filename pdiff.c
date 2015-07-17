@@ -82,7 +82,7 @@ static void psync_notify_cache_change(psync_changetype_t event){
   paccount_cache_callback_t callback;
   callback=psync_cache_callback;
   if (callback)
-    psync_run_thread("cache start callback", callback);
+    psync_run_thread1("cache start callback", callback, (void*)event);
 }
 
 
