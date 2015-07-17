@@ -38,8 +38,10 @@ typedef uint32_t psync_changetype_t;
 #define PACCOUNT_CHANGE_TEAMS 4
 #define PACCOUNT_CHANGE_EMAILS 5
 
-/* Account cache change callback is called every time account team, members, contacts or links has been change.*/
+/* Account cache change callback is called every time account team, members, contacts or links has been change. 
+ * You must free event or it will leak.
+ */
 
-typedef void (*paccount_cache_callback_t)(psync_changetype_t event);
+typedef void (*paccount_cache_callback_t)(void  *event);
 
 #endif //_PACCOUNTEVENTS_H

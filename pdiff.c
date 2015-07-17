@@ -80,9 +80,11 @@ void do_register_account_events_callback(paccount_cache_callback_t callback)
 
 static void psync_notify_cache_change(psync_changetype_t event){
   paccount_cache_callback_t callback;
+  psync_changetype_t  *chtype=psync_new(psync_changetype_t);
+  *chtype=event;
   callback=psync_cache_callback;
   if (callback)
-    psync_run_thread1("cache start callback", callback, (void*)event);
+    psync_run_thread1("cache start callback", callback, chtype);
 }
 
 
@@ -1465,26 +1467,32 @@ static void process_establishbsharein(const binresult *entry){
 static void process_acceptedshareout(const binresult *entry){
   psync_sql_res *q;
   const binresult *share, *br;
+  uint32_t aff = 0;
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
-  send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
   q=psync_sql_prep_statement("DELETE FROM sharerequest WHERE id=?");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
-  psync_sql_run_free(q);
-  q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
-                                                "VALUES (?, 0, ?, ?, ?, ?, ?, ?)");
-  debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 4, psync_get_permissions(share));
-  psync_sql_bind_uint(q, 5, psync_find_result(share, "touserid", PARAM_NUM)->num);
-  br=psync_find_result(share, "tomail", PARAM_STR);
-  psync_sql_bind_lstring(q, 6, br->str, br->length);
-  br=psync_find_result(share, "sharename", PARAM_STR);
-  psync_sql_bind_lstring(q, 7, br->str, br->length);
-  psync_sql_run_free(q);
+  psync_sql_run(q);
+  aff=psync_sql_affected_rows();
+  psync_sql_free_result(q);
+  if (aff) {
+    send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
+      
+    q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
+                                                  "VALUES (?, 0, ?, ?, ?, ?, ?, ?)");
+    debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
+    psync_sql_bind_uint(q, 4, psync_get_permissions(share));
+    psync_sql_bind_uint(q, 5, psync_find_result(share, "touserid", PARAM_NUM)->num);
+    br=psync_find_result(share, "tomail", PARAM_STR);
+    psync_sql_bind_lstring(q, 6, br->str, br->length);
+    br=psync_find_result(share, "sharename", PARAM_STR);
+    psync_sql_bind_lstring(q, 7, br->str, br->length);
+    psync_sql_run_free(q);
+  }
 }
 
 static void process_establishbshareout(const binresult *entry) {

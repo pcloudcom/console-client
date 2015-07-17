@@ -79,10 +79,6 @@ static pthread_mutex_t psync_libstate_mutex=PTHREAD_MUTEX_INITIALIZER;
 #define return_error(err) do {psync_error=err; return -1;} while (0)
 #define return_isyncid(err) do {psync_error=err; return PSYNC_INVALID_SYNCID;} while (0)
 
-/* Account cache change callback is called every time account team, members, contacts or links has been change.*/
-
-typedef void (*paccount_cache_callback_t)(uint32_t event);
-
 PSYNC_NOINLINE void *psync_emergency_malloc(size_t size){
   void *ret;
   debug(D_WARNING, "could not allocate %lu bytes", (unsigned long)size);
