@@ -2426,7 +2426,7 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
       if (!ret && ap->waiter->error)
         ret=ap->waiter->error;
     }
-    if (ap->parent){
+    if (ap->parent && !ret){
       psync_crypto_sector_auth_t sa;
       psync_crypto_auth_page *p;
       debug(D_NOTICE, "checking chain checksums for pages %lu-%lu tree level %d",

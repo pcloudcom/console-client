@@ -137,7 +137,7 @@ psync_socket *psync_apipool_get_from_cache(){
     else{
       debug(D_NOTICE, "got api connection from cache");
       if (IS_DEBUG && psync_socket_readable(ret)){
-        debug(D_WARNING, "got socked with pending data to read from cache");
+        debug(D_WARNING, "got socket with pending data to read from cache");
         abort();
       }
       return ret;
@@ -233,7 +233,7 @@ PSYNC_NOINLINE static void psync_apipool_dump_socket(psync_socket *api){
 void psync_apipool_release(psync_socket *api){
 #if IS_DEBUG
   if (unlikely(psync_socket_readable(api))){
-    debug(D_WARNING, "released socked with pending data to read");
+    debug(D_WARNING, "released socket with pending data to read");
     psync_apipool_dump_socket(api);
     return;
   }
