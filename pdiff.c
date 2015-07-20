@@ -63,7 +63,7 @@ typedef struct {
   uint64_t diffid;
   uint32_t notificationid;
   uint64_t publinkid;
-  uint32_t uploadlinkid;
+  uint64_t uploadlinkid;
 } subscribed_ids;
 
 static uint64_t used_quota=0, current_quota=0;
