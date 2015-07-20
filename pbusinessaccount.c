@@ -536,15 +536,15 @@ void cache_account_emails() {
 static void insert_cache_team(int i, const binresult *team, void *_this) {
   const char *nameret = 0;
   nameret = psync_find_result(team, "name", PARAM_STR)->str;
-  uint64_t shareid = 0;
+  uint64_t teamid = 0;
   psync_sql_res *q;
   
-  shareid = psync_find_result(team, "id", PARAM_NUM)->num;
+  teamid = psync_find_result(team, "id", PARAM_NUM)->num;
   
-  debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)shareid);
-  if (shareid) {
+  debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)teamid);
+  if (teamid >= 0) {
     q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
-    psync_sql_bind_uint(q, 1, shareid);
+    psync_sql_bind_uint(q, 1, teamid);
     psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
     psync_sql_run_free(q);
   }

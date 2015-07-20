@@ -1519,9 +1519,9 @@ static void process_establishbshareout(const binresult *entry) {
   psync_sql_bind_lstring(q, 5, br->str, br->length);
   br=psync_find_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
-  psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_BOOL)->num);
   psync_sql_bind_int(q, 8, psync_find_result(share, "touserid", PARAM_NUM)->num);
-  psync_sql_bind_int(q, 9, psync_find_result(share, "team", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 9, psync_find_result(share, "team", PARAM_BOOL)->num);
   psync_sql_bind_int(q, 10, psync_find_result(share, "toteamid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 11, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 12, psync_find_result(share, "folderownerid", PARAM_NUM)->num);
