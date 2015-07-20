@@ -62,7 +62,7 @@ typedef struct {
 typedef struct {
   uint64_t diffid;
   uint32_t notificationid;
-  uint32_t publinkid;
+  uint64_t publinkid;
   uint32_t uploadlinkid;
 } subscribed_ids;
 
@@ -2025,7 +2025,6 @@ restart:
   if (ids.diffid==0)
     initialdownload=1;
   used_quota=psync_sql_cellint("SELECT value FROM setting WHERE id='usedquota'", 0);
-  psync_cache_contacts();
   do{
     binparam diffparams[]={P_STR("timeformat", "timestamp"), P_NUM("limit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid)};
     if (!psync_do_run)
@@ -2141,6 +2140,8 @@ restart:
           ret = chache_links(&err);
           if (ret < 0)
             debug(D_ERROR, "Cacheing links faild with err %s", err);
+          else
+            psync_notify_cache_change(PACCOUNT_CHANGE_LINKS);
         }
         else if (entries->length==11 && !strcmp(entries->str, "uploadlinks")){
           ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num; 
@@ -2153,7 +2154,7 @@ restart:
         }
         else if (entries->length==5 && !strcmp(entries->str, "teams")){
           cache_account_teams();
-           psync_notify_cache_change(PACCOUNT_CHANGE_TEAMS);
+          psync_notify_cache_change(PACCOUNT_CHANGE_TEAMS);
         }
         else if (entries->length==5 && !strcmp(entries->str, "users")){
           cache_account_emails();
