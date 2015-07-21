@@ -790,7 +790,12 @@ void cache_links_all()
 {
   char *err /*OUT*/ = NULL;
   int ret =0;
+  psync_sql_res *q;
+  
   psync_sql_lock();
+  q=psync_sql_prep_statement("DELETE FROM links ");
+  psync_sql_run_free(q);
+  
   ret = chache_upload_links(&err);
   if (ret >= 0)
     ret += chache_links(&err);
