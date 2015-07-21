@@ -108,7 +108,7 @@ psync_rwlock_t psync_db_lock;
 sqlite3 *psync_db;
 pstatus_t psync_status;
 int psync_do_run=1;
-int psync_recache_contacts=0;
+int psync_recache_contacts=1;
 PSYNC_THREAD uint32_t psync_error=0;
 
 static pthread_mutex_t psync_db_checkpoint_mutex;

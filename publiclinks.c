@@ -349,6 +349,10 @@ int chache_links(char **err /*OUT*/) {
   const binresult *publinks, *meta;
   binresult *link;
   int i, linkscnt;
+  psync_sql_res *q;
+
+  q=psync_sql_prep_statement("DELETE FROM links WHERE isincomming = 0 ");
+  psync_sql_run_free(q);
   
   *err  = 0;
   if(psync_my_auth[0]) {
@@ -395,7 +399,6 @@ int chache_links(char **err /*OUT*/) {
     return 0;
   }
 
-  psync_sql_res *q;
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
 
@@ -703,9 +706,12 @@ int chache_upload_links(char **err /*OUT*/) {
   const binresult *publinks, *meta;
   binresult *link;
   int i, linkscnt;
+  psync_sql_res *q;
   
   *err  = 0;
- 
+  
+  q=psync_sql_prep_statement("DELETE FROM links WHERE isincomming = 1 ");
+  psync_sql_run_free(q);
   
   if(psync_my_auth[0]) {
     binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
@@ -750,7 +756,6 @@ int chache_upload_links(char **err /*OUT*/) {
     psync_free(bres);
     return 0;
   }
-  psync_sql_res *q;
   for (i = 0; i < linkscnt; ++i) {
     link = publinks->array[i];
 
@@ -790,12 +795,8 @@ void cache_links_all()
 {
   char *err /*OUT*/ = NULL;
   int ret =0;
-  psync_sql_res *q;
   
   psync_sql_lock();
-  q=psync_sql_prep_statement("DELETE FROM links ");
-  psync_sql_run_free(q);
-  
   ret = chache_upload_links(&err);
   if (ret >= 0)
     ret += chache_links(&err);
