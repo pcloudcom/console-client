@@ -33,5 +33,6 @@
 pcontacts_list_t *do_psync_list_contacts();
 int do_call_contactlist(result_visitor vis, void *param);
 void cache_contacts();
+void cache_shares();
 
 #endif

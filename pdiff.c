@@ -2001,6 +2001,7 @@ static void psync_cache_contacts() {
   cache_account_teams();
   cache_links_all();
   cache_contacts();
+  cache_shares();
   psync_notify_cache_change(PACCOUNT_CHANGE_ALL);
 }
 
