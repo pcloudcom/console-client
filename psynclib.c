@@ -1132,12 +1132,15 @@ psync_share_list_t *psync_list_shares(int incoming){
   psync_list_bulder_add_sql(builder, res, create_share);
   
   } else {
-    res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, bsharedfolderid, 0 FROM sharedfolder WHERE isincoming=0 AND id >= 0 "
-                             " UNION ALL "
-                             "select id, folderid, ctime, permissions, case when isincoming = 0 and isteam = 1 then toteamid else touserid end as userid , "
-                               "case when isincoming = 0 and isteam = 1 then (select name from baccountteam where id = toteamid) "
-                               "else (select mail from baccountemail where id = touserid) end as mail,name, id, isteam from bsharedfolder where isincoming = 0 "
-                             " ORDER BY name");
+    res=psync_sql_query_rdlock("SELECT sf.id, sf.folderid, sf.ctime, sf.permissions, sf.userid, sf.mail, f.name as fname, sf.bsharedfolderid, 0 "
+                               " FROM sharedfolder sf, folder f WHERE sf.isincoming=0 AND sf.id >= 0 and sf.folderid = f.id "
+                               " UNION ALL "
+                               "select bsf.id, bsf.folderid, bsf.ctime,  bsf.permissions, "
+                               "  case when bsf.isincoming = 0 and bsf.isteam = 1 then bsf.toteamid else bsf.touserid end as userid , "
+                               "  case when bsf.isincoming = 0 and bsf.isteam = 1 then (select name from baccountteam where id = bsf.toteamid) "
+                               "  else (select mail from baccountemail where id = bsf.touserid) end as mail, "
+                               "  f.name as fname, bsf.id, bsf.isteam from bsharedfolder bsf, folder f where bsf.isincoming = 0 "
+                               "  and bsf.folderid = f.id ORDER BY fname ");
     psync_list_bulder_add_sql(builder, res, create_share);
   }
   
