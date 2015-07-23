@@ -1509,17 +1509,27 @@ static void process_acceptedshareout(const binresult *entry){
 
 static void process_establishbshareout(const binresult *entry) {
   psync_sql_res *q;
-  const binresult *share, *br;
+  const binresult *share, *br, *ownid;
   char *email = 0;
+  int isincomming =  0;
+  uint64_t folderowneruserid, owneruserid;
   
   if (!entry)
     return;
+  
   share=psync_find_result(entry, "share", PARAM_HASH);
+  ownid =  psync_check_result(share, "folderowneruserid", PARAM_NUM);
+  if(ownid) {
+    folderowneruserid = ownid->num;
+    owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+    isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+  }
+  
   send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
   
-  q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, isincoming, folderid, ctime, permissions, message, name, isuser, "
-                                                          "touserid, isteam, toteamid, fromuserid, folderownerid)"
-                                                "VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, folderid, ctime, permissions, message, name, isuser, "
+                                                          "touserid, isteam, toteamid, fromuserid, folderownerid, isincoming)"
+                                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
@@ -1537,6 +1547,7 @@ static void process_establishbshareout(const binresult *entry) {
   psync_sql_bind_int(q, 10, psync_find_result(share, "toteamid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 11, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 12, psync_find_result(share, "folderownerid", PARAM_NUM)->num);
+  psync_sql_bind_int(q, 13, isincomming);
 
   psync_sql_run_free(q);
   debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
