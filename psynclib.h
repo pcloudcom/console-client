@@ -904,7 +904,7 @@ void psync_run_new_version(psync_new_version_t *ver);
  * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
  *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
  *                            pointer.
- *  psync_get_path_by_fileid() - returns full path (including mountpoint) of a given fileid on the filesystem or
+ *  psync_get_path_by_fileid() - returns path (without mountpoint) of a given fileid on the filesystem or
  *                            NULL if it is not mounted or parent folder could not be found. You are supposed to free the returned
  *                            pointer.
  *
