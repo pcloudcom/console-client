@@ -1379,19 +1379,21 @@ static void process_requestsharein(const binresult *entry){
 
 static void process_requestshareout(const binresult *entry){
   psync_sql_res *q;
-  const binresult *share, *br;
+  const binresult *share, *br, *ownid;
   int isincomming =  0;
   uint64_t folderowneruserid, owneruserid;
   
   if (!entry)
     return;
   
-  
-  folderowneruserid =  psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
-  owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
-  isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
-  
   share=psync_find_result(entry, "share", PARAM_HASH);
+  ownid =  psync_check_result(share, "folderowneruserid", PARAM_NUM);
+  if(ownid) {
+    folderowneruserid = ownid->num;
+    owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+    isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+  }
+  
   send_share_notify(PEVENT_SHARE_REQUESTOUT, share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming) "
                                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
