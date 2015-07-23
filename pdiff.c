@@ -1378,27 +1378,30 @@ static void process_requestsharein(const binresult *entry){
 }
 
 static void process_requestshareout(const binresult *entry){
-  psync_sql_res *q;
-  const binresult *share, *br, *ownid;
+  psync_sql_res *q, *res;
+  const binresult *share, *br;
   int isincomming =  0;
-  uint64_t folderowneruserid, owneruserid;
+  uint64_t folderowneruserid = 0, owneruserid, folderid;
+  psync_uint_row row;
   
   if (!entry)
     return;
   
   share=psync_find_result(entry, "share", PARAM_HASH);
-  ownid =  psync_check_result(share, "folderowneruserid", PARAM_NUM);
-  if(ownid) {
-    folderowneruserid = ownid->num;
-    owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
-    isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
-  }
+  folderid = psync_find_result(share, "folderid", PARAM_NUM)->num;
+  
+  res=psync_sql_query("SELECT userid FROM folder WHERE id=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    folderowneruserid = row[0];
+  owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+  isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   
   send_share_notify(PEVENT_SHARE_REQUESTOUT, share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming) "
                                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
-  psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
+  psync_sql_bind_uint(q, 2, folderid);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 5, psync_get_permissions(share));
@@ -1518,10 +1521,10 @@ static void process_establishbshareout(const binresult *entry) {
     return;
   
   share=psync_find_result(entry, "share", PARAM_HASH);
-  ownid =  psync_check_result(share, "folderowneruserid", PARAM_NUM);
+  ownid =  psync_check_result(share, "folderownerid", PARAM_NUM);
   if(ownid) {
     folderowneruserid = ownid->num;
-    owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+    owneruserid =  psync_find_result(share, "fromuserid", PARAM_NUM)->num;
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   }
   
