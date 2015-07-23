@@ -904,6 +904,9 @@ void psync_run_new_version(psync_new_version_t *ver);
  * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
  *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
  *                            pointer.
+ *  psync_get_path_by_fileid() - returns full path (including mountpoint) of a given fileid on the filesystem or
+ *                            NULL if it is not mounted or parent folder could not be found. You are supposed to free the returned
+ *                            pointer.
  *
  */
 
@@ -913,7 +916,7 @@ void psync_fs_stop();
 char *psync_fs_getmountpoint();
 void psync_fs_register_start_callback(psync_generic_callback_t callback);
 char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
-
+char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen);
 
 /* psync_password_quality estimates password quality, returns one of:
  *   0 - weak
