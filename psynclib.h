@@ -432,6 +432,7 @@ typedef struct {
   uint64_t teamid;
   const char *mail;
   const char *name;
+  uint32_t type;
 } contact_info_t;
 
 

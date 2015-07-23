@@ -114,6 +114,7 @@ static int create_contact(psync_list_builder_t *builder, void *element, psync_va
   contact->name=str;
   psync_list_add_lstring_offset(builder, offsetof(contact_info_t, name), len);
   contact->teamid=psync_get_number(row[2]);
+  contact->type=psync_get_number(row[3]);
   return 0;
 }
 
@@ -121,11 +122,11 @@ pcontacts_list_t *do_psync_list_contacts() {
   psync_list_builder_t *builder;
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(contact_info_t), offsetof(pcontacts_list_t, entries));
-  res=psync_sql_query_rdlock("select mail, name , 0 as teamid from contacts "
+  res=psync_sql_query_rdlock("select mail, name , 0 as teamid, 1 as type from contacts "
                              "union all "
-                             "select  mail, (firstname||' '||lastname) as name, 0 as teamid  from baccountemail "
+                             "select  mail, (firstname||' '||lastname) as name, 0 as teamid , 2 as type from baccountemail "
                              "union all "
-                             "select  '' as mail, name , id as teamid from baccountteam "
+                             "select  '' as mail, name , id as teamid, 3 as type from baccountteam "
                              "ORDER BY name "
   );
   psync_list_bulder_add_sql(builder, res, create_contact);
