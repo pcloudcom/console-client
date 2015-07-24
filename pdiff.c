@@ -1390,10 +1390,11 @@ static void process_requestshareout(const binresult *entry){
   share=psync_find_result(entry, "share", PARAM_HASH);
   folderid = psync_find_result(share, "folderid", PARAM_NUM)->num;
   
-  res=psync_sql_query("SELECT userid FROM folder WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT userid FROM folder WHERE id=?");
   psync_sql_bind_uint(res, 1, folderid);
   while ((row=psync_sql_fetch_rowint(res)))
     folderowneruserid = row[0];
+  psync_sql_free_result(res);
   owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
   isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   
