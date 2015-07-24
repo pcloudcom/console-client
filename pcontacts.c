@@ -268,6 +268,8 @@ void cache_shares() {
   int shcnt;
   psync_sql_res *q;
   
+  psync_sql_lock();
+  
   q=psync_sql_prep_statement("DELETE FROM sharerequest ");
   psync_sql_run_free(q);
   
@@ -338,4 +340,6 @@ void cache_shares() {
   }
 
   psync_free(bres);
+  
+  psync_sql_unlock();
 }
