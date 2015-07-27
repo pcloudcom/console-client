@@ -1072,6 +1072,7 @@ static int create_request(psync_list_builder_t *builder, void *element, psync_va
   request->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
   request->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
   request->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
+  request->isba=psync_get_number(row[8]);
   return 0;
 }
 
@@ -1080,7 +1081,7 @@ psync_sharerequest_list_t *psync_list_sharerequests(int incoming){
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(psync_sharerequest_t), offsetof(psync_sharerequest_list_t, sharerequests));
   incoming=!!incoming;
-  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, message FROM sharerequest WHERE isincoming=? ORDER BY name");
+  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, message, isba FROM sharerequest WHERE isincoming=? ORDER BY name");
   psync_sql_bind_uint(res, 1, incoming);
   psync_list_bulder_add_sql(builder, res, create_request);
   return (psync_sharerequest_list_t *)psync_list_builder_finalize(builder);

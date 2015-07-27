@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 14
+#define PSYNC_DATABASE_VERSION 15
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS ktaskitemid ON task(itemid);\
 CREATE INDEX IF NOT EXISTS ktasklocalitemid ON task(localitemid);\
 CREATE TABLE IF NOT EXISTS hashchecksum (hash INTEGER, size INTEGER, checksum TEXT, PRIMARY KEY (hash, size)) " P_SQL_WOWROWID ";\
 CREATE TABLE IF NOT EXISTS sharerequest (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, etime INTEGER, permissions INTEGER,\
-  userid INTEGER, mail TEXT, name VARCHAR(1024), message TEXT);\
+  userid INTEGER, mail TEXT, name VARCHAR(1024), message TEXT, isba INTEGER);\
 CREATE TABLE IF NOT EXISTS sharedfolder (id INTEGER PRIMARY KEY, isincoming INTEGER, folderid INTEGER, ctime INTEGER, permissions INTEGER,\
   userid INTEGER, mail TEXT, name VARCHAR(1024), bsharedfolderid INTEGER);\
 CREATE TABLE IF NOT EXISTS pagecache (id INTEGER PRIMARY KEY, hash INTEGER, pageid INTEGER, type INTEGER, flags INTEGER,\
@@ -247,10 +247,14 @@ id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxsp
 downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER); \
 CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048), name TEXT); \
 UPDATE setting SET value=13 WHERE id='dbversion'; \
-COMMIT;"
+COMMIT;",
 "BEGIN;\
 ALTER TABLE links ADD icon INTEGER; \
 UPDATE setting SET value=14 WHERE id='dbversion'; \
+COMMIT;",
+"BEGIN;\
+ALTER TABLE sharerequest ADD isba INTEGER; \
+UPDATE setting SET value=15 WHERE id='dbversion'; \
 COMMIT;"
 };
 

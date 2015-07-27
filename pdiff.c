@@ -1399,8 +1399,8 @@ static void process_requestshareout(const binresult *entry){
   isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   
   send_share_notify(PEVENT_SHARE_REQUESTOUT, share);
-  q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming) "
-                                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
+                                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, folderid);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -1417,6 +1417,7 @@ static void process_requestshareout(const binresult *entry){
   else
     psync_sql_bind_null(q, 9);
   psync_sql_bind_uint(q, 10, isincomming);
+  psync_sql_bind_uint(q, 11, isincomming);
   psync_sql_run_free(q);
 }
 
