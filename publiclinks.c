@@ -652,6 +652,7 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
   link_cont_t *pcont;
   const binresult *contents = 0, *meta = 0, *link = 0, *br =0;
   uint32_t concnt = 0, i = 0;
+  plink_contents_t *ret = 0;
   *err = 0;
   
   binparam params[] = {P_STR("auth", psync_my_auth),P_STR("timeformat", "timestamp"), P_STR("iconformat","id"), P_STR("code", code)};
@@ -690,8 +691,9 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
       }
       pcont->icon = psync_find_result(link, "icon", PARAM_NUM)->num;
     }
+    ret = (plink_contents_t *)psync_list_builder_finalize(builder);
     psync_free(bres);
-    return (plink_contents_t *)psync_list_builder_finalize(builder);
+    return ret;
   }
   psync_free(bres);
   return 0;
