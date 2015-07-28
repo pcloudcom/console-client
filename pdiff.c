@@ -1253,16 +1253,19 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     psync_sql_res *res;
     psync_variant_row row;
     const char *cstr;
+   
     if ((br=psync_check_result(share, "shareid", PARAM_NUM)))
-      res=psync_sql_query("SELECT name, ctime FROM sharedfolder WHERE id=? or id = - ?");
+      if (isba)
+        res=psync_sql_query("SELECT name, ctime FROM bsharedfolder WHERE id=? ");
+      else
+        res=psync_sql_query("SELECT name, ctime FROM sharedfolder WHERE id=? ");
     else if ((br=psync_check_result(share, "sharerequestid", PARAM_NUM)))
-      res=psync_sql_query("SELECT name, ctime FROM sharerequest WHERE id=? or id = ?");
+      res=psync_sql_query("SELECT name, ctime FROM sharerequest WHERE id=? ");
     else {
       debug(D_WARNING, "Neither sharename, shareid or sharerequestid found for eventtype %u", (unsigned)eventid);
       return;
     }
     psync_sql_bind_uint(res, 1, br->num);
-    psync_sql_bind_uint(res, 2, br->num);
     if ((row=psync_sql_fetch_row(res))){
       cstr=psync_get_lstring(row[0], &sharenamelen);
       stringslen+=++sharenamelen;
