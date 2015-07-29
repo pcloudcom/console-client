@@ -811,3 +811,18 @@ void cache_links_all()
       psync_free(err);
   }
 }
+
+void delete_all_links(psync_folderid_t folderid, psync_fileid_t fileid){
+  psync_sql_res *res;
+  psync_variant_row row;
+
+  cache_links_all();
+  res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where folderid = ? or fileid = ? ");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_uint(res, 2, fileid);
+
+  while ((row=psync_sql_fetch_row(res))){
+    
+  }
+  
+}
