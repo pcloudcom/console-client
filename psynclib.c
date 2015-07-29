@@ -1641,10 +1641,10 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
 }
 
 int psync_delete_all_links_folder(psync_folderid_t folderid, char**err) {
-  return do_delete_all_links(folderid, -1, err);
+  return do_delete_all_folder_links(folderid, err);
 }
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err){
-  return do_delete_all_links(-1, fileid, err);
+  return do_delete_all_file_links(fileid, err);
 }
 
 

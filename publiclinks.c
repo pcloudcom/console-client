@@ -833,3 +833,45 @@ int do_delete_all_links(int64_t folderid, int64_t fileid, char**err) {
   }
   return 0;
 }
+
+int do_delete_all_folder_links(psync_folderid_t folderid, char**err) {
+  psync_sql_res *res;
+  psync_uint_row row;
+  int ret = 0;
+
+  cache_links_all();
+  res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where folderid = ? ");
+  psync_sql_bind_uint(res, 1, folderid);
+
+  while ((row=psync_sql_fetch_rowint(res))){
+    if (row[3]) {
+      ret = do_psync_delete_upload_link(row[0],err);
+      if (ret) return ret;
+    } else {
+      ret = do_psync_delete_link(row[0],err);
+      if (ret) return ret;
+    }
+  }
+  return 0;
+}
+
+int do_delete_all_file_links(psync_fileid_t fileid, char**err) {
+  psync_sql_res *res;
+  psync_uint_row row;
+  int ret = 0;
+
+  cache_links_all();
+  res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where fileid = ? ");
+  psync_sql_bind_uint(res, 1, fileid);
+
+  while ((row=psync_sql_fetch_rowint(res))){
+    if (row[3]) {
+      ret = do_psync_delete_upload_link(row[0],err);
+      if (ret) return ret;
+    } else {
+      ret = do_psync_delete_link(row[0],err);
+      if (ret) return ret;
+    }
+  }
+  return 0;
+}
