@@ -839,7 +839,6 @@ int do_delete_all_folder_links(psync_folderid_t folderid, char**err) {
   psync_uint_row row;
   int ret = 0;
 
-  cache_links_all();
   res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where folderid = ? ");
   psync_sql_bind_uint(res, 1, folderid);
 
@@ -860,7 +859,6 @@ int do_delete_all_file_links(psync_fileid_t fileid, char**err) {
   psync_uint_row row;
   int ret = 0;
 
-  cache_links_all();
   res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where fileid = ? ");
   psync_sql_bind_uint(res, 1, fileid);
 
