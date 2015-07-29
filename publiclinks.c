@@ -812,17 +812,24 @@ void cache_links_all()
   }
 }
 
-void delete_all_links(psync_folderid_t folderid, psync_fileid_t fileid){
+int do_delete_all_links(int64_t folderid, int64_t fileid, char**err) {
   psync_sql_res *res;
-  psync_variant_row row;
+  psync_uint_row row;
+  int ret = 0;
 
   cache_links_all();
   res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where folderid = ? or fileid = ? ");
-  psync_sql_bind_uint(res, 1, folderid);
-  psync_sql_bind_uint(res, 2, fileid);
+  psync_sql_bind_int(res, 1, folderid);
+  psync_sql_bind_int(res, 2, fileid);
 
-  while ((row=psync_sql_fetch_row(res))){
-    
+  while ((row=psync_sql_fetch_rowint(res))){
+    if (row[3]) {
+      ret = do_psync_delete_upload_link(row[0],err);
+      if (ret) return ret;
+    } else {
+      ret = do_psync_delete_link(row[0],err);
+      if (ret) return ret;
+    }
   }
-  
+  return 0;
 }

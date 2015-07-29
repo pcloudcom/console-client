@@ -1050,6 +1050,9 @@ external_status psync_status_folder(const char *path);
  * 
  * psync_sow_link() Lists link contents. Returns list of contents for folders and virtial folders or empty pointer and err is filled with string representation of the error.
  * 
+ * psync_delete_all_links_folder() Deletes all link for given folderid. Stops on first error and returns error msg.
+ * psync_delete_all_links_file() Deletes all link for given fileid.  Stops on first error and returns error msg.
+ * 
  * REMINDER. You have to free the out parameters passed as pointers to the library as it reserves memory for them but does not cleans it. You will have to iterate 
  * though entire entires[] array and free all codes and names and comments if not empty before feeing entire info with separate call.
  * 
@@ -1065,8 +1068,11 @@ int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
+int psync_delete_all_links_folder(psync_folderid_t folderid, char**err); 
+int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
+
 /*
- * Publik links API functions. 
+ * Publik contacts API functions. 
  * 
  * psync_list_contacts() Lists cached contacts emails from the buissiness account and team names.
  * */

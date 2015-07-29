@@ -1640,6 +1640,14 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   return do_psync_delete_upload_link(uploadlinkid, err);
 }
 
+int psync_delete_all_links_folder(psync_folderid_t folderid, char**err) {
+  return do_delete_all_links(folderid, -1, err);
+}
+int psync_delete_all_links_file(psync_fileid_t fileid, char**err){
+  return do_delete_all_links(-1, fileid, err);
+}
+
+
 pcontacts_list_t *psync_list_contacts() {
   return do_psync_list_contacts();
 }
