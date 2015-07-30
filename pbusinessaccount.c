@@ -75,8 +75,10 @@ static int handle_result(const binresult *bres, uint64_t result, char **err)
   psync_process_api_error(result);
   if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
     return -result;
-  else
+  else {
+    *err = psync_strndup("Connection error.", 17);
     return -1;
+  }
 }
 
 int do_psync_account_stopshare(psync_shareid_t usershareids[], int nusershareid, psync_shareid_t teamshareids[], int nteamshareid, char **err) {

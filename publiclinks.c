@@ -67,6 +67,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     
@@ -88,6 +89,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     api=psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres =  do_send_command(api, "getfilepublink", sizeof("getfilepublink") - 1, t, pind, -1, 1);
@@ -100,6 +102,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -110,8 +113,10 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else { 
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
   
   rescode = psync_find_result(bres, "code", PARAM_STR)->str;
@@ -140,6 +145,7 @@ int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char 
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     
@@ -162,6 +168,7 @@ int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char 
     api=psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres =  do_send_command(api, "getfolderpublink", sizeof("getfolderpublink") - 1, t, pind, -1, 1);
@@ -183,8 +190,10 @@ int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char 
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
   
   rescode = psync_find_result(bres, "code", PARAM_STR)->str;
@@ -296,6 +305,7 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   api=psync_apipool_get();
   if (unlikely(!api)) {
     debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   
@@ -306,6 +316,7 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -316,8 +327,10 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
   
   rescode = psync_find_result(bres, "code", PARAM_STR)->str;
@@ -360,6 +373,7 @@ int chache_links(char **err /*OUT*/) {
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres = send_command(api, "listpublinks", params);
@@ -368,6 +382,7 @@ int chache_links(char **err /*OUT*/) {
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres = send_command(api, "listpublinks", params);
@@ -377,6 +392,7 @@ int chache_links(char **err /*OUT*/) {
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return 0;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -387,8 +403,10 @@ int chache_links(char **err /*OUT*/) {
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return 0;
+    }
   }
   
   publinks=psync_find_result(bres, "publinks", PARAM_ARRAY);
@@ -444,6 +462,7 @@ int do_psync_delete_link(int64_t linkid, char **err /*OUT*/) {
   api = psync_apipool_get();
   if (unlikely(!api)) {
     debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   
@@ -455,6 +474,7 @@ int do_psync_delete_link(int64_t linkid, char **err /*OUT*/) {
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -465,8 +485,10 @@ int do_psync_delete_link(int64_t linkid, char **err /*OUT*/) {
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
  
   
@@ -490,6 +512,7 @@ int64_t do_psync_upload_link(const char *path, const char *comment, char **code 
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     
@@ -513,6 +536,7 @@ int64_t do_psync_upload_link(const char *path, const char *comment, char **code 
     api=psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres =  do_send_command(api, "createuploadlink", sizeof("createuploadlink") - 1, t, pind, -1, 1);
@@ -524,6 +548,7 @@ int64_t do_psync_upload_link(const char *path, const char *comment, char **code 
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -534,8 +559,10 @@ int64_t do_psync_upload_link(const char *path, const char *comment, char **code 
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
   
   rescode = psync_find_result(bres, "code", PARAM_STR)->str;
@@ -563,6 +590,7 @@ int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   api = psync_apipool_get();
   if (unlikely(!api)) {
     debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   
@@ -574,6 +602,7 @@ int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -584,8 +613,10 @@ int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
  
   
@@ -720,6 +751,7 @@ int chache_upload_links(char **err /*OUT*/) {
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres = send_command(api, "listuploadlinks", params);
@@ -728,6 +760,7 @@ int chache_upload_links(char **err /*OUT*/) {
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      *err = psync_strndup("Connection error.", 17);
       return -2;
     }
     bres = send_command(api, "listuploadlinks", params);
@@ -737,6 +770,7 @@ int chache_upload_links(char **err /*OUT*/) {
   else {
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
     return -2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
@@ -747,8 +781,10 @@ int chache_upload_links(char **err /*OUT*/) {
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
       return -result;
-    else
+    else {
+      *err = psync_strndup("Connection error.", 17);
       return -1;
+    }
   }
   
   publinks=psync_find_result(bres, "uploadlinks", PARAM_ARRAY);
