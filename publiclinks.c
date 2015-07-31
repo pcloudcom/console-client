@@ -353,7 +353,7 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
   
 }
 
-int chache_links(char **err /*OUT*/) {
+int cache_links(char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
@@ -730,7 +730,7 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
   return 0;
 } 
 
-int chache_upload_links(char **err /*OUT*/) {
+int cache_upload_links(char **err /*OUT*/) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
@@ -835,9 +835,9 @@ void cache_links_all()
   int ret =0;
   
   psync_sql_lock();
-  ret = chache_upload_links(&err);
+  ret = cache_upload_links(&err);
   if (ret >= 0)
-    ret += chache_links(&err);
+    ret += cache_links(&err);
   psync_sql_unlock();
   
   if (ret < 0) {
@@ -853,7 +853,6 @@ int do_delete_all_links(int64_t folderid, int64_t fileid, char**err) {
   psync_uint_row row;
   int ret = 0;
 
-  cache_links_all();
   res=psync_sql_query_rdlock("SELECT id, folderid, fileid, isincomming FROM links where folderid = ? or fileid = ? ");
   psync_sql_bind_int(res, 1, folderid);
   psync_sql_bind_int(res, 2, fileid);

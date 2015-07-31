@@ -42,8 +42,8 @@ int do_psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 plink_contents_t *do_show_link(const char *code, char **err /*OUT*/);
 
 void cache_links_all();
-int chache_upload_links(char **err /*OUT*/);
-int chache_links(char **err /*OUT*/);
+int cache_upload_links(char **err /*OUT*/);
+int cache_links(char **err /*OUT*/);
 
 int do_delete_all_folder_links(psync_folderid_t folderid, char**err);
 int do_delete_all_file_links(psync_fileid_t fileid, char**err);

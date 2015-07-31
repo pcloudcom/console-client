@@ -159,8 +159,8 @@ static void process_shares_out(const binresult *shares_out, int shcnt) {
     psync_sql_bind_uint(q, 5, psync_find_result(share, "touserid", PARAM_NUM)->num);
     br=psync_find_result(share, "tomail", PARAM_STR);
     psync_sql_bind_lstring(q, 6, br->str, br->length);
-    if(!(br=psync_check_result(share, "sharename", PARAM_STR)))
-      br=psync_check_result(share, "foldername", PARAM_STR);
+    if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
     psync_sql_bind_lstring(q, 7, br->str, br->length);
     psync_sql_bind_uint(q, 8, isincomming);
     psync_sql_run_free(q);
@@ -186,8 +186,8 @@ static void process_shares_in(const binresult *shares_in, int shcnt) {
     psync_sql_bind_uint(q, 5, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
     br=psync_find_result(share, "frommail", PARAM_STR);
     psync_sql_bind_lstring(q, 6, br->str, br->length);
-    if(!(br=psync_check_result(share, "sharename", PARAM_STR)))
-      br=psync_check_result(share, "foldername", PARAM_STR);
+    if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
     psync_sql_bind_lstring(q, 7, br->str, br->length);
     psync_sql_run_free(q);
   }
@@ -218,7 +218,8 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
     psync_sql_bind_null(q, 6);
     br=psync_find_result(share, "tomail", PARAM_STR);
     psync_sql_bind_lstring(q, 7, br->str, br->length);
-    br=psync_find_result(share, "sharename", PARAM_STR);
+    if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
     psync_sql_bind_lstring(q, 8, br->str, br->length);
     br=psync_check_result(share, "message", PARAM_STR);
     if (br)
@@ -249,7 +250,8 @@ static void process_shares_req_in(const binresult *shares_in, int shcnt) {
     psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
     br=psync_find_result(share, "frommail", PARAM_STR);
     psync_sql_bind_lstring(q, 7, br->str, br->length);
-    br=psync_find_result(share, "sharename", PARAM_STR);
+    if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
     psync_sql_bind_lstring(q, 8, br->str, br->length);
     br=psync_check_result(share, "message", PARAM_STR);
     if (br)

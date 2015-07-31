@@ -1243,7 +1243,7 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     message=NULL;
     messagelen=0;
   }
-  if ((br=psync_check_result(share, "sharename", PARAM_STR))){
+  if ((br=psync_check_result(share, "foldername", PARAM_STR)) || ( br=psync_check_result(share, "sharename", PARAM_STR))){
     sharename=(char *)br->str;
     sharenamelen=br->length+1;
     stringslen+=br->length+1;
@@ -1370,7 +1370,8 @@ static void process_requestsharein(const binresult *entry){
   psync_sql_bind_uint(q, 6, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
-  br=psync_find_result(share, "sharename", PARAM_STR);
+  if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 8, br->str, br->length);
   br=psync_check_result(share, "message", PARAM_STR);
   if (br)
@@ -1412,7 +1413,8 @@ static void process_requestshareout(const binresult *entry){
   psync_sql_bind_null(q, 6);
   br=psync_find_result(share, "tomail", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
-  br=psync_find_result(share, "sharename", PARAM_STR);
+  if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 8, br->str, br->length);
   br=psync_check_result(share, "message", PARAM_STR);
   if (br)
@@ -1444,7 +1446,8 @@ static void process_acceptedsharein(const binresult *entry){
   psync_sql_bind_uint(q, 5, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   br=psync_find_result(share, "frommail", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
-  br=psync_find_result(share, "sharename", PARAM_STR);
+  if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 7, br->str, br->length);
   psync_sql_run_free(q);
 }
@@ -1470,7 +1473,8 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   br=psync_find_result(share, "message", PARAM_STR);
   psync_sql_bind_lstring(q, 5, br->str, br->length);
-  br=psync_find_result(share, "sharename", PARAM_STR);
+  if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
   psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_BOOL)->num);
   psync_sql_bind_int(q, 8, psync_find_result(share, "touserid", PARAM_NUM)->num);
@@ -1509,7 +1513,8 @@ static void process_acceptedshareout(const binresult *entry){
     psync_sql_bind_uint(q, 5, psync_find_result(share, "touserid", PARAM_NUM)->num);
     br=psync_find_result(share, "tomail", PARAM_STR);
     psync_sql_bind_lstring(q, 6, br->str, br->length);
-    br=psync_find_result(share, "sharename", PARAM_STR);
+    if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
     psync_sql_bind_lstring(q, 7, br->str, br->length);
     psync_sql_run_free(q);
   }
@@ -1547,7 +1552,8 @@ static void process_establishbshareout(const binresult *entry) {
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   br=psync_find_result(share, "message", PARAM_STR);
   psync_sql_bind_lstring(q, 5, br->str, br->length);
-  br=psync_find_result(share, "sharename", PARAM_STR);
+  if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
+      br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
   psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_BOOL)->num);
   psync_sql_bind_int(q, 8, psync_find_result(share, "touserid", PARAM_NUM)->num);
@@ -2169,7 +2175,7 @@ restart:
         }
         else if (entries->length==8 && !strcmp(entries->str, "publinks")){
           ids.publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num; 
-          ret = chache_links(&err);
+          ret = cache_links(&err);
           if (ret < 0)
             debug(D_ERROR, "Cacheing links faild with err %s", err);
           else
@@ -2177,7 +2183,7 @@ restart:
         }
         else if (entries->length==11 && !strcmp(entries->str, "uploadlinks")){
           ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num; 
-          ret = chache_upload_links(&err);
+          ret = cache_upload_links(&err);
           if (ret < 0)
             debug(D_ERROR, "Cacheing upload links failed with err %s", err);
           else
