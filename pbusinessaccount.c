@@ -396,8 +396,6 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
     psync_sql_run_free(q);
   }
   psync_sql_free_result(res);
-  
-  
 }
 
 int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param) {
