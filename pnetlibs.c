@@ -1229,6 +1229,18 @@ psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *host
   return hsock;
 }
 
+int psync_http_request_range_additional(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr){
+  int rl;
+  if (unlikely(!addhdr))
+    return psync_http_request(sock, host, path, from, to);
+  rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64
+                  "\015\012Connection: Keep-Alive\015\012%s\015\012",
+                  path, host, from, to, addhdr);
+  if (unlikely(rl>=PSYNC_HTTP_RESP_BUFFER-1))
+    return psync_http_request(sock, host, path, from, to);
+  return psync_socket_writeall(sock->sock, sock->readbuff, rl)==rl?0:-1;
+}
+
 int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to){
   int rl;
   if (from || to){
