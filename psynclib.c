@@ -1081,7 +1081,7 @@ psync_sharerequest_list_t *psync_list_sharerequests(int incoming){
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(psync_sharerequest_t), offsetof(psync_sharerequest_list_t, sharerequests));
   incoming=!!incoming;
-  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, message, isba FROM sharerequest WHERE isincoming=? ORDER BY name");
+  res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, mail, name, message, ifnull(isba, 0) FROM sharerequest WHERE isincoming=? ORDER BY name");
   psync_sql_bind_uint(res, 1, incoming);
   psync_list_bulder_add_sql(builder, res, create_request);
   return (psync_sharerequest_list_t *)psync_list_builder_finalize(builder);
