@@ -737,7 +737,7 @@ int cache_upload_links(char **err /*OUT*/) {
   const char *errorret;
   const char *charfiled;
   const binresult *publinks, *meta;
-  binresult *link;
+  binresult *link; const binresult *br;
   int i, linkscnt;
   psync_sql_res *q;
   
@@ -806,7 +806,10 @@ int cache_upload_links(char **err /*OUT*/) {
     charfiled =  psync_find_result(link, "comment", PARAM_STR)->str;
     psync_sql_bind_lstring(q, 3, charfiled, strlen(charfiled));
     psync_sql_bind_uint(q, 4, psync_find_result(link, "space", PARAM_NUM)->num);
-    psync_sql_bind_uint(q, 5, psync_find_result(link, "maxspace", PARAM_NUM)->num);
+    if((br = psync_check_result(link, "maxspace", PARAM_NUM)))
+      psync_sql_bind_uint(q, 5, br->num);
+    else
+      psync_sql_bind_uint(q, 5, 0);
     psync_sql_bind_uint(q, 6, psync_find_result(link, "files", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 7, psync_find_result(link, "created", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 8, psync_find_result(link, "modified", PARAM_NUM)->num);
