@@ -861,6 +861,12 @@ int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_
 
 int psync_remove_share(psync_shareid_t shareid, char **err);
 
+/* Removes established business account share.
+ *
+ * Return value same as psync_share_folder.
+ */
+int psync_account_stopshare(psync_shareid_t shareid, char **err);
+
 /* Removes established share. Can be called by both receiving and sharing user.
  *
  * Return value same as psync_share_folder.

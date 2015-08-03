@@ -1189,7 +1189,7 @@ int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_
   }
 }
 
-static int psync_account_stopshare(psync_shareid_t shareid, char **err) {
+int psync_account_stopshare(psync_shareid_t shareid, char **err) {
   psync_shareid_t shareidarr[] = {shareid};
   debug(D_NOTICE, "shareidarr %lld", (long long)shareidarr[0]);
   int result =  do_psync_account_stopshare(shareidarr, 1, shareidarr, 1, err);

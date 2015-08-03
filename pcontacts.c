@@ -215,7 +215,7 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 4, psync_find_result(share, "expires", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 5, psync_get_permissions(share));
-    psync_sql_bind_null(q, 6);
+    psync_sql_bind_uint(q, 6, folderowneruserid);
     br=psync_find_result(share, "tomail", PARAM_STR);
     psync_sql_bind_lstring(q, 7, br->str, br->length);
     if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
