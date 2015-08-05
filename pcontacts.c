@@ -146,7 +146,7 @@ static void process_shares_out(const binresult *shares_out, int shcnt) {
     share = shares_out->array[i];
     
     folderowneruserid =  psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
-    owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+	psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
 
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, folderid, ctime, permissions, userid, mail, name, isincoming) "
