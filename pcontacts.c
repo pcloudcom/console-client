@@ -199,17 +199,22 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
   psync_sql_res *q;
   int i, isincomming =  0;
   uint64_t folderowneruserid, owneruserid;
+  psync_sql_res *res;
+  psync_uint_row row;
  
   
   for (i = 0; i < shcnt; ++i) {
     share = shares_out->array[i];
     
     folderowneruserid =  psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
-    owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+	res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
+	while ((row = psync_sql_fetch_rowint(res)))
+		owneruserid = row[0];
+	psync_sql_free_result(res);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
 
-    q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message,  isincoming) "
-                                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message,  isincoming, isba) "
+                                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -226,7 +231,8 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
       psync_sql_bind_lstring(q, 9, br->str, br->length);
     else
       psync_sql_bind_null(q, 9);
-    psync_sql_bind_uint(q, 10,isincomming);
+    psync_sql_bind_uint(q, 10, isincomming);
+	psync_sql_bind_uint(q, 11, isincomming);
     psync_sql_run_free(q);
   }
 }
@@ -234,14 +240,23 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
 static void process_shares_req_in(const binresult *shares_in, int shcnt) {
   const binresult *share;
   const binresult *br;
-  psync_sql_res *q;
-  int i;
+  psync_sql_res *q, *res;
+  int i, isincomming = 1;
+  uint64_t folderowneruserid, owneruserid;
+  psync_uint_row row;
   
   for (i = 0; i < shcnt; ++i) {
     share = shares_in->array[i];
 
-    q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, isincoming, folderid, ctime, etime, permissions, userid, mail, name, message) "
-                                                  "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
+	folderowneruserid = psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
+	res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
+	while ((row = psync_sql_fetch_rowint(res)))
+		owneruserid = row[0];
+	psync_sql_free_result(res);
+	isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+
+    q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
+                                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -258,6 +273,8 @@ static void process_shares_req_in(const binresult *shares_in, int shcnt) {
       psync_sql_bind_lstring(q, 9, br->str, br->length);
     else
       psync_sql_bind_null(q, 9);
+	psync_sql_bind_uint(q, 10, isincomming);
+	psync_sql_bind_uint(q, 11, !isincomming);
     psync_sql_run_free(q);
   }
 }

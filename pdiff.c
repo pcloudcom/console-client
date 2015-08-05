@@ -1354,14 +1354,32 @@ static void do_send_eventdata(void * param) {
 }
 
 static void process_requestsharein(const binresult *entry){
-  psync_sql_res *q;
+  psync_sql_res *q, *res;
   const binresult *share, *br;
+  int isincomming = 1;
+  uint64_t folderowneruserid = 0, owneruserid, folderid;
+  psync_uint_row row;
+
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
+  folderid = psync_find_result(share, "folderid", PARAM_NUM)->num;
+  res = psync_sql_query_rdlock("SELECT userid FROM folder WHERE id=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  while ((row = psync_sql_fetch_rowint(res)))
+	  folderowneruserid = row[0];
+  psync_sql_free_result(res);
+
+  res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
+  while ((row = psync_sql_fetch_rowint(res)))
+	  owneruserid = row[0];
+  psync_sql_free_result(res);
+  isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+
+
   send_share_notify(PEVENT_SHARE_REQUESTIN, share);
-  q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, isincoming, folderid, ctime, etime, permissions, userid, mail, name, message) "
-                                                "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)");
+  q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
+                                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -1378,6 +1396,8 @@ static void process_requestsharein(const binresult *entry){
     psync_sql_bind_lstring(q, 9, br->str, br->length);
   else
     psync_sql_bind_null(q, 9);
+  psync_sql_bind_uint(q, 10, isincomming);
+  psync_sql_bind_uint(q, 11, !isincomming);
   psync_sql_run_free(q);
 }
 
@@ -1399,7 +1419,12 @@ static void process_requestshareout(const binresult *entry){
   while ((row=psync_sql_fetch_rowint(res)))
     folderowneruserid = row[0];
   psync_sql_free_result(res);
-  owneruserid =  psync_find_result(share, "owneruserid", PARAM_NUM)->num;
+
+  res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
+  while ((row = psync_sql_fetch_rowint(res)))
+	  owneruserid = row[0];
+  psync_sql_free_result(res);
+
   isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   
   send_share_notify(PEVENT_SHARE_REQUESTOUT, share);
