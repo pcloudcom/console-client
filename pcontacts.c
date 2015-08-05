@@ -199,18 +199,13 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
   psync_sql_res *q;
   int i, isincomming =  0;
   uint64_t folderowneruserid, owneruserid;
-  psync_sql_res *res;
-  psync_uint_row row;
  
   
   for (i = 0; i < shcnt; ++i) {
     share = shares_out->array[i];
     
     folderowneruserid =  psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
-	res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
-	while ((row = psync_sql_fetch_rowint(res)))
-		owneruserid = row[0];
-	psync_sql_free_result(res);
+    psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
 
     q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message,  isincoming, isba) "
@@ -240,19 +235,15 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
 static void process_shares_req_in(const binresult *shares_in, int shcnt) {
   const binresult *share;
   const binresult *br;
-  psync_sql_res *q, *res;
+  psync_sql_res *q; 
   int i, isincomming = 1;
   uint64_t folderowneruserid, owneruserid;
-  psync_uint_row row;
   
   for (i = 0; i < shcnt; ++i) {
     share = shares_in->array[i];
 
 	folderowneruserid = psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
-	res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
-	while ((row = psync_sql_fetch_rowint(res)))
-		owneruserid = row[0];
-	psync_sql_free_result(res);
+	psync_get_current_userid(&owneruserid);
 	isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
 
     q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "

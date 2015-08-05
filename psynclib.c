@@ -1656,3 +1656,24 @@ void psync_register_account_events_callback(paccount_cache_callback_t callback)
 {
   do_register_account_events_callback(callback);
 }
+
+void psync_get_current_userid(psync_userid_t* ret) {
+  psync_sql_res *res;
+  psync_uint_row row;
+  
+  res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
+  while ((row = psync_sql_fetch_rowint(res)))
+    *ret = row[0];
+  psync_sql_free_result(res);
+}
+
+void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t* ret) {
+  psync_sql_res *res;
+  psync_uint_row row;
+  
+  res=psync_sql_query_rdlock("SELECT userid FROM folder WHERE id=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    *ret = row[0];
+  psync_sql_free_result(res);
+}

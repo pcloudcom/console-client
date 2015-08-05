@@ -1109,6 +1109,9 @@ int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_t
  */
 void psync_register_account_events_callback(paccount_cache_callback_t callback);
 
+void psync_get_current_userid(psync_userid_t* /*OUT*/ ret);
+void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t* /*OUT*/ ret);
+
 #ifdef __cplusplus
 }
 #endif
