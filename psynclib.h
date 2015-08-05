@@ -343,7 +343,8 @@ typedef struct {
   psync_folderid_t folderid;
   time_t created;
   psync_userid_t userid;
-  const char *email;
+  const char *fromemail;
+  const char *toemail;
   const char *sharename;
   unsigned char permissions;
   unsigned char canread;

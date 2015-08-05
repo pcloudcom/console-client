@@ -1099,9 +1099,12 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   perms=psync_get_number(row[3]);
   share->userid=psync_get_number(row[4]);
   str=psync_get_lstring(row[5], &len);
-  share->email=str;
-  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, email), len);
+  share->toemail=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, toemail), len);
   str=psync_get_lstring(row[6], &len);
+  share->fromemail=str;
+  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, fromemail), len);
+  str=psync_get_lstring(row[7], &len);
   share->sharename=str;
   psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
   share->permissions=perms;
@@ -1110,11 +1113,11 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   share->canmodify=(perms&PSYNC_PERM_MODIFY)/PSYNC_PERM_MODIFY;
   share->candelete=(perms&PSYNC_PERM_DELETE)/PSYNC_PERM_DELETE;
   share->canmanage=(perms&PSYNC_PERM_MANAGE)/PSYNC_PERM_MANAGE;
-  if(psync_get_number(row[7]))
+  if(psync_get_number(row[8]))
     share->isba = 1;
   else 
     share->isba = 0;
-  share->isteam = psync_get_number(row[8]);
+  share->isteam = psync_get_number(row[9]);
   return 0;
 }
 
