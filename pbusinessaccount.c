@@ -314,6 +314,7 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
   const binresult *users;
   
   if (nids) { 
+    binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", ids) };
     ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
     idsp = ids;
     for (i = 0; i < nids; ++i) {
@@ -325,7 +326,6 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
     if (i > 0)
       *(idsp - 1) = '\0';
     
-    binparam params[] = {P_STR("auth", psync_my_auth),P_STR("timeformat", "timestamp"), P_STR("userids", ids)};
 
     sock = psync_apipool_get();
     bres = send_command(sock, "account_users", params);
