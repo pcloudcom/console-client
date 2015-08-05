@@ -297,7 +297,8 @@ typedef struct {
 typedef struct {
   psync_folderid_t folderid;
   const char *sharename;
-  const char *email;
+  const char *toemail;
+  const char *fromemail;
   const char *message;
   psync_userid_t userid;
   psync_shareid_t shareid;

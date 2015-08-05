@@ -54,8 +54,10 @@
 typedef struct {
   psync_eventtype_t eventid;
   psync_share_event_t *event_data;
-  uint64_t userid;
+  uint64_t touserid;
+  uint64_t fromuserid;
   uint64_t teamid;
+  
   char *str;
 } notify_paramst;
 
@@ -1210,7 +1212,8 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   int isba = 0;
   const binresult *permissions;
   uint64_t teamid = 0;
-  uint64_t userid = 0;
+  uint64_t touserid = 0;
+  uint64_t fromuserid = 0;
   
   if (initialdownload)
     return;
@@ -1225,9 +1228,15 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     } else isba = 1;
   }
   if (isba) {
-    teamid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
-    if (!teamid)
-      userid = br->num;
+    if((br=psync_check_result(share, "user", PARAM_BOOL)) && br->num)
+      touserid = psync_find_result(share, "touserid", PARAM_NUM)->num;
+    
+    if((br=psync_check_result(share, "team", PARAM_BOOL)) && br->num)
+      teamid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
+    
+    if((br=psync_check_result(share, "fromuserid", PARAM_NUM)))
+      fromuserid = br->num;
+
     stringslen+= ++emaillen;
   } else {
     email=(char *)br->str;
@@ -1323,12 +1332,14 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     notify_paramst *params = psync_malloc(sizeof(notify_paramst));
     params->eventid = eventid;
     params->event_data = e;
-    params->userid = userid;
+    params->touserid = touserid;
+    params->fromuserid = fromuserid;
     params->teamid = teamid;
     params->str = str;
     psync_run_thread1("Share notify", do_send_eventdata, params);
   } else {
-    fill_str(e->email, email, emaillen);
+    fill_str(e->toemail, email, emaillen);
+    fill_str(e->fromemail, email, emaillen);
     psync_send_eventdata(eventid, e);
   }
 }
@@ -1339,17 +1350,23 @@ static void do_send_eventdata(void * param) {
   size_t emaillen;
   char *str =  data->str;
 
-  if(data->userid)
-    get_ba_member_email(data->userid, &email, &emaillen);
-  else
+  get_ba_member_email(data->fromuserid, &email, &emaillen);
+  fill_str(data->event_data->fromemail, email, emaillen);
+   psync_free(email);
+   
+  if(data->touserid)
+    get_ba_member_email(data->touserid, &email, &emaillen);
+  else 
     get_ba_team_name(data->teamid, &email, &emaillen);
-  
+  fill_str(data->event_data->toemail, email, emaillen);
+  psync_free(email);
+ 
   if (email) {
     psync_diff_lock();
-    fill_str(data->event_data->email, email, emaillen);
     psync_send_eventdata(data->eventid, data->event_data);
     psync_diff_unlock();
   }
+  
   psync_free(param);
 }
 
@@ -1368,7 +1385,7 @@ static void process_requestsharein(const binresult *entry){
   isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
 
 
-  send_share_notify(PEVENT_SHARE_REQUESTIN, share);
+  send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
                                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
@@ -1407,7 +1424,7 @@ static void process_requestshareout(const binresult *entry){
   psync_get_current_userid(&owneruserid);
   isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   
-  send_share_notify(PEVENT_SHARE_REQUESTOUT, share);
+  send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
                                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_uint(q, 1, psync_find_result(share, "sharerequestid", PARAM_NUM)->num);
@@ -1509,12 +1526,13 @@ static void process_acceptedshareout(const binresult *entry){
   aff=psync_sql_affected_rows();
   psync_sql_free_result(q);
   if (aff) {
-    send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
       
     folderid = psync_find_result(share, "folderid", PARAM_NUM)->num;
     psync_get_folder_ownerid(folderid, &folderowneruserid);
     psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+    
+    send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
     
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, folderid, ctime, permissions, userid, mail, name, isincoming) "
                                                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
@@ -1552,7 +1570,7 @@ static void process_establishbshareout(const binresult *entry) {
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   }
   
-  send_share_notify(PEVENT_SHARE_ACCEPTOUT, share);
+  send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
   
   q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, folderid, ctime, permissions, message, name, isuser, "
                                                           "touserid, isteam, toteamid, fromuserid, folderownerid, isincoming)"
