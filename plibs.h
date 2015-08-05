@@ -51,7 +51,7 @@
 }
 
 #ifndef DEBUG_LEVEL
-#define DEBUG_LEVEL D_NOTICE
+#define DEBUG_LEVEL D_ERROR
 #endif
 
 #define IS_DEBUG (DEBUG_LEVEL>=D_WARNING)
