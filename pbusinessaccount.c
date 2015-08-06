@@ -589,7 +589,7 @@ void cache_ba_my_teams() {
   const binresult *users;
   const binresult *user;
   const binresult *teams;
-  
+  psync_sql_lock();
     binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", "me"), P_STR("showteams", "1"), P_STR("showeveryone", "1") };
 
     sock = psync_apipool_get();
@@ -620,4 +620,5 @@ void cache_ba_my_teams() {
   }
   
   psync_free(bres);
+  psync_sql_unlock();
 }
