@@ -31,6 +31,7 @@
 #include "psynclib.h"
 
 pcontacts_list_t *do_psync_list_contacts();
+pcontacts_list_t *do_psync_list_myteams();
 int do_call_contactlist(result_visitor vis, void *param);
 void cache_contacts();
 void cache_shares();

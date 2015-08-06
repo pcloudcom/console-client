@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 15
+#define PSYNC_DATABASE_VERSION 16
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048),
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
+CREATE TABLE IF NOT EXISTS myteams (id INTEGER PRIMARY KEY, name TEXT); \
 COMMIT;\
 "
 
@@ -255,6 +256,10 @@ COMMIT;",
 "BEGIN;\
 ALTER TABLE sharerequest ADD isba INTEGER; \
 UPDATE setting SET value=15 WHERE id='dbversion'; \
+COMMIT;",
+"BEGIN;\
+CREATE TABLE IF NOT EXISTS myteams (id INTEGER PRIMARY KEY, name TEXT);\
+UPDATE setting SET value=16 WHERE id='dbversion'; \
 COMMIT;"
 };
 

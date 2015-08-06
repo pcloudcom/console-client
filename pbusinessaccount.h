@@ -42,5 +42,6 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
 
 void cache_account_emails();
 void cache_account_teams();
+void cache_ba_my_teams();
 
 #endif //_PSYNC_BUSINESS_ACCOUNT_H

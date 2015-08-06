@@ -2071,6 +2071,7 @@ static void psync_cache_contacts() {
   cache_links_all();
   cache_contacts();
   cache_shares();
+  cache_ba_my_teams();
   psync_notify_cache_change(PACCOUNT_CHANGE_ALL);
 }
 
@@ -2224,6 +2225,7 @@ restart:
         }
         else if (entries->length==5 && !strcmp(entries->str, "teams")){
           cache_account_teams();
+          cache_ba_my_teams();
           psync_notify_cache_change(PACCOUNT_CHANGE_TEAMS);
         }
         else if (entries->length==5 && !strcmp(entries->str, "users")){

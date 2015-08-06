@@ -1658,6 +1658,10 @@ pcontacts_list_t *psync_list_contacts() {
   return do_psync_list_contacts();
 }
 
+pcontacts_list_t *psync_list_myteams() {
+  return do_psync_list_myteams();
+}
+
 void psync_register_account_events_callback(paccount_cache_callback_t callback)
 {
   do_register_account_events_callback(callback);

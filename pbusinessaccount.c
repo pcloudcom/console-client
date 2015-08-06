@@ -561,3 +561,63 @@ void cache_account_teams() {
   do_psync_account_teams(teamids, 0, &insert_cache_team, params);
   psync_sql_unlock();
 }
+
+static void cache_my_team(const binresult *team1) {
+  const char *nameret = 0;
+  const binresult *team;
+  uint64_t teamid = 0;
+  psync_sql_res *q;
+  
+  team = psync_find_result(team1, "team", PARAM_HASH);
+  
+  nameret = psync_find_result(team, "name", PARAM_STR)->str;
+  teamid = psync_find_result(team, "id", PARAM_NUM)->num;
+  
+  debug(D_NOTICE, "My Team name %s team id %lld\n", nameret,(long long)teamid);
+  if (teamid >= 0) {
+    q=psync_sql_prep_statement("REPLACE INTO myteams  (id, name) VALUES (?, ?)");
+    psync_sql_bind_uint(q, 1, teamid);
+    psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
+    psync_sql_run_free(q);
+  }
+}
+
+void cache_ba_my_teams() {
+  psync_socket *sock;
+  binresult *bres;
+  int i;
+  const binresult *users;
+  const binresult *user;
+  const binresult *teams;
+  
+    binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", "me"), P_STR("showteams", "1") };
+
+    sock = psync_apipool_get();
+    bres = send_command(sock, "account_users", params);
+
+  if (likely(bres))
+    psync_apipool_release(sock);
+  else {
+    psync_apipool_release_bad(sock);
+    debug(D_WARNING, "Send command returned invalid result.\n");
+    return;
+  }
+  
+  
+  users = psync_find_result(bres, "users", PARAM_ARRAY);
+  
+  if (!users->length) {
+    psync_free(bres);
+    debug(D_WARNING, "Account_users returned empty result!\n");
+    return;
+  } else {
+    user =  users->array[0];
+    teams = psync_find_result(user, "teams", PARAM_ARRAY);
+    if (teams->length) {
+       for (i = 0; i < teams->length; ++i)
+         cache_my_team(users->array[i]);
+    }
+  }
+  
+  psync_free(bres);
+}

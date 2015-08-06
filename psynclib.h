@@ -1083,10 +1083,15 @@ int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
  * Publik contacts API functions. 
  * 
  * psync_list_contacts() Lists cached contacts emails from the buissiness account and team names.
+ * 
+ * psync_list_myteams() Lists cached teams that you are member of. Returns same structure like psync_list_contacts
+ * only type 3 records filled.
  * */
 
 
 pcontacts_list_t *psync_list_contacts();
+
+pcontacts_list_t *psync_list_myteams();
 
 /* account_teamshare shares a folder with business account team a. The "permissions" parameter is bitwise or of
  * PSYNC_PERM_READ, PSYNC_PERM_CREATE, PSYNC_PERM_MODIFY and PSYNC_PERM_DELETE (PSYNC_PERM_READ is actually

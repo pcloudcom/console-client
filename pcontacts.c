@@ -134,6 +134,18 @@ pcontacts_list_t *do_psync_list_contacts() {
   return (pcontacts_list_t *)psync_list_builder_finalize(builder);
 }
 
+pcontacts_list_t *do_psync_list_myteams() {
+  psync_list_builder_t *builder;
+  psync_sql_res *res;
+  builder=psync_list_builder_create(sizeof(contact_info_t), offsetof(pcontacts_list_t, entries));
+  res=psync_sql_query_rdlock("select  '' as mail, name , id as teamid, 3 as type from myteams "
+                             "ORDER BY name "
+  );
+  psync_list_bulder_add_sql(builder, res, create_contact);
+  
+  return (pcontacts_list_t *)psync_list_builder_finalize(builder);
+}
+
 static void process_shares_out(const binresult *shares_out, int shcnt) {
   const binresult *share;
   const binresult *br;
