@@ -74,6 +74,7 @@ static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 static paccount_cache_callback_t psync_cache_callback=NULL;
+static uint32_t psync_is_business=0;
 
 void do_register_account_events_callback(paccount_cache_callback_t callback)
 {
