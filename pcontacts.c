@@ -122,7 +122,7 @@ pcontacts_list_t *do_psync_list_contacts() {
   psync_list_builder_t *builder;
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(contact_info_t), offsetof(pcontacts_list_t, entries));
-  res=psync_sql_query_rdlock("select mail, name , 0 as teamid, 1 as type from contacts "
+  res=psync_sql_query_rdlock("select mail, ifnull(name, " ") , 0 as teamid, 1 as type from contacts "
                              "union all "
                              "select  mail, (firstname||' '||lastname) as name, 0 as teamid , 2 as type from baccountemail "
                              "union all "

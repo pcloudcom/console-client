@@ -151,6 +151,7 @@ static psync_socket *get_connected_socket(){
   uint64_t result, userid, luserid;
   int saveauth, isbusiness;
   auth=user=pass=NULL;
+  psync_is_business = 0;
   while (1){
     psync_free(auth);
     psync_free(user);
@@ -219,6 +220,7 @@ static psync_socket *get_connected_socket(){
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
+    psync_is_business = psync_find_result(res, "business", PARAM_BOOL)->num;
     psync_sql_start_transaction();
     psync_strlcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str, sizeof(psync_my_auth));
     if (luserid){
@@ -1238,10 +1240,11 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
       fromuserid = br->num;
 
     stringslen+= ++emaillen;
+    stringslen+= ++emaillen;
   } else {
     email=(char *)br->str;
     emaillen=br->length+1;
-    stringslen+=br->length+1;
+    stringslen+=2*(br->length+1);
   }
   if ((br=psync_check_result(share, "message", PARAM_STR))){
     message=br->str;
@@ -1871,26 +1874,38 @@ static psync_socket_t setup_exeptions(){
 }
 
 static int send_diff_command(psync_socket *sock, subscribed_ids ids){
+  char* basubscribefor = "diff,notifications,publinks,uploadlinks,teams,users,contacts";
+  char* subscribefor = "diff,notifications,publinks,uploadlinks,contacts";
+  
+  if (psync_is_business) 
+    subscribefor = basubscribefor;
+  
   if (psync_notifications_running()){
     const char *ts=psync_notifications_get_thumb_size();
     if (ts){
-      binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"),
+      binparam diffparams[]={P_STR("subscribefor", subscribefor), P_STR("timeformat", "timestamp"),
                             P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid),
                             P_NUM("notificationid", ids.notificationid), P_STR("notificationthumbsize", ts), P_NUM("publinkid", ids.publinkid),
                             P_NUM("uploadlinkid", ids.uploadlinkid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
     else{
-      binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"),
+      binparam diffparams[]={P_STR("subscribefor", subscribefor), P_STR("timeformat", "timestamp"),
                             P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid), P_NUM("notificationid", ids.notificationid), P_NUM("publinkid", ids.publinkid),
                             P_NUM("uploadlinkid", ids.uploadlinkid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
   }
   else{
-    binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), 
-                           P_NUM("diffid", ids.diffid), P_NUM("publinkid", ids.publinkid), P_NUM("uploadlinkid", ids.uploadlinkid)};
-    return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+    if (psync_is_business) {
+      binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), 
+                            P_NUM("diffid", ids.diffid), P_NUM("publinkid", ids.publinkid), P_NUM("uploadlinkid", ids.uploadlinkid)};
+      return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+    } else {
+      binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), 
+                            P_NUM("diffid", ids.diffid), P_NUM("publinkid", ids.publinkid), P_NUM("uploadlinkid", ids.uploadlinkid)};
+      return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+    }
   }
 }
 

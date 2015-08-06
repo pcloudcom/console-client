@@ -190,6 +190,7 @@ extern pthread_mutex_t psync_my_auth_mutex;
 extern PSYNC_THREAD uint32_t psync_error;
 extern uint16_t const *__hex_lookup;
 extern const char base64_table[];
+extern uint32_t psync_is_business;
 
 char *psync_strdup(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
 char *psync_strnormalize_filename(const char *str) PSYNC_MALLOC PSYNC_NONNULL(1);
