@@ -615,7 +615,7 @@ void cache_ba_my_teams() {
     teams = psync_find_result(user, "teams", PARAM_ARRAY);
     if (teams->length) {
        for (i = 0; i < teams->length; ++i)
-         cache_my_team(users->array[i]);
+         cache_my_team(teams->array[i]);
     }
   }
   
