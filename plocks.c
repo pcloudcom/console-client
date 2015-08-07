@@ -71,6 +71,10 @@ static psync_rwlock_lockcnt_t psync_rwlock_get_count(psync_rwlock_t *rw){
 }
 
 static void psync_rwlock_set_count(psync_rwlock_t *rw, psync_rwlock_lockcnt_t cnt){
+  if (cnt.cnt[1]== 1)
+  {
+    debug(D_NOTICE, "Getting write lock.");
+  }
   pthread_setspecific(rw->cntkey, cnt.ptr);
 }
 
@@ -331,6 +335,7 @@ void psync_rwlock_unlock(psync_rwlock_t *rw){
     }
   }
   else{
+    debug(D_NOTICE, "Releasing write lock.");
     assert(rw->wcount);
     if (--rw->wcount==0){
       if (rw->opts&PSYNC_RW_OPT_RESERVED){
