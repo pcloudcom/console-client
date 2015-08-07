@@ -1875,26 +1875,35 @@ static psync_socket_t setup_exeptions(){
 }
 
 static int send_diff_command(psync_socket *sock, subscribed_ids ids){
-  char* basubscribefor = "diff,notifications,publinks,uploadlinks,teams,users,contacts";
-  char* subscribefor = "diff,notifications,publinks,uploadlinks,contacts";
-  
-  if (psync_is_business) 
-    subscribefor = basubscribefor;
-  
   if (psync_notifications_running()){
     const char *ts=psync_notifications_get_thumb_size();
     if (ts){
-      binparam diffparams[]={P_STR("subscribefor", subscribefor), P_STR("timeformat", "timestamp"),
-                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid),
-                            P_NUM("notificationid", ids.notificationid), P_STR("notificationthumbsize", ts), P_NUM("publinkid", ids.publinkid),
-                            P_NUM("uploadlinkid", ids.uploadlinkid)};
-      return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+      if (psync_is_business) {
+        binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"),
+                              P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid),
+                              P_NUM("notificationid", ids.notificationid), P_STR("notificationthumbsize", ts), P_NUM("publinkid", ids.publinkid),
+                              P_NUM("uploadlinkid", ids.uploadlinkid)};
+        return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+      } else {
+         binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,contacts"), P_STR("timeformat", "timestamp"),
+                              P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid),
+                              P_NUM("notificationid", ids.notificationid), P_STR("notificationthumbsize", ts), P_NUM("publinkid", ids.publinkid),
+                              P_NUM("uploadlinkid", ids.uploadlinkid)};
+        return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+      }
     }
     else{
-      binparam diffparams[]={P_STR("subscribefor", subscribefor), P_STR("timeformat", "timestamp"),
-                            P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid), P_NUM("notificationid", ids.notificationid), P_NUM("publinkid", ids.publinkid),
-                            P_NUM("uploadlinkid", ids.uploadlinkid)};
-      return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+      if (psync_is_business) {
+        binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"),
+                              P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid), P_NUM("notificationid", ids.notificationid), P_NUM("publinkid", ids.publinkid),
+                              P_NUM("uploadlinkid", ids.uploadlinkid)};
+        return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+      } else {
+        binparam diffparams[]={P_STR("subscribefor", "diff,notifications,publinks,uploadlinks,contacts"), P_STR("timeformat", "timestamp"),
+                              P_NUM("difflimit", PSYNC_DIFF_LIMIT), P_NUM("diffid", ids.diffid), P_NUM("notificationid", ids.notificationid), P_NUM("publinkid", ids.publinkid),
+                              P_NUM("uploadlinkid", ids.uploadlinkid)};
+        return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
+      }
     }
   }
   else{
@@ -2082,12 +2091,14 @@ static int psync_diff_check_quota(psync_socket *sock){
 }
 
 static void psync_cache_contacts() {
-  cache_account_emails();
-  cache_account_teams();
+  if (psync_is_business) {
+    cache_account_emails();
+    cache_account_teams();
+    cache_ba_my_teams();
+  }
   cache_links_all();
   cache_contacts();
   cache_shares();
-  cache_ba_my_teams();
   psync_notify_cache_change(PACCOUNT_CHANGE_ALL);
 }
 

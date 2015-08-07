@@ -575,7 +575,7 @@ static void cache_my_team(const binresult *team1) {
   
   debug(D_NOTICE, "My Team name %s team id %lld\n", nameret,(long long)teamid);
   if (teamid >= 0) {
-    q=psync_sql_prep_statement("REPLACE INTO myteams  (id, name) VALUES (?, ?)");
+    q=psync_sql_prep_statement("INSERT INTO myteams  (id, name) VALUES (?, ?)");
     psync_sql_bind_uint(q, 1, teamid);
     psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
     psync_sql_run_free(q);
@@ -589,8 +589,13 @@ void cache_ba_my_teams() {
   const binresult *users;
   const binresult *user;
   const binresult *teams;
+  psync_sql_res *q;
   psync_sql_lock();
-    binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", "me"), P_STR("showteams", "1"), P_STR("showeveryone", "1") };
+  
+  q=psync_sql_prep_statement("DELETE FROM myteams ");
+  psync_sql_run_free(q);
+  
+  binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", "me"), P_STR("showteams", "1"), P_STR("showeveryone", "1") };
 
     sock = psync_apipool_get();
     bres = send_command(sock, "account_users", params);
