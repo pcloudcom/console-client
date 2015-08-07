@@ -305,7 +305,7 @@ int do_psync_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[],
   return result;
 }
 
-int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vis, void *param) {
+int do_psync_account_users(psync_userid_t userids[], int nids, result_visitor vis, void *param) {
   psync_socket *sock;
   binresult *bres;
   char *ids = NULL;
@@ -314,21 +314,23 @@ int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vi
   const binresult *users;
   
   if (nids) { 
-    binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", ids) };
+    
     ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
     idsp = ids;
     for (i = 0; i < nids; ++i) {
-      k = sprintf(idsp, "%lld", (long long) iserids[i]);
+      k = sprintf(idsp, "%lld", (long long) userids[i]);
       if (unlikely(k <= 0 )) break;
       idsp[k] = ',';
       idsp = idsp + k + 1;
     }
     if (i > 0)
       *(idsp - 1) = '\0';
-    
 
-    sock = psync_apipool_get();
-    bres = send_command(sock, "account_users", params);
+    {
+      binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("userids", ids) };
+      sock = psync_apipool_get();
+      bres = send_command(sock, "account_users", params);
+    }
   } else {
     if (psync_my_auth[0]) {
       binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
