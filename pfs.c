@@ -2256,7 +2256,7 @@ static int psync_fs_can_rmdir(const char *path){
   else if (!(fpath->permissions&PSYNC_PERM_DELETE))
     ret=-EACCES;
   else
-    ret=psync_fstask_can_rmdir(fpath->folderid, fpath->name);
+    ret=psync_fstask_can_rmdir(fpath->folderid, fpath->flags, fpath->name);
   psync_sql_unlock();
   psync_free(fpath);
   debug(D_NOTICE, "can_rmdir %s=%d", path, ret);
@@ -2277,7 +2277,7 @@ static int psync_fs_rmdir(const char *path){
   else if (!(fpath->permissions&PSYNC_PERM_DELETE))
     ret=-EACCES;
   else
-    ret=psync_fstask_rmdir(fpath->folderid, fpath->name);
+    ret=psync_fstask_rmdir(fpath->folderid, fpath->flags,  fpath->name);
   psync_sql_unlock();
   psync_free(fpath);
   debug(D_NOTICE, "rmdir %s=%d", path, ret);
