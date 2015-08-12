@@ -1265,6 +1265,7 @@ static void upload_thread(){
         res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
         psync_sql_bind_uint(res, 1, taskid);
         psync_sql_run_free(res);
+        psync_status_recalc_to_upload_async();
       }
       else if (type!=PSYNC_UPLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
