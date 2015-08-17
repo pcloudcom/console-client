@@ -1497,8 +1497,11 @@ static void process_establishbsharein(const binresult *entry){
   else 
     psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
-  br=psync_find_result(share, "message", PARAM_STR);
-  psync_sql_bind_lstring(q, 5, br->str, br->length);
+  br=psync_check_result(share, "message", PARAM_STR);
+  if (br)
+    psync_sql_bind_lstring(q, 5, br->str, br->length);
+  else
+    psync_sql_bind_null(q, 5);
   if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
       br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);

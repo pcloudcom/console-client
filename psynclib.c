@@ -1098,15 +1098,24 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   share->created=psync_get_number(row[2]);
   perms=psync_get_number(row[3]);
   share->userid=psync_get_number(row[4]);
-  str=psync_get_lstring(row[5], &len);
-  share->toemail=str;
-  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, toemail), len);
-  str=psync_get_lstring(row[6], &len);
-  share->fromemail=str;
-  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, fromemail), len);
-  str=psync_get_lstring(row[7], &len);
-  share->sharename=str;
-  psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
+  if (row[5].type != PSYNC_TNULL) {
+    str=psync_get_lstring(row[5], &len);
+    share->toemail=str;
+    psync_list_add_lstring_offset(builder, offsetof(psync_share_t, toemail), len);
+  } else
+    share->toemail = 0;
+  if (row[6].type != PSYNC_TNULL) {
+    str=psync_get_lstring(row[6], &len);
+    share->fromemail=str;
+    psync_list_add_lstring_offset(builder, offsetof(psync_share_t, fromemail), len);
+  } else 
+    share->fromemail = 0;
+  if (row[7].type != PSYNC_TNULL) {
+    str=psync_get_lstring(row[7], &len);
+    share->sharename=str;
+    psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
+   } else 
+    share->sharename = 0;
   share->permissions=perms;
   share->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
   share->cancreate=(perms&PSYNC_PERM_CREATE)/PSYNC_PERM_CREATE;
