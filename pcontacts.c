@@ -253,10 +253,12 @@ static void process_shares_req_in(const binresult *shares_in, int shcnt) {
   
   for (i = 0; i < shcnt; ++i) {
     share = shares_in->array[i];
-
-	folderowneruserid = psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
-	psync_get_current_userid(&owneruserid);
-	isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+  br = psync_check_result(share, "folderowneruserid", PARAM_NUM);
+  if (br) {
+    folderowneruserid = br->num;
+    psync_get_current_userid(&owneruserid);
+    isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
+  }
 
     q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
                                                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");

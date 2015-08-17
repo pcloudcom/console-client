@@ -1502,10 +1502,26 @@ static void process_establishbsharein(const binresult *entry){
   if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
       br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
-  psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_BOOL)->num);
-  psync_sql_bind_int(q, 8, psync_find_result(share, "touserid", PARAM_NUM)->num);
-  psync_sql_bind_int(q, 9, psync_find_result(share, "team", PARAM_BOOL)->num);
-  psync_sql_bind_int(q, 10, psync_find_result(share, "toteamid", PARAM_NUM)->num);
+  br = psync_check_result(share, "user", PARAM_BOOL);
+  if(br)
+    psync_sql_bind_int(q, 7, br->num);
+  else
+    psync_sql_bind_int(q, 7, 0);
+  br = psync_check_result(share, "touserid", PARAM_NUM);
+  if (br) 
+    psync_sql_bind_int(q, 8, br->num);
+  else
+    psync_sql_bind_null(q, 8);
+  br = psync_check_result(share, "team", PARAM_BOOL);
+  if(br)
+    psync_sql_bind_int(q, 9, br->num);
+  else
+    psync_sql_bind_int(q, 9, 0);
+  br = psync_check_result(share, "toteamid", PARAM_NUM);
+  if (br) 
+    psync_sql_bind_int(q, 10, br->num);
+  else
+    psync_sql_bind_null(q, 10);
   psync_sql_bind_int(q, 11, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 12, psync_find_result(share, "folderownerid", PARAM_NUM)->num);
 
@@ -1591,10 +1607,26 @@ static void process_establishbshareout(const binresult *entry) {
   if(!(br=psync_check_result(share, "foldername", PARAM_STR)))
       br=psync_check_result(share, "sharename", PARAM_STR);
   psync_sql_bind_lstring(q, 6, br->str, br->length);
-  psync_sql_bind_int(q, 7, psync_find_result(share, "user", PARAM_BOOL)->num);
-  psync_sql_bind_int(q, 8, psync_find_result(share, "touserid", PARAM_NUM)->num);
-  psync_sql_bind_int(q, 9, psync_find_result(share, "team", PARAM_BOOL)->num);
-  psync_sql_bind_int(q, 10, psync_find_result(share, "toteamid", PARAM_NUM)->num);
+  br = psync_check_result(share, "user", PARAM_BOOL);
+  if(br)
+    psync_sql_bind_int(q, 7, br->num);
+  else
+    psync_sql_bind_int(q, 7, 0);
+  br = psync_check_result(share, "touserid", PARAM_NUM);
+  if (br) 
+    psync_sql_bind_int(q, 8, br->num);
+  else
+    psync_sql_bind_null(q, 8);
+   br = psync_check_result(share, "team", PARAM_BOOL);
+  if(br)
+    psync_sql_bind_int(q, 9, br->num);
+  else
+    psync_sql_bind_int(q, 9, 0);
+  br = psync_check_result(share, "toteamid", PARAM_NUM);
+  if (br) 
+    psync_sql_bind_int(q, 10, br->num);
+  else
+    psync_sql_bind_null(q, 10);
   psync_sql_bind_int(q, 11, psync_find_result(share, "fromuserid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 12, psync_find_result(share, "folderownerid", PARAM_NUM)->num);
   psync_sql_bind_int(q, 13, isincomming);
