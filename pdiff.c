@@ -1319,12 +1319,20 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   e->created=ctime;
   
   if (isba) {
-    permissions =psync_find_result(share, "permissions", PARAM_HASH);
-    e->canread=psync_find_result(permissions, "canread", PARAM_BOOL)->num;
-    e->cancreate=psync_find_result(permissions, "cancreate", PARAM_BOOL)->num;
-    e->canmodify=psync_find_result(permissions, "canmodify", PARAM_BOOL)->num;
-    e->candelete=psync_find_result(permissions, "candelete", PARAM_BOOL)->num;
-    e->canmanage=psync_find_result(permissions, "canmanage", PARAM_BOOL)->num;
+    permissions =psync_check_result(share, "permissions", PARAM_HASH);
+    if (permissions) {
+      e->canread=psync_find_result(permissions, "canread", PARAM_BOOL)->num;
+      e->cancreate=psync_find_result(permissions, "cancreate", PARAM_BOOL)->num;
+      e->canmodify=psync_find_result(permissions, "canmodify", PARAM_BOOL)->num;
+      e->candelete=psync_find_result(permissions, "candelete", PARAM_BOOL)->num;
+      e->canmanage=psync_find_result(permissions, "canmanage", PARAM_BOOL)->num;
+    } else {
+      e->canread=0;
+      e->cancreate=0;
+      e->canmodify=0;
+      e->candelete=0;
+      e->canmanage=0;
+    }
   }
   else {
     e->canread=psync_find_result(share, "canread", PARAM_BOOL)->num;
