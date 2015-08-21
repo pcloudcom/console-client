@@ -2276,7 +2276,9 @@ restart:
         }
         else if (entries->length==8 && !strcmp(entries->str, "publinks")){
           ids.publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num; 
+          psync_sql_lock();
           ret = cache_links(&err);
+          psync_sql_unlock();
           if (ret < 0)
             debug(D_ERROR, "Cacheing links faild with err %s", err);
           else
@@ -2284,7 +2286,9 @@ restart:
         }
         else if (entries->length==11 && !strcmp(entries->str, "uploadlinks")){
           ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num; 
+          psync_sql_lock();
           ret = cache_upload_links(&err);
+          psync_sql_unlock();
           if (ret < 0)
             debug(D_ERROR, "Cacheing upload links failed with err %s", err);
           else
