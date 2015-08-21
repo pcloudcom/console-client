@@ -696,6 +696,15 @@ plink_contents_t *do_show_link(const char *code, char **err /*OUT*/) {
   
   bres = send_command(api, "showpublink", params);
   
+  if (likely(bres))
+    psync_apipool_release(api);
+  else {
+    psync_apipool_release_bad(api);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    *err = psync_strndup("Connection error.", 17);
+    return NULL;
+  }
+  
   meta=psync_find_result(bres, "metadata", PARAM_HASH);
   if (meta) {
     contents=psync_find_result(meta, "contents", PARAM_ARRAY);
