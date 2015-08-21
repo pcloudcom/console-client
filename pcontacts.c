@@ -110,7 +110,10 @@ static int create_contact(psync_list_builder_t *builder, void *element, psync_va
   str=psync_get_lstring(row[0], &len);
   contact->mail=str;
   psync_list_add_lstring_offset(builder, offsetof(contact_info_t, mail), len);
-  str=psync_get_lstring(row[1], &len);
+  if (row[1].type != PSYNC_TNULL)
+    str=psync_get_lstring(row[1], &len);
+  else 
+    str = "";
   contact->name=str;
   psync_list_add_lstring_offset(builder, offsetof(contact_info_t, name), len);
   contact->teamid=psync_get_number(row[2]);
