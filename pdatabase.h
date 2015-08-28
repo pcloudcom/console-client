@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 16
+#define PSYNC_DATABASE_VERSION 17
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -260,6 +260,10 @@ COMMIT;",
 "BEGIN;\
 CREATE TABLE IF NOT EXISTS myteams (id INTEGER PRIMARY KEY, name TEXT);\
 UPDATE setting SET value=16 WHERE id='dbversion'; \
+UPDATE setting SET value=0 WHERE id='diffid'; \
+COMMIT;",
+"BEGIN;\
+UPDATE setting SET value=17 WHERE id='dbversion'; \
 UPDATE setting SET value=0 WHERE id='diffid'; \
 COMMIT;"
 };
