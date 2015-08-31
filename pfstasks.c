@@ -412,7 +412,8 @@ int psync_fstask_can_rmdir(psync_fsfolderid_t folderid, uint32_t parentflags, co
     cfolderid=row[0];
     if ((row[1]&PSYNC_FOLDER_FLAG_ENCRYPTED) && !(parentflags&PSYNC_FOLDER_FLAG_ENCRYPTED)){
       psync_sql_free_result(res);
-      psync_fstask_release_folder_tasks_locked(folder);
+      if (folder)
+        psync_fstask_release_folder_tasks_locked(folder);
       debug(D_WARNING, "attempt to delete encrypted folder %s in folderid %lu rejected", name, (unsigned long)folderid);
       return -EACCES;
     }
