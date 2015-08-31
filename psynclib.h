@@ -879,6 +879,11 @@ int psync_password_quality(const char *password);
 
 int psync_password_quality10000(const char *password);
 
+/* psync_derive_password_from_passphrase() - derives API password from passphrase of cases where single password login is desired. Returned string is to be free()-d.
+ *
+ */
+char *psync_derive_password_from_passphrase(const char *username, const char *passphrase);
+
 /*
  * Crypto functions.
  *

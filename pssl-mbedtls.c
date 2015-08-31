@@ -35,6 +35,7 @@
 #include "ptimer.h"
 #include "pmemlock.h"
 #include <pthread.h>
+#include <ctype.h>
 #include <polarssl/ctr_drbg.h>
 #include <polarssl/entropy.h>
 #include <polarssl/ssl.h>
@@ -527,6 +528,27 @@ psync_symmetric_key_t psync_ssl_gen_symmetric_key_from_pass(const char *password
   pkcs5_pbkdf2_hmac(&ctx, (const unsigned char *)password, strlen(password), salt, saltlen, iterations, keylen, key->key);
   md_free_ctx(&ctx);
   return key;
+}
+
+char *psync_ssl_derive_password_from_passphrase(const char *username, const char *passphrase){
+  unsigned char *usercopy;
+  unsigned char usersha512[PSYNC_SHA512_DIGEST_LEN], passwordbin[32];
+  md_context_t ctx;
+  size_t userlen, i;
+  userlen=strlen(username);
+  usercopy=psync_new_cnt(unsigned char, userlen);
+  for (i=0; i<userlen; i++)
+    if ((unsigned char)username[i]<=127)
+      usercopy[i]=tolower((unsigned char)username[i]);
+    else
+      usercopy[i]='*';
+  psync_sha512(usercopy, userlen, usersha512);
+  psync_free(usercopy);
+  md_init_ctx(&ctx, md_info_from_type(POLARSSL_MD_SHA512));
+  pkcs5_pbkdf2_hmac(&ctx, (const unsigned char *)passphrase, strlen(passphrase), usersha512, PSYNC_SHA512_DIGEST_LEN, 5000, sizeof(passwordbin), passwordbin);
+  md_free_ctx(&ctx);
+  usercopy=psync_base64_encode(passwordbin, sizeof(passwordbin), &userlen);
+  return (char *)usercopy;
 }
 
 psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t rsa, const unsigned char *data, size_t datalen){

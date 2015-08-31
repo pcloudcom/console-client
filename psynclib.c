@@ -1414,6 +1414,10 @@ int psync_password_quality10000(const char *password){
   }
 }
 
+char *psync_derive_password_from_passphrase(const char *username, const char *passphrase){
+  return psync_ssl_derive_password_from_passphrase(username, passphrase);
+}
+
 int psync_crypto_setup(const char *password, const char *hint){
   if (psync_status_is_offline())
     return PSYNC_CRYPTO_SETUP_CANT_CONNECT;
