@@ -337,6 +337,8 @@ int do_psync_account_users(psync_userid_t userids[], int nids, result_visitor vi
       sock = psync_apipool_get();
       bres = send_command(sock, "account_users", params);
     } else {
+      if (!psync_my_user)
+        return -1;
       binparam params[] =  {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
       sock = psync_apipool_get();
       bres = send_command(sock, "account_users", params);
@@ -432,6 +434,8 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
       sock = psync_apipool_get();
       bres = send_command(sock, "account_teams", params);
     } else {
+      if (!psync_my_user)
+        return -1;
       binparam params[] =  {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp"), P_STR("showeveryone", "1")};
       sock = psync_apipool_get();
       bres = send_command(sock, "account_teams", params);

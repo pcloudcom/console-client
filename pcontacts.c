@@ -44,6 +44,8 @@ int do_call_contactlist(result_visitor vis, void *param) {
     sock = psync_apipool_get();
     bres = send_command(sock, "contactlist", params);
   } else {
+    if (!psync_my_user)
+      return -1;
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass)};
     sock = psync_apipool_get();
     bres = send_command(sock, "contactlist", params);
@@ -314,7 +316,9 @@ void cache_shares() {
     }
     bres = send_command(api, "listshares", params);
   } else {
-  binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
+    if (!psync_my_user)
+      return;
+    binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
     api = psync_apipool_get();
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
