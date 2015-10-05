@@ -857,10 +857,10 @@ void cache_links_all()
   psync_sql_unlock();
   
   if (ret < 0) {
-    if (*err)
+    if (err) {
       debug(D_WARNING, "Problem cacheing links errcode %d errmsg[%s]\n", ret, err);
-    if (err)
       psync_free(err);
+    }
   }
 }
 
