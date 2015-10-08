@@ -41,6 +41,11 @@
 #include <polarssl/ssl.h>
 #include <polarssl/pkcs5.h>
 
+#if defined(PSYNC_AES_HW_MSC)
+#include <intrin.h>
+#include <wmmintrin.h>
+#endif
+
 static const int psync_mbed_ciphersuite[]={
   TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
   TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
