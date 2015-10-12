@@ -263,6 +263,14 @@ typedef struct {
 
 #define PSYNC_CRYPTO_INVALID_FOLDERID      ((psync_folderid_t)-1)
 
+#ifndef DEFAULT_FUSE_VOLUME_NAME
+#define DEFAULT_FUSE_VOLUME_NAME "pCloud Drive"
+#endif
+  
+#ifndef DEFAULT_FUSE_MOUNT_POINT
+#define DEFAULT_FUSE_MOUNT_POINT "pCloud"
+#endif
+
 typedef struct {
   const char *localname;
   const char *localpath;

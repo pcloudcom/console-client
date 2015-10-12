@@ -40,14 +40,6 @@
 #include "pcrc32c.h"
 #include <pthread.h>
 
-#ifndef DEFAULT_FUSE_VOLUME_NAME
-#define DEFAULT_FUSE_VOLUME_NAME "pCloud Drive"
-#endif
-  
-#ifndef DEFAULT_FUSE_MOUNT_POINT
-#define DEFAULT_FUSE_MOUNT_POINT "pCloud"
-#endif
-
 
 #if defined(P_OS_POSIX)
 #define psync_fs_need_per_folder_refresh() psync_fs_need_per_folder_refresh_f()
