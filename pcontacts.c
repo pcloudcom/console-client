@@ -43,13 +43,11 @@ int do_call_contactlist(result_visitor vis, void *param) {
     binparam params[] = {P_STR("auth", psync_my_auth)};
     sock = psync_apipool_get();
     bres = send_command(sock, "contactlist", params);
-  } else {
-    if (!psync_my_user)
-      return -1;
+  } else if (psync_my_user) {
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass)};
     sock = psync_apipool_get();
     bres = send_command(sock, "contactlist", params);
-  }
+  } else return -1;
   if (likely(bres))
     psync_apipool_release(sock);
   else {
@@ -315,9 +313,7 @@ void cache_shares() {
       return;
     }
     bres = send_command(api, "listshares", params);
-  } else {
-    if (!psync_my_user)
-      return;
+  } else if (psync_my_user) {
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
     api = psync_apipool_get();
     if (unlikely(!api)) {
@@ -325,7 +321,7 @@ void cache_shares() {
       return;
     }
     bres = send_command(api, "listshares", params);
-  }
+  } else return;
   if (likely(bres))
     psync_apipool_release(api);
   else {

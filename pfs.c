@@ -3039,13 +3039,13 @@ static int psync_fs_do_start(){
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
   fuse_opt_add_arg(&args, "-oauto_unmount");
-  fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
+  fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   fuse_opt_add_arg(&args, "-ononempty");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
-  fuse_opt_add_arg(&args, "-ovolname=pCloud Drive");
-  fuse_opt_add_arg(&args, "-ofsname=pCloud.fs");
+  fuse_opt_add_arg(&args, "-ovolname="DEFAULT_FUSE_VOLUME_NAME);
+  fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   //fuse_opt_add_arg(&args, "-olocal");
   if (psync_user_is_admin())
     fuse_opt_add_arg(&args, "-oallow_root");
