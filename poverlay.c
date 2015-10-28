@@ -1,28 +1,28 @@
 /* Copyright (c) 2013-2015 pCloud Ltd.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of pCloud Ltd nor the
- *       names of its contributors may be used to endorse or promote products
- *       derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL pCloud Ltd BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+* All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*     * Redistributions of source code must retain the above copyright
+*       notice, this list of conditions and the following disclaimer.
+*     * Redistributions in binary form must reproduce the above copyright
+*       notice, this list of conditions and the following disclaimer in the
+*       documentation and/or other materials provided with the distribution.
+*     * Neither the name of pCloud Ltd nor the
+*       names of its contributors may be used to endorse or promote products
+*       derived from this software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL pCloud Ltd BE LIABLE FOR ANY
+* DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+* ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
 #include "pcompat.h"
 #include "plibs.h"
 
@@ -33,7 +33,7 @@
 #include <tchar.h>
 #include <strsafe.h>
 
-#define POVERLAY_BUFSIZE 4096
+#define POVERLAY_BUFSIZE 512
 
 
 #include "poverlay.h"
@@ -42,126 +42,149 @@ LPCWSTR PORT = TEXT("\\\\.\\pipe\\pStatusPipe");
 
 void overlay_main_loop(VOID)
 {
-   BOOL   fConnected = FALSE;
-   HANDLE hPipe = INVALID_HANDLE_VALUE;
+  BOOL   fConnected = FALSE;
+  HANDLE hPipe = INVALID_HANDLE_VALUE;
 
-// The main loop creates an instance of the named pipe and
-// then waits for a client to connect to it. When the client
-// connects, a thread is created to handle communications
-// with that client, and this loop is free to wait for the
-// next client connect request. It is an infinite loop.
-   
-   for (;;)
-   {
-      debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
-      hPipe = CreateNamedPipe(
-          PORT,                     // pipe name
-          PIPE_ACCESS_DUPLEX,       // read/write access
-          PIPE_TYPE_MESSAGE |       // message type pipe
-          PIPE_READMODE_MESSAGE |   // message-read mode
-          PIPE_WAIT,                // blocking mode
-          PIPE_UNLIMITED_INSTANCES, // max. instances
-          POVERLAY_BUFSIZE,         // output buffer size
-          POVERLAY_BUFSIZE,         // input buffer size
+  // The main loop creates an instance of the named pipe and
+  // then waits for a client to connect to it. When the client
+  // connects, a thread is created to handle communications
+  // with that client, and this loop is free to wait for the
+  // next client connect request. It is an infinite loop.
 
-          0,                        // client time-out
-          NULL);                    // default security attribute
+  for (;;)
+  {
+    debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
+    hPipe = CreateNamedPipe(
+      PORT,                     // pipe name
+      PIPE_ACCESS_DUPLEX,       // read/write access
+      PIPE_TYPE_MESSAGE |       // message type pipe
+      PIPE_READMODE_MESSAGE |   // message-read mode
+      PIPE_WAIT,                // blocking mode
+      PIPE_UNLIMITED_INSTANCES, // max. instances
+      POVERLAY_BUFSIZE,         // output buffer size
+      POVERLAY_BUFSIZE,         // input buffer size
+      0,                        // client time-out
+      NULL);                    // default security attribute
 
-      if (hPipe == INVALID_HANDLE_VALUE)
-      {
-          debug(D_NOTICE, "CreateNamedPipe failed, GLE=%d.\n", GetLastError());
-          return;
-      }
+    if (hPipe == INVALID_HANDLE_VALUE)
+    {
+      debug(D_NOTICE, "CreateNamedPipe failed, GLE=%d.\n", GetLastError());
+      return;
+    }
 
-      fConnected = ConnectNamedPipe(hPipe, NULL) ?
-         TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+    fConnected = ConnectNamedPipe(hPipe, NULL) ?
+    TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
 
-      if (fConnected)
-      {
-         debug(D_NOTICE, "Client connected, creating a processing thread.\n");
+    if (fConnected)
+    {
+      debug(D_NOTICE, "Client connected, creating a processing thread.\n");
 
-         // Create a thread for this client.
-         psync_run_thread1(
-            "Pipe request handle routine",
-            instance_thread,    // thread proc
-            (LPVOID) hPipe     // thread parameter
-         );
-       }
-      else
-         CloseHandle(hPipe);
-   }
+      // Create a thread for this client.
+      psync_run_thread1(
+        "Pipe request handle routine",
+        instance_thread,    // thread proc
+        (LPVOID)hPipe     // thread parameter
+        );
+    }
+    else
+      CloseHandle(hPipe);
+  }
 
-   return;
+  return;
 }
 
 void instance_thread(LPVOID lpvParam)
 {
-   HANDLE hHeap      = GetProcessHeap();
-   message* request = (message*)HeapAlloc(hHeap, 0, POVERLAY_BUFSIZE);
-   message* reply   = (message*)HeapAlloc(hHeap, 0, POVERLAY_BUFSIZE);
+  DWORD cbBytesRead = 0, cbWritten = 0;
+  BOOL fSuccess = FALSE;
+  HANDLE hPipe = NULL;
+  char  chBuf[POVERLAY_BUFSIZE];
 
-   DWORD cbBytesRead = 0, cbWritten = 0;
-   BOOL fSuccess = FALSE;
-   HANDLE hPipe  = NULL;
-
-   if (lpvParam == NULL)
-   {
-       debug(D_ERROR,  "InstanceThread got an unexpected NULL value in lpvParam.\n");
-       return (DWORD)-1;
-   }
+  message* request = NULL; //(message*)psync_malloc(POVERLAY_BUFSIZE);
+  message* reply = (message*)psync_malloc(POVERLAY_BUFSIZE);
+ // memset(request,0,sizeof(request));
+  memset(reply, 0, sizeof(reply));
+  if (lpvParam == NULL)
+  {
+    debug(D_ERROR, "InstanceThread got an unexpected NULL value in lpvParam.\n");
+    return;
+  }
 
   // debug(D_NOTICE, "InstanceThread created, receiving and processing messages.\n");
-   hPipe = (HANDLE) lpvParam;
-   while (1)
-   {
+  hPipe = (HANDLE)lpvParam;
+  while (1)
+  {
+    do
+    {
       fSuccess = ReadFile(
-         hPipe,        // handle to pipe
-         request,    // buffer to receive data
-         POVERLAY_BUFSIZE, // size of buffer
-         &cbBytesRead, // number of bytes read
-         NULL);        // not overlapped I/O
+        hPipe,    // pipe handle 
+        chBuf,    // buffer to receive reply 
+        POVERLAY_BUFSIZE,  // size of buffer 
+        &cbBytesRead,  // number of bytes read 
+        NULL);    // not overlapped 
 
-      if (!fSuccess || cbBytesRead == 0)
-      {
-          if (GetLastError() == ERROR_BROKEN_PIPE)
-              debug(D_NOTICE, "InstanceThread: client disconnected.\n");
-          else
+      if (!fSuccess && GetLastError() != ERROR_MORE_DATA)
+        break;
+    } while (!fSuccess);  // repeat loop if ERROR_MORE_DATA 
 
-              debug(D_NOTICE, "InstanceThread ReadFile failed, GLE=%d.\n", GetLastError());
-          break;
-      }
-      get_answer_to_request(request, reply);
-      fSuccess = WriteFile(
-         hPipe,        // handle to pipe
-         reply,     // buffer to write from
-         reply->length, // number of bytes to write
-         &cbWritten,   // number of bytes written
-         NULL);        // not overlapped I/O
+    if (!fSuccess || cbBytesRead == 0)
+    {
+      if (GetLastError() == ERROR_BROKEN_PIPE)
+        debug(D_NOTICE, "InstanceThread: client disconnected.\n");
+      else
 
-      if (!fSuccess || reply->length != cbWritten)
-      {
-          debug(D_NOTICE, "InstanceThread WriteFile failed, GLE=%d.\n", GetLastError());
-          break;
-      }
+        debug(D_NOTICE, "InstanceThread ReadFile failed, GLE=%d.\n", GetLastError());
+      break;
+    }
+    message *request = (message *)chBuf;
+
+    debug(D_NOTICE, "bytes received  %d buffer[%s]\n", cbBytesRead, chBuf);
+    get_answer_to_request(request, reply);
+    fSuccess = WriteFile(
+      hPipe,        // handle to pipe
+      reply,     // buffer to write from
+      reply->length, // number of bytes to write
+      &cbWritten,   // number of bytes written
+      NULL);        // not overlapped I/O
+
+    if (!fSuccess || reply->length != cbWritten)
+    {
+      debug(D_NOTICE, "InstanceThread WriteFile failed, GLE=%d.\n", GetLastError());
+      break;
+    }
   }
   FlushFileBuffers(hPipe);
   DisconnectNamedPipe(hPipe);
   CloseHandle(hPipe);
-  HeapFree(hHeap, 0, request);
-  HeapFree(hHeap, 0, reply);
+  psync_free(request);
+  psync_free(reply);
 
-   debug(D_NOTICE, "InstanceThread exitting.\n");
-   return;
+  debug(D_NOTICE, "InstanceThread exitting.\n");
+  return;
 }
 
 void get_answer_to_request(message *request, message *replay)
 {
-    char msg[4] = "Ok.";
-    msg[3] = '\0';
-    debug(D_NOTICE, "Client Request type [%d] len [%d] string: [%s]", request->type, request->length, request->value );
+  char msg[4] = "Ok.";
+  msg[3] = '\0';
+
+  debug(D_NOTICE, "Client Request type [%u] len [%llu] string: [%s]", request->type, request->length, request->value);
+
+  if (strstr(request->value, "InSync") != 0) {
     replay->type = 10;
-    replay->length = sizeof(message)+ 3;
-    strncpy(replay->value, msg, 4);
+  }
+  else if (strstr(request->value, "NoSync") != 0) {
+    replay->type = 11;
+  }
+  else if (strstr(request->value, "InProgress") != 0) {
+    replay->type = 12;
+  }
+  else {
+    replay->type = 13;
+    strncpy(msg,"No.",3);
+  }
+  replay->length = sizeof(message)+4;
+  strncpy(replay->value, msg, 4);
 
 }
 #endif //defined(P_OS_WINDOWS)

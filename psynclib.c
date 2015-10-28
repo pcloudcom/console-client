@@ -57,6 +57,7 @@
 #include "publiclinks.h"
 #include "pbusinessaccount.h"
 #include "pcontacts.h"
+#include "poverlay.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -207,6 +208,10 @@ int psync_init(){
     pthread_mutex_unlock(&psync_libstate_mutex);
   }
   
+#ifdef P_OS_WINDOWS
+  psync_run_thread("Overlay main thread", overlay_main_loop);
+#endif
+
   return 0;
 }
 

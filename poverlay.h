@@ -2,10 +2,10 @@
 #define POVERLAY_H
 
 typedef struct _message {
-   uint32_t type;
-   uint64_t length;
-   char value[];
- } message;
+  uint32_t type;
+  uint64_t length;
+  char value[];
+} message;
 
 void overlay_main_loop(VOID);
 void instance_thread(LPVOID);
