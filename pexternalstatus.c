@@ -315,13 +315,46 @@ external_status result = INSYNC;
   return result;
 }
 
+/*
+static void do_normalize_path(char * path) {
+  int i = 0;
+  int to_move = 0;
+  int new_ind = 0;
+  int path_size = strlen(path);
+  for (; i < (path_size - to_move); ++i) {
+    if ((path[i] == '\\') && (path[i + 1] == '\\')) {
+      path[i] = '/';
+      ++to_move;
+      i += 2;
+      if (i >= path_size)
+        break;
+    }
+    if (to_move) {
+      new_ind = i - to_move;
+      if (new_ind > 0)
+        path[new_ind] = path[i];
+    }
+  }
+  path[path_size - to_move] = '\0';
+}
+*/
+static void do_normalize_path(char * path) {
+  int i = 0;
+  int to_move = 0;
+  int new_ind = 0;
+  int path_size = strlen(path);
+  for (; i < path_size; ++i)
+    if (path[i] == '\\')
+      path[i] = '/';
+}
+     
 external_status do_psync_external_status(const char *path)
 {
   char *fsroot = NULL;
   char *folder = NULL;
   int syncid, rootlen = 0;
   psync_stat_t st;
-  external_status result = INSYNC;
+  external_status result = INVSYNC;
   const char *pcpath = NULL;
   
   fsroot = psync_fs_getmountpoint();
@@ -341,7 +374,7 @@ external_status do_psync_external_status(const char *path)
       return result;
     }
   }
-  
+  do_normalize_path(pcpath);
   if (!psync_stat(path, &st)) {
     if (!psync_stat_isfolder(&st))
       result = do_psync_external_status_file(pcpath);

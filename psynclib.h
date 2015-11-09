@@ -402,7 +402,7 @@ typedef struct {
   psync_notification_t notifications[];
 } psync_notification_list_t;
 
-typedef enum Status {INSYNC, INPROG, NOSYNC} external_status;
+typedef enum Status {INSYNC, INPROG, NOSYNC, INVSYNC} external_status;
 
 typedef struct {
   uint64_t linkid;

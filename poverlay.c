@@ -25,6 +25,7 @@
 */
 #include "pcompat.h"
 #include "plibs.h"
+#include "pexternalstatus.h"
 
 #if defined(P_OS_WINDOWS)
 
@@ -170,13 +171,14 @@ void get_answer_to_request(message *request, message *replay)
 
   debug(D_NOTICE, "Client Request type [%u] len [%llu] string: [%s]", request->type, request->length, request->value);
 
-  if (strstr(request->value, "InSync") != 0) {
+  external_status stat = do_psync_external_status(request->value);
+  if (stat == INSYNC) {
     replay->type = 10;
   }
-  else if (strstr(request->value, "NoSync") != 0) {
+  else if (stat == NOSYNC) {
     replay->type = 11;
   }
-  else if (strstr(request->value, "InProgress") != 0) {
+  else if (stat == INPROG) {
     replay->type = 12;
   }
   else {
