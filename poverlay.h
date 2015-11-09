@@ -1,6 +1,14 @@
 #ifndef POVERLAY_H
 #define POVERLAY_H
 
+#ifndef VOID
+#define VOID void
+#endif
+
+#ifndef LPVOID
+#define LPVOID void*
+#endif
+
 typedef struct _message {
   uint32_t type;
   uint64_t length;
