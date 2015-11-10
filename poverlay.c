@@ -27,6 +27,7 @@
 #include "plibs.h"
 #include "pexternalstatus.h"
 
+
 #if defined(P_OS_WINDOWS)
 
 #include <windows.h>
@@ -170,7 +171,6 @@ void get_answer_to_request(message *request, message *replay)
   msg[3] = '\0';
 
   debug(D_NOTICE, "Client Request type [%u] len [%llu] string: [%s]", request->type, request->length, request->value);
-
   external_status stat = do_psync_external_status(request->value);
   if (stat == INSYNC) {
     replay->type = 10;
@@ -179,6 +179,7 @@ void get_answer_to_request(message *request, message *replay)
     replay->type = 11;
   }
   else if (stat == INPROG) {
+
     replay->type = 12;
   }
   else {
