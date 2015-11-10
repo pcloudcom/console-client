@@ -184,7 +184,7 @@ void get_answer_to_request(message *request, message *replay)
   }
   else {
     replay->type = 13;
-    strncpy(msg,"No.",3);
+    strncpy(msg,"No.\0",4);
   }
   replay->length = sizeof(message)+4;
   strncpy(replay->value, msg, 4);
