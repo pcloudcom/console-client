@@ -17,7 +17,8 @@ typedef struct _message {
 
 void overlay_main_loop(VOID);
 void instance_thread(LPVOID);
-void get_answer_to_request(message *requesr, message *replay);
+void get_answer_to_request(message *requesr /*IN*/, message *replay/*OUT*/);
 
 
 #endif // POVERLAY_H
+

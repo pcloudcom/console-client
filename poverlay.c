@@ -26,13 +26,13 @@
 #include "pcompat.h"
 #include "plibs.h"
 #include "poverlay.h"
-
+#include "pexternalstatus.h"
 
 #if defined(P_OS_WINDOWS)
 
 #include "poverlay_win.c"
 
-#elif defined(P_OS_LINUX) || definef(P_OS_MACOSX) || defined(P_OS_BSD)
+#elif defined(P_OS_LINUX) || defined(P_OS_MACOSX) || defined(P_OS_BSD)
 
 #include "poverlay_lin.c"
 
@@ -48,23 +48,24 @@ void get_answer_to_request(message *request, message *replay)
   char msg[4] = "Ok.";
   msg[3] = '\0';
 
-  debug(D_NOTICE, "Client Request type [%u] len [%llu] string: [%s]", request->type, request->length, request->value);
-
-  if (strstr(request->value, "InSync") != 0) {
+  debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
+  external_status stat = do_psync_external_status(request->value);
+  replay = request;
+  if (stat == INSYNC) {
     replay->type = 10;
   }
-  else if (strstr(request->value, "NoSync") != 0) {
+  else if (stat == NOSYNC) {
     replay->type = 11;
   }
-  else if (strstr(request->value, "InProgress") != 0) {
+  else if (stat == INPROG) {
+
     replay->type = 12;
   }
   else {
     replay->type = 13;
-    strncpy(msg,"No.",3);
+    strncpy(msg,"No.\0",4);
   }
   replay->length = sizeof(message)+4;
   strncpy(replay->value, msg, 4);
 
 }
-

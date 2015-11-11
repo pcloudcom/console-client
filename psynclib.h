@@ -402,7 +402,7 @@ typedef struct {
   psync_notification_t notifications[];
 } psync_notification_list_t;
 
-typedef enum Status {INSYNC, INPROG, NOSYNC} external_status;
+typedef enum Status {INSYNC, INPROG, NOSYNC, INVSYNC} external_status;
 
 typedef struct {
   uint64_t linkid;
@@ -1020,7 +1020,7 @@ psync_folderid_t *psync_crypto_folderids();
  * of the drive and/or drive letter. Can be used for synced folders. For files and folders not in drive or sync folder INSYNC is returned.
  */
 
-external_status psync_filesystem_status(const char *path);
+external_status psync_filesystem_status(char *path);
 external_status psync_status_file(const char *path);
 external_status psync_status_folder(const char *path);
 

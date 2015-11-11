@@ -208,9 +208,8 @@ int psync_init(){
     pthread_mutex_unlock(&psync_libstate_mutex);
   }
   
-#ifdef P_OS_WINDOWS
   psync_run_thread("Overlay main thread", overlay_main_loop);
-#endif
+
 
   return 0;
 }
@@ -1616,7 +1615,7 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
-external_status psync_filesystem_status(const char *path) {
+external_status psync_filesystem_status(char *path) {
   return do_psync_external_status(path);
 }
 

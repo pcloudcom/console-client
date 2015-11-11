@@ -47,7 +47,7 @@ static inline const char* print_external_status(external_status stat)
   }
 }
 
-external_status do_psync_external_status(const char *path);
+external_status do_psync_external_status(char *path);
 external_status do_psync_external_status_file(const char *path);
 external_status do_psync_external_status_folder(const char *path);
 
