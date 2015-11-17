@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <errno.h>
 
 #include "overlay_client.h"
 #define POVERLAY_BUFSIZE 512
@@ -59,8 +60,8 @@ int QueryState(pCloud_FileState *state, char* path)
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
   strncpy(addr.sun_path, mysoc, sizeof(addr.sun_path)-1);
-
-  if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+  
+  if (connect(fd, (struct sockaddr*)&addr, strlen(mysoc)+sizeof(addr.sun_family)) == -1) {
     return -2;
   }
 

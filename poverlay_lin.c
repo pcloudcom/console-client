@@ -55,7 +55,7 @@ void overlay_main_loop()
 
   unlink(mysoc);
   
-  if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+  if (bind(fd, (struct sockaddr*)&addr,  strlen(mysoc) + sizeof(addr.sun_family)) == -1) {
     debug(D_ERROR,"Unix socket bind error");
     return;
   }
