@@ -448,6 +448,7 @@ static void perm_fail_upload_task(uint64_t taskid){
   psync_sql_run_free(sql);
   psync_fs_task_deleted(taskid);
   psync_sql_commit_transaction();
+  psync_status_recalc_to_upload_async();
 }
 
 static int copy_file(psync_socket *api, psync_fileid_t fileid, uint64_t hash, psync_folderid_t folderid, const char *name,  uint64_t taskid, uint64_t writeid){
@@ -969,6 +970,7 @@ static void large_upload(){
       res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
       psync_sql_bind_uint(res, 1, taskid);
       psync_sql_run_free(res);
+      psync_status_recalc_to_upload_async();
     }
     psync_upload_dec_uploads();
     if (ret)
@@ -1454,9 +1456,10 @@ static void pr_update_fileid(psync_fileid_t newfileid, psync_fsfileid_t oldfilei
 
 static void psync_fsupload_process_tasks(psync_list *tasks){
   fsupload_task_t *task;
-  uint32_t creats, cancels;
+  uint32_t creats, cancels, dels;
   creats=0;
   cancels=0;
+  dels=0;
   psync_sql_start_transaction();
   psync_list_for_each_element (task, tasks, fsupload_task_t, list){
     if (task->ccreat)
@@ -1481,8 +1484,10 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
           pr_update_fileid(task->int2, -(psync_fsfileid_t)task->id);
           pr_set_task_status3(task->id);
         }
-        else
+        else{
           pr_del_task(task->id);
+          dels++;
+        }
       }
       psync_free(task->res);
     }
@@ -1492,7 +1497,7 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
     psync_upload_dec_uploads_cnt(creats);
     psync_status_recalc_to_upload_async();
   }
-  else if (cancels)
+  else if (cancels || dels)
     psync_status_recalc_to_upload_async();
 }
 
