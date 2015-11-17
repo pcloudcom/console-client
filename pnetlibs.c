@@ -107,18 +107,45 @@ static void psync_ret_api(void *ptr){
   debug(D_NOTICE, "closed connection to api");
 }
 
+static int api_sock_is_broken(psync_socket *ret){
+  if (unlikely_log(psync_socket_is_broken(ret->sock) || psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl)))){
+    debug(D_NOTICE, "got broken socket from cache");
+    psync_ret_api(ret);
+    return 1;
+  }
+  else{
+    if (psync_socket_readable(ret)){
+      char buff[16];
+      int rd;
+      rd=psync_socket_read_noblock(ret, buff, sizeof(buff));
+      if (rd<=0){
+        psync_ret_api(ret);
+        debug(D_NOTICE, "got broken socket from cache");
+      }
+      else{
+        buff[sizeof(buff)-1]=0;
+        debug(D_ERROR, "got socket with pending data to read from cache, read %d bytes: %s", rd, buff);
+        psync_ret_api(ret);
+        if (IS_DEBUG)
+          abort();
+      }
+      return 1;
+    }
+    else{
+      debug(D_NOTICE, "got api connection from cache");
+      return 0;
+    }
+  }
+}
+
 psync_socket *psync_apipool_get(){
   psync_socket *ret;
   while (1){
     ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
     if (!ret)
       break;
-    if (unlikely_log(psync_socket_is_broken(ret->sock) || psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl))))
-      psync_ret_api(ret);
-    else{
-      debug(D_NOTICE, "got api connection from cache");
+    if (!api_sock_is_broken(ret))
       return ret;
-    }
   }
   ret=psync_get_api();
   if (unlikely_log(!ret))
@@ -132,16 +159,8 @@ psync_socket *psync_apipool_get_from_cache(){
     ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
     if (!ret)
       break;
-    if (unlikely_log(psync_socket_is_broken(ret->sock) || psync_socket_isssl(ret)!=psync_setting_get_bool(_PS(usessl))))
-      psync_ret_api(ret);
-    else{
-      debug(D_NOTICE, "got api connection from cache");
-      if (IS_DEBUG && psync_socket_readable(ret)){
-        debug(D_WARNING, "got socket with pending data to read from cache");
-        abort();
-      }
+    if (!api_sock_is_broken(ret))
       return ret;
-    }
   }
   return NULL;
 }
