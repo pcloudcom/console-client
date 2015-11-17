@@ -46,6 +46,7 @@
 #include "pbusinessaccount.h"
 #include "publiclinks.h"
 #include "pcontacts.h"
+#include "pcloudcrypto.h"
 #include <ctype.h>
 
 
@@ -57,7 +58,7 @@ typedef struct {
   uint64_t touserid;
   uint64_t fromuserid;
   uint64_t teamid;
-  
+
   char *str;
 } notify_paramst;
 
@@ -93,6 +94,17 @@ static void psync_notify_cache_change(psync_changetype_t event){
 
 static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid);
 static void do_send_eventdata(void * param);
+
+static void delete_cached_crypto_keys(){
+  psync_sql_statement("DELETE FROM setting WHERE id IN ('crypto_public_key', 'crypto_private_key', 'crypto_private_iter', "\
+                                                       "'crypto_private_salt', 'crypto_private_sha1', 'crypto_public_sha1')");
+  if (psync_sql_affected_rows()){
+    debug(D_NOTICE, "deleted cached crypto keys");
+    psync_cloud_crypto_clean_cache();
+  }
+  psync_sql_statement("DELETE FROM cryptofolderkey");
+  psync_sql_statement("DELETE FROM cryptofilekey");
+}
 
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
                                            const char *device){
@@ -150,7 +162,7 @@ static psync_socket *get_connected_socket(){
   psync_sql_res *q;
   char *device;
   uint64_t result, userid, luserid;
-  int saveauth, isbusiness;
+  int saveauth, isbusiness, cryptosetup;
   auth=user=pass=NULL;
   psync_is_business = 0;
   while (1){
@@ -188,6 +200,7 @@ static psync_socket *get_connected_socket(){
                          P_STR("auth", auth),
                          P_STR("device", device),
                          P_BOOL("getauth", 1),
+                         P_BOOL("cryptokeyssign", 1),
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
@@ -309,9 +322,21 @@ static psync_socket *get_connected_socket(){
       psync_sql_run(q);
       isbusiness=0;
     }
+    cryptosetup=psync_find_result(res, "cryptosetup", PARAM_BOOL)->num;
     psync_sql_bind_string(q, 1, "cryptosetup");
-    psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosetup", PARAM_BOOL)->num);
+    psync_sql_bind_uint(q, 2, cryptosetup);
     psync_sql_run(q);
+    if (cryptosetup){
+      char *publicsha1=psync_sql_cellstr("SELECT value FROM setting WHERE id='crypto_public_sha1'");
+      char *privatesha1=psync_sql_cellstr("SELECT value FROM setting WHERE id='crypto_private_sha1'");
+      if (!publicsha1 || !privatesha1 || strcmp(publicsha1, psync_find_result(res, "publicsha1", PARAM_STR)->str) ||
+                                         strcmp(privatesha1, psync_find_result(res, "privatesha1", PARAM_STR)->str))
+        delete_cached_crypto_keys();
+      psync_free(privatesha1);
+      psync_free(publicsha1);
+    }
+    else
+      delete_cached_crypto_keys();
     psync_sql_bind_string(q, 1, "cryptosubscription");
     psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
     psync_sql_run(q);
@@ -1178,8 +1203,10 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_string(q, 1, "cryptosetup");
   psync_sql_bind_uint(q, 2, u);
   psync_sql_run(q);
-  if (!u)
+  if (!u){
     psync_crypto_stop();
+    delete_cached_crypto_keys();
+  }
   psync_sql_bind_string(q, 1, "cryptosubscription");
   psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
   psync_sql_run(q);
@@ -1217,13 +1244,13 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   uint64_t teamid = 0;
   uint64_t touserid = 0;
   uint64_t fromuserid = 0;
-  
+
   if (initialdownload)
     return;
   stringslen=0;
   ctime=0;
   if (!(br=psync_check_result(share, "frommail", PARAM_STR)) && !(br=psync_check_result(share, "tomail", PARAM_STR))){
-    if(!(br=psync_check_result(share, "touserid", PARAM_NUM)) && 
+    if(!(br=psync_check_result(share, "touserid", PARAM_NUM)) &&
        !(br=psync_check_result(share, "fromuserid", PARAM_NUM)) &&
        !(br=psync_check_result(share, "toteamid", PARAM_NUM)) ) {
       debug(D_WARNING, "Neigher frommail or tomail nor buissines share found for eventtype %u", (unsigned)eventid);
@@ -1233,10 +1260,10 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   if (isba) {
     if((br=psync_check_result(share, "user", PARAM_BOOL)) && br->num)
       touserid = psync_find_result(share, "touserid", PARAM_NUM)->num;
-    
+
     if((br=psync_check_result(share, "team", PARAM_BOOL)) && br->num)
       teamid = psync_find_result(share, "toteamid", PARAM_NUM)->num;
-    
+
     if((br=psync_check_result(share, "fromuserid", PARAM_NUM)))
       fromuserid = br->num;
 
@@ -1266,7 +1293,7 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
     psync_sql_res *res;
     psync_variant_row row;
     const char *cstr;
-   
+
     if ((br=psync_check_result(share, "shareid", PARAM_NUM)))
       if (isba)
         res=psync_sql_query("SELECT name, ctime FROM bsharedfolder WHERE id=? ");
@@ -1302,7 +1329,7 @@ static void send_share_notify(psync_eventtype_t eventid, const binresult *share)
   fill_str(e->sharename, sharename, sharenamelen);
   if (freesharename)
     psync_free(sharename);
-  
+
   fill_str(e->message, message, messagelen);
   if ((br=psync_check_result(share, "userid", PARAM_NUM)))
     e->userid=br->num;
@@ -1363,20 +1390,20 @@ static void do_send_eventdata(void * param) {
   get_ba_member_email(data->fromuserid, &email, &emaillen);
   fill_str(data->event_data->fromemail, email, emaillen);
    psync_free(email);
-   
+
   if(data->touserid)
     get_ba_member_email(data->touserid, &email, &emaillen);
-  else 
+  else
     get_ba_team_name(data->teamid, &email, &emaillen);
   fill_str(data->event_data->toemail, email, emaillen);
   psync_free(email);
- 
+
   if (email) {
     psync_diff_lock();
     psync_send_eventdata(data->eventid, data->event_data);
     psync_diff_unlock();
   }
-  
+
   psync_free(param);
 }
 
@@ -1424,16 +1451,16 @@ static void process_requestshareout(const binresult *entry){
   const binresult *share, *br;
   int isincomming =  0;
   uint64_t folderowneruserid = 0, owneruserid, folderid;
-  
+
   if (!entry)
     return;
-  
+
   share=psync_find_result(entry, "share", PARAM_HASH);
   folderid = psync_find_result(share, "folderid", PARAM_NUM)->num;
   psync_get_folder_ownerid(folderid, &folderowneruserid);
   psync_get_current_userid(&owneruserid);
   isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
-  
+
   send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
   q=psync_sql_prep_statement("REPLACE INTO sharerequest (id, folderid, ctime, etime, permissions, userid, mail, name, message, isincoming, isba) "
                                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -1487,20 +1514,20 @@ static void process_acceptedsharein(const binresult *entry){
 static void process_establishbsharein(const binresult *entry){
   psync_sql_res *q;
   const binresult *share, *br;
-  
+
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_ACCEPTIN, share);
-  
+
   q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, isincoming, folderid, ctime, permissions, message, name, isuser, "
                                                           "touserid, isteam, toteamid, fromuserid, folderownerid)"
                                                 "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
+  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM)))
     psync_sql_bind_uint(q, 3, br->num);
-  else 
+  else
     psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   br=psync_check_result(share, "message", PARAM_STR);
@@ -1517,7 +1544,7 @@ static void process_establishbsharein(const binresult *entry){
   else
     psync_sql_bind_int(q, 7, 0);
   br = psync_check_result(share, "touserid", PARAM_NUM);
-  if (br) 
+  if (br)
     psync_sql_bind_int(q, 8, br->num);
   else
     psync_sql_bind_null(q, 8);
@@ -1527,7 +1554,7 @@ static void process_establishbsharein(const binresult *entry){
   else
     psync_sql_bind_int(q, 9, 0);
   br = psync_check_result(share, "toteamid", PARAM_NUM);
-  if (br) 
+  if (br)
     psync_sql_bind_int(q, 10, br->num);
   else
     psync_sql_bind_null(q, 10);
@@ -1535,7 +1562,7 @@ static void process_establishbsharein(const binresult *entry){
   psync_sql_bind_int(q, 12, psync_find_result(share, "folderownerid", PARAM_NUM)->num);
 
   psync_sql_run_free(q);
-  
+
   debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
@@ -1545,7 +1572,7 @@ static void process_acceptedshareout(const binresult *entry){
   uint32_t aff = 0;
   int isincomming = 0;
   uint64_t folderowneruserid = 0, owneruserid, folderid;
-  
+
   if (!entry)
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
@@ -1555,14 +1582,14 @@ static void process_acceptedshareout(const binresult *entry){
   aff=psync_sql_affected_rows();
   psync_sql_free_result(q);
   if (aff) {
-      
+
     folderid = psync_find_result(share, "folderid", PARAM_NUM)->num;
     psync_get_folder_ownerid(folderid, &folderowneruserid);
     psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
-    
+
     send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
-    
+
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, folderid, ctime, permissions, userid, mail, name, isincoming) "
                                                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
@@ -1587,10 +1614,10 @@ static void process_establishbshareout(const binresult *entry) {
   char *email = 0;
   int isincomming =  0;
   uint64_t folderowneruserid, owneruserid;
-  
+
   if (!entry)
     return;
-  
+
   share=psync_find_result(entry, "share", PARAM_HASH);
   ownid =  psync_check_result(share, "folderownerid", PARAM_NUM);
   if(ownid) {
@@ -1598,17 +1625,17 @@ static void process_establishbshareout(const binresult *entry) {
     psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
   }
-  
+
   send_share_notify(((isincomming) ? PEVENT_SHARE_REQUESTIN : PEVENT_SHARE_REQUESTOUT ), share);
-  
+
   q=psync_sql_prep_statement("REPLACE INTO bsharedfolder (id, folderid, ctime, permissions, message, name, isuser, "
                                                           "touserid, isteam, toteamid, fromuserid, folderownerid, isincoming)"
                                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
   psync_sql_bind_int(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
   psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
-  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM))) 
+  if ((br=psync_check_result(share, "shared", PARAM_NUM)) || (br=psync_check_result(entry, "time", PARAM_NUM)))
     psync_sql_bind_uint(q, 3, br->num);
-  else 
+  else
     psync_sql_bind_uint(q, 3, 0);
   psync_sql_bind_uint(q, 4, psync_get_permissions(psync_find_result(share, "permissions", PARAM_HASH)));
   br=psync_find_result(share, "message", PARAM_STR);
@@ -1622,7 +1649,7 @@ static void process_establishbshareout(const binresult *entry) {
   else
     psync_sql_bind_int(q, 7, 0);
   br = psync_check_result(share, "touserid", PARAM_NUM);
-  if (br) 
+  if (br)
     psync_sql_bind_int(q, 8, br->num);
   else
     psync_sql_bind_null(q, 8);
@@ -1632,7 +1659,7 @@ static void process_establishbshareout(const binresult *entry) {
   else
     psync_sql_bind_int(q, 9, 0);
   br = psync_check_result(share, "toteamid", PARAM_NUM);
-  if (br) 
+  if (br)
     psync_sql_bind_int(q, 10, br->num);
   else
     psync_sql_bind_null(q, 10);
@@ -1703,11 +1730,11 @@ static void delete_bsshared_folder(const binresult *share){
   psync_sql_res *q;
   uint64_t shareid;
   shareid =  psync_find_result(share, "shareid", PARAM_NUM)->num;
-  
+
   q=psync_sql_prep_statement("DELETE FROM bsharedfolder WHERE id=?");
   psync_sql_bind_uint(q, 1, shareid);
   psync_sql_run_free(q);
-  
+
   debug(D_NOTICE, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
 }
 
@@ -1787,7 +1814,7 @@ static void process_modifybsharein(const binresult *entry){
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYIN, share);
-  modify_bshared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
+  modify_bshared_folder(psync_find_result(share, "permissions", PARAM_HASH),
                         psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
@@ -1797,7 +1824,7 @@ static void process_modifybshareout(const binresult *entry){
     return;
   share=psync_find_result(entry, "share", PARAM_HASH);
   send_share_notify(PEVENT_SHARE_MODIFYOUT, share);
-  modify_bshared_folder(psync_find_result(share, "permissions", PARAM_HASH), 
+  modify_bshared_folder(psync_find_result(share, "permissions", PARAM_HASH),
                         psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
@@ -1949,11 +1976,11 @@ static int send_diff_command(psync_socket *sock, subscribed_ids ids){
   }
   else{
     if (psync_is_business) {
-      binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), 
+      binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,teams,users,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT),
                             P_NUM("diffid", ids.diffid), P_NUM("publinkid", ids.publinkid), P_NUM("uploadlinkid", ids.uploadlinkid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     } else {
-      binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT), 
+      binparam diffparams[]={P_STR("subscribefor", "diff,publinks,uploadlinks,contacts"), P_STR("timeformat", "timestamp"), P_NUM("difflimit", PSYNC_DIFF_LIMIT),
                             P_NUM("diffid", ids.diffid), P_NUM("publinkid", ids.publinkid), P_NUM("uploadlinkid", ids.uploadlinkid)};
       return send_command_no_res(sock, "subscribe", diffparams)?0:-1;
     }
@@ -2275,7 +2302,7 @@ restart:
           psync_notifications_notify(res);
         }
         else if (entries->length==8 && !strcmp(entries->str, "publinks")){
-          ids.publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num; 
+          ids.publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num;
           psync_sql_lock();
           ret = cache_links(&err);
           psync_sql_unlock();
@@ -2285,7 +2312,7 @@ restart:
             psync_notify_cache_change(PACCOUNT_CHANGE_LINKS);
         }
         else if (entries->length==11 && !strcmp(entries->str, "uploadlinks")){
-          ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num; 
+          ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num;
           psync_sql_lock();
           ret = cache_upload_links(&err);
           psync_sql_unlock();
@@ -2293,7 +2320,7 @@ restart:
             debug(D_ERROR, "Cacheing upload links failed with err %s", err);
           else
             psync_notify_cache_change(PACCOUNT_CHANGE_LINKS);
-          
+
         }
         else if (entries->length==5 && !strcmp(entries->str, "teams")){
           cache_account_teams();
