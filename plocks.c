@@ -71,10 +71,8 @@ static psync_rwlock_lockcnt_t psync_rwlock_get_count(psync_rwlock_t *rw){
 }
 
 static void psync_rwlock_set_count(psync_rwlock_t *rw, psync_rwlock_lockcnt_t cnt){
-  if (cnt.cnt[1]== 1)
-  {
-    debug(D_NOTICE, "Getting write lock.");
-  }
+/*  if (cnt.cnt[1]==1)
+    debug(D_NOTICE, "Getting write lock.");*/
   pthread_setspecific(rw->cntkey, cnt.ptr);
 }
 
@@ -295,7 +293,7 @@ int psync_rwlock_towrlock(psync_rwlock_t *rw){
   if (rw->opts&PSYNC_RW_OPT_RESERVED){
     if (cnt.cnt[1]!=PSYNC_WR_RESERVED){
       pthread_mutex_unlock(&rw->mutex);
-      debug(D_NOTICE, "could not upgrade to write lock, consider using reserved locks instead");
+//      debug(D_NOTICE, "could not upgrade to write lock, consider using reserved locks instead");
       return -1;
     }
   }
@@ -335,7 +333,7 @@ void psync_rwlock_unlock(psync_rwlock_t *rw){
     }
   }
   else{
-    debug(D_NOTICE, "Releasing write lock.");
+//    debug(D_NOTICE, "Releasing write lock.");
     assert(rw->wcount);
     if (--rw->wcount==0){
       if (rw->opts&PSYNC_RW_OPT_RESERVED){
