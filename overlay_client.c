@@ -41,7 +41,7 @@ typedef struct _message {
   char value[];
 } message;
 
-char *mysoc = "/tmp/pcloud_unix_soc";
+char *clsoc = "/mydir/pcloud_unix_soc";
 
 int QueryState(pCloud_FileState *state, char* path)
 {
@@ -54,14 +54,21 @@ int QueryState(pCloud_FileState *state, char* path)
   char buf[POVERLAY_BUFSIZE];
   int bytes_read = 0;
   
+
+  
   if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
     return -1;
   }
   memset(&addr, 0, sizeof(addr));
+
   addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, mysoc, sizeof(addr.sun_path)-1);
+  strncpy(addr.sun_path, clsoc, sizeof(addr.sun_path)-1);
+
+#if defined(P_OS_MACOSX)
+  addr.sun_len = sizeof(addr);
+#endif 
   
-  if (connect(fd, (struct sockaddr*)&addr, strlen(mysoc)+sizeof(addr.sun_family)) == -1) {
+  if (connect(fd, (struct sockaddr*)&addr,SUN_LEN(&addr)) == -1) {
     return -2;
   }
 

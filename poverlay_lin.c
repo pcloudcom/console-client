@@ -37,12 +37,14 @@
 
 #include "poverlay.h"
 
-char *mysoc = "/tmp/pcloud_unix_soc";
+char *mysoc = "/mydir";
 
 void overlay_main_loop()
 {
   struct sockaddr_un addr;
   int fd,cl;
+  mkdir (mysoc, 777);
+  strcat (mysoc, "/pcloud_unix_soc.sock");
   
   if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
     debug(D_NOTICE, "Unix socket error failed to open %s", mysoc);
