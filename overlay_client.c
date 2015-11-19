@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <errno.h>
 
+
 #include "overlay_client.h"
 #define POVERLAY_BUFSIZE 512
 
@@ -69,6 +70,9 @@ int QueryState(pCloud_FileState *state, char* path)
 #endif 
   
   if (connect(fd, (struct sockaddr*)&addr,SUN_LEN(&addr)) == -1) {
+    if (errno = EPERM) { ///Probably macos no permission for UNIX sockets
+    ///TODO AF_INET socket maybe 
+    }
     return -2;
   }
 
