@@ -2428,7 +2428,7 @@ psync_file_t psync_file_open(const char *path, int access, int flags){
     cdis=OPEN_EXISTING;
   wpath=utf8_to_wchar_path(path);
   ret=CreateFileW(wpath, access, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, cdis, FILE_FLAG_POSIX_SEMANTICS|FILE_ATTRIBUTE_NORMAL, NULL);
-  if (ret==INVALID_HANDLE_VALUE)
+  if (IS_DEBUG && ret==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND)
     debug(D_WARNING, "could not open file %s, error %d", path, (int)GetLastError());
   psync_free(wpath);
   return ret;

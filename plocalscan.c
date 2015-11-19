@@ -460,7 +460,7 @@ static void scan_create_folder(sync_folderlist *fl){
   psync_sql_bind_string(res, 7, fl->name);
   psync_sql_run_free(res);
   /* it is OK to use affected rows after run_free as we are in transaction */
-  if (unlikely_log(!psync_sql_affected_rows())){
+  if (!psync_sql_affected_rows()){
     res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, deviceid=?, mtime=?, mtimenative=?, flags=0 WHERE syncid=? AND localparentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fl->inode);
     psync_sql_bind_uint(res, 2, fl->deviceid);

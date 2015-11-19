@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -110,8 +110,6 @@ void psync_del_folder_from_downloadlist(psync_folderid_t folderid){
 
 int psync_is_folder_in_downloadlist(psync_folderid_t folderid){
   synced_down_folder *f;
-  int ret;
-  ret=0;
   pthread_mutex_lock(&sync_down_mutex);
   f=psync_tree_element(synced_down_folders, synced_down_folder, tree);
   while (f){
@@ -119,13 +117,11 @@ int psync_is_folder_in_downloadlist(psync_folderid_t folderid){
       f=psync_tree_element(f->tree.left, synced_down_folder, tree);
     else if (folderid>f->folderid)
       f=psync_tree_element(f->tree.right, synced_down_folder, tree);
-    else{
-      ret=1;
+    else
       break;
-    }
   }
   pthread_mutex_unlock(&sync_down_mutex);
-  return ret;
+  return f!=NULL;
 }
 
 void psync_increase_local_folder_taskcnt(psync_folderid_t lfolderid){
@@ -159,7 +155,7 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
     lfolderid=0;
   psync_sql_free_result(res);
   if (lfolderid)
-    return lfolderid;  
+    return lfolderid;
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, folderid, syncid, flags, taskcnt, name) VALUES (?, ?, ?, 0, 1, ?)");
   psync_sql_bind_uint(res, 1, localparentfolderid);
   psync_sql_bind_uint(res, 2, folderid);
@@ -370,7 +366,7 @@ void psync_syncer_check_delayed_syncs(){
       debug(D_WARNING, "could not get folderid/create folder %s", remotepath);
       if (psync_error!=PERROR_OFFLINE)
         delete_delayed_sync(id);
-      continue;        
+      continue;
     }
     psync_sql_start_transaction();
     stmt=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags, inode, deviceid) VALUES (?, ?, ?, 0, ?, ?)");

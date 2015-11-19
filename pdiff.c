@@ -1885,6 +1885,8 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
     return psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
   }
   psync_sql_start_transaction();
+  if (entries->length>=10000)
+    psync_sql_statement("DELETE FROM setting WHERE id='lastanalyze'");
   for (i=0; i<entries->length; i++){
     entry=entries->array[i];
     etype=psync_find_result(entry, "event", PARAM_STR);

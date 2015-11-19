@@ -676,8 +676,10 @@ static int task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psyn
   http=NULL;
   psync_hash_init(&hashctx);
   psync_list_for_each_element(range, &ranges, psync_range_list_t, list){
+    if (!range->len)
+      continue;
     if (range->type==PSYNC_RANGE_TRANSFER){
-      debug(D_NOTICE, "downloading %lu bytes from offset %lu", (unsigned long)range->len, (unsigned long)range->off);
+      debug(D_NOTICE, "downloading %lu bytes from offset %lu of fileid %lu", (unsigned long)range->len, (unsigned long)range->off, (unsigned long)fileid);
       for (i=0; i<hosts->length; i++)
         if ((http=psync_http_connect(hosts->array[i]->str, requestpath, range->off, (range->len==serversize&&range->off==0)?0:(range->len+range->off-1))))
           break;
@@ -942,8 +944,7 @@ static void task_run_download_file_thread(void *ptr){
     res=psync_sql_prep_statement("DELETE FROM task WHERE id=?");
     psync_sql_bind_uint(res, 1, dt->taskid);
     psync_sql_run_free(res);
-    psync_status_recalc_to_download();
-    psync_send_status_update();
+    psync_status_recalc_to_download_async();
   }
   pthread_mutex_lock(&current_downloads_mutex);
   psync_list_del(&dt->dwllist.list);
@@ -1142,15 +1143,15 @@ void psync_download_init(){
 void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
   psync_sql_res *res;
   download_list_t *dwl;
+  uint32_t aff;
   res=psync_sql_prep_statement("DELETE FROM task WHERE type=? AND itemid=?");
   psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
   psync_sql_bind_uint(res, 2, fileid);
   psync_sql_run(res);
-  if (psync_sql_affected_rows()){
-    psync_status_recalc_to_download();
-    psync_send_status_update();
-  }
+  aff=psync_sql_affected_rows();
   psync_sql_free_result(res);
+  if (aff)
+    psync_status_recalc_to_download_async();
   pthread_mutex_lock(&current_downloads_mutex);
   psync_list_for_each_element(dwl, &downloads, download_list_t, list)
     if (dwl->fileid==fileid)
@@ -1173,8 +1174,7 @@ void psync_stop_sync_download(psync_syncid_t syncid){
   res=psync_sql_prep_statement("DELETE FROM task WHERE syncid=? AND type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_DOWNLOAD));
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
-  psync_status_recalc_to_download();
-  psync_send_status_update();
+  psync_status_recalc_to_download_async();
   pthread_mutex_lock(&current_downloads_mutex);
   psync_list_for_each_element(dwl, &downloads, download_list_t, list)
     if (dwl->syncid==syncid)
