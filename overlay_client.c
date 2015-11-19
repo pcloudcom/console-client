@@ -32,7 +32,6 @@
 #include <stdint.h>
 #include <errno.h>
 
-
 #include "overlay_client.h"
 #define POVERLAY_BUFSIZE 512
 
