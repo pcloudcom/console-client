@@ -56,6 +56,8 @@ ifeq ($(USESSL),mbed)
   CFLAGS += -DP_SSL_MBEDTLS -I../../mbedtls-1.3.10/include/
 endif
 
+OBJ1=overlay_client.o
+
 all: $(LIB_A)
 
 $(LIB_A): $(OBJ) $(OBJNOFS)
@@ -68,6 +70,9 @@ fs: $(OBJ) $(OBJFS)
 
 cli: fs
 	$(CC) $(CFLAGS) -o cli cli.c $(LIB_A) $(LDFLAGS)
+	
+overlay_client: $(OBJ1)
+	$(CC) $(CFLAGS) $(OBJ1) -o overlay_client
 
 clean:
 	rm -f *~ *.o $(LIB_A)

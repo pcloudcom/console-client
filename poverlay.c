@@ -47,10 +47,8 @@ void get_answer_to_request(message *request, message *replay)
 {
   char msg[4] = "Ok.";
   msg[3] = '\0';
-
   debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   external_status stat = do_psync_external_status(request->value);
-  replay = request;
   if (stat == INSYNC) {
     replay->type = 10;
   }
