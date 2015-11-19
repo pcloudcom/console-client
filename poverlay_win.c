@@ -101,7 +101,7 @@ void instance_thread(LPVOID lpvParam)
   message* request = NULL; //(message*)psync_malloc(POVERLAY_BUFSIZE);
   message* reply = (message*)psync_malloc(POVERLAY_BUFSIZE);
  // memset(request,0,sizeof(request));
-  memset(reply, 0, sizeof(reply));
+  memset(reply, 0, POVERLAY_BUFSIZE);
   if (lpvParam == NULL)
   {
     debug(D_ERROR, "InstanceThread got an unexpected NULL value in lpvParam.\n");

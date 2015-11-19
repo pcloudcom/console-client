@@ -41,7 +41,7 @@ typedef struct _message {
   char value[];
 } message;
 
-char *clsoc = "/mydir/pcloud_unix_soc";
+char *clsoc = "/tmp/pcloud_unix_soc.sock";
 
 int QueryState(pCloud_FileState *state, char* path)
 {
@@ -53,7 +53,7 @@ int QueryState(pCloud_FileState *state, char* path)
   char *curbuf = NULL;
   char buf[POVERLAY_BUFSIZE];
   int bytes_read = 0;
-  
+  message *rep = NULL;
 
   
   if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -89,10 +89,15 @@ int QueryState(pCloud_FileState *state, char* path)
   while ( (rc=read(fd,curbuf,(POVERLAY_BUFSIZE - bytes_read))) > 0) {
     bytes_read += rc;
     curbuf = curbuf + rc;
+    if (bytes_read > 12){
+      rep = (message *)buf;
+      if(rep->length == bytes_read)
+        break;
+    }
   }
-  message *rep = (message *)buf;
+  rep = (message *)buf;
  
-  if (rep->type == 11)
+  if (rep->type == 10)
     *state = FileStateInSync;
   else if (rep->type == 12)
     *state = FileStateInProgress;
@@ -101,5 +106,23 @@ int QueryState(pCloud_FileState *state, char* path)
   else 
     *state = FileStateInvalid;
   
+  return 0;
+}
+
+int main (int arc, char **argv ){
+  int i;pCloud_FileState state;
+  for (i = 1; i < arc; ++i) {
+    QueryState(&state, argv[i]);
+    if (state == FileStateInSync)
+      printf("File %s FileStateInSync\n", argv[i]);
+    else if (state == FileStateNoSync)
+      printf("File %s FileStateNoSync\n", argv[i]);
+    else if (state == FileStateInProgress)
+      printf("File %s FileStateInProgress\n", argv[i]);
+    else if (state == FileStateInvalid)
+      printf("File %s FileStateInvalid\n", argv[i]);
+    else 
+       printf("Not valid state returned for file %s\n", argv[i]);
+  }
   return 0;
 }
