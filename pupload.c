@@ -567,6 +567,7 @@ err1:
   psync_apipool_release_bad(api);
 err0:
   psync_file_close(fd);
+return -1;
 err00:
   psync_diff_unlock();
   return -1;
