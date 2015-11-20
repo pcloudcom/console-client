@@ -993,7 +993,7 @@ static struct addrinfo *addr_load_from_db(const char *host, const char *port){
     psync_sql_unlock();
     return NULL;
   }
-  ret=psync_malloc(sizeof(struct addrinfo)*row[0]+row[1]);
+  ret=(struct addrinfo *)psync_malloc(sizeof(struct addrinfo)*row[0]+row[1]);
   data=(char *)(ret+row[0]);
   for (i=0; i<row[0]-1; i++)
     ret[i].ai_next=&ret[i+1];

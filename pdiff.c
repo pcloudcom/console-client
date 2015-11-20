@@ -2230,6 +2230,7 @@ restart:
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
   initialdownload=0;
+  psync_run_analyze_if_needed();
   psync_syncer_check_delayed_syncs();
   exceptionsock=setup_exeptions();
   if (unlikely(exceptionsock==INVALID_SOCKET)){
@@ -2241,7 +2242,6 @@ restart:
   socks[1]=sock->sock;
   send_diff_command(sock, ids);
   psync_milisleep(50);
-  psync_run_analyze_if_needed();
   while (psync_do_run){
     if(psync_recache_contacts) {
       psync_cache_contacts();
