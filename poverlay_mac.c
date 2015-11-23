@@ -30,44 +30,46 @@
 
 #include <stdio.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <stdlib.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define POVERLAY_BUFSIZE 512
 
 #include "poverlay.h"
 
-char *mysoc = "/tmp/pcloud_unix_soc.sock";
+uint32_t myport = 8989;
 
 void overlay_main_loop()
 {
-  struct sockaddr_un addr;
+  struct sockaddr_in addr;
   int fd,cl;
   
-  if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-    debug(D_NOTICE, "Unix socket error failed to open %s", mysoc);
+  if ( (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    debug(D_NOTICE, "TCP/IP socket error failed to create socket on port %u", (unsigned int)myport);
     return;
   }
   
   memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, mysoc, sizeof(addr.sun_path)-1);
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = htons(myport);
 
-  unlink(mysoc);
   
-  if (bind(fd, (struct sockaddr*)&addr,  strlen(mysoc) + sizeof(addr.sun_family)) == -1) {
-    debug(D_ERROR,"Unix socket bind error");
+  if (bind(fd, (struct sockaddr*)&addr,  sizeof(addr)) == -1) {
+    debug(D_ERROR,"TCP/IP socket bind error");
     return;
   }
 
   if (listen(fd, 5) == -1) {
-    debug(D_ERROR,"Unix socket listen error");
+    debug(D_ERROR,"TCP/IP socket listen error");
     return;
   }
 
   while (1) {
     if ( (cl = accept(fd, NULL, NULL)) == -1) {
-      debug(D_ERROR,"Unix socket accept error");
+      debug(D_ERROR,"TCP/IP socket accept error");
       continue;
     }
     psync_run_thread1(
@@ -96,7 +98,7 @@ void instance_thread(void* lpvParam)
   
   while ( (rc=read(*cl,curbuf,(POVERLAY_BUFSIZE - bytes_read))) > 0) {
     bytes_read += rc;
-    debug(D_ERROR, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
+    debug(D_NOTICE, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
     curbuf = curbuf + rc;
     if (bytes_read > 12){
       request = (message *)chbuf;
@@ -105,7 +107,7 @@ void instance_thread(void* lpvParam)
     }
   }
   if (rc == -1) {
-    debug(D_ERROR,"Unix socket read");
+    debug(D_ERROR,"TCP/IP socket read");
     close(*cl);
     return;
   }
@@ -119,7 +121,7 @@ void instance_thread(void* lpvParam)
     if (reply ) {
       rc = write(*cl,reply,reply->length);
       if (rc != reply->length)
-        debug(D_ERROR,"Unix socket reply not sent.");
+        debug(D_ERROR,"TCP/IP  socket reply not sent.");
     
     }
   }

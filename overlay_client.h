@@ -23,51 +23,20 @@
 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-#include "pcompat.h"
-#include "plibs.h"
-#include "poverlay.h"
-#include "pexternalstatus.h"
 
-#if defined(P_OS_WINDOWS)
+#ifndef OVERLAY_CLIENT_H
+#define OVERLAY_CLIENT_H
 
-#include "poverlay_win.c"
+#define P_OS_MACOS
 
-#elif defined(P_OS_LINUX)
-
-#include "poverlay_lin.c"
-
-#elif defined(P_OS_MACOSX)
-
-#include "poverlay_mac.c"
-
-#else 
-
-void overlay_main_loop(VOID){}
-void instance_thread(LPVOID){}
-
-#endif //defined(P_OS_WINDOWS)
-
-void get_answer_to_request(message *request, message *replay)
+typedef enum _pCloud_FileState
 {
-  char msg[4] = "Ok.";
-  msg[3] = '\0';
-  debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
-  external_status stat = do_psync_external_status(request->value);
-  if (stat == INSYNC) {
-    replay->type = 10;
-  }
-  else if (stat == NOSYNC) {
-    replay->type = 11;
-  }
-  else if (stat == INPROG) {
+  FileStateInSync = 0,
+  FileStateNoSync,
+  FileStateInProgress,
+  FileStateInvalid
+}pCloud_FileState;
 
-    replay->type = 12;
-  }
-  else {
-    replay->type = 13;
-    strncpy(msg,"No.\0",4);
-  }
-  replay->length = sizeof(message)+4;
-  strncpy(replay->value, msg, 4);
+int QueryState(pCloud_FileState *state /*OUT*/, char* path /*IN*/);
 
-}
+#endif //OVERLAY_CLIENT_H
