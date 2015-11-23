@@ -32,9 +32,13 @@
 
 #include "poverlay_win.c"
 
-#elif defined(P_OS_LINUX) || defined(P_OS_MACOSX) || defined(P_OS_BSD)
+#elif defined(P_OS_LINUX)
 
 #include "poverlay_lin.c"
+
+#elif defined(P_OS_MACOSX)
+
+#include "poverlay_mac.c"
 
 #else 
 
