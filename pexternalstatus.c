@@ -284,6 +284,8 @@ external_status do_psync_external_status_file(const char *path)
   external_status result = INSYNC;
   int syncid;
   
+  if (!path)
+    return INVSYNC;
   psync_sql_rdlock();
   filep = psync_fsfolder_resolve_path(path);
   if (filep) {
@@ -310,6 +312,8 @@ external_status do_psync_external_status_folder(const char *path) {
 psync_fsfolderid_t folderid;
 external_status result = INSYNC;
   
+  if (!path)
+    return INVSYNC;
   folderid = psync_fsfolderid_by_path(path, 0);
   if (folderid != PSYNC_INVALID_FSFOLDERID) {
     result = psync_external_status_folderid(folderid);
