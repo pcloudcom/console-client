@@ -146,6 +146,8 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
   psync_fsfolderid_t folderid;
   const char *syncfolder;
   int i =0;
+  int rootlen = 0;
+  
   
   psync_sql_rdlock();
   res=psync_sql_query_nolock("select localpath, id, folderid from syncfolder;");
@@ -158,10 +160,11 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
       rest = path + len + 1;
       rootpath = psync_get_path_by_folderid(folderid, 0);
       if(rootpath) {
-        drivepath = (char *)psync_malloc(strlen(rootpath)+strlen(rest) + 1);
-        strcpy(drivepath, rootpath);
-        strcpy(drivepath + strlen(rootpath), SLASHCHAR);
-        strcpy(drivepath + strlen(rootpath) + 1, rest);
+        rootlen = strlen(rootpath);
+        drivepath = (char *)psync_malloc(rootlen +strlen(rest) + 2); // Slash and null terminator
+        memcpy(drivepath, rootpath, rootlen);
+        memcpy(drivepath + rootlen, SLASHCHAR, 1);
+        strcpy(drivepath + rootlen + 1, rest);
         debug(D_NOTICE,"Sync folder replace result: %s", drivepath);
         
         psync_sql_free_result(res);

@@ -130,6 +130,7 @@ int QueryState(pCloud_FileState *state, char* path)
   return 0;
 }
 
+#ifdef PCLOUD_TESTING
 int main (int arc, char **argv ){
   int i;pCloud_FileState state;
   for (i = 1; i < arc; ++i) {
@@ -147,3 +148,4 @@ int main (int arc, char **argv ){
   }
   return 0;
 }
+#endif
