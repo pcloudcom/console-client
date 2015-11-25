@@ -982,6 +982,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
   fl->writeid=writeid;
   fl->datafile=INVALID_HANDLE_VALUE;
   fl->indexfile=INVALID_HANDLE_VALUE;
+  fl->writetimer=PSYNC_INVALID_TIMER;
   fl->refcnt=1;
   fl->modified=fileid<0?1:0;
   if (encoder!=PSYNC_CRYPTO_INVALID_ENCODER){
@@ -1562,6 +1563,8 @@ static void close_if_valid(psync_file_t fd){
 
 static void psync_fs_free_openfile(psync_openfile_t *of){
   debug(D_NOTICE, "releasing file %s", of->currentname);
+  if (unlikely(of->writetimer!=PSYNC_INVALID_TIMER))
+    debug(D_BUG, "file %s with active timer is set to free, this is not supposed to happen", of->currentname);
   if (of->deleted && of->fileid<0){
     psync_sql_res *res;
     debug(D_NOTICE, "file %s marked for deletion, releasing cancel tasks", of->currentname);
@@ -1602,8 +1605,7 @@ static void psync_fs_free_openfile(psync_openfile_t *of){
   psync_free(of);
 }
 
-void psync_fs_dec_of_refcnt(psync_openfile_t *of){
-  uint32_t refcnt;
+static void psync_fs_get_both_locks(psync_openfile_t *of){
 retry:
   psync_sql_lock();
   if (pthread_mutex_trylock(&of->mutex)){
@@ -1614,6 +1616,11 @@ retry:
       goto retry;
     }
   }
+}
+
+void psync_fs_dec_of_refcnt(psync_openfile_t *of){
+  uint32_t refcnt;
+  psync_fs_get_both_locks(of);
   refcnt=--of->refcnt;
   if (refcnt==0)
     psync_tree_del(&openfiles, &of->tree);
@@ -1632,8 +1639,7 @@ void psync_fs_inc_of_refcnt_and_readers(psync_openfile_t *of){
 
 void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of){
   uint32_t refcnt;
-  psync_sql_lock();
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_get_both_locks(of);
   of->runningreads--;
   refcnt=--of->refcnt;
   if (refcnt==0)
@@ -1649,6 +1655,73 @@ static int psync_fs_release(const char *path, struct fuse_file_info *fi){
   debug(D_NOTICE, "release %s", path);
   psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
   return 0;
+}
+
+typedef struct {
+  psync_openfile_t *of;
+  uint64_t writeid;
+} psync_openfile_writeid_t;
+
+static void psync_fs_upload_release_timer(void *ptr){
+  psync_sql_res *res;
+  psync_openfile_writeid_t *ofw;
+  uint32_t aff;
+  ofw=(psync_openfile_writeid_t *)ptr;
+  debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", ofw->of->currentname, (unsigned long)ofw->of->currentsize, (unsigned)ofw->writeid);
+  res=psync_sql_prep_statement("UPDATE fstask SET status=0, int1=? WHERE id=? AND status=1");
+  psync_sql_bind_uint(res, 1, ofw->writeid);
+  psync_sql_bind_uint(res, 2, -ofw->of->fileid);
+  psync_sql_run(res);
+  aff=psync_sql_affected_rows();
+  psync_sql_free_result(res);
+  if (aff)
+    psync_fsupload_wake();
+  else{
+    res=psync_sql_prep_statement("UPDATE fstask SET int1=? WHERE id=? AND int1<?");
+    psync_sql_bind_uint(res, 1, ofw->writeid);
+    psync_sql_bind_uint(res, 2, -ofw->of->fileid);
+    psync_sql_bind_uint(res, 3, ofw->writeid);
+    psync_sql_run_free(res);
+  }
+  psync_fs_dec_of_refcnt(ofw->of);
+  psync_free(ofw);
+  psync_status_recalc_to_upload_async();
+}
+
+static void psync_fs_write_timer(psync_timer_t timer, void *ptr){
+  psync_openfile_t *of;
+  of=(psync_openfile_t *)ptr;
+  pthread_mutex_lock(&of->mutex);
+  psync_timer_stop(timer);
+  of->writetimer=PSYNC_INVALID_TIMER;
+  debug(D_NOTICE, "got write timer for file %s", of->currentname);
+  if (of->releasedforupload)
+    debug(D_NOTICE, "file seems to be already released for upload");
+  else if (of->modified){
+    psync_openfile_writeid_t *ofw;
+    if (unlikely(of->staticfile)){
+      debug(D_ERROR, "file is static file, which should not generally happen");
+      goto unlock_ex;
+    }
+    if (unlikely(of->encrypted && psync_fs_crypto_flush_file(of))){
+      debug(D_WARNING, "we are in timer and we failed to flush crypto file, life sux");
+      pthread_mutex_unlock(&of->mutex);
+      goto unlock_ex;
+    }
+    of->releasedforupload=1;
+    ofw=psync_new(psync_openfile_writeid_t);
+    ofw->of=of;
+    ofw->writeid=of->writeid;
+    pthread_mutex_unlock(&of->mutex);
+    debug(D_NOTICE, "running separate thread to release file for upload");
+    psync_run_thread1("upload release timer", psync_fs_upload_release_timer, ofw);
+    return;
+  }
+  else
+    debug(D_NOTICE, "file seems to be already uploaded");
+unlock_ex:
+  pthread_mutex_unlock(&of->mutex);
+  psync_fs_dec_of_refcnt(of);
 }
 
 static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
@@ -1675,8 +1748,15 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
       }
     }
     of->releasedforupload=1;
+    if (of->writetimer && !psync_timer_stop(of->writetimer)){
+      if (--of->refcnt==0){
+        debug(D_BUG, "zero refcnt in flush after canceling timer");
+        assert(of->refcnt);
+      }
+      of->writetimer=PSYNC_INVALID_TIMER;
+    }
     pthread_mutex_unlock(&of->mutex);
-    debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", path, (unsigned long)of->currentsize, (unsigned)of->writeid);
+    debug(D_NOTICE, "releasing file %s for upload, size=%lu, writeid=%u", path, (unsigned long)of->currentsize, (unsigned)writeid);
     res=psync_sql_prep_statement("UPDATE fstask SET status=0, int1=? WHERE id=? AND status=1");
     psync_sql_bind_uint(res, 1, writeid);
     psync_sql_bind_uint(res, 2, -of->fileid);
@@ -1821,6 +1901,11 @@ static void psync_fs_inc_writeid_locked(psync_openfile_t *of){
     psync_sql_unlock();
   }
   of->writeid++;
+  if (of->writetimer==PSYNC_INVALID_TIMER || !psync_timer_stop(of->writetimer)){
+    if (of->writetimer==PSYNC_INVALID_TIMER)
+      psync_fs_inc_of_refcnt_locked(of);
+    of->writetimer=psync_timer_register(psync_fs_write_timer, PSYNC_UPLOAD_NOWRITE_TIMER, of);
+  }
 }
 
 static int psync_fs_modfile_check_size_ok(psync_openfile_t *of, uint64_t size){
