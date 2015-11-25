@@ -32,9 +32,13 @@
 
 #include "poverlay_win.c"
 
-#elif defined(P_OS_LINUX) || defined(P_OS_MACOSX) || defined(P_OS_BSD)
+#elif defined(P_OS_LINUX)
 
 #include "poverlay_lin.c"
+
+#elif defined(P_OS_MACOSX)
+
+#include "poverlay_mac.c"
 
 #else 
 
@@ -47,10 +51,8 @@ void get_answer_to_request(message *request, message *replay)
 {
   char msg[4] = "Ok.";
   msg[3] = '\0';
-
   debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   external_status stat = do_psync_external_status(request->value);
-  replay = request;
   if (stat == INSYNC) {
     replay->type = 10;
   }

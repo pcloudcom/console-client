@@ -37,7 +37,7 @@
 
 #include "poverlay.h"
 
-char *mysoc = "/tmp/pcloud_unix_soc";
+char *mysoc = "/tmp/pcloud_unix_soc.sock";
 
 void overlay_main_loop()
 {
@@ -55,7 +55,7 @@ void overlay_main_loop()
 
   unlink(mysoc);
   
-  if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+  if (bind(fd, (struct sockaddr*)&addr,  strlen(mysoc) + sizeof(addr.sun_family)) == -1) {
     debug(D_ERROR,"Unix socket bind error");
     return;
   }
@@ -85,19 +85,24 @@ void instance_thread(void* lpvParam)
   int *cl, rc;
   char  chbuf[POVERLAY_BUFSIZE];
   message* request = NULL; 
-  message* reply = NULL;
   char * curbuf = &chbuf[0];
   int bytes_read = 0;
-  
+  message* reply = (message*)psync_malloc(POVERLAY_BUFSIZE);
+
+  memset(reply, 0, POVERLAY_BUFSIZE);
   memset(chbuf, 0, POVERLAY_BUFSIZE);
   
   cl = (int *)lpvParam;
   
   while ( (rc=read(*cl,curbuf,(POVERLAY_BUFSIZE - bytes_read))) > 0) {
-    
     bytes_read += rc;
     debug(D_ERROR, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
     curbuf = curbuf + rc;
+    if (bytes_read > 12){
+      request = (message *)chbuf;
+      if(request->length == bytes_read)
+        break;
+    }
   }
   if (rc == -1) {
     debug(D_ERROR,"Unix socket read");
@@ -109,10 +114,18 @@ void instance_thread(void* lpvParam)
     close(*cl);
   }
   request = (message *)chbuf;
+  if (request) {
   get_answer_to_request(request, reply);
-  rc = write(*cl,reply,reply->length);
-  if (rc != reply->length)
-    debug(D_ERROR,"Unix socket reply not sent.");
+    if (reply ) {
+      rc = write(*cl,reply,reply->length);
+      if (rc != reply->length)
+        debug(D_ERROR,"Unix socket reply not sent.");
+    
+    }
+  }
+  if (cl) {
+    close(*cl);
+  }
   debug(D_NOTICE, "InstanceThread exitting.\n");
   return;
 };
