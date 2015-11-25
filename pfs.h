@@ -38,6 +38,7 @@
 #include "pcompat.h"
 #include "pcrypto.h"
 #include "pcrc32c.h"
+#include "ptimer.h"
 #include <pthread.h>
 
 
@@ -92,6 +93,7 @@ typedef struct {
     uint64_t writeid;
     time_t staticctime;
   };
+  psync_timer_t writetimer;
   time_t currentsec;
   time_t origctime;
   psync_file_t datafile;

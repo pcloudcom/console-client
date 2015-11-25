@@ -414,6 +414,7 @@ void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr);
 void psync_milisleep(uint64_t millisec);
 time_t psync_time();
 void psync_nanotime(struct timespec *tm);
+uint64_t psync_millitime();
 void psync_yield_cpu();
 
 void psync_get_random_seed(unsigned char *seed, const void *addent, size_t aelen, int fast);
@@ -452,6 +453,10 @@ int psync_pipe(psync_socket_t pipefd[2]);
 int psync_pipe_close(psync_socket_t pfd);
 int psync_pipe_read(psync_socket_t pfd, void *buff, int num);
 int psync_pipe_write(psync_socket_t pfd, const void *buff, int num);
+
+int psync_socket_pair(psync_socket_t sfd[2]);
+int psync_wait_socket_write_timeout(psync_socket_t sock);
+int psync_wait_socket_read_timeout(psync_socket_t sock);
 
 int psync_socket_is_broken(psync_socket_t sock);
 int psync_select_in(psync_socket_t *sockets, int cnt, int64_t timeoutmillisec);

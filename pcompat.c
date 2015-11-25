@@ -544,6 +544,12 @@ void psync_nanotime(struct timespec *tm){
 #endif
 }
 
+uint64_t psync_millitime(){
+  struct timespec tm;
+  psync_nanotime(&tm);
+  return tm.tv_sec*1000+tm.tv_nsec/1000000;
+}
+
 #if defined(P_OS_POSIX)
 static void psync_add_file_to_seed(const char *fn, psync_lhash_ctx *hctx, size_t max){
   char buff[4096];
@@ -844,7 +850,10 @@ static int psync_wait_socket_writable_microsec(psync_socket_t sock, long sec, lo
 }
 
 #define psync_wait_socket_writable(sock, sec) psync_wait_socket_writable_microsec(sock, sec, 0)
-#define psync_wait_socket_write_timeout(sock) psync_wait_socket_writable(sock, PSYNC_SOCK_WRITE_TIMEOUT)
+
+int psync_wait_socket_write_timeout(psync_socket_t sock){
+  return psync_wait_socket_writable(sock, PSYNC_SOCK_WRITE_TIMEOUT);
+}
 
 static int psync_wait_socket_readable_microsec(psync_socket_t sock, long sec, long usec){
   fd_set rfds;
@@ -882,7 +891,10 @@ static int psync_wait_socket_readable_microsec(psync_socket_t sock, long sec, lo
 }
 
 #define psync_wait_socket_readable(sock, sec) psync_wait_socket_readable_microsec(sock, sec, 0)
-#define psync_wait_socket_read_timeout(sock) psync_wait_socket_readable(sock, PSYNC_SOCK_READ_TIMEOUT)
+
+int psync_wait_socket_read_timeout(psync_socket_t sock){
+  return psync_wait_socket_readable(sock, PSYNC_SOCK_READ_TIMEOUT);
+}
 
 static psync_socket_t connect_res(struct addrinfo *res){
   psync_socket_t sock;
@@ -1999,10 +2011,8 @@ empty:
   return ret;
 }
 
-int psync_pipe(psync_socket_t pipefd[2]){
-#if defined(P_OS_POSIX)
-  return pipe(pipefd);
-#else
+#if !defined(P_OS_POSIX)
+static int psync_compat_socketpair(psync_socket_t sockfd[2]){
   psync_socket_t sock;
   struct sockaddr_in addr;
   socklen_t addrlen;
@@ -2025,19 +2035,27 @@ int psync_pipe(psync_socket_t pipefd[2]){
   if (bind(sock, (struct sockaddr *)&addr, sizeof(addr))==SOCKET_ERROR ||
       listen(sock, 1)==SOCKET_ERROR ||
       getsockname(sock, (struct sockaddr *)&addr, &addrlen)==SOCKET_ERROR ||
-      (pipefd[0]=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET)
+      (sockfd[0]=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))==INVALID_SOCKET)
     goto err1;
-  if (connect(pipefd[0], (struct sockaddr *)&addr, addrlen)==SOCKET_ERROR ||
-      (pipefd[1]=accept(sock, NULL, NULL))==INVALID_SOCKET)
+  if (connect(sockfd[0], (struct sockaddr *)&addr, addrlen)==SOCKET_ERROR ||
+      (sockfd[1]=accept(sock, NULL, NULL))==INVALID_SOCKET)
     goto err2;
   psync_close_socket(sock);
   return 0;
 err2:
-  psync_close_socket(pipefd[0]);
+  psync_close_socket(sockfd[0]);
 err1:
   psync_close_socket(sock);
 err0:
   return SOCKET_ERROR;
+}
+#endif
+
+int psync_pipe(psync_socket_t pipefd[2]){
+#if defined(P_OS_POSIX)
+  return pipe(pipefd);
+#else
+  return psync_compat_socketpair(pipefd);
 #endif
 }
 
@@ -2062,6 +2080,14 @@ int psync_pipe_write(psync_socket_t pfd, const void *buff, int num){
   return send(pfd, (const char *)buff, num, 0);
 #else
 #error "Function not implemented for your operating system"
+#endif
+}
+
+int psync_socket_pair(psync_socket_t sfd[2]){
+#if defined(P_OS_POSIX)
+  return socketpair(AF_UNIX, SOCK_STREAM, 0, sfd);
+#else
+  return psync_compat_socketpair(sfd);
 #endif
 }
 
