@@ -295,7 +295,7 @@ external_status do_psync_external_status_file(const char *path)
         psync_sync_status_file(filep->name, filep->folderid, syncid);
       }
       if (psync_fstask_find_creat(taskp, filep->name, 0)) {
-        if (psync_status_is_offline())
+        if (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
           result = NOSYNC;
         else 
           result = INPROG;
