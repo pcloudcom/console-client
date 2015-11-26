@@ -34,6 +34,7 @@
 #include <netinet/in.h>
 
 #include "overlay_client.h"
+#include "debug.h"
 #define POVERLAY_BUFSIZE 512
 
 typedef struct _message {
@@ -66,7 +67,8 @@ int QueryState(pCloud_FileState *state, char* path)
   char buf[POVERLAY_BUFSIZE];
   int bytes_read = 0;
   message *rep = NULL;
-
+  
+  debug(D_NOTICE, "QueryState state[%d] path[%s]\n", *state, path);
   
 #if defined(P_OS_MACOS)
   if ( (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -102,7 +104,7 @@ int QueryState(pCloud_FileState *state, char* path)
     bytes_writen += rc;
     curbuf = curbuf + rc;
   }
-  
+  debug(D_NOTICE, "QueryState bytes send[%d]\n", bytes_writen);
   if (bytes_writen != mes->length)
     return -3;
  
@@ -118,6 +120,7 @@ int QueryState(pCloud_FileState *state, char* path)
   }
   rep = (message *)buf;
  
+  debug(D_NOTICE, "QueryState responese type[%d] msg[%s]\n", rep->type, rep->value);
   if (rep->type == 10)
     *state = FileStateInSync;
   else if (rep->type == 12)
