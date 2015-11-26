@@ -27,7 +27,7 @@
 #ifndef OVERLAY_CLIENT_H
 #define OVERLAY_CLIENT_H
 
-#define P_OS_MACOS
+// #define P_OS_MACOS
 
 typedef enum _pCloud_FileState
 {
@@ -38,5 +38,7 @@ typedef enum _pCloud_FileState
 }pCloud_FileState;
 
 int QueryState(pCloud_FileState *state /*OUT*/, char* path /*IN*/);
+
+int SendCall(int id /*IN*/, char* path /*IN*/, int* ret /*OUT*/, char** errm /*OUT*/);
 
 #endif //OVERLAY_CLIENT_H

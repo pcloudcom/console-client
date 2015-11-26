@@ -51,8 +51,22 @@ uint32_t clport = 8989;
 char *clsoc = "/tmp/pcloud_unix_soc.sock";
 #endif
 
-int QueryState(pCloud_FileState *state, char* path)
-{
+int QueryState(pCloud_FileState *state, char* path) {
+  int rep = 0;
+  if (SendCall(4, path /*IN*/, &rep, NULL)) {
+    debug(D_NOTICE, "QueryState responese type[%d] msg[%s]\n", (int)*state, path);
+    if (rep == 10)
+      *state = FileStateInSync;
+    else if (rep == 12)
+      *state = FileStateInProgress;
+    else if (rep == 11)
+      *state = FileStateNoSync;
+    else 
+      *state = FileStateInvalid;
+  }
+  return 0;
+}
+int SendCall(int id /*IN*/, char* path /*IN*/, int* ret /*OUT*/, char** errm /*OUT*/) {
 #if defined(P_OS_MACOS)
   struct sockaddr_in addr;
 #else
@@ -65,25 +79,36 @@ int QueryState(pCloud_FileState *state, char* path)
   int bytes_writen = 0;
   char *curbuf = NULL;
   char buf[POVERLAY_BUFSIZE];
+  char sendbuf[mess_size];
   int bytes_read = 0;
   message *rep = NULL;
   
-  debug(D_NOTICE, "QueryState state[%d] path[%s]\n", *state, path);
+  
+  debug(D_NOTICE, "QueryState state[%d] path[%s]\n", id, path);
   
 #if defined(P_OS_MACOS)
   if ( (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    if (errm)
+      *errm = strndup("Unable to crate socket", 22);
+    *ret = -1;
     return -1;
   }
-  
+
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   addr.sin_port = htons(clport);
   if (connect(fd, (struct sockaddr*)&addr,sizeof(struct sockaddr)) == -1) {
+    if (errm)
+      *errm = strndup("Unable to connect", 17);
+    *ret = -2;
     return -2;
   }
 #else
   if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    if (errm)
+      *errm = strndup("Unable to crate socket", 22);
+    *ret = -1;
     return -1;
   }
   memset(&addr, 0, sizeof(addr));
@@ -91,12 +116,16 @@ int QueryState(pCloud_FileState *state, char* path)
   strncpy(addr.sun_path, clsoc, sizeof(addr.sun_path)-1);
   
   if (connect(fd, (struct sockaddr*)&addr,SUN_LEN(&addr)) == -1) {
+    if (errm)
+      *errm = strndup("Unable to connect", 16);
+    *ret = -2;
     return -2;
   }
 #endif 
 
-  message* mes = (message *)malloc(mess_size);
-  mes->type = 4;
+  message* mes = (message *)sendbuf;
+  memset(mes, 0, mess_size);
+  mes->type = id;
   strncpy(mes->value, path, path_size);
   mes->length = mess_size;
   curbuf = (char *)mes;
@@ -105,9 +134,12 @@ int QueryState(pCloud_FileState *state, char* path)
     curbuf = curbuf + rc;
   }
   debug(D_NOTICE, "QueryState bytes send[%d]\n", bytes_writen);
-  if (bytes_writen != mes->length)
-    return -3;
- 
+  if (bytes_writen != mes->length) {
+    if (errm)
+      *errm = strndup("Communication error", 19);
+    *ret = -3;
+    return -3;}
+  
   curbuf = buf;
   while ( (rc=read(fd,curbuf,(POVERLAY_BUFSIZE - bytes_read))) > 0) {
     bytes_read += rc;
@@ -120,22 +152,19 @@ int QueryState(pCloud_FileState *state, char* path)
   }
   rep = (message *)buf;
  
-  debug(D_NOTICE, "QueryState responese type[%d] msg[%s]\n", rep->type, rep->value);
-  if (rep->type == 10)
-    *state = FileStateInSync;
-  else if (rep->type == 12)
-    *state = FileStateInProgress;
-  else if (rep->type == 11)
-    *state = FileStateNoSync;
-  else 
-    *state = FileStateInvalid;
+  *ret = rep->type;
+  if (errm)
+    *errm = strndup(rep->value, rep->length - sizeof(message));
   
   return 0;
 }
 
 #ifdef PCLOUD_TESTING
 int main (int arc, char **argv ){
-  int i;pCloud_FileState state;
+  int i,j = 0;
+  pCloud_FileState state;
+  char *errm;
+  
   for (i = 1; i < arc; ++i) {
     QueryState(&state, argv[i]);
     if (state == FileStateInSync)
@@ -148,6 +177,12 @@ int main (int arc, char **argv ){
       printf("File %s FileStateInvalid\n", argv[i]);
     else 
        printf("Not valid state returned for file %s\n", argv[i]);
+    SendCall(20, argv[i], &j, &errm);
+      printf("Call 20 returned %d msg %s \n", j, errm);
+    SendCall(21, argv[i], &j, &errm);
+      printf("Call 21 returned %d msg %s \n", j, errm);
+    SendCall(22, argv[i], &j, &errm);
+      printf("Call 22 returned %d msg %s \n", j, errm);
   }
   return 0;
 }
