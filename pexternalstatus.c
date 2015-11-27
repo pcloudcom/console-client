@@ -364,9 +364,10 @@ external_status do_psync_external_status(char *path)
   
   fsroot = psync_fs_getmountpoint();
   if (fsroot) {
-    debug(D_WARNING, "Not mounted!!!");
     rootlen = strlen(fsroot);
   }
+  else 
+    debug(D_WARNING, "Not mounted!!!");
   if (fsroot && rootlen && !strncmp(fsroot, path, rootlen)) {
     pcpath = path + rootlen;
     debug(D_NOTICE, "Drive root replace result: %s", pcpath);
