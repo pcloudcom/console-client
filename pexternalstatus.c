@@ -157,8 +157,10 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
     if (i == 0) {
       (*syncid) = psync_get_snumber(row[1]);
       folderid = psync_get_snumber(row[2]);
-      rest = path + len + 1;
       rootpath = psync_get_path_by_folderid(folderid, 0);
+      if ((path[len] == '\0') || ((path[len] == SLASHCHAR) && (path[len + 1] == '\0')))
+        return rootpath;
+      rest = path + len + 1;
       if(rootpath) {
         rootlen = strlen(rootpath);
         drivepath = (char *)psync_malloc(rootlen +strlen(rest) + 2); // Slash and null terminator
@@ -167,6 +169,7 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
         strcpy(drivepath + rootlen + 1, rest);
         debug(D_NOTICE,"Sync folder replace result: %s", drivepath);
         
+        psync_free(rootpath);
         psync_sql_free_result(res);
         psync_sql_rdunlock();
         return drivepath;
@@ -289,11 +292,11 @@ external_status do_psync_external_status_file(const char *path)
   psync_sql_rdlock();
   filep = psync_fsfolder_resolve_path(path);
   if (filep) {
+    if ((syncid = folder_in_sync(filep->folderid))) {
+      return psync_sync_status_file(filep->name, filep->folderid, syncid);
+    }
     taskp =  psync_fstask_get_folder_tasks_rdlocked(filep->folderid);
     if (taskp) {
-      if((syncid = folder_in_sync(filep->folderid))) {
-        psync_sync_status_file(filep->name, filep->folderid, syncid);
-      }
       if (psync_fstask_find_creat(taskp, filep->name, 0)) {
         if (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
           result = NOSYNC;
