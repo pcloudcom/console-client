@@ -77,18 +77,19 @@ static int initialdownload=0;
 static paccount_cache_callback_t psync_cache_callback=NULL;
 static uint32_t psync_is_business=0;
 
-void do_register_account_events_callback(paccount_cache_callback_t callback)
-{
+void do_register_account_events_callback(paccount_cache_callback_t callback){
   psync_cache_callback=callback;
 }
 
 static void psync_notify_cache_change(psync_changetype_t event){
   paccount_cache_callback_t callback;
-  psync_changetype_t  *chtype=psync_new(psync_changetype_t);
+  psync_changetype_t *chtype=psync_new(psync_changetype_t);
   *chtype=event;
   callback=psync_cache_callback;
   if (callback)
     psync_run_thread1("cache start callback", callback, chtype);
+  else
+    psync_free(chtype);
 }
 
 
@@ -2305,9 +2306,7 @@ restart:
         }
         else if (entries->length==8 && !strcmp(entries->str, "publinks")){
           ids.publinkid=psync_find_result(res, "publinkid", PARAM_NUM)->num;
-          psync_sql_lock();
           ret = cache_links(&err);
-          psync_sql_unlock();
           if (ret < 0)
             debug(D_ERROR, "Cacheing links faild with err %s", err);
           else
@@ -2315,9 +2314,7 @@ restart:
         }
         else if (entries->length==11 && !strcmp(entries->str, "uploadlinks")){
           ids.uploadlinkid=psync_find_result(res, "uploadlinkid", PARAM_NUM)->num;
-          psync_sql_lock();
           ret = cache_upload_links(&err);
-          psync_sql_unlock();
           if (ret < 0)
             debug(D_ERROR, "Cacheing upload links failed with err %s", err);
           else
