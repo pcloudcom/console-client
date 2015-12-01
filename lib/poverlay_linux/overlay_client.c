@@ -142,6 +142,7 @@ int SendCall( int id /*IN*/ , char * path /*IN*/ , int * ret /*OUT*/ , char ** e
   if (bytes_writen != mes-> length ) {
     if (errm)
       *errm = strndup ( "Communication error" , 19 );
+    close(fd);
     *ret = - 5 ;
     return - 5 ;
   }
@@ -161,6 +162,8 @@ int SendCall( int id /*IN*/ , char * path /*IN*/ , int * ret /*OUT*/ , char ** e
   *ret = rep-> type ;
   if (errm)
     *errm = strndup (rep-> value , rep-> length - sizeof ( message ));
+
+  close(fd);
 
   return 0 ;
 }
