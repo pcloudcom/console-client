@@ -40,9 +40,9 @@
 #define MAX_RECURS_DEPTH 31
 
 #ifdef P_OS_WINDOWS
-#define SLASHCHAR "\\"
+#define SLASHCHAR '\\'
 #else
-#define SLASHCHAR "/"
+#define SLASHCHAR '/'
 #endif
 
 static int folder_in_sync(psync_fsfolderid_t folderid) {
@@ -140,13 +140,13 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
   psync_sql_res *res = NULL;
   psync_variant_row row;
   size_t len;
-  const char *rootpath;
+  char *rootpath;
   char *drivepath;
   const char *rest;
   psync_fsfolderid_t folderid;
   const char *syncfolder;
   int i =0;
-  int rootlen = 0;
+  int rootlen = 0, reslen = 0;
   
   
   psync_sql_rdlock();
@@ -161,12 +161,13 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
       if ((path[len] == '\0') || ((path[len] == SLASHCHAR) && (path[len + 1] == '\0')))
         return rootpath;
       rest = path + len + 1;
+      reslen = strlen(rest);
       if(rootpath) {
         rootlen = strlen(rootpath);
-        drivepath = (char *)psync_malloc(rootlen +strlen(rest) + 2); // Slash and null terminator
+        drivepath = (char *)psync_malloc(rootlen + reslen + 2); // Slash and null terminator
         memcpy(drivepath, rootpath, rootlen);
-        memcpy(drivepath + rootlen, SLASHCHAR, 1);
-        strcpy(drivepath + rootlen + 1, rest);
+        memset(drivepath + rootlen, SLASHCHAR, 1);
+        memcpy(drivepath + rootlen + 1, rest, reslen + 1); //Copy also the null terminator 
         debug(D_NOTICE,"Sync folder replace result: %s", drivepath);
         
         psync_free(rootpath);

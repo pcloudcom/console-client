@@ -56,6 +56,7 @@ int psync_add_overlay_callback(int id, poverlay_callback callback)
   if (id > 35)
     return -2;
   callbacks[id - 20] = callback;
+  return 0;
 }
 
 void inti_overlay_callbacks() {

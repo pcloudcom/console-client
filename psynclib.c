@@ -901,8 +901,18 @@ int psync_lost_password(const char *email, char **err){
 }
 
 int psync_change_password(const char *currentpass, const char *newpass, char **err){
-  binparam params[]={P_STR("auth", psync_my_auth), P_STR("oldpassword", currentpass), P_STR("newpassword", newpass)};
-  return run_command("changepassword", params, err);
+  char * device; int ret;binresult *res;
+  device=psync_deviceid();
+  {
+    binparam params[]={P_STR("auth", psync_my_auth), P_STR("oldpassword", currentpass), P_STR("newpassword", newpass), P_STR("device", device), P_BOOL("regetauth", 1)};
+    ret = run_command_get_res("changepassword", params, err, &res);
+  }
+  psync_free(device);
+  if (ret)
+    return ret;
+  psync_strlcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str, sizeof(psync_my_auth));
+  psync_free(res);
+  return 0;
 }
 
 int psync_create_remote_folder_by_path(const char *path, char **err){
