@@ -70,15 +70,9 @@ fs: $(OBJ) $(OBJFS)
 
 cli: fs
 	$(CC) $(CFLAGS) -o cli cli.c $(LIB_A) $(LDFLAGS)
-<<<<<<< HEAD
-
-overlay_client: $(OBJ1)
-	$(CC) $(CFLAGS) $(OBJ1) -o overlay_client
-=======
 	
 overlay_client:
 	cd ./lib/poverlay_linux && make
->>>>>>> 8bf5cacb165d3a627d4b51d66db4d09757ee3ff9
 
 clean:
 	rm -f *~ *.o $(LIB_A) ./lib/poverlay_linux/*.o ./lib/poverlay_linux/overlay_client
