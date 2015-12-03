@@ -76,7 +76,6 @@ typedef struct {
   uint32_t type;
 } psync_block_action;
 
-
 static time_t current_download_sec=0;
 static psync_uint_t download_bytes_this_sec=0;
 static psync_uint_t download_bytes_off=0;

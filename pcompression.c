@@ -62,7 +62,7 @@ psync_deflate_t *psync_deflate_init(int level){
   }
   else{
     def->flags=FLAG_DEFLATE;
-    ret=deflateInit(&def->stream, level);
+    ret=deflateInit2(&def->stream, level, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY);
   }
   if (likely_log(ret==Z_OK))
     return def;
@@ -77,6 +77,7 @@ void psync_deflate_destroy(psync_deflate_t *def){
     deflateEnd(&def->stream);
   else
     inflateEnd(&def->stream);
+  psync_free(def->flushbuff);
   psync_free(def);
 }
 
@@ -242,9 +243,9 @@ int psync_deflate_read(psync_deflate_t *def, void *data, int len){
     memcpy((char *)data+BUFFER_SIZE-def->bufferstartoff, def->buffer, len-(BUFFER_SIZE-def->bufferstartoff));
   }
   def->bufferstartoff+=len;
-  /*if (def->bufferstartoff==def->bufferendoff)
+  if (def->bufferstartoff==def->bufferendoff)
     def->bufferstartoff=def->bufferendoff=0;
-  else*/ if (def->bufferstartoff>=BUFFER_SIZE){
+  else if (def->bufferstartoff>=BUFFER_SIZE){
     def->bufferstartoff-=BUFFER_SIZE;
     assert(def->bufferendoff>=BUFFER_SIZE);
     def->bufferendoff-=BUFFER_SIZE;

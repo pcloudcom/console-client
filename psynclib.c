@@ -58,6 +58,7 @@
 #include "pbusinessaccount.h"
 #include "pcontacts.h"
 #include "poverlay.h"
+#include "pasyncnet.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -207,7 +208,7 @@ int psync_init(){
     psync_libstate=1;
     pthread_mutex_unlock(&psync_libstate_mutex);
   }
-  
+
   psync_run_thread("Overlay main thread", overlay_main_loop);
 
 
@@ -264,6 +265,7 @@ void psync_destroy(){
   psync_fs_stop();
   psync_terminate_status_waiters();
   psync_send_status_update();
+  psync_async_stop();
   psync_timer_wake();
   psync_timer_notify_exception();
   psync_sql_sync();
@@ -390,6 +392,7 @@ void psync_logout2(uint32_t auth_status, int doinvauth){
   psync_fs_pause_until_login();
   psync_stop_all_download();
   psync_stop_all_upload();
+  psync_async_stop();
   psync_cache_clean_all();
   psync_restart_localscan();
   psync_timer_notify_exception();
@@ -1112,13 +1115,13 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
     str=psync_get_lstring(row[6], &len);
     share->fromemail=str;
     psync_list_add_lstring_offset(builder, offsetof(psync_share_t, fromemail), len);
-  } else 
+  } else
     share->fromemail = "";
   if (row[7].type != PSYNC_TNULL) {
     str=psync_get_lstring(row[7], &len);
     share->sharename=str;
     psync_list_add_lstring_offset(builder, offsetof(psync_share_t, sharename), len);
-   } else 
+   } else
     share->sharename = "";
   share->permissions=perms;
   share->canread=(perms&PSYNC_PERM_READ)/PSYNC_PERM_READ;
@@ -1128,7 +1131,7 @@ static int create_share(psync_list_builder_t *builder, void *element, psync_vari
   share->canmanage=(perms&PSYNC_PERM_MANAGE)/PSYNC_PERM_MANAGE;
   if(psync_get_number(row[8]))
     share->isba = 1;
-  else 
+  else
     share->isba = 0;
   share->isteam = psync_get_number(row[9]);
   return 0;
@@ -1140,7 +1143,7 @@ psync_share_list_t *psync_list_shares(int incoming){
   builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
   incoming=!!incoming;
   if (incoming) {
-    res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, ifnull(mail, ''), ifnull(mail, '') as frommail,name, ifnull(bsharedfolderid, 0), 0 FROM sharedfolder WHERE isincoming=1 AND id >= 0 " 
+    res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, ifnull(mail, ''), ifnull(mail, '') as frommail,name, ifnull(bsharedfolderid, 0), 0 FROM sharedfolder WHERE isincoming=1 AND id >= 0 "
                                 " UNION ALL "
                                 " select id, folderid, ctime, permissions, fromuserid as userid , "
                                 " case when isteam = 1 then (select name from baccountteam where id = toteamid) "
@@ -1149,7 +1152,7 @@ psync_share_list_t *psync_list_shares(int incoming){
                                 " name, id as bsharedfolderid, 0 from bsharedfolder where isincoming = 1 "
                                 " ORDER BY name;");
   psync_list_bulder_add_sql(builder, res, create_share);
-  
+
   } else {
     res=psync_sql_query_rdlock("SELECT sf.id, sf.folderid, sf.ctime, sf.permissions, sf.userid, ifnull(sf.mail, ''), ifnull(sf.mail, '') as frommail, f.name as fname, ifnull(sf.bsharedfolderid, 0), 0 "
                                 " FROM sharedfolder sf, folder f WHERE sf.isincoming=0 AND sf.id >= 0 and sf.folderid = f.id "
@@ -1163,7 +1166,7 @@ psync_share_list_t *psync_list_shares(int incoming){
                                 " and bsf.folderid = f.id ORDER BY fname ");
     psync_list_bulder_add_sql(builder, res, create_share);
   }
-  
+
   return (psync_share_list_t *)psync_list_builder_finalize(builder);
 }
 
@@ -1222,7 +1225,7 @@ int psync_remove_share(psync_shareid_t shareid, char **err){
   result = run_command("removeshare", params, err);
   if (result == 2025) {
     result = psync_account_stopshare(shareid, &err1);
-    if(result == 2075) { 
+    if(result == 2075) {
       result = 2025;
       psync_free(err1);
     } else {
@@ -1249,7 +1252,7 @@ int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err
   result =  run_command("changeshare", params, err);
   if (result == 2025) {
     result = psync_account_modifyshare(shareid, convert_perms(permissions), &err1);
-    if(result == 2075) { 
+    if(result == 2075) {
       result = 2025;
       psync_free(err1);
     } else {
@@ -1680,20 +1683,20 @@ void psync_register_account_events_callback(paccount_cache_callback_t callback)
   do_register_account_events_callback(callback);
 }
 
-void psync_get_current_userid(psync_userid_t* ret) {
+void psync_get_current_userid(psync_userid_t *ret) {
   psync_sql_res *res;
   psync_uint_row row;
-  
+
   res = psync_sql_query_rdlock("SELECT value FROM setting WHERE id= 'userid' ");
   while ((row = psync_sql_fetch_rowint(res)))
     *ret = row[0];
   psync_sql_free_result(res);
 }
 
-void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t* ret) {
+void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t *ret) {
   psync_sql_res *res;
   psync_uint_row row;
-  
+
   res=psync_sql_query_rdlock("SELECT userid FROM folder WHERE id=?");
   psync_sql_bind_uint(res, 1, folderid);
   while ((row=psync_sql_fetch_rowint(res)))

@@ -887,6 +887,8 @@ static int psync_wait_socket_readable_microsec(psync_socket_t sock, long sec, lo
       debug(D_WARNING, "socket read timeouted on %ld seconds", sec);
     psync_sock_set_err(P_TIMEDOUT);
   }
+  else
+    debug(D_WARNING, "select returned %d", res);
   return SOCKET_ERROR;
 }
 
