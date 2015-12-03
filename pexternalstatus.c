@@ -40,9 +40,9 @@
 #define MAX_RECURS_DEPTH 31
 
 #ifdef P_OS_WINDOWS
-#define SLASHCHAR "\\"
+#define SLASHCHAR '\\'
 #else
-#define SLASHCHAR "/"
+#define SLASHCHAR '/'
 #endif
 
 static int folder_in_sync(psync_fsfolderid_t folderid) {
@@ -140,12 +140,14 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
   psync_sql_res *res = NULL;
   psync_variant_row row;
   size_t len;
-  const char *rootpath;
+  char *rootpath;
   char *drivepath;
   const char *rest;
   psync_fsfolderid_t folderid;
   const char *syncfolder;
   int i =0;
+  char *ret = NULL;
+  int rootlen = 0, reslen = 0;
   
   psync_sql_rdlock();
   res=psync_sql_query_nolock("select localpath, id, folderid from syncfolder;");
@@ -155,25 +157,30 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
     if (i == 0) {
       (*syncid) = psync_get_snumber(row[1]);
       folderid = psync_get_snumber(row[2]);
-      rest = path + len + 1;
       rootpath = psync_get_path_by_folderid(folderid, 0);
+      if ((path[len] == '\0') || ((path[len] == SLASHCHAR) && (path[len + 1] == '\0'))) {
+        ret = rootpath;
+        break;
+      }
+      rest = path + len + 1;
+      reslen = strlen(rest);
       if(rootpath) {
-        drivepath = (char *)psync_malloc(strlen(rootpath)+strlen(rest) + 1);
-        strcpy(drivepath, rootpath);
-        strcpy(drivepath + strlen(rootpath), SLASHCHAR);
-        strcpy(drivepath + strlen(rootpath) + 1, rest);
+        rootlen = strlen(rootpath);
+        drivepath = (char *)psync_malloc(rootlen + reslen + 2); // Slash and null terminator
+        memcpy(drivepath, rootpath, rootlen);
+        memset(drivepath + rootlen, SLASHCHAR, 1);
+        memcpy(drivepath + rootlen + 1, rest, reslen + 1); //Copy also the null terminator 
         debug(D_NOTICE,"Sync folder replace result: %s", drivepath);
         
-        psync_sql_free_result(res);
-        psync_sql_rdunlock();
-        return drivepath;
+        psync_free(rootpath);
+        ret = drivepath;
+        break;
       }
     }
   }
   psync_sql_free_result(res);
   psync_sql_rdunlock();
-   
-  return NULL;
+  return ret;
 } 
 
 external_status psync_sync_status_folderid(psync_fsfolderid_t folderid, int syncid) {
@@ -281,24 +288,26 @@ external_status do_psync_external_status_file(const char *path)
   external_status result = INSYNC;
   int syncid;
   
+  if (!path)
+    return INVSYNC;
   psync_sql_rdlock();
   filep = psync_fsfolder_resolve_path(path);
   if (filep) {
-    taskp =  psync_fstask_get_folder_tasks_rdlocked(filep->folderid);
-    if (taskp) {
-      if((syncid = folder_in_sync(filep->folderid))) {
-        psync_sync_status_file(filep->name, filep->folderid, syncid);
-      }
-      if (psync_fstask_find_creat(taskp, filep->name, 0)) {
-        if (psync_status_is_offline())
-          result = NOSYNC;
-        else 
-          result = INPROG;
+    if ((syncid = folder_in_sync(filep->folderid))) {
+      result = psync_sync_status_file(filep->name, filep->folderid, syncid);
+    } else {
+      taskp = psync_fstask_get_folder_tasks_rdlocked(filep->folderid);
+      if (taskp) {
+        if (psync_fstask_find_creat(taskp, filep->name, 0)) {
+          if (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
+            result = NOSYNC;
+          else
+            result = INPROG;
+        }
       }
     }
   }
   psync_sql_rdunlock();
-  
   return result;
 }
 
@@ -307,6 +316,8 @@ external_status do_psync_external_status_folder(const char *path) {
 psync_fsfolderid_t folderid;
 external_status result = INSYNC;
   
+  if (!path)
+    return INVSYNC;
   folderid = psync_fsfolderid_by_path(path, 0);
   if (folderid != PSYNC_INVALID_FSFOLDERID) {
     result = psync_external_status_folderid(folderid);
@@ -357,9 +368,10 @@ external_status do_psync_external_status(char *path)
   
   fsroot = psync_fs_getmountpoint();
   if (fsroot) {
-    debug(D_WARNING, "Not mounted!!!");
     rootlen = strlen(fsroot);
   }
+  else 
+    debug(D_WARNING, "Not mounted!!!");
   if (fsroot && rootlen && !strncmp(fsroot, path, rootlen)) {
     pcpath = path + rootlen;
     debug(D_NOTICE, "Drive root replace result: %s", pcpath);

@@ -47,27 +47,68 @@ void instance_thread(LPVOID){}
 
 #endif //defined(P_OS_WINDOWS)
 
+poverlay_callback callbacks[15];
+
+int psync_add_overlay_callback(int id, poverlay_callback callback) 
+{
+  if (id < 20)
+    return -1;
+  if (id > 35)
+    return -2;
+  callbacks[id - 20] = callback;
+  return 0;
+}
+
+void inti_overlay_callbacks() {
+  memset(&callbacks, 0, 15);
+}
+
 void get_answer_to_request(message *request, message *replay)
 {
   char msg[4] = "Ok.";
   msg[3] = '\0';
   debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
-  external_status stat = do_psync_external_status(request->value);
-  if (stat == INSYNC) {
-    replay->type = 10;
-  }
-  else if (stat == NOSYNC) {
-    replay->type = 11;
-  }
-  else if (stat == INPROG) {
+  if (request->type < 20 ) {
+    external_status stat = do_psync_external_status(request->value);
+    if (stat == INSYNC) {
+      replay->type = 10;
+    }
+    else if (stat == NOSYNC) {
+      replay->type = 11;
+    }
+    else if (stat == INPROG) {
 
-    replay->type = 12;
-  }
-  else {
-    replay->type = 13;
-    strncpy(msg,"No.\0",4);
-  }
-  replay->length = sizeof(message)+4;
-  strncpy(replay->value, msg, 4);
+      replay->type = 12;
+    }
+    else {
+      replay->type = 13;
+      strncpy(msg,"No.\0",4);
+    }
+    replay->length = sizeof(message)+4;
+    strncpy(replay->value, msg, 4);
+  } else if (request->type < 36) {
+    int ind = request->type - 20;
+    int ret = 0;
+    if (callbacks[ind]) {
+      if ((ret = callbacks[ind](request->value)) == 0) {
+        replay->type = 0;
+        replay->length = sizeof(message)+4;
+        strncpy(replay->value, msg, 4);
+      } else {
+        replay->type = ret;
+        strncpy(msg,"No.\0",4);
+      }
+      strncpy(replay->value, msg, 4);
+      replay->length = sizeof(message)+4;
+    } else {
+      replay->type = 13;
+      strncpy(replay->value, "No callback with this id registered.\0", 37);
+      replay->length = sizeof(message)+37;
+    }
+  } else {
+      replay->type = 13;
+      strncpy(replay->value, "Invalid type.\0", 14);
+      replay->length = sizeof(message)+14;
+    }
 
 }

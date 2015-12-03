@@ -31,7 +31,7 @@ ShellExt::ShellExt(FileState state) :_state(state)
     ("INVALID", FileStateInvalid)
     ;
   
-  _logfile.open("c:\\tmp\\ovelaydll.log", std::fstream::out | std::fstream::app | std::fstream::ate);
+  _logfile.open("c:\\tmp\\overlaydll.log", std::fstream::out | std::fstream::app | std::fstream::ate);
   _logfile << "New Shell Extension created for state " << _statetostr[_state] << std::endl;
 }
 

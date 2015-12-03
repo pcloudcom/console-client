@@ -45,6 +45,7 @@ void overlay_main_loop()
 {
   struct sockaddr_in addr;
   int fd,cl;
+  const int enable = 1;
   
   if ( (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
     debug(D_NOTICE, "TCP/IP socket error failed to create socket on port %u", (unsigned int)myport);
@@ -56,6 +57,10 @@ void overlay_main_loop()
   addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   addr.sin_port = htons(myport);
 
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+    debug(D_ERROR,"setsockopt(SO_REUSEADDR) failed");
+    return;
+  }
   
   if (bind(fd, (struct sockaddr*)&addr,  sizeof(addr)) == -1) {
     debug(D_ERROR,"TCP/IP socket bind error");
