@@ -105,7 +105,7 @@ typedef struct {
 #define PSTATUS_SCANNING               13
 #define PSTATUS_USER_MISMATCH          14
 
-typedef struct {
+typedef struct pstatus_struct_ {
   const char *downloadstr; /* formatted string with the status of uploads */
   const char *uploadstr;   /* formatted string with the status of downloads */
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */

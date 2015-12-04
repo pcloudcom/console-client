@@ -380,7 +380,7 @@ external_status do_psync_external_status(char *path)
     if (folder)
       pcpath = folder;
     else {
-      debug(D_WARNING, "No sync nor drive folder! Called on no pCloud item?");
+      debug(D_NOTICE, "No sync nor drive folder! Called on no pCloud item?");
       return result;
     }
   }
