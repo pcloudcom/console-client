@@ -33,6 +33,8 @@
 #include "plist.h"
 #include "papi.h"
 
+#define psync_api_run_command(cmd, params) psync_do_api_run_command(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam))
+
 #define PSYNC_NET_OK        0
 #define PSYNC_NET_PERMFAIL -1
 #define PSYNC_NET_TEMPFAIL -2
@@ -94,6 +96,7 @@ psync_socket *psync_apipool_get_from_cache();
 void psync_apipool_prepare();
 void psync_apipool_release(psync_socket *api);
 void psync_apipool_release_bad(psync_socket *api);
+binresult *psync_do_api_run_command(const char *command, size_t cmdlen, const binparam *params, size_t paramcnt);
 
 int psync_rmdir_with_trashes(const char *path);
 int psync_rmdir_recursive(const char *path);
@@ -108,6 +111,7 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
 int psync_file_writeall_checkoverquota(psync_file_t fd, const void *buf, size_t count);
 
 int psync_set_default_sendbuf(psync_socket *sock);
+void psync_account_downloaded_bytes(int unsigned bytes);
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
 int psync_socket_readall_download_thread(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);

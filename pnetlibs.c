@@ -179,6 +179,30 @@ void psync_apipool_prepare(){
   }
 }
 
+binresult *psync_do_api_run_command(const char *command, size_t cmdlen, const binparam *params, size_t paramcnt){
+  psync_socket *api;
+  binresult *ret;
+  int tries;
+  tries=0;
+  do {
+    api=psync_apipool_get();
+    if (unlikely(!api))
+      break;
+    if (likely(do_send_command(api, command, cmdlen, params, paramcnt, -1, 0))){
+      //something useful can be done here as we will wait a while
+      ret=get_result(api);
+      if (likely(ret)){
+        psync_apipool_release(api);
+        return ret;
+      }
+    }
+    psync_apipool_release_bad(api);
+  } while (++tries<=PSYNC_RETRY_REQUEST);
+  psync_timer_notify_exception();
+  return NULL;
+}
+
+
 #if IS_DEBUG
 
 void pident(int ident){
@@ -336,7 +360,6 @@ int psync_handle_api_result(uint64_t result){
 }
 
 int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum, uint64_t *fsize, uint64_t *hash){
-  psync_socket *api;
   binresult *res;
   const binresult *meta, *checksum;
   psync_sql_res *sres;
@@ -357,19 +380,12 @@ int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum,
     return PSYNC_NET_OK;
   }
   psync_sql_free_result(sres);
-  api=psync_apipool_get();
-  if (unlikely(!api))
+  res=psync_api_run_command("checksumfile", params);
+  if (!res)
     return PSYNC_NET_TEMPFAIL;
-  res=send_command(api, "checksumfile", params);
-  if (unlikely_log(!res)){
-    psync_apipool_release_bad(api);
-    psync_timer_notify_exception();
-    return PSYNC_NET_TEMPFAIL;
-  }
-  psync_apipool_release(api);
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (result){
-    debug(D_ERROR, "checksumfile returned error %lu", (unsigned long)result);
+    debug(D_WARNING, "checksumfile returned error %lu", (unsigned long)result);
     psync_free(res);
     return psync_handle_api_result(result);
   }
@@ -391,8 +407,12 @@ int psync_get_remote_file_checksum(psync_fileid_t fileid, unsigned char *hexsum,
   return PSYNC_NET_OK;
 }
 
+static int file_changed(psync_stat_t *st1, psync_stat_t *st2){
+  return psync_stat_size(st1)!=psync_stat_size(st2) || psync_stat_mtime_native(st1)!=psync_stat_mtime_native(st2);
+}
+
 int psync_get_local_file_checksum(const char *restrict filename, unsigned char *restrict hexsum, uint64_t *restrict fsize){
-  psync_stat_t st;
+  psync_stat_t st, st2;
   psync_hash_ctx hctx;
   uint64_t rsz;
   void *buff;
@@ -404,6 +424,7 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
   fd=psync_file_open(filename, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE)
     return PSYNC_NET_PERMFAIL;
+retry:
   if (unlikely_log(psync_fstat(fd, &st)))
     goto err1;
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
@@ -416,12 +437,27 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
     else
       rs=rsz;
     rrs=psync_file_read(fd, buff, rs);
-    if (rrs<=0)
+    if (unlikely(rrs<=0)){
+      if (rrs==0 && !psync_fstat(fd, &st2) && file_changed(&st, &st2)){
+        debug(D_NOTICE, "file %s changed while calculating checksum, restarting", filename);
+        psync_hash_final(hashbin, &hctx);
+        psync_milisleep(PSYNC_SLEEP_FILE_CHANGE);
+        goto retry;
+      }
       goto err2;
+    }
     psync_hash_update(&hctx, buff, rrs);
     rsz-=rrs;
     if (++cnt%16==0)
       psync_milisleep(5);
+  }
+  if (unlikely_log(psync_fstat(fd, &st2)))
+    goto err2;
+  if (unlikely(file_changed(&st, &st2))){
+    debug(D_NOTICE, "file %s changed while calculating checksum, restarting", filename);
+    psync_hash_final(hashbin, &hctx);
+    psync_milisleep(PSYNC_SLEEP_FILE_CHANGE);
+    goto retry;
   }
   psync_free(buff);
   psync_file_close(fd);
@@ -522,7 +558,6 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
   psync_file_t sfd, dfd;
   psync_hash_ctx hctx;
   void *buff;
-  char *tmpdest;
   size_t rrd;
   ssize_t rd;
   unsigned char hashbin[PSYNC_HASH_DIGEST_LEN];
@@ -530,10 +565,9 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
   sfd=psync_file_open(source, P_O_RDONLY, 0);
   if (unlikely_log(sfd==INVALID_HANDLE_VALUE))
     goto err0;
-  tmpdest=psync_strcat(destination, PSYNC_APPEND_PARTIAL_FILES, NULL);
   if (unlikely_log(psync_file_size(sfd)!=fsize))
     goto err1;
-  dfd=psync_file_open(tmpdest, P_O_WRONLY, P_O_CREAT|P_O_TRUNC);
+  dfd=psync_file_open(destination, P_O_WRONLY, P_O_CREAT|P_O_TRUNC);
   if (unlikely_log(dfd==INVALID_HANDLE_VALUE))
     goto err1;
   psync_hash_init(&hctx);
@@ -557,17 +591,15 @@ int psync_copy_local_file_if_checksum_matches(const char *source, const char *de
   if (unlikely_log(memcmp(hexsum, hashhex, PSYNC_HASH_DIGEST_HEXLEN)) || unlikely_log(psync_file_sync(dfd)))
     goto err2;
   psync_free(buff);
-  if (unlikely_log(psync_file_close(dfd)) || unlikely_log(psync_file_rename_overwrite(tmpdest, destination)))
+  if (unlikely_log(psync_file_close(dfd)))
     goto err1;
-  psync_free(tmpdest);
   psync_file_close(sfd);
   return PSYNC_NET_OK;
 err2:
   psync_free(buff);
   psync_file_close(dfd);
-  psync_file_delete(tmpdest);
+  psync_file_delete(destination);
 err1:
-  psync_free(tmpdest);
   psync_file_close(sfd);
 err0:
   return PSYNC_NET_PERMFAIL;
@@ -611,7 +643,7 @@ void psync_socket_close_download(psync_socket *sock){
  * have that accurate download speed
  */
 
-static void account_downloaded_bytes(int unsigned bytes){
+void psync_account_downloaded_bytes(int unsigned bytes){
   if (current_download_sec==psync_current_time)
     download_bytes_this_sec+=bytes;
   else{
@@ -683,7 +715,7 @@ static int psync_socket_readall_download_th(psync_socket *sock, void *buff, int 
       num-=rd;
       buff=(char *)buff+rd;
       readbytes+=rd;
-      account_downloaded_bytes(rd);
+      psync_account_downloaded_bytes(rd);
     }
     return readbytes;
   }
@@ -692,7 +724,7 @@ static int psync_socket_readall_download_th(psync_socket *sock, void *buff, int 
   else
     readbytes=psync_socket_readall(sock, buff, num);
   if (readbytes>0)
-    account_downloaded_bytes(readbytes);
+    psync_account_downloaded_bytes(readbytes);
   return readbytes;
 }
 
@@ -2236,6 +2268,7 @@ int psync_is_revision_of_file(const unsigned char *localhashhex, uint64_t filesi
   return PSYNC_NET_OK;
 }
 
+//
 psync_file_lock_t *psync_lock_file(const char *path){
   psync_file_lock_t *lock, *l;
   size_t len;
@@ -2294,7 +2327,7 @@ void psync_process_api_error(uint64_t result){
 }
 
 static void psync_netlibs_timer(psync_timer_t timer, void *ptr){
-  account_downloaded_bytes(0);
+  psync_account_downloaded_bytes(0);
   account_uploaded_bytes(0);
 }
 

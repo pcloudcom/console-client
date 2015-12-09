@@ -38,7 +38,10 @@
 #define PSYNC_ASYNC_ERROR_FILE      2
 #define PSYNC_ASYNC_ERROR_DISK_FULL 3
 #define PSYNC_ASYNC_ERROR_IO        4
-#define PSYNC_ASYNC_CHECKSUM        5
+#define PSYNC_ASYNC_ERROR_CHECKSUM  5
+
+#define PSYNC_SERVER_ERROR_TOO_BIG  102
+#define PSYNC_SERVER_ERROR_NOT_MOD  104
 
 typedef struct {
   uint64_t size;

@@ -261,7 +261,7 @@ static void file_download_free(stream_t *s, uint32_t error){
 static int file_download_send_error(stream_t *s, async_thread_params_t *prms, file_download_add_t *fda, uint32_t error, uint32_t errorflags){
   psync_async_result_t r;
   if (error)
-    debug(D_NOTICE, "got error %u for file %s", (unsigned)error, fda->localpath);
+    debug(D_NOTICE, "got error %u(%u) for file %s", (unsigned)error, (unsigned)errorflags, fda->localpath);
   else
     debug(D_NOTICE, "download of %s finished", fda->localpath);
   r.error=error;
@@ -311,7 +311,7 @@ static int process_file_download_data(stream_t *s, async_thread_params_t *prms, 
   }
   if (fda->remsize==0){
     if (file_download_checksum(fda))
-      return file_download_send_error(s, prms, fda, PSYNC_ASYNC_CHECKSUM, 0);
+      return file_download_send_error(s, prms, fda, PSYNC_ASYNC_ERROR_CHECKSUM, 0);
     else
       return file_download_send_error(s, prms, fda, 0, 0);
   }
@@ -495,6 +495,7 @@ static int handle_decompressed_data(async_thread_params_t *prms){
   while (1){
     rd=psync_deflate_read(prms->dec, prms->curreadbuff, prms->curreadbuffrem);
     if (rd>0){
+      psync_account_downloaded_bytes(rd);
       prms->curreadbuff+=rd;
       prms->curreadbuffrem-=rd;
       if (!prms->curreadbuffrem && prms->process_buf(prms))
@@ -529,6 +530,7 @@ static int handle_incoming_data(async_thread_params_t *prms){
         return -1;
       }
       else if (wrdecomp!=PSYNC_DEFLATE_FULL){
+        assert(wrdecomp>0);
         rdsock-=wrdecomp;
         ptr+=wrdecomp;
       }

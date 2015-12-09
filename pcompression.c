@@ -25,8 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "miniz.h"
-//#include "zlib.h"
+//#include "miniz.h"
+#include "zlib.h"
 #include "plibs.h"
 #include "pcompression.h"
 
