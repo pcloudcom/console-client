@@ -46,6 +46,11 @@ struct time_bytes {
   psync_uint_t bytes;
 };
 
+struct _psync_file_lock_t {
+  psync_tree tree;
+  char filename[];
+};
+
 typedef struct {
   unsigned char sha1[PSYNC_SHA1_DIGEST_LEN];
   uint32_t adler;
@@ -87,7 +92,7 @@ static psync_uint_t upload_bytes_off=0;
 static psync_uint_t upload_speed=0;
 static psync_uint_t dyn_upload_speed=PSYNC_UPL_AUTO_SHAPER_INITIAL;
 
-static psync_list file_lock_list=PSYNC_LIST_STATIC_INIT(file_lock_list);
+static psync_tree *file_lock_tree=PSYNC_TREE_EMPTY;
 static pthread_mutex_t file_lock_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], upload_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC];
@@ -2268,28 +2273,50 @@ int psync_is_revision_of_file(const unsigned char *localhashhex, uint64_t filesi
   return PSYNC_NET_OK;
 }
 
-//
 psync_file_lock_t *psync_lock_file(const char *path){
-  psync_file_lock_t *lock, *l;
+  psync_file_lock_t *lock;
+  psync_tree *tr, **at;
   size_t len;
+  int cmp;
   len=strlen(path)+1;
   lock=psync_malloc(offsetof(psync_file_lock_t, filename)+len);
   memcpy(lock->filename, path, len);
   pthread_mutex_lock(&file_lock_mutex);
-  psync_list_for_each_element(l, &file_lock_list, psync_file_lock_t, list)
-    if (psync_filename_cmp(l->filename, path)==0){
+  tr=file_lock_tree;
+  at=&file_lock_tree;
+  while (tr){
+    cmp=psync_filename_cmp(path, psync_tree_element(tr, psync_file_lock_t, tree)->filename);
+    if (cmp<0){
+      if (tr->left)
+        tr=tr->left;
+      else{
+        at=&tr->left;
+        break;
+      }
+    }
+    else if (cmp>0){
+      if (tr->right)
+        tr=tr->right;
+      else{
+        at=&tr->right;
+        break;
+      }
+    }
+    else{
       pthread_mutex_unlock(&file_lock_mutex);
       psync_free(lock);
       return NULL;
     }
-  psync_list_add_tail(&file_lock_list, &lock->list);
+  }
+  *at=&lock->tree;
+  psync_tree_added_at(&file_lock_tree, tr, &lock->tree);
   pthread_mutex_unlock(&file_lock_mutex);
   return lock;
 }
 
 void psync_unlock_file(psync_file_lock_t *lock){
   pthread_mutex_lock(&file_lock_mutex);
-  psync_list_del(&lock->list);
+  psync_tree_del(&file_lock_tree, &lock->tree);
   pthread_mutex_unlock(&file_lock_mutex);
   psync_free(lock);
 }

@@ -84,10 +84,9 @@ typedef struct {
   uint32_t id;
 } psync_upload_range_list_t;
 
-typedef struct {
-  psync_list list;
-  char filename[];
-} psync_file_lock_t;
+struct _psync_file_lock_t;
+
+typedef struct _psync_file_lock_t psync_file_lock_t;
 
 void psync_netlibs_init();
 
