@@ -290,11 +290,13 @@ static int handle_upload_api_error_taskid(uint64_t result, uint64_t taskid){
       res=psync_sql_prep_statement("UPDATE fstask SET folderid=0 WHERE id=?");
       psync_sql_bind_uint(res, 1, taskid);
       psync_sql_run_free(res);
+      psync_fsupload_wake();
       return -1;
     case 2001: /* invalid filename */
       res=psync_sql_prep_statement("UPDATE fstask SET text1=\"Invalid Name Requested\" WHERE id=?");
       psync_sql_bind_uint(res, 1, taskid);
       psync_sql_run_free(res);
+      psync_fsupload_wake();
       return -1;
     case 2008:{ /* overquota */
       int locked=psync_sql_islocked();
