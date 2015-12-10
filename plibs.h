@@ -208,33 +208,70 @@ int psync_sql_close();
 int psync_sql_reopen(const char *path);
 void psync_sql_checkpoint_lock();
 void psync_sql_checkpoint_unlock();
+
+#if IS_DEBUG
+
+#define psync_sql_trylock() psync_sql_do_trylock(__FILE__, __LINE__)
+#define psync_sql_lock() psync_sql_do_lock(__FILE__, __LINE__)
+#define psync_sql_rdlock() psync_sql_do_rdlock(__FILE__, __LINE__)
+#define psync_sql_statement(sql) psync_sql_do_statement(sql, __FILE__, __LINE__)
+#define psync_sql_start_transaction() psync_sql_do_start_transaction(__FILE__, __LINE__)
+
+#define psync_sql_query_nocache(sql) psync_sql_do_query_nocache(sql, __FILE__, __LINE__)
+#define psync_sql_query(sql) psync_sql_do_query(sql, __FILE__, __LINE__)
+#define psync_sql_query_rdlock_nocache(sql) psync_sql_do_query_rdlock_nocache(sql, __FILE__, __LINE__)
+#define psync_sql_query_rdlock(sql) psync_sql_do_query_rdlock(sql, __FILE__, __LINE__)
+#define psync_sql_prep_statement_nocache(sql) psync_sql_do_prep_statement_nocache(sql, __FILE__, __LINE__)
+#define psync_sql_prep_statement(sql) psync_sql_do_prep_statement(sql, __FILE__, __LINE__)
+
+int psync_sql_do_trylock(const char *file, unsigned line);
+void psync_sql_do_lock(const char *file, unsigned line);
+void psync_sql_do_rdlock(const char *file, unsigned line);
+int psync_sql_do_statement(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+int psync_sql_do_start_transaction(const char *file, unsigned line);
+
+psync_sql_res *psync_sql_do_query_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_query(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_query_rdlock_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_query_rdlock(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_prep_statement_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_prep_statement(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+
+#else
+
 int psync_sql_trylock();
 void psync_sql_lock();
-void psync_sql_unlock();
 void psync_sql_rdlock();
+int psync_sql_statement(const char *sql) PSYNC_NONNULL(1);
+int psync_sql_start_transaction();
+
+psync_sql_res *psync_sql_query_nocache(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_rdlock(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_prep_statement_nocache(const char *sql) PSYNC_NONNULL(1);
+
+
+
+#endif
+
+void psync_sql_unlock();
 void psync_sql_rdunlock();
 int psync_sql_has_waiters();
 int psync_sql_isrdlocked();
 int psync_sql_islocked();
 int psync_sql_tryupgradelock();
 int psync_sql_sync();
-int psync_sql_start_transaction();
 int psync_sql_commit_transaction();
 int psync_sql_rollback_transaction();
 
-int psync_sql_statement(const char *sql) PSYNC_NONNULL(1);
 char *psync_sql_cellstr(const char *sql) PSYNC_NONNULL(1);
 int64_t psync_sql_cellint(const char *sql, int64_t dflt) PSYNC_NONNULL(1);
 char **psync_sql_rowstr(const char *sql) PSYNC_NONNULL(1);
 psync_variant *psync_sql_row(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_query_nocache(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_query_rdlock(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query_nolock(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query_nolock_nocache(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_prep_statement_nocache(const char *sql) PSYNC_NONNULL(1);
 void psync_sql_reset(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run_free(psync_sql_res *res) PSYNC_NONNULL(1);
