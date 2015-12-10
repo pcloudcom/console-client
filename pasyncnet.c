@@ -298,6 +298,7 @@ static int process_file_download_data(stream_t *s, async_thread_params_t *prms, 
     return -1;
   }
   fda->remsize-=datalen;
+  psync_account_downloaded_bytes(datalen);
   psync_sha1_update(&fda->sha1ctx, buff, datalen);
   while (datalen){
     wr=psync_file_write(fda->fd, buff, datalen);
@@ -495,7 +496,6 @@ static int handle_decompressed_data(async_thread_params_t *prms){
   while (1){
     rd=psync_deflate_read(prms->dec, prms->curreadbuff, prms->curreadbuffrem);
     if (rd>0){
-      psync_account_downloaded_bytes(rd);
       prms->curreadbuff+=rd;
       prms->curreadbuffrem-=rd;
       if (!prms->curreadbuffrem && prms->process_buf(prms))
