@@ -26,6 +26,9 @@
  */
 
 //#include "miniz.h"
+#if defined(P_OS_WINDOWS)
+#define ZLIB_WINAPI
+#endif
 #include "zlib.h"
 #include "plibs.h"
 #include "pcompression.h"

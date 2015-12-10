@@ -544,12 +544,12 @@ static void insert_cache_team(int i, const binresult *team, void *_this) {
   teamid = psync_find_result(team, "id", PARAM_NUM)->num;
   
   debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)teamid);
-  if (teamid >= 0) {
-    q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
-    psync_sql_bind_uint(q, 1, teamid);
-    psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
-    psync_sql_run_free(q);
-  }
+  
+  q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
+  psync_sql_bind_uint(q, 1, teamid);
+  psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
+  psync_sql_run_free(q);
+
 }
 
 void cache_account_teams() {
@@ -576,12 +576,11 @@ static void cache_my_team(const binresult *team1) {
   teamid = psync_find_result(team, "id", PARAM_NUM)->num;
   
   debug(D_NOTICE, "My Team name %s team id %lld\n", nameret,(long long)teamid);
-  if (teamid >= 0) {
-    q=psync_sql_prep_statement("INSERT INTO myteams  (id, name) VALUES (?, ?)");
-    psync_sql_bind_uint(q, 1, teamid);
-    psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
-    psync_sql_run_free(q);
-  }
+  
+  q=psync_sql_prep_statement("INSERT INTO myteams  (id, name) VALUES (?, ?)");
+  psync_sql_bind_uint(q, 1, teamid);
+  psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
+  psync_sql_run_free(q);
 }
 
 void cache_ba_my_teams() {
