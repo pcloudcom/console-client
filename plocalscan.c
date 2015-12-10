@@ -247,8 +247,10 @@ static void add_deleted_element(const sync_folderlist *e, psync_folderid_t folde
     add_element_to_scan_list(SCAN_LIST_DELFILES, c);
 }
 
-static void add_modified_file(const sync_folderlist *e, psync_folderid_t folderid, psync_folderid_t localfolderid, psync_syncid_t syncid, psync_synctype_t synctype){
-  debug(D_NOTICE, "found modified file %s", e->name);
+static void add_modified_file(const sync_folderlist *e, const sync_folderlist *dbe, psync_folderid_t folderid, psync_folderid_t localfolderid, psync_syncid_t syncid, psync_synctype_t synctype){
+  debug(D_NOTICE, "found modified file %s on disk: size=%llu mtime=%llu inode=%llu in db: size=%llu mtime=%llu inode=%llu", e->name,
+        (long long unsigned)e->size, (long long unsigned)e->mtimenat, (long long unsigned)e->inode,
+        (long long unsigned)dbe->size, (long long unsigned)dbe->mtimenat, (long long unsigned)dbe->inode);
   add_element_to_scan_list(SCAN_LIST_MODFILES, copy_folderlist_element(e, folderid, localfolderid, syncid, synctype));
 }
 
@@ -275,7 +277,7 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
         fdisk->localid=fdb->localid;
         fdisk->remoteid=fdb->remoteid;
         if (!fdisk->isfolder && (fdisk->mtimenat!=fdb->mtimenat || fdisk->size!=fdb->size || fdisk->inode!=fdb->inode))
-          add_modified_file(fdisk, folderid, localfolderid, syncid, synctype);
+          add_modified_file(fdisk, fdb, folderid, localfolderid, syncid, synctype);
         if (fdisk->isfolder && fdisk->deviceid!=fdb->deviceid){
           if (fdisk->deviceid==deviceid){
             debug(D_NOTICE, "deviceid of localfolder %s %lu is different, skipping", fdisk->name, (unsigned long)fdisk->localid);
