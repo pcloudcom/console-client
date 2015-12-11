@@ -674,7 +674,22 @@ int psync_sql_islocked(){
 }
 
 int psync_sql_tryupgradelock(){
+#if IS_DEBUG
+  if (psync_rwlock_holding_wrlock(&psync_db_lock))
+    return 0;
+  assert(psync_rwlock_holding_rdlock(&psync_db_lock));
+  if (psync_rwlock_towrlock(&psync_db_lock))
+    return -1;
+  else{
+    rd_lock_data *lock=record_rdunlock();
+    record_wrlock(lock->file, lock->line);
+    debug(D_NOTICE, "upgraded read lock taken at %s:%u to a write lock", lock->file, lock->line);
+    psync_free(lock);
+    return 0;
+  }
+#else
   return psync_rwlock_towrlock(&psync_db_lock);
+#endif
 }
 
 int psync_sql_sync(){
