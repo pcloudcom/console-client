@@ -486,6 +486,11 @@ static psync_list rdlocks=PSYNC_LIST_STATIC_INIT(rdlocks);
 static pthread_mutex_t rdmutex=PTHREAD_MUTEX_INITIALIZER;
 
 static void record_wrlock(const char *file, unsigned line){
+  if (unlikely(rdlock)){
+    debug(D_BUG, "trying to get write lock at %s:%u, but read lock is already taken at %s:%u, aborting", file, line, rdlock->file, rdlock->line);
+    abort();
+  }
+  assert(!wrlocked);
   wrlockfile=file;
   wrlockline=line;
   wrlockthread=psync_thread_name;
