@@ -911,6 +911,9 @@ static void finish_async_download(void *ptr, psync_async_result_t *res){
   if (res->error)
     handle_async_error(dt, res);
   else{
+#if defined(P_OS_WINDOWS)
+    psync_milisleep(1);
+#endif
     if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename,
                                 res->file.sha1hex, res->file.size, res->file.hash))
       psync_timer_register(free_task_timer, 1, dt);
