@@ -241,7 +241,7 @@ int psync_rwlock_timedwrlock(psync_rwlock_t *rw, const struct timespec *abstime)
   while (rw->rcount || rw->wcount){
     rw->wwait++;
     if (unlikely(pthread_cond_timedwait(&rw->wcond, &rw->mutex, abstime))){
-      if (--rw->wwait && !rw->wcount && rw->rwait)
+      if (--rw->wwait==0 && !rw->wcount && rw->rwait)
         pthread_cond_broadcast(&rw->rcond);
       pthread_mutex_unlock(&rw->mutex);
       return -1;
