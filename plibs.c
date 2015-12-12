@@ -726,11 +726,16 @@ int psync_sql_statement(const char *sql){
   if (likely(code==SQLITE_OK))
     return 0;
   else{
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, errmsg, file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, errmsg);
+#endif
     sqlite3_free(errmsg);
     return -1;
   }
 }
+
 #if IS_DEBUG
 int psync_sql_do_start_transaction(const char *file, unsigned line){
   psync_sql_do_lock(file, line);
@@ -1026,7 +1031,11 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+#endif
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -1080,7 +1089,11 @@ psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_rdunlock();
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+#endif
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -1204,7 +1217,11 @@ psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+#endif
     return NULL;
   }
   res=psync_new(psync_sql_res);
