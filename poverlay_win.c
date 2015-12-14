@@ -31,7 +31,7 @@
 #include <tchar.h>
 #include <strsafe.h>
 
-#define POVERLAY_BUFSIZE 512
+#define POVERLAY_BUFSIZE 600
 
 
 #include "poverlay.h"
