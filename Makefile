@@ -8,7 +8,7 @@ USESSL=mbed
 CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2
 #CFLAGS=-O2 -g -pg
 
-LIB_A=psynclib.a
+LIB_A=libpsynclib.a
 
 ifeq ($(OS),Windows_NT)
     CFLAGS += -DP_OS_WINDOWS
@@ -24,7 +24,7 @@ else
             ifneq (,$(findstring Debian,$(UNAME_V)))
                 CFLAGS += -DP_OS_DEBIAN
             endif
-	LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3
+	LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3 -lzlib
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
