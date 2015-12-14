@@ -241,7 +241,7 @@ int psync_rwlock_timedwrlock(psync_rwlock_t *rw, const struct timespec *abstime)
   while (rw->rcount || rw->wcount){
     rw->wwait++;
     if (unlikely(pthread_cond_timedwait(&rw->wcond, &rw->mutex, abstime))){
-      if (--rw->wwait && !rw->wcount && rw->rwait)
+      if (--rw->wwait==0 && !rw->wcount && rw->rwait)
         pthread_cond_broadcast(&rw->rcond);
       pthread_mutex_unlock(&rw->mutex);
       return -1;
@@ -368,6 +368,12 @@ unsigned psync_rwlock_num_waiters(psync_rwlock_t *rw){
 
 int psync_rwlock_holding_rdlock(psync_rwlock_t *rw){
   return psync_rwlock_get_count(rw).cnt[0]!=0;
+}
+
+int psync_rwlock_holding_wrlock(psync_rwlock_t *rw){
+  psync_rwlock_lockcnt_t cnt;
+  cnt=psync_rwlock_get_count(rw);
+  return cnt.cnt[1]!=0 && cnt.cnt[1]!=PSYNC_WR_RESERVED;
 }
 
 int psync_rwlock_holding_lock(psync_rwlock_t *rw){

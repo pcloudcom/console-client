@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -97,7 +97,7 @@ psync_folderid_t psync_get_folderid_by_path(const char *path){
       goto err;
     cfolderid=row[0];
     path+=len;
-  }  
+  }
 err:
   if (res)
     psync_sql_free_result(res);
@@ -172,7 +172,7 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
       }
     }
     path+=len;
-  }  
+  }
 err:
   if (res)
     psync_sql_free_result(res);
@@ -377,7 +377,7 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen){
   row=psync_sql_fetch_row(res);
   if (unlikely_log(!row)){
     psync_sql_free_result(res);
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     return PSYNC_INVALID_PATH;
   }
   folderid=psync_get_number(row[0]);
@@ -386,7 +386,7 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen){
   psync_list_add_head(&folderlist, &e->list);
   psync_sql_free_result(res);
   if (unlikely_log(psync_add_path_to_list(&folderlist, folderid))){
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     psync_free_string_list(&folderlist);
     return PSYNC_INVALID_PATH;
   }
@@ -652,7 +652,7 @@ static pfolder_list_t *folder_list_finalize(folder_list *list){
   pfolder_list_t *ret;
   char *name;
   uint32_t i;
-  debug(D_NOTICE, "allocating %u bytes for folder list, %u of which for names", 
+  debug(D_NOTICE, "allocating %u bytes for folder list, %u of which for names",
         (unsigned)(offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt+list->nameoff), (unsigned)list->nameoff);
   ret=(pfolder_list_t *)psync_malloc(offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt+list->nameoff);
   name=((char *)ret)+offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt;
@@ -691,7 +691,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
       folder_list_add(list, &entry);
     }
     psync_sql_free_result(res);
-  }  
+  }
   if (listtype&PLIST_FILES){
     res=psync_sql_query_rdlock("SELECT id, size, name FROM file WHERE parentfolderid=? ORDER BY name");
     psync_sql_bind_uint(res, 1, folderid);
@@ -704,7 +704,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
       folder_list_add(list, &entry);
     }
     psync_sql_free_result(res);
-  }  
+  }
   return folder_list_finalize(list);
 }
 

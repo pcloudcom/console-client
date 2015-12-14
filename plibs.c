@@ -465,26 +465,98 @@ void psync_sql_checkpoint_unlock(){
 }
 
 #if IS_DEBUG
-unsigned long sqllockcnt=0;
-struct timespec sqllockstart;
-PSYNC_THREAD unsigned long sqlrdlockcnt=0;
-PSYNC_THREAD struct timespec sqlrdlockstart;
-#endif
+typedef struct {
+  psync_list list;
+  const char *file;
+  const char *thread;
+  unsigned line;
+} rd_lock_data;
 
-int psync_sql_trylock(){
-#if IS_DEBUG
-  if (psync_rwlock_trywrlock(&psync_db_lock))
-    return -1;
-  if (++sqllockcnt==1)
-    psync_nanotime(&sqllockstart);
-  return 0;
-#else
-  return psync_rwlock_trywrlock(&psync_db_lock);
-#endif
+static PSYNC_THREAD rd_lock_data *rdlock=NULL;
+static PSYNC_THREAD unsigned long sqlrdlockcnt=0;
+static PSYNC_THREAD struct timespec sqlrdlockstart;
+unsigned long sqllockcnt=0;
+static struct timespec sqllockstart;
+static const char *wrlockfile="none";
+static const char *wrlockthread="";
+static unsigned wrlockline=0;
+static unsigned wrlocked=0;
+static pthread_t wrlocker;
+static psync_list rdlocks=PSYNC_LIST_STATIC_INIT(rdlocks);
+static pthread_mutex_t rdmutex=PTHREAD_MUTEX_INITIALIZER;
+
+static void record_wrlock(const char *file, unsigned line){
+  if (unlikely(rdlock)){
+    debug(D_BUG, "trying to get write lock at %s:%u, but read lock is already taken at %s:%u, aborting", file, line, rdlock->file, rdlock->line);
+    abort();
+  }
+  assert(!wrlocked);
+  wrlockfile=file;
+  wrlockline=line;
+  wrlockthread=psync_thread_name;
+  wrlocked=1;
+  wrlocker=pthread_self();
 }
 
-void psync_sql_lock(){
+static void record_wrunlock(){
+  assert(pthread_equal(pthread_self(), wrlocker));
+  assert(wrlocked);
+  wrlocked=0;
+}
+
+static void record_rdlock(const char *file, unsigned line){
+  rd_lock_data *lock;
+  lock=psync_new(rd_lock_data);
+  lock->file=file;
+  lock->thread=psync_thread_name;
+  lock->line=line;
+  pthread_mutex_lock(&rdmutex);
+  psync_list_add_tail(&rdlocks, &lock->list);
+  pthread_mutex_unlock(&rdmutex);
+  rdlock=lock;
+}
+
+static rd_lock_data *record_rdunlock(){
+  rd_lock_data *lock;
+  assert(rdlock);
+  lock=rdlock;
+  rdlock=NULL;
+  pthread_mutex_lock(&rdmutex);
+  psync_list_del(&lock->list);
+  pthread_mutex_unlock(&rdmutex);
+  return lock;
+}
+
+static void dump_locks(){
+  rd_lock_data *lock;
+  if (wrlocked)
+    debug(D_ERROR, "write lock taken by thread %s at %s:%u", wrlockthread, wrlockfile, wrlockline);
+  pthread_mutex_lock(&rdmutex);
+  psync_list_for_each_element(lock, &rdlocks, rd_lock_data, list)
+    debug(D_ERROR, "read lock taken by thread %s at %s:%u", lock->thread, lock->file, lock->line);
+  pthread_mutex_unlock(&rdmutex);
+}
+
+#endif
+
 #if IS_DEBUG
+int psync_sql_do_trylock(const char *file, unsigned line){
+  if (psync_rwlock_trywrlock(&psync_db_lock))
+    return -1;
+  if (++sqllockcnt==1){
+    psync_nanotime(&sqllockstart);
+    record_wrlock(file, line);
+  }
+  return 0;
+}
+#else
+int psync_sql_trylock(){
+  return psync_rwlock_trywrlock(&psync_db_lock);
+}
+#endif
+
+#if IS_DEBUG
+void psync_sql_do_lock(const char *file, unsigned line){
   if (psync_rwlock_trywrlock(&psync_db_lock)){
     struct timespec start, end;
     unsigned long msec;
@@ -492,7 +564,8 @@ void psync_sql_lock(){
     memcpy(&end, &start, sizeof(end));
     end.tv_sec+=30;
     if (psync_rwlock_timedwrlock(&psync_db_lock, &end)){
-      debug(D_BUG, "sql write lock timed out");
+      debug(D_BUG, "sql write lock timed out called from %s:%u", file, line);
+      dump_locks();
       abort();
     }
     psync_nanotime(&end);
@@ -501,24 +574,31 @@ void psync_sql_lock(){
       debug(D_WARNING, "waited %lu milliseconds for database write lock", msec);
     sqllockcnt++;
     memcpy(&sqllockstart, &end, sizeof(struct timespec));
+    record_wrlock(file, line);
   }
-  else if (++sqllockcnt==1)
+  else if (++sqllockcnt==1){
     psync_nanotime(&sqllockstart);
-#else
-  psync_rwlock_wrlock(&psync_db_lock);
-#endif
+    record_wrlock(file, line);
+  }
 }
+#else
+void psync_sql_lock(){
+  psync_rwlock_wrlock(&psync_db_lock);
+}
+#endif
 
 void psync_sql_unlock(){
 #if IS_DEBUG
+  assert(sqllockcnt>0);
   if (--sqllockcnt==0){
     struct timespec end;
     unsigned long msec;
-    psync_rwlock_unlock(&psync_db_lock);
     psync_nanotime(&end);
     msec=(end.tv_sec-sqllockstart.tv_sec)*1000+end.tv_nsec/1000000-sqllockstart.tv_nsec/1000000;
     if (msec>=10)
-      debug(D_WARNING, "held database write lock for %lu milliseconds", msec);
+      debug(D_WARNING, "held database write lock for %lu milliseconds taken at %s:%u", msec, wrlockfile, wrlockline);
+    record_wrunlock();
+    psync_rwlock_unlock(&psync_db_lock);
   }
   else
     psync_rwlock_unlock(&psync_db_lock);
@@ -527,8 +607,8 @@ void psync_sql_unlock(){
 #endif
 }
 
-void psync_sql_rdlock(){
 #if IS_DEBUG
+void psync_sql_do_rdlock(const char *file, unsigned line){
   if (psync_rwlock_tryrdlock(&psync_db_lock)){
     struct timespec start, end;
     unsigned long msec;
@@ -536,7 +616,8 @@ void psync_sql_rdlock(){
     memcpy(&end, &start, sizeof(end));
     end.tv_sec+=30;
     if (psync_rwlock_timedrdlock(&psync_db_lock, &end)){
-      debug(D_BUG, "sql read lock timed out");
+      debug(D_BUG, "sql read lock timed out, called from %s:%u", file, line);
+      dump_locks();
       abort();
     }
     psync_nanotime(&end);
@@ -545,24 +626,33 @@ void psync_sql_rdlock(){
       debug(D_WARNING, "waited %lu milliseconds for database read lock", msec);
     sqlrdlockcnt++;
     memcpy(&sqlrdlockstart, &end, sizeof(struct timespec));
+    record_rdlock(file, line);
   }
-  else if (++sqlrdlockcnt==1)
+  else if (++sqlrdlockcnt==1){
     psync_nanotime(&sqlrdlockstart);
-#else
-  psync_rwlock_rdlock(&psync_db_lock);
-#endif
+    record_rdlock(file, line);
+  }
 }
+#else
+void psync_sql_rdlock(){
+  psync_rwlock_rdlock(&psync_db_lock);
+}
+#endif
 
 void psync_sql_rdunlock(){
 #if IS_DEBUG
+  assert(sqlrdlockcnt>0);
   if (--sqlrdlockcnt==0){
     struct timespec end;
     unsigned long msec;
+    rd_lock_data *lock;
     psync_rwlock_unlock(&psync_db_lock);
     psync_nanotime(&end);
+    lock=record_rdunlock();
     msec=(end.tv_sec-sqlrdlockstart.tv_sec)*1000+end.tv_nsec/1000000-sqlrdlockstart.tv_nsec/1000000;
     if (msec>=20)
-      debug(D_WARNING, "held database read lock for %lu milliseconds", msec);
+      debug(D_WARNING, "held database read lock for %lu milliseconds taken at %s:%u", msec, lock->file, lock->line);
+    psync_free(lock);
   }
   else
     psync_rwlock_unlock(&psync_db_lock);
@@ -584,7 +674,22 @@ int psync_sql_islocked(){
 }
 
 int psync_sql_tryupgradelock(){
+#if IS_DEBUG
+  if (psync_rwlock_holding_wrlock(&psync_db_lock))
+    return 0;
+  assert(psync_rwlock_holding_rdlock(&psync_db_lock));
+  if (psync_rwlock_towrlock(&psync_db_lock))
+    return -1;
+  else{
+    rd_lock_data *lock=record_rdunlock();
+    record_wrlock(lock->file, lock->line);
+    debug(D_NOTICE, "upgraded read lock taken at %s:%u to a write lock", lock->file, lock->line);
+    psync_free(lock);
+    return 0;
+  }
+#else
   return psync_rwlock_towrlock(&psync_db_lock);
+#endif
 }
 
 int psync_sql_sync(){
@@ -605,24 +710,41 @@ int psync_sql_sync(){
     return 0;
 }
 
+#if IS_DEBUG
+int psync_sql_do_statement(const char *sql, const char *file, unsigned line){
+  char *errmsg;
+  int code;
+  psync_sql_do_lock(file, line);
+#else
 int psync_sql_statement(const char *sql){
   char *errmsg;
   int code;
   psync_sql_lock();
+#endif
   code=sqlite3_exec(psync_db, sql, NULL, NULL, &errmsg);
   psync_sql_unlock();
   if (likely(code==SQLITE_OK))
     return 0;
   else{
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, errmsg, file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, errmsg);
+#endif
     sqlite3_free(errmsg);
     return -1;
   }
 }
 
+#if IS_DEBUG
+int psync_sql_do_start_transaction(const char *file, unsigned line){
+  psync_sql_do_lock(file, line);
+  if (unlikely(psync_sql_do_statement("BEGIN", file, line))){
+#else
 int psync_sql_start_transaction(){
   psync_sql_lock();
   if (unlikely(psync_sql_statement("BEGIN"))){
+#endif
     psync_sql_unlock();
     return -1;
   }
@@ -892,16 +1014,28 @@ psync_variant *psync_sql_row(const char *sql){
   }
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_query_nocache(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_query_nocache(const char *sql){
+#endif
   sqlite3_stmt *stmt;
   psync_sql_res *res;
   int code, cnt;
   psync_sql_check_query_plan(sql);
+#if IS_DEBUG
+  psync_sql_do_lock(file, line);
+#else
   psync_sql_lock();
+#endif
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+#endif
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -913,29 +1047,53 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
   return res;
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_query(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_query(const char *sql){
+#endif
   psync_sql_res *ret;
   ret=(psync_sql_res *)psync_cache_get(sql);
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     ret->locked=SQL_WRITE_LOCK;
+#if IS_DEBUG
+    psync_sql_do_lock(file, line);
+#else
     psync_sql_lock();
+#endif
     return ret;
   }
   else
+#if IS_DEBUG
+    return psync_sql_do_query_nocache(sql, file, line);
+#else
     return psync_sql_query_nocache(sql);
+#endif
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_query_rdlock_nocache(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql){
+#endif
   sqlite3_stmt *stmt;
   psync_sql_res *res;
   int code, cnt;
   psync_sql_check_query_plan(sql);
+#if IS_DEBUG
+  psync_sql_do_rdlock(file, line);
+#else
   psync_sql_rdlock();
+#endif
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_rdunlock();
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+#endif
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -947,17 +1105,29 @@ psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql){
   return res;
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_query_rdlock(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_query_rdlock(const char *sql){
+#endif
   psync_sql_res *ret;
   ret=(psync_sql_res *)psync_cache_get(sql);
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     ret->locked=SQL_READ_LOCK;
+#if IS_DEBUG
+    psync_sql_do_rdlock(file, line);
+#else
     psync_sql_rdlock();
+#endif
     return ret;
   }
   else
+#if IS_DEBUG
+    return psync_sql_do_query_rdlock_nocache(sql, file, line);
+#else
     return psync_sql_query_rdlock_nocache(sql);
+#endif
 }
 
 psync_sql_res *psync_sql_query_nolock_nocache(const char *sql){
@@ -1030,16 +1200,28 @@ void psync_sql_free_result_nocache(psync_sql_res *res){
   psync_free(res);
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_prep_statement_nocache(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
+#endif
   sqlite3_stmt *stmt;
   psync_sql_res *res;
   int code;
   psync_sql_check_query_plan(sql);
+#if IS_DEBUG
+  psync_sql_do_lock(file, line);
+#else
   psync_sql_lock();
+#endif
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_unlock();
+#if IS_DEBUG
+    debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+#else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+#endif
     return NULL;
   }
   res=psync_new(psync_sql_res);
@@ -1049,17 +1231,29 @@ psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
   return res;
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_prep_statement(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_prep_statement(const char *sql){
+#endif
   psync_sql_res *ret;
   ret=psync_cache_get(sql);
   if (ret){
 //    debug(D_NOTICE, "got statement %s from cache", sql);
     ret->locked=SQL_WRITE_LOCK;
+#if IS_DEBUG
+    psync_sql_do_lock(file, line);
+#else
     psync_sql_lock();
+#endif
     return ret;
   }
   else
+#if IS_DEBUG
+    return psync_sql_do_prep_statement_nocache(sql, file, line);
+#else
     return psync_sql_prep_statement_nocache(sql);
+#endif
 }
 
 void psync_sql_reset(psync_sql_res *res){

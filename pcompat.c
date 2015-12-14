@@ -1004,7 +1004,7 @@ static struct addrinfo *addr_load_from_db(const char *host, const char *port){
   psync_sql_bind_string(res, 2, port);
   if (!(row=psync_sql_fetch_rowint(res)) || row[0]==0){
     psync_sql_free_result(res);
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     return NULL;
   }
   ret=(struct addrinfo *)psync_malloc(sizeof(struct addrinfo)*row[0]+row[1]);

@@ -67,6 +67,7 @@ static void psync_add_folder_to_downloadlist_locked(psync_folderid_t folderid){
       else{
         f->tree.left=psync_new_sd_folder(folderid);
         psync_tree_added_at(&synced_down_folders, &f->tree, f->tree.left);
+        break;
       }
     }
     else if (folderid>f->folderid){
@@ -75,11 +76,12 @@ static void psync_add_folder_to_downloadlist_locked(psync_folderid_t folderid){
       else{
         f->tree.right=psync_new_sd_folder(folderid);
         psync_tree_added_at(&synced_down_folders, &f->tree, f->tree.right);
+        break;
       }
     }
     else{
       debug(D_NOTICE, "not adding folderid %llu to downloadlist as it is already there", (unsigned long long)folderid);
-      return;
+      break;
     }
   }
 }

@@ -1242,7 +1242,9 @@ static int flush_pages(int nosleep){
       pthread_mutex_lock(&cache_mutex);
     }
   }
+  pthread_mutex_unlock(&cache_mutex);
   psync_sql_start_transaction();
+  pthread_mutex_lock(&cache_mutex);
   if (db_cache_max_page<db_cache_in_pages && cache_pages_in_hash && !diskfull){
     i=0;
     res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
@@ -1250,13 +1252,13 @@ static int flush_pages(int nosleep){
       psync_sql_run(res);
       i++;
       if (i%64==0){
+        pthread_mutex_unlock(&cache_mutex);
         psync_sql_free_result(res);
         psync_sql_commit_transaction();
-        pthread_mutex_unlock(&cache_mutex);
         if (!nosleep)
           psync_milisleep(1);
-        pthread_mutex_lock(&cache_mutex);
         psync_sql_start_transaction();
+        pthread_mutex_lock(&cache_mutex);
         res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
       }
     }
@@ -1289,12 +1291,12 @@ static int flush_pages(int nosleep){
       psync_list_add_head(&free_pages, &page->list);
       cache_pages_free++;
       if (nosleep!=1 && updates%64==0){
+        pthread_mutex_unlock(&cache_mutex);
         psync_sql_free_result(res);
         psync_sql_commit_transaction();
-        pthread_mutex_unlock(&cache_mutex);
         psync_milisleep(1);
-        pthread_mutex_lock(&cache_mutex);
         psync_sql_start_transaction();
+        pthread_mutex_lock(&cache_mutex);
         res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=?, pageid=?, type="NTO_STR(PAGE_TYPE_READ)", lastuse=?, usecnt=?, size=?, crc=? WHERE id=?");
       }
     }
@@ -1314,12 +1316,12 @@ static int flush_pages(int nosleep){
         memset(&cachepages_to_update[i], 0, sizeof(psync_cachepage_to_update));
         updates++;
         if (!nosleep && updates%128==0){
+          pthread_mutex_unlock(&cache_mutex);
           psync_sql_free_result(res);
           psync_sql_commit_transaction();
-          pthread_mutex_unlock(&cache_mutex);
           psync_milisleep(1);
-          pthread_mutex_lock(&cache_mutex);
           psync_sql_start_transaction();
+          pthread_mutex_lock(&cache_mutex);
           res=psync_sql_prep_statement("UPDATE pagecache SET lastuse=?, usecnt=usecnt+? WHERE id=?");
         }
       }
@@ -1330,16 +1332,16 @@ static int flush_pages(int nosleep){
   }
   flushcacherun=0;
   if (updates){
-    ret=psync_sql_commit_transaction();
     pthread_mutex_unlock(&cache_mutex);
+    ret=psync_sql_commit_transaction();
     pthread_mutex_unlock(&flush_cache_mutex);
     if (free_db_pages<=CACHE_PAGES*2)
       psync_run_thread("clean cache", clean_cache);
     return ret;
   }
   else{
-    psync_sql_rollback_transaction();
     pthread_mutex_unlock(&cache_mutex);
+    psync_sql_rollback_transaction();
     pthread_mutex_unlock(&flush_cache_mutex);
     if (free_db_pages==0)
       psync_run_thread("clean cache", clean_cache);
@@ -2655,6 +2657,10 @@ static void psync_pagecache_add_page_if_not_exists(psync_cache_page_t *page, uin
   psync_uint_t h1, h2;
   int hasit;
   hasit=0;
+  if (has_page_in_db(hash, pageid)){
+    psync_pagecache_return_free_page(page);
+    return;
+  }
   h1=pagehash_by_hash_and_pageid(hash, pageid);
   h2=waiterhash_by_hash_and_pageid(hash, pageid);
   lock_wait(hash);
@@ -2670,8 +2676,6 @@ static void psync_pagecache_add_page_if_not_exists(psync_cache_page_t *page, uin
         hasit=1;
         break;
       }
-  if (!hasit && has_page_in_db(hash, pageid))
-    hasit=1;
   if (hasit)
     psync_pagecache_return_free_page_locked(page);
   else{

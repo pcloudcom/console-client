@@ -429,10 +429,10 @@ int psync_get_local_file_checksum(const char *restrict filename, unsigned char *
   fd=psync_file_open(filename, P_O_RDONLY, 0);
   if (fd==INVALID_HANDLE_VALUE)
     return PSYNC_NET_PERMFAIL;
+  buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
 retry:
   if (unlikely_log(psync_fstat(fd, &st)))
     goto err1;
-  buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
   psync_hash_init(&hctx);
   rsz=psync_stat_size(&st);
   cnt=0;
@@ -447,9 +447,10 @@ retry:
         debug(D_NOTICE, "file %s changed while calculating checksum, restarting", filename);
         psync_hash_final(hashbin, &hctx);
         psync_milisleep(PSYNC_SLEEP_FILE_CHANGE);
+        psync_file_seek(fd, 0, P_SEEK_SET);
         goto retry;
       }
-      goto err2;
+      goto err1;
     }
     psync_hash_update(&hctx, buff, rrs);
     rsz-=rrs;
@@ -457,11 +458,12 @@ retry:
       psync_milisleep(5);
   }
   if (unlikely_log(psync_fstat(fd, &st2)))
-    goto err2;
+    goto err1;
   if (unlikely(file_changed(&st, &st2))){
     debug(D_NOTICE, "file %s changed while calculating checksum, restarting", filename);
     psync_hash_final(hashbin, &hctx);
     psync_milisleep(PSYNC_SLEEP_FILE_CHANGE);
+    psync_file_seek(fd, 0, P_SEEK_SET);
     goto retry;
   }
   psync_free(buff);
@@ -471,9 +473,8 @@ retry:
   if (fsize)
     *fsize=psync_stat_size(&st);
   return PSYNC_NET_OK;
-err2:
-  psync_free(buff);
 err1:
+  psync_free(buff);
   psync_file_close(fd);
   return PSYNC_NET_PERMFAIL;
 }
