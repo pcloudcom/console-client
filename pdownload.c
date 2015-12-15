@@ -353,13 +353,14 @@ static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid
 
 static void create_conflicted(const char *name, psync_folderid_t localfolderid, psync_syncid_t syncid, const char *filename){
   psync_sql_res *res;
+  psync_stop_localscan();
+  psync_rename_conflicted_file(name);
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, localfolderid);
   psync_sql_bind_string(res, 3, filename);
-  psync_restart_localscan();
-  psync_rename_conflicted_file(name);
   psync_sql_run_free(res);
+  psync_restart_localscan();
   psync_wake_localscan();
 }
 
