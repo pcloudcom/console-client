@@ -2397,6 +2397,8 @@ retry:
       psync_milisleep(PSYNC_SLEEP_ON_OS_LOCK);
       goto retry;
     }
+    else
+      debug(D_WARNING, "rename from %s to %s failed with error %d", oldpath, newpath, (int)GetLastError());
     psync_free(oldwpath);
     psync_free(newwpath);
     return ret;

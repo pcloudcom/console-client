@@ -441,6 +441,7 @@ static int rename_and_create_local(const char *src, const char *dst, psync_synci
   if (rename_if_notex(src, dst, fileid, localfolderid, syncid, filename)){
     psync_resume_localscan();
     debug(D_WARNING, "failed to rename %s to %s", src, dst);
+    psync_milisleep(1000);
     return -1;
   }
   if (stat_and_create_local(syncid, fileid, localfolderid, filename, dst, checksum, serversize, hash)){
@@ -1112,6 +1113,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     debug(D_NOTICE, "found file %s, candidate for %s with the right size and checksum", tmpname, localname);
     ret=rename_and_create_local(tmpname, localname, syncid, fileid, localfolderid, filename, targetchecksum, size, hash);
     free_download_task(dt);
+    psync_status_recalc_to_download_async();
     return ret;
   }
   if (psync_get_local_file_checksum(localname, dt->checksum, &dt->localsize)==PSYNC_NET_OK)
@@ -1122,6 +1124,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     debug(D_NOTICE, "file %s already exists and has correct checksum, not downloading", localname);
     ret=stat_and_create_local(dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, dt->localname, targetchecksum, size, hash);
     free_download_task(dt);
+    psync_status_recalc_to_download_async();
     return ret;
   }
   minfree=psync_setting_get_uint(_PS(minlocalfreespace));
