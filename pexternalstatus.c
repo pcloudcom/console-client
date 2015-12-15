@@ -72,31 +72,6 @@ static int folder_in_sync(psync_fsfolderid_t folderid) {
   return 0;
 }
 
-static int file_to_sync(const char *path) {
- 
-  psync_sql_res *res = NULL;
-  psync_variant_row row;
-  const char *syncfolder;
-  int i = 1;
-  size_t len = 0;
-
-  if (!path)
-    return 0;
-
-  res=psync_sql_query_nolock("select localpath from syncfolder ");
-  while ((row = psync_sql_fetch_row(res))) {
-    syncfolder = psync_get_lstring(row[0], &len);
-    i = strncmp(syncfolder, path, len);
-    if (i == 0) {
-      psync_sql_free_result(res);
-      return 1;
-    }
-  }
-  
-  psync_sql_free_result(res);
-  return 0;
-}
-
 static int fsexternal_status_folderid(psync_fsfolderid_t folder_id, int level)
 {
   psync_fstask_folder_t *tasksp;
@@ -331,9 +306,6 @@ external_status do_psync_external_status_file(const char *path)
         } else result = INSYNC;
       } else result = INSYNC;
     }
-  } else {
-    if (file_to_sync(path))
-      result = NOSYNC;
   }
   psync_sql_rdunlock();
   return result;
@@ -342,7 +314,7 @@ external_status do_psync_external_status_file(const char *path)
 
 external_status do_psync_external_status_folder(const char *path) {
 psync_fsfolderid_t folderid;
-external_status result = INSYNC;
+external_status result = INVSYNC;
   
   if (!path)
     return INVSYNC;
@@ -350,9 +322,7 @@ external_status result = INSYNC;
   if (folderid != PSYNC_INVALID_FSFOLDERID) {
     result = psync_external_status_folderid(folderid);
   } else
-    if (file_to_sync(path))
-      result = NOSYNC;
-    //debug(D_WARNING, "Sync folder folderid not found! Called on no actual path ?");
+    debug(D_WARNING, "Sync folder folderid not found! Called on no actual path ?");
   return result;
 }
 
@@ -391,7 +361,7 @@ external_status do_psync_external_status(char *path)
 {
   char *fsroot = NULL;
   char *folder = NULL;
-  int syncid, rootlen = 0;
+  int syncid = 0, rootlen = 0;
   psync_stat_t st;
   external_status result = INVSYNC;
   char *pcpath = NULL;
@@ -416,10 +386,15 @@ external_status do_psync_external_status(char *path)
   }
   do_normalize_path(pcpath);
   if (!psync_stat(path, &st)) {
-    if (!psync_stat_isfolder(&st))
+    if (!psync_stat_isfolder(&st)) {
       result = do_psync_external_status_file(pcpath);
-    else 
+      if (syncid && (result == INVSYNC))
+        result = NOSYNC;
+    } else { 
       result = do_psync_external_status_folder(pcpath);
+       if (syncid && (result == INVSYNC))
+        result = NOSYNC;
+    }
   }
   
   if (folder)
