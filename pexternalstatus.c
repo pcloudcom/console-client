@@ -285,7 +285,7 @@ external_status do_psync_external_status_file(const char *path)
 {
   psync_fstask_folder_t *taskp;
   psync_fspath_t *filep;
-  external_status result = INSYNC;
+  external_status result = INVSYNC;
   int syncid;
   
   if (!path)
@@ -303,8 +303,8 @@ external_status do_psync_external_status_file(const char *path)
             result = NOSYNC;
           else
             result = INPROG;
-        }
-      }
+        } else result = INSYNC;
+      } else result = INSYNC;
     }
   }
   psync_sql_rdunlock();
@@ -314,7 +314,7 @@ external_status do_psync_external_status_file(const char *path)
 
 external_status do_psync_external_status_folder(const char *path) {
 psync_fsfolderid_t folderid;
-external_status result = INSYNC;
+external_status result = INVSYNC;
   
   if (!path)
     return INVSYNC;
@@ -361,7 +361,7 @@ external_status do_psync_external_status(char *path)
 {
   char *fsroot = NULL;
   char *folder = NULL;
-  int syncid, rootlen = 0;
+  int syncid = 0, rootlen = 0;
   psync_stat_t st;
   external_status result = INVSYNC;
   char *pcpath = NULL;
@@ -386,10 +386,15 @@ external_status do_psync_external_status(char *path)
   }
   do_normalize_path(pcpath);
   if (!psync_stat(path, &st)) {
-    if (!psync_stat_isfolder(&st))
+    if (!psync_stat_isfolder(&st)) {
       result = do_psync_external_status_file(pcpath);
-    else 
+      if (syncid && (result == INVSYNC))
+        result = NOSYNC;
+    } else { 
       result = do_psync_external_status_folder(pcpath);
+       if (syncid && (result == INVSYNC))
+        result = NOSYNC;
+    }
   }
   
   if (folder)
