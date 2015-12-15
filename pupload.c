@@ -38,6 +38,7 @@
 #include "pcallbacks.h"
 #include "pdiff.h"
 #include "plist.h"
+#include "plocalscan.h"
 
 typedef struct {
   psync_list list;
@@ -110,14 +111,33 @@ void psync_upload_sub_bytes_uploaded(uint64_t bytes){
   psync_send_status_update();
 }
 
-static void task_wait_no_uploads(){
+static int task_wait_no_uploads(uint64_t taskid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  uint64_t cnt;
   pthread_mutex_lock(&current_uploads_mutex);
   while (psync_status.filesuploading){
     current_uploads_waiters++;
     pthread_cond_wait(&current_uploads_cond, &current_uploads_mutex);
     current_uploads_waiters--;
+    if (!psync_status.filesuploading)
+      debug(D_NOTICE, "waited for uploads to finish");
   }
   pthread_mutex_unlock(&current_uploads_mutex);
+  res=psync_sql_query("SELECT COUNT(*) FROM task WHERE id<? AND type=?");
+  psync_sql_bind_uint(res, 1, taskid);
+  psync_sql_bind_uint(res, 2, PSYNC_UPLOAD_FILE);
+  if ((row=psync_sql_fetch_rowint(res)))
+    cnt=row[0];
+  else
+    cnt=0;
+  psync_sql_free_result(res);
+  if (cnt){
+    debug(D_NOTICE, "all uploads stopped, but there are still %u upload tasks", (unsigned)cnt);
+    return -1;
+  }
+  else
+    return 0;
 }
 
 static int64_t do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt){
@@ -237,14 +257,15 @@ static int task_renameremotefile(psync_fileid_t fileid, psync_folderid_t newpare
   return ret;
 }
 
-static int task_renamefile(psync_syncid_t syncid, psync_fileid_t localfileid, psync_folderid_t newlocalparentfolderid, const char *newname){
+static int task_renamefile(uint64_t taskid, psync_syncid_t syncid, psync_fileid_t localfileid, psync_folderid_t newlocalparentfolderid, const char *newname){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fileid_t fileid;
   psync_folderid_t folderid;
   char *nname;
   int ret;
-  task_wait_no_uploads();
+  if (task_wait_no_uploads(taskid))
+    return -1;
   res=psync_sql_query_rdlock("SELECT fileid FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, localfileid);
   if ((row=psync_sql_fetch_rowint(res)))
@@ -279,13 +300,14 @@ static int task_renameremotefolder(psync_folderid_t folderid, psync_folderid_t n
   return ret;
 }
 
-static int task_renamefolder(psync_syncid_t syncid, psync_fileid_t localfolderid, psync_folderid_t newlocalparentfolderid, const char *newname){
+static int task_renamefolder(uint64_t taskid, psync_syncid_t syncid, psync_fileid_t localfolderid, psync_folderid_t newlocalparentfolderid, const char *newname){
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t folderid, parentfolderid;
   char *nname;
   int ret;
-  task_wait_no_uploads();
+  if (task_wait_no_uploads(taskid))
+    return -1;
   res=psync_sql_query_rdlock("SELECT folderid FROM syncedfolder WHERE syncid=? AND localfolderid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, localfolderid);
@@ -1191,20 +1213,22 @@ static int task_run_uploadfile(uint64_t taskid, psync_syncid_t syncid, psync_fol
   return -1;
 }
 
-static int task_deletefile(psync_fileid_t fileid){
+static int task_deletefile(uint64_t taskid, psync_fileid_t fileid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid)};
   int ret;
-  task_wait_no_uploads();
+  if (task_wait_no_uploads(taskid))
+    return -1;
   ret=run_command("deletefile", params);
   if (likely(!ret))
     debug(D_NOTICE, "remote fileid %lu deleted", (long unsigned)fileid);
   return ret;
 }
 
-static int task_deletefolderrec(psync_folderid_t folderid){
+static int task_deletefolderrec(uint64_t taskid, psync_folderid_t folderid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid)};
   int ret;
-  task_wait_no_uploads();
+  if (task_wait_no_uploads(taskid))
+    return -1;
   ret=run_command("deletefolderrecursive", params);
   if (likely(!ret))
     debug(D_NOTICE, "remote folder %lu deleted", (long unsigned)folderid);
@@ -1219,19 +1243,19 @@ static int upload_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, ui
       res=task_createfolder(syncid, localitemid, name);
       break;
     case PSYNC_RENAME_REMOTE_FILE:
-      res=task_renamefile(newsyncid, localitemid, newitemid, name);
+      res=task_renamefile(taskid, newsyncid, localitemid, newitemid, name);
       break;
     case PSYNC_RENAME_REMOTE_FOLDER:
-      res=task_renamefolder(newsyncid, localitemid, newitemid, name);
+      res=task_renamefolder(taskid, newsyncid, localitemid, newitemid, name);
       break;
     case PSYNC_UPLOAD_FILE:
       res=task_run_uploadfile(taskid, syncid, localitemid, name);
       break;
     case PSYNC_DELETE_REMOTE_FILE:
-      res=task_deletefile(itemid);
+      res=task_deletefile(taskid, itemid);
       break;
     case PSYNC_DELREC_REMOTE_FOLDER:
-      res=task_deletefolderrec(itemid);
+      res=task_deletefolderrec(taskid, itemid);
       break;
     default:
       debug(D_BUG, "invalid task type %u", (unsigned)type);
