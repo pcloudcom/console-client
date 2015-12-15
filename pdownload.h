@@ -1,7 +1,7 @@
 /* Copyright (c) 2013 Anton Titov.
  * Copyright (c) 2013 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -41,7 +41,7 @@ typedef struct {
 
 void psync_download_init();
 void psync_wake_download();
-void psync_delete_download_tasks_for_file(psync_fileid_t fileid);
+void psync_delete_download_tasks_for_file(psync_fileid_t fileid, psync_syncid_t syncid, int deltemp);
 void psync_stop_file_download(psync_fileid_t fileid, psync_syncid_t syncid);
 void psync_stop_sync_download(psync_syncid_t syncid);
 void psync_stop_all_download();

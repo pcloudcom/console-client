@@ -996,7 +996,7 @@ static void process_modifyfile(const binresult *entry){
   if (oldsync || newsync){
     if (psync_is_name_to_ignore(name->str)){
       char *path;
-      psync_delete_download_tasks_for_file(fileid);
+      psync_delete_download_tasks_for_file(fileid, 0, 1);
       path=psync_get_path_by_fileid(fileid, NULL);
       psync_task_delete_local_file(fileid, path);
       psync_free(path);
@@ -1006,7 +1006,7 @@ static void process_modifyfile(const binresult *entry){
     lneeddownload=hash!=psync_get_number(row[3]) || size!=oldsize;
     oldname=psync_get_lstring(row[4], &oldnamelen);
     if (lneeddownload)
-      psync_delete_download_tasks_for_file(fileid);
+      psync_delete_download_tasks_for_file(fileid, 0, 0);
     needrename=oldparentfolderid!=parentfolderid || name->length!=oldnamelen || memcmp(name->str, oldname, oldnamelen);
     res=psync_sql_query("SELECT syncid, localfolderid, synctype FROM syncedfolder WHERE folderid=? AND "PSYNC_SQL_DOWNLOAD);
     psync_sql_bind_uint(res, 1, oldparentfolderid);
@@ -1016,6 +1016,7 @@ static void process_modifyfile(const binresult *entry){
     fres2=psync_sql_fetchall_int(res);
     group_results_by_col(fres1, fres2, 0);
     cnt=fres2->rows>fres1->rows?fres1->rows:fres2->rows;
+//    debug(D_NOTICE, "cnt=%u fres1->rows=%u, fres2->rows=%u, oldparentfolderid=%lu, parentfolderid=%lu", cnt, fres1->rows, fres2->rows, oldparentfolderid, parentfolderid);
     for (i=0; i<cnt; i++){
       if (needrename){
         psync_task_rename_local_file(psync_get_result_cell(fres1, i, 0), psync_get_result_cell(fres2, i, 0), fileid,
@@ -1046,6 +1047,7 @@ static void process_modifyfile(const binresult *entry){
     for (/*i is already=cnt*/; i<fres1->rows; i++){
       char *path=psync_get_path_by_fileid(fileid, NULL);
       psync_task_delete_local_file_syncid(psync_get_result_cell(fres1, i, 0), fileid, path);
+      psync_delete_download_tasks_for_file(fileid, psync_get_result_cell(fres1, i, 0), 1);
       psync_free(path);
       needdownload=1;
     }
@@ -1074,7 +1076,7 @@ static void process_deletefile(const binresult *entry){
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   if (psync_is_folder_in_downloadlist(psync_find_result(meta, "parentfolderid", PARAM_NUM)->num)){
-    psync_delete_download_tasks_for_file(fileid);
+    psync_delete_download_tasks_for_file(fileid, 0, 1);
     path=psync_get_path_by_fileid(fileid, NULL);
     if (likely(path)){
       psync_task_delete_local_file(fileid, path);

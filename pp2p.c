@@ -660,6 +660,7 @@ static int psync_p2p_download(psync_socket_t sock, psync_fileid_t fileid, const 
   psync_file_close(fd);
   psync_hash_final(hashbin, &hashctx);
   psync_binhex(hashhex, hashbin, PSYNC_HASH_DIGEST_LEN);
+  debug(D_NOTICE, "downloaded file %s from peer", filename);
   if (memcmp(hashhex, filehashhex, PSYNC_HASH_DIGEST_HEXLEN)){
     /* it is better to return permanent fail and let the block checksum algo to find bad blocks */
     debug(D_WARNING, "got bad checksum for file %s", filename);

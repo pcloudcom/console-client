@@ -566,6 +566,8 @@ static int task_download_file(download_task_t *dt){
     if (rt==PSYNC_NET_OK){
       if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, serverhashhex, serversize, hash))
         return -1;
+      else
+        return 0;
     }
     else if (rt==PSYNC_NET_TEMPFAIL)
       return -1;
@@ -683,8 +685,13 @@ static int task_download_file(download_task_t *dt){
     if (dt->dwllist.stop)
       break;
   }
-  if (unlikely(dt->dwllist.stop))
+  if (unlikely(dt->dwllist.stop)){
+    if (dt->dwllist.stop==2){
+      debug(D_NOTICE, "deleting file %s as stop is detected", dt->tmpname);
+      psync_file_delete(dt->tmpname);
+    }
     goto err2;
+  }
   if (unlikely_log(psync_file_sync(fd)))
     goto err2;
   psync_free(buff);
@@ -694,6 +701,11 @@ static int task_download_file(download_task_t *dt){
   psync_binhex(localhashhex, localhashbin, PSYNC_HASH_DIGEST_LEN);
   if (unlikely_log(memcmp(localhashhex, serverhashhex, PSYNC_HASH_DIGEST_HEXLEN))){
     debug(D_WARNING, "got wrong file checksum for file %s", dt->filename);
+    goto err0;
+  }
+  if (dt->dwllist.stop==2){
+    debug(D_NOTICE, "deleting file %s as stop is detected", dt->tmpname);
+    psync_file_delete(dt->tmpname);
     goto err0;
   }
   if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, serverhashhex, serversize, hash))
@@ -954,6 +966,11 @@ static void finish_async_download(void *ptr, psync_async_result_t *res){
   if (res->error)
     handle_async_error(dt, res);
   else{
+    if (dt->dwllist.stop==2){
+      debug(D_NOTICE, "deleting file %s as stop is detected", dt->tmpname);
+      psync_file_delete(dt->tmpname);
+      return;
+    }
 #if defined(P_OS_WINDOWS)
     async_res_dt_t *ard;
     ard=psync_new(async_res_dt_t);
@@ -1302,22 +1319,31 @@ void psync_download_init(){
   psync_run_thread("download main", download_thread);
 }
 
-void psync_delete_download_tasks_for_file(psync_fileid_t fileid){
+void psync_delete_download_tasks_for_file(psync_fileid_t fileid, psync_syncid_t syncid, int deltemp){
   psync_sql_res *res;
   download_list_t *dwl;
   uint32_t aff;
-  res=psync_sql_prep_statement("DELETE FROM task WHERE type=? AND itemid=?");
+  if (syncid)
+    res=psync_sql_prep_statement("DELETE FROM task WHERE type=? AND itemid=? AND syncid=?");
+  else
+    res=psync_sql_prep_statement("DELETE FROM task WHERE type=? AND itemid=?");
   psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
   psync_sql_bind_uint(res, 2, fileid);
+  if (syncid)
+    psync_sql_bind_uint(res, 3, syncid);
   psync_sql_run(res);
   aff=psync_sql_affected_rows();
   psync_sql_free_result(res);
   if (aff)
     psync_status_recalc_to_download_async();
+  if (deltemp)
+    deltemp=2;
+  else
+    deltemp=1;
   pthread_mutex_lock(&current_downloads_mutex);
   psync_list_for_each_element(dwl, &downloads, download_list_t, list)
-    if (dwl->fileid==fileid)
-      dwl->stop=1;
+    if (dwl->fileid==fileid && (syncid==0 || dwl->syncid==syncid))
+      dwl->stop=deltemp;
   pthread_mutex_unlock(&current_downloads_mutex);
 }
 
