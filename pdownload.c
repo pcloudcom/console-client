@@ -351,10 +351,13 @@ static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid
   return ret;
 }
 
-static void create_conflicted(const char *name, psync_folderid_t localfolderid, psync_syncid_t syncid, const char *filename){
+static int create_conflicted(const char *name, psync_folderid_t localfolderid, psync_syncid_t syncid, const char *filename){
   psync_sql_res *res;
   psync_stop_localscan();
-  psync_rename_conflicted_file(name);
+  if (psync_rename_conflicted_file(name)){
+    psync_restart_localscan();
+    return -1;
+  }
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, localfolderid);
@@ -362,6 +365,7 @@ static void create_conflicted(const char *name, psync_folderid_t localfolderid, 
   psync_sql_run_free(res);
   psync_restart_localscan();
   psync_wake_localscan();
+  return 0;
 }
 
 static int rename_if_notex(const char *oldname, const char *newname, psync_fileid_t fileid, psync_folderid_t localfolderid,
@@ -377,8 +381,12 @@ static int rename_if_notex(const char *oldname, const char *newname, psync_filei
       debug(D_NOTICE, "got PSYNC_NET_TEMPFAIL for %s", newname);
       return -1;
     }
-    if (ret==PSYNC_NET_OK && !isrev)
-      create_conflicted(newname, localfolderid, syncid, filename);
+    if (ret==PSYNC_NET_OK && !isrev){
+      if (create_conflicted(newname, localfolderid, syncid, filename)){
+        debug(D_WARNING, "create_conflicted failed for %s", newname);
+        return -1;
+      }
+    }
     else if (ret==PSYNC_NET_OK && isrev)
       debug(D_NOTICE, "file %s is found to be old revision of fileid %lu, overwriting", newname, (unsigned long)fileid);
   }
@@ -929,17 +937,7 @@ typedef struct {
 
 static void rename_create_thread(void *ptr){
   async_res_dt_t *ard;
-  psync_file_t fd;
   ard=(async_res_dt_t *)ptr;
-  fd=psync_file_open(ard->dt->tmpname, P_O_RDONLY, 0);
-  if (fd!=INVALID_HANDLE_VALUE){
-    if (psync_file_sync(fd))
-      debug(D_WARNING, "can not sync %s", ard->dt->tmpname);
-    if (psync_file_close(fd))
-      debug(D_WARNING, "error when closing %s", ard->dt->tmpname);
-  }
-  else
-    debug(D_WARNING, "can not open %s", ard->dt->tmpname);
   if (rename_and_create_local(ard->dt->tmpname, ard->dt->localname, ard->dt->dwllist.syncid, ard->dt->dwllist.fileid, ard->dt->localfolderid, ard->dt->filename,
                               ard->res.file.sha1hex, ard->res.file.size, ard->res.file.hash)){
     set_task_inprogress(ard->dt->taskid, 0);
@@ -1114,7 +1112,6 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     debug(D_NOTICE, "found file %s, candidate for %s with the right size and checksum", tmpname, localname);
     ret=rename_and_create_local(tmpname, localname, syncid, fileid, localfolderid, filename, targetchecksum, size, hash);
     free_download_task(dt);
-    psync_status_recalc_to_download_async();
     return ret;
   }
   if (psync_get_local_file_checksum(localname, dt->checksum, &dt->localsize)==PSYNC_NET_OK)
@@ -1125,7 +1122,6 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     debug(D_NOTICE, "file %s already exists and has correct checksum, not downloading", localname);
     ret=stat_and_create_local(dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, dt->localname, targetchecksum, size, hash);
     free_download_task(dt);
-    psync_status_recalc_to_download_async();
     return ret;
   }
   minfree=psync_setting_get_uint(_PS(minlocalfreespace));
@@ -1296,6 +1292,8 @@ static void download_thread(){
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
         delete_task(taskid);
+      if (type==PSYNC_DOWNLOAD_FILE)
+        psync_status_recalc_to_download_async();
       }
       else if (type!=PSYNC_DOWNLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_DOWNLOAD);

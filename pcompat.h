@@ -121,7 +121,7 @@ typedef unsigned long psync_uint_t;
 
 
 #define psync_32to64(hi, lo) ((((uint64_t)(hi))<<32)+(lo))
-#define psync_bool_to_zero(x) ((!!(x))-1)
+#define psync_bool_to_zero(x) (((int)(!!(x)))-1)
 
 #define NTO_STR(s) TO_STR(s)
 #define TO_STR(s) #s
