@@ -148,7 +148,7 @@ external_status psync_external_status_folderid(psync_fsfolderid_t folder_id)
   {
     case 1: return NOSYNC; break;
     case 2: 
-      if (psync_status_is_offline())
+      if (psync_status_is_offline()|| (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
         return NOSYNC;
       else
         return INPROG;
