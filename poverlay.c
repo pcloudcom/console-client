@@ -27,6 +27,7 @@
 #include "plibs.h"
 #include "poverlay.h"
 #include "pexternalstatus.h"
+#include "pcache.h"
 
 #if defined(P_OS_WINDOWS)
 
@@ -49,6 +50,51 @@ void instance_thread(LPVOID){}
 
 poverlay_callback callbacks[15];
 
+#define CACHE_PREF "P_OVERLA_CACHE_PREFIX"
+#define CACHE_PREF_LEN 21
+
+
+typedef struct overlay_cache_{
+  external_status stat;
+  uint64_t timestamp;
+} overlay_cache_t;
+
+static int get_item_from_cache(const char* key, external_status* stat){
+  int ketlen = strlen(key);
+  char* reckey =  psync_malloc(ketlen + CACHE_PREF_LEN + 1);
+  overlay_cache_t * rec = NULL;
+  uint64_t now = 0;
+  
+  strncpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
+  strncpy(reckey + CACHE_PREF_LEN , key, ketlen);
+  
+  if ((rec = (overlay_cache_t *) psync_cache_get(reckey))) {
+    now = psync_millitime();
+    if ((now - rec->timestamp) < 100) {
+      *stat = rec->stat;
+      return 1;
+    } else {
+      psync_free(rec);
+    }
+  }
+  return 0;
+}
+
+static void add_item_to_cache(const char* key, external_status* stat){
+  int ketlen = strlen(key);
+  char* reckey =  psync_malloc(ketlen + CACHE_PREF_LEN + 1);
+  overlay_cache_t * rec = psync_malloc(sizeof(overlay_cache_t));
+  
+  strncpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
+  strncpy(reckey + CACHE_PREF_LEN , key, ketlen);
+
+  rec->stat = *stat;
+  rec->timestamp = psync_millitime();
+  psync_cache_add(key, rec, 1, psync_free, 1);
+}
+
+  
+
 int psync_add_overlay_callback(int id, poverlay_callback callback) 
 {
   if (id < 20)
@@ -66,10 +112,13 @@ void inti_overlay_callbacks() {
 void get_answer_to_request(message *request, message *replay)
 {
   char msg[4] = "Ok.";
+  external_status stat = INVSYNC;
   msg[3] = '\0';
   debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   if (request->type < 20 ) {
-    external_status stat = do_psync_external_status(request->value);
+    if (!get_item_from_cache(request->value, &stat)) {
+     stat = do_psync_external_status(request->value);
+    }
     if (stat == INSYNC) {
       replay->type = 10;
     }
@@ -86,6 +135,7 @@ void get_answer_to_request(message *request, message *replay)
     }
     replay->length = sizeof(message)+4;
     strncpy(replay->value, msg, 4);
+    add_item_to_cache(request->value, &stat);
   } else if (request->type < 36) {
     int ind = request->type - 20;
     int ret = 0;
