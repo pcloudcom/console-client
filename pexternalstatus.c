@@ -274,10 +274,21 @@ external_status psync_sync_status_file(const char *name, psync_fsfolderid_t fold
         result = NOSYNC;
       else 
         result = INPROG;
+      psync_sql_free_result(res);
+      psync_sql_rdunlock();
+      return result;
     }
-  
+    
+  psync_sql_free_result(res); 
+  // sync
+  res=psync_sql_query_nolock("select 1 from file as f where = f.parentfolderid = ? and f.name = ? ");
+  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_string(res, 2, name);
+  if(!psync_sql_fetch_rowint(res))
+     result = NOSYNC;
   psync_sql_free_result(res);
-  psync_sql_rdunlock();    
+  psync_sql_rdunlock(); 
+
   return result;
 }
 

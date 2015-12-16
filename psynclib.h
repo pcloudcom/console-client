@@ -599,7 +599,7 @@ void psync_logout();
 void psync_unlink();
 
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,
- * on success syncid is returned, on error -1. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
+ * on success syncid is returned, on error PSYNC_INVALID_SYNCID. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
  * PSYNC_UPLOAD_ONLY or PSYNC_FULL.
  *
  * psync_add_sync_by_path_delayed generally works in a way similar to psync_add_sync_by_path, but with few
