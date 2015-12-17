@@ -45,6 +45,12 @@
 #define SLASHCHAR '/'
 #endif
 
+static int sync_offline() {
+  if  (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
+    return 1;
+  else return 0;
+}
+
 static int folder_in_sync_nolock(psync_fsfolderid_t folderid) {
   psync_sql_res *res = NULL;
   psync_variant_row row;
@@ -110,10 +116,17 @@ static int fsexternal_status_folderid(psync_fsfolderid_t folder_id, int level)
   if (syncid) {
     synctsk = task_for_sync_nolock(syncid);
     if (synctsk > 0) {
-      if (level  == 0)
-        return 2;
-      if (psync_sync_status_folderid(folder_id, syncid) != INSYNC)
-        return 2;
+      if (level  == 0) {
+        if (sync_offline())
+            return 2;
+        else return 1; 
+      } else {  
+        if ((psync_sync_status_folderid(folder_id, syncid) != INSYNC)) {
+          if (sync_offline())
+              return 2;
+          else return 1;
+        }
+      }
     }
   }
   
@@ -148,7 +161,7 @@ external_status psync_external_status_folderid(psync_fsfolderid_t folder_id)
   {
     case 1: return NOSYNC; break;
     case 2: 
-      if (psync_status_is_offline()|| (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
+      if (sync_offline())
         return NOSYNC;
       else
         return INPROG;
@@ -306,8 +319,12 @@ external_status psync_sync_status_file(const char *name, psync_fsfolderid_t fold
   res=psync_sql_query_nolock("select 1 from file as f where f.parentfolderid = ? and f.name = ? ");
   psync_sql_bind_uint(res, 1, folderid);
   psync_sql_bind_string(res, 2, name);
-  if(!psync_sql_fetch_rowint(res))
-     result = NOSYNC;
+  if((!psync_sql_fetch_rowint(res))) {
+    if (sync_offline())
+      result = NOSYNC;
+    else
+      result = INPROG;
+  }
   psync_sql_free_result(res);
   psync_sql_rdunlock(); 
 
@@ -332,7 +349,7 @@ external_status do_psync_external_status_file(const char *path)
       taskp = psync_fstask_get_folder_tasks_rdlocked(filep->folderid);
       if (taskp) {
         if (psync_fstask_find_creat(taskp, filep->name, 0)) {
-          if (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
+          if (sync_offline())
             result = NOSYNC;
           else
             result = INPROG;
