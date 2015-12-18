@@ -189,7 +189,7 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
   while ((row = psync_sql_fetch_row(res))){
     syncfolder = psync_get_lstring(row[0], &len);
     i = strncmp(syncfolder, path, len);
-    if (i == 0) {
+    if (i == 0 && ((path[len] == '\0') || (path[len] == SLASHCHAR))) {
       (*syncid) = psync_get_snumber(row[1]);
       folderid = psync_get_snumber(row[2]);
       rootpath = psync_get_path_by_folderid(folderid, 0);
