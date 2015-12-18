@@ -2914,6 +2914,7 @@ void psync_fs_refresh_folder(psync_folderid_t folderid){
   if (psync_invalidate_os_cache_needed())
     psync_invalidate_os_cache(fpath);
   else{
+    sleep(1);
     debug(D_NOTICE, "creating fake file %s", fpath);
     fd=psync_file_open(fpath, P_O_WRONLY, P_O_CREAT);
     if (fd!=INVALID_HANDLE_VALUE)
