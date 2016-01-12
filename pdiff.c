@@ -2079,7 +2079,7 @@ static void psync_diff_refresh_fs(const binresult *entries){
     qsort(refresh_folders, refresh_last, sizeof(psync_folderid_t), cmp_folderid);
     for (i=0; i<refresh_last; i++)
       if (refresh_folders[i]!=lastfolderid){
-        psync_fs_refresh_folder(refresh_folders[i]);
+        psync_fs_refresh_folder_delayed(refresh_folders[i]);
         lastfolderid=refresh_folders[i];
       }
     psync_free(refresh_folders);

@@ -8,7 +8,7 @@ USESSL=mbed
 CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2
 #CFLAGS=-O2 -g -pg
 
-LIB_A=libpsynclib.a
+LIB_A=psynclib.a
 
 ifeq ($(OS),Windows_NT)
     CFLAGS += -DP_OS_WINDOWS

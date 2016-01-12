@@ -149,6 +149,7 @@ void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of);
 void psync_fs_refresh();
 int psync_fs_need_per_folder_refresh_f();
 void psync_fs_refresh_folder(psync_folderid_t folderid);
+void psync_fs_refresh_folder_delayed(psync_folderid_t folderid);
 
 void psync_fs_pause_until_login();
 void psync_fs_clean_tasks();

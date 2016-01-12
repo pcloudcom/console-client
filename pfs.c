@@ -2887,11 +2887,30 @@ int psync_fs_need_per_folder_refresh_f(){
 #endif
 }
 
+static void psync_fs_refresh_folder_th(void *folderidp){
+  psync_folderid_t folderid;
+
+  sleep(1);
+  folderid = *((psync_folderid_t *)(folderidp));
+  psync_fs_refresh_folder(folderid);
+  psync_free(folderidp);
+}
+
+void psync_fs_refresh_folder_delayed(psync_folderid_t folderid) {
+  psync_folderid_t *folderidp;
+  
+  folderidp = (psync_folderid_t *)psync_malloc(sizeof(psync_folderid_t));
+  *folderidp = folderid;
+  psync_run_thread1("refresh folder thread",psync_fs_refresh_folder_th, folderidp);
+  
+}
+
 void psync_fs_refresh_folder(psync_folderid_t folderid){
   char *path, *fpath;
   unsigned char rndbuff[20];
   char rndhex[42];
   psync_file_t fd;
+
   path=psync_get_path_by_folderid_sep(folderid, PSYNC_DIRECTORY_SEPARATOR, NULL);
   if (path==PSYNC_INVALID_PATH)
     return;
@@ -2914,7 +2933,6 @@ void psync_fs_refresh_folder(psync_folderid_t folderid){
   if (psync_invalidate_os_cache_needed())
     psync_invalidate_os_cache(fpath);
   else{
-    sleep(1);
     debug(D_NOTICE, "creating fake file %s", fpath);
     fd=psync_file_open(fpath, P_O_WRONLY, P_O_CREAT);
     if (fd!=INVALID_HANDLE_VALUE)
