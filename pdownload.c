@@ -1217,7 +1217,7 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
   psync_stop_localscan();
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
   if (unlikely_log(!localpath)){
-    psync_sql_unlock();
+    psync_resume_localscan();
     return 0;
   }
   debug(D_NOTICE, "got recursive delete for localfolder %lu %s", (unsigned long)localfolderid, localpath);
