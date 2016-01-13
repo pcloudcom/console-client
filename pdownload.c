@@ -355,7 +355,7 @@ static int create_conflicted(const char *name, psync_folderid_t localfolderid, p
   psync_sql_res *res;
   psync_stop_localscan();
   if (psync_rename_conflicted_file(name)){
-    psync_restart_localscan();
+    psync_resume_localscan();
     return -1;
   }
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
@@ -363,7 +363,7 @@ static int create_conflicted(const char *name, psync_folderid_t localfolderid, p
   psync_sql_bind_uint(res, 2, localfolderid);
   psync_sql_bind_string(res, 3, filename);
   psync_sql_run_free(res);
-  psync_restart_localscan();
+  psync_resume_localscan();
   psync_wake_localscan();
   return 0;
 }
@@ -1217,7 +1217,7 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
   psync_stop_localscan();
   localpath=psync_local_path_for_local_folder(localfolderid, syncid, NULL);
   if (unlikely_log(!localpath)){
-    psync_sql_unlock();
+    psync_resume_localscan();
     return 0;
   }
   debug(D_NOTICE, "got recursive delete for localfolder %lu %s", (unsigned long)localfolderid, localpath);

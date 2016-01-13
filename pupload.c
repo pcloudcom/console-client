@@ -578,9 +578,13 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     psync_sql_commit_transaction();
   }
   psync_diff_unlock();
-  psync_free(res);
-  if (unlikely_log(rsize!=fsize) || unlikely_log(memcmp(hashhexsrv, hashhex, PSYNC_HASH_DIGEST_HEXLEN)))
+  if (rsize!=fsize || memcmp(hashhexsrv, hashhex, PSYNC_HASH_DIGEST_HEXLEN)){
+    debug(D_WARNING, "uploaded file differs localsize=%lu, remotesize=%lu, localhash=%s, remotehash=%s",
+          (unsigned long)fsize, (unsigned long)rsize, hashhex, hashhexsrv);
+    psync_free(res);
     return -1;
+  }
+  psync_free(res);
   debug(D_NOTICE, "file %s uploaded to %lu/%s", localpath, (long unsigned)folderid, name);
   return 0;
 err2:
