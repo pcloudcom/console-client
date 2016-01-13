@@ -45,7 +45,7 @@ void overlay_main_loop()
   int fd,cl;
   
   if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-    debug(D_NOTICE, "Unix socket error failed to open %s", mysoc);
+    //debug(D_NOTICE, "Unix socket error failed to open %s", mysoc);
     return;
   }
   
@@ -96,7 +96,7 @@ void instance_thread(void* lpvParam)
   
   while ( (rc=read(*cl,curbuf,(POVERLAY_BUFSIZE - bytes_read))) > 0) {
     bytes_read += rc;
-    debug(D_ERROR, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
+    //debug(D_ERROR, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
     curbuf = curbuf + rc;
     if (bytes_read > 12){
       request = (message *)chbuf;
@@ -105,12 +105,12 @@ void instance_thread(void* lpvParam)
     }
   }
   if (rc == -1) {
-    debug(D_ERROR,"Unix socket read");
+    //debug(D_ERROR,"Unix socket read");
     close(*cl);
     return;
   }
   else if (rc == 0) {
-    debug(D_NOTICE,"Message received");
+    //debug(D_NOTICE,"Message received");
     close(*cl);
   }
   request = (message *)chbuf;
@@ -126,7 +126,7 @@ void instance_thread(void* lpvParam)
   if (cl) {
     close(*cl);
   }
-  debug(D_NOTICE, "InstanceThread exitting.\n");
+  //debug(D_NOTICE, "InstanceThread exitting.\n");
   return;
 };
 

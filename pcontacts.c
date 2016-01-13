@@ -158,7 +158,7 @@ static void process_shares_out(const binresult *shares_out, int shcnt) {
 
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, folderid, ctime, permissions, userid, mail, name, isincoming) "
                                                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+    //debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -185,7 +185,7 @@ static void process_shares_in(const binresult *shares_in, int shcnt) {
 
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
                                                   "VALUES (?, 1, ?, ?, ?, ?, ?, ?)");
-    debug(D_WARNING, "INSERT NORMAL SHARE IN id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+    //debug(D_WARNING, "INSERT NORMAL SHARE IN id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);

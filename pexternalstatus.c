@@ -205,7 +205,7 @@ static char *replace_sync_folder(const char *path, int *syncid /*OUT*/) {
         memcpy(drivepath, rootpath, rootlen);
         memset(drivepath + rootlen, SLASHCHAR, 1);
         memcpy(drivepath + rootlen + 1, rest, reslen + 1); //Copy also the null terminator 
-        debug(D_NOTICE,"Sync folder replace result: %s", drivepath);
+        //debug(D_NOTICE,"Sync folder replace result: %s", drivepath);
         
         psync_free(rootpath);
         ret = drivepath;
@@ -224,7 +224,7 @@ external_status psync_sync_status_folderid(psync_fsfolderid_t folderid, int sync
   psync_uint_row row;
   uint32_t offline;
   external_status result = INSYNC;
-  debug(D_NOTICE, "Psync folderid %" PRIu64 " syncid %d", folderid, syncid);
+  //debug(D_NOTICE, "Psync folderid %" PRIu64 " syncid %d", folderid, syncid);
   offline = psync_status_is_offline();
   //upload
   res=psync_sql_query_nolock(
@@ -424,13 +424,13 @@ external_status do_psync_external_status(char *path)
     debug(D_WARNING, "Not mounted!!!");
   if (fsroot && rootlen && !strncmp(fsroot, path, rootlen)) {
     pcpath = path + rootlen;
-    debug(D_NOTICE, "Drive root replace result: %s", pcpath);
+    // debug(D_NOTICE, "Drive root replace result: %s", pcpath);
   }else {
     folder = replace_sync_folder(path, &syncid);
     if (folder)
       pcpath = folder;
     else {
-      debug(D_NOTICE, "No sync nor drive folder! Called on no pCloud item?");
+      // debug(D_NOTICE, "No sync nor drive folder! Called on no pCloud item?");
       return result;
     }
   }

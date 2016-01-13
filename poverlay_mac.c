@@ -48,7 +48,7 @@ void overlay_main_loop()
   const int enable = 1;
   
   if ( (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-    debug(D_NOTICE, "TCP/IP socket error failed to create socket on port %u", (unsigned int)myport);
+    //debug(D_NOTICE, "TCP/IP socket error failed to create socket on port %u", (unsigned int)myport);
     return;
   }
   
@@ -103,7 +103,7 @@ void instance_thread(void* lpvParam)
   
   while ( (rc=read(*cl,curbuf,(POVERLAY_BUFSIZE - bytes_read))) > 0) {
     bytes_read += rc;
-    debug(D_NOTICE, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
+    //debug(D_NOTICE, "Read %u bytes: %u %s", bytes_read, rc, curbuf );
     curbuf = curbuf + rc;
     if (bytes_read > 12){
       request = (message *)chbuf;
@@ -117,7 +117,7 @@ void instance_thread(void* lpvParam)
     return;
   }
   else if (rc == 0) {
-    debug(D_NOTICE,"Message received");
+    //debug(D_NOTICE,"Message received");
     close(*cl);
   }
   request = (message *)chbuf;
@@ -133,7 +133,7 @@ void instance_thread(void* lpvParam)
   if (cl) {
     close(*cl);
   }
-  debug(D_NOTICE, "InstanceThread exitting.\n");
+  //debug(D_NOTICE, "InstanceThread exitting.\n");
   return;
 };
 

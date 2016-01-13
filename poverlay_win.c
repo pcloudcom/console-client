@@ -51,7 +51,7 @@ void overlay_main_loop(VOID)
 
   for (;;)
   {
-    debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
+    //debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
     hPipe = CreateNamedPipe(
       PORT,                     // pipe name
       PIPE_ACCESS_DUPLEX,       // read/write access
@@ -66,7 +66,7 @@ void overlay_main_loop(VOID)
 
     if (hPipe == INVALID_HANDLE_VALUE)
     {
-      debug(D_NOTICE, "CreateNamedPipe failed, GLE=%d.\n", GetLastError());
+      //debug(D_NOTICE, "CreateNamedPipe failed, GLE=%d.\n", GetLastError());
       return;
     }
 
@@ -75,7 +75,7 @@ void overlay_main_loop(VOID)
 
     if (fConnected)
     {
-      debug(D_NOTICE, "Client connected, creating a processing thread.\n");
+      //debug(D_NOTICE, "Client connected, creating a processing thread.\n");
 
       // Create a thread for this client.
       psync_run_thread1(
@@ -127,16 +127,17 @@ void instance_thread(LPVOID lpvParam)
 
     if (!fSuccess || cbBytesRead == 0)
     {
-      if (GetLastError() == ERROR_BROKEN_PIPE)
-        debug(D_NOTICE, "InstanceThread: client disconnected.\n");
-      else
-
-        debug(D_NOTICE, "InstanceThread ReadFile failed, GLE=%d.\n", GetLastError());
+      if (GetLastError() == ERROR_BROKEN_PIPE){
+        //debug(D_NOTICE, "InstanceThread: client disconnected.\n");
+      }
+      else{
+        //debug(D_NOTICE, "InstanceThread ReadFile failed, GLE=%d.\n", GetLastError());
+      }
       break;
     }
     message *request = (message *)chBuf;
 
-    debug(D_NOTICE, "bytes received  %d buffer[%s]\n", cbBytesRead, chBuf);
+    //debug(D_NOTICE, "bytes received  %d buffer[%s]\n", cbBytesRead, chBuf);
     get_answer_to_request(request, reply);
     fSuccess = WriteFile(
       hPipe,        // handle to pipe
@@ -147,7 +148,7 @@ void instance_thread(LPVOID lpvParam)
 
     if (!fSuccess || reply->length != cbWritten)
     {
-      debug(D_NOTICE, "InstanceThread WriteFile failed, GLE=%d.\n", GetLastError());
+      //debug(D_NOTICE, "InstanceThread WriteFile failed, GLE=%d.\n", GetLastError());
       break;
     }
   }
@@ -157,7 +158,7 @@ void instance_thread(LPVOID lpvParam)
   psync_free(request);
   psync_free(reply);
 
-  debug(D_NOTICE, "InstanceThread exitting.\n");
+  //debug(D_NOTICE, "InstanceThread exitting.\n");
   return;
 }
 

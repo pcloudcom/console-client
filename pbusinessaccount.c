@@ -112,7 +112,7 @@ int do_psync_account_stopshare(psync_shareid_t usershareids[], int nusershareid,
     }
     if (i > 0)
       *(idsp - 1) = '\0';
-    debug(D_NOTICE, "usershareids %s",ids1);
+    //debug(D_NOTICE, "usershareids %s",ids1);
     init_param_str(t + pind++, "usershareids", ids1);
   }
   
@@ -127,7 +127,7 @@ int do_psync_account_stopshare(psync_shareid_t usershareids[], int nusershareid,
     }
     if (i > 0)
       *(idsp - 1) = '\0';
-    debug(D_NOTICE, "teamshareids %s",ids2);
+    //debug(D_NOTICE, "teamshareids %s",ids2);
     init_param_str(t + pind++, "teamshareids", ids2);
   }
   
@@ -223,7 +223,7 @@ int do_psync_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[],
       *(idsp - 1) = '\0';
       *(permsp - 1) = '\0';
     }
-    debug(D_NOTICE, "usershareids %s, userpermissions %s",ids1, perms1);
+    //debug(D_NOTICE, "usershareids %s, userpermissions %s",ids1, perms1);
     init_param_str(t + pind++, "usershareids", ids1);
     init_param_str(t + pind++, "userpermissions", perms1);
   }
@@ -249,7 +249,7 @@ int do_psync_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[],
       *(idsp - 1) = '\0';
       *(permsp - 1) = '\0';
     }
-    debug(D_NOTICE, "teamshareids %s teampermissions %s",ids2, perms2);
+    //debug(D_NOTICE, "teamshareids %s teampermissions %s",ids2, perms2);
     init_param_str(t + pind++, "teamshareids", ids2);
     init_param_str(t + pind++, "teampermissions", perms2);
   }
@@ -420,7 +420,7 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
     if (i > 0)
       *(idsp - 1) = '\0';
     
-    debug(D_NOTICE, "Account_teams numids %d\n", nids);
+    //debug(D_NOTICE, "Account_teams numids %d\n", nids);
     
     binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("teamids", ids), P_STR("showeveryone", "1")};
 
@@ -448,7 +448,7 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
   
   users = psync_find_result(bres, "teams", PARAM_ARRAY);
   
-  debug(D_NOTICE, "Result contains %d teams\n", users->length);
+  //debug(D_NOTICE, "Result contains %d teams\n", users->length);
   
   if (!users->length){
     psync_free(bres);
@@ -543,7 +543,7 @@ static void insert_cache_team(int i, const binresult *team, void *_this) {
   
   teamid = psync_find_result(team, "id", PARAM_NUM)->num;
   
-  debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)teamid);
+  //debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)teamid);
   
   q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
   psync_sql_bind_uint(q, 1, teamid);
@@ -575,7 +575,7 @@ static void cache_my_team(const binresult *team1) {
   nameret = psync_find_result(team, "name", PARAM_STR)->str;
   teamid = psync_find_result(team, "id", PARAM_NUM)->num;
   
-  debug(D_NOTICE, "My Team name %s team id %lld\n", nameret,(long long)teamid);
+  //debug(D_NOTICE, "My Team name %s team id %lld\n", nameret,(long long)teamid);
   
   q=psync_sql_prep_statement("INSERT INTO myteams  (id, name) VALUES (?, ?)");
   psync_sql_bind_uint(q, 1, teamid);

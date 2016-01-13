@@ -3063,7 +3063,7 @@ int psync_invalidate_os_cache(const char *path){
     return -1;
   }
   else if (pid){
-    sleep(1);//Artificialy delay refresh of the finder for correct overlays.
+    psync_milisleep(1000);//Artificialy delay refresh of the finder for correct overlays.
     const char *cmd="tell application \"Finder\"\n\
   repeat with i from 1 to count of Finder windows\n\
     tell window i\n\

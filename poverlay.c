@@ -114,7 +114,7 @@ void get_answer_to_request(message *request, message *replay)
   char msg[4] = "Ok.";
   external_status stat = INVSYNC;
   msg[3] = '\0';
-  debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
+  //debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   if (request->type < 20 ) {
     if (!get_item_from_cache(request->value, &stat)) {
      stat = do_psync_external_status(request->value);

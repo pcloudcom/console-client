@@ -1566,7 +1566,7 @@ static void process_establishbsharein(const binresult *entry){
 
   psync_sql_run_free(q);
 
-  debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+  //debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
 }
 
 static void process_acceptedshareout(const binresult *entry){
@@ -1595,7 +1595,7 @@ static void process_acceptedshareout(const binresult *entry){
 
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, folderid, ctime, permissions, userid, mail, name, isincoming) "
                                                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+    //debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -1671,7 +1671,7 @@ static void process_establishbshareout(const binresult *entry) {
   psync_sql_bind_int(q, 13, isincomming);
 
   psync_sql_run_free(q);
-  debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+  //debug(D_NOTICE, "INSERT BS SHARE IN FINISHED id: %lld", - (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
   if (email)
     psync_free(email);
 }
@@ -1724,7 +1724,7 @@ static void delete_shared_folder(const binresult *share){
   uint64_t shareid;
   q=psync_sql_prep_statement("DELETE FROM sharedfolder WHERE id=?");
   shareid =  psync_find_result(share, "shareid", PARAM_NUM)->num;
-  debug(D_NOTICE, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
+  //debug(D_NOTICE, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
   psync_sql_bind_uint(q, 1, shareid);
   psync_sql_run_free(q);
 }
@@ -1738,7 +1738,7 @@ static void delete_bsshared_folder(const binresult *share){
   psync_sql_bind_uint(q, 1, shareid);
   psync_sql_run_free(q);
 
-  debug(D_NOTICE, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
+  //debug(D_NOTICE, "DELETE NORMAL SHARE id: %lld", (long long) shareid );
 }
 
 static void process_removedsharein(const binresult *entry){

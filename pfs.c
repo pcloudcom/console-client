@@ -2890,7 +2890,7 @@ int psync_fs_need_per_folder_refresh_f(){
 static void psync_fs_refresh_folder_th(void *folderidp){
   psync_folderid_t folderid;
 
-  sleep(1);
+  psync_milisleep(1000);
   folderid = *((psync_folderid_t *)(folderidp));
   psync_fs_refresh_folder(folderid);
   psync_free(folderidp);
