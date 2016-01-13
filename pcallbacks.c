@@ -236,13 +236,13 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
 }
 
 void psync_callbacks_get_status(pstatus_t *status){
-  char downloadstr[MAX_STATUS_STR_LEN], uploadstr[MAX_STATUS_STR_LEN];
+  static char downloadstr[MAX_STATUS_STR_LEN], uploadstr[MAX_STATUS_STR_LEN];
   memcpy(status, &psync_status, sizeof(pstatus_t));
   status_fill_formatted_str(status, downloadstr, uploadstr);
 }
 
 static void status_change_thread(void *ptr){
-  static char downloadstr[MAX_STATUS_STR_LEN], uploadstr[MAX_STATUS_STR_LEN];
+  char downloadstr[MAX_STATUS_STR_LEN], uploadstr[MAX_STATUS_STR_LEN];
   pstatus_change_callback_t callback=(pstatus_change_callback_t)ptr;
   while (1){
     // Maximum 2 updates/sec
