@@ -129,11 +129,11 @@ static int fsexternal_status_folderid(psync_fsfolderid_t folder_id, int level)
       }
     }
   }
-  
+  ++level;
   res=psync_sql_query_nolock("SELECT id FROM folder WHERE parentfolderid=?");
   psync_sql_bind_int(res, 1, folder_id);
   while ((row = psync_sql_fetch_rowint(res))) {
-    result = fsexternal_status_folderid(row[0], ++level);
+    result = fsexternal_status_folderid(row[0], level);
     if (result)
       break;
   }
