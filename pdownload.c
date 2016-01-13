@@ -355,7 +355,7 @@ static int create_conflicted(const char *name, psync_folderid_t localfolderid, p
   psync_sql_res *res;
   psync_stop_localscan();
   if (psync_rename_conflicted_file(name)){
-    psync_restart_localscan();
+    psync_resume_localscan();
     return -1;
   }
   res=psync_sql_prep_statement("DELETE FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
@@ -363,7 +363,7 @@ static int create_conflicted(const char *name, psync_folderid_t localfolderid, p
   psync_sql_bind_uint(res, 2, localfolderid);
   psync_sql_bind_string(res, 3, filename);
   psync_sql_run_free(res);
-  psync_restart_localscan();
+  psync_resume_localscan();
   psync_wake_localscan();
   return 0;
 }
