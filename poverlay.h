@@ -21,7 +21,7 @@ void overlay_main_loop(VOID);
 void instance_thread(LPVOID);
 void get_answer_to_request(message *requesr /*IN*/, message *replay/*OUT*/);
 
-void inti_overlay_callbacks();
+void init_overlay_callbacks();
 int psync_add_overlay_callback(int id, poverlay_callback callback);
 
 

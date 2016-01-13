@@ -105,7 +105,7 @@ int psync_add_overlay_callback(int id, poverlay_callback callback)
   return 0;
 }
 
-void inti_overlay_callbacks() {
+void init_overlay_callbacks() {
   memset(&callbacks, 0, 15);
 }
 
