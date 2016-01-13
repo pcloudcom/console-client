@@ -210,7 +210,7 @@ int psync_init(){
   }
 
   psync_run_thread("Overlay main thread", overlay_main_loop);
-  inti_overlay_callbacks();
+  init_overlay_callbacks();
 
   return 0;
 }

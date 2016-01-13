@@ -157,7 +157,6 @@ void instance_thread(LPVOID lpvParam)
   CloseHandle(hPipe);
   psync_free(request);
   psync_free(reply);
-
   //debug(D_NOTICE, "InstanceThread exitting.\n");
   return;
 }
