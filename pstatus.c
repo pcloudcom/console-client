@@ -225,9 +225,9 @@ void psync_set_status(uint32_t statusid, uint32_t status){
   statuses[statusid]=status;
   if (status_waiters)
     pthread_cond_broadcast(&statuscond);
-  pthread_mutex_unlock(&statusmutex);
   psync_status.remoteisfull=(statuses[PSTATUS_TYPE_ACCFULL]==PSTATUS_ACCFULL_OVERQUOTA);
-  psync_status.localisfull=(statuses[PSTATUS_TYPE_DISKFULL]==PSTATUS_DISK_FULL);
+  psync_status.localisfull=(statuses[PSTATUS_TYPE_DISKFULL]==PSTATUS_DISKFULL_FULL);
+  pthread_mutex_unlock(&statusmutex);
   status=psync_calc_status();
   if (psync_status.status!=status){
     psync_status.status=status;
