@@ -46,7 +46,10 @@
 #endif
 
 static int sync_offline() {
-  if  (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
+  if  (psync_status_is_offline() || 
+       (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || 
+       (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL) ||
+       (psync_status_get(PSTATUS_TYPE_RUN) == PSTATUS_RUN_PAUSE))
     return 1;
   else return 0;
 }
