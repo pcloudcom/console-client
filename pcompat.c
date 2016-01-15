@@ -3104,7 +3104,7 @@ end tell\n";
     close(fd);
     execl("/bin/sh", "/bin/sh", "-c", "\"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt\"", NULL);
     execl("/bin/sh", "/bin/sh", "-c", "\"pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt\"", NULL);
-    //debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed");
+    debug(D_ERROR, "Reseting Finder Ext");
     exit(1);
   }
 #else
