@@ -1966,14 +1966,12 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   if (of->encrypted){
     if (unlikely(psync_crypto_isexpired())){
       psync_sql_unlock();
-      pthread_mutex_unlock(&of->mutex);
       return -PRINT_RETURN_CONST(PSYNC_FS_ERR_CRYPTO_EXPIRED);
     }
     size=psync_fs_crypto_crypto_size(of->initialsize);
     encsymkey=psync_cloud_crypto_get_file_encoded_key(of->fileid, of->hash, &encsymkeylen);
     if (unlikely_log(psync_crypto_is_error(encsymkey))){
       psync_sql_unlock();
-      pthread_mutex_unlock(&of->mutex);
       return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(encsymkey));
     }
   }
@@ -1988,7 +1986,6 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     cr=psync_fstask_add_creat(of->currentfolder, of->currentname, encsymkey, encsymkeylen);
     if (unlikely_log(!cr)){
       psync_sql_unlock();
-      pthread_mutex_unlock(&of->mutex);
       psync_pagecache_unlock_pages_from_cache();
       psync_free(encsymkey);
       return -EIO;
@@ -2000,7 +1997,6 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     of->modified=1;
     ret=open_write_files(of, 0);
     if (unlikely_log(ret)){
-      pthread_mutex_unlock(&of->mutex);
       psync_pagecache_unlock_pages_from_cache();
       psync_free(encsymkey);
       return ret;
@@ -2011,7 +2007,6 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
       ret=psync_pagecache_copy_all_pages_from_cache_to_file_locked(of, of->hash, size);
       psync_pagecache_unlock_pages_from_cache();
       if (unlikely_log(ret)){
-        pthread_mutex_unlock(&of->mutex);
         psync_free(encsymkey);
         return -EIO;
       }
@@ -2023,14 +2018,12 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   psync_free(encsymkey);
   if (unlikely_log(!cr)){
     psync_sql_unlock();
-    pthread_mutex_unlock(&of->mutex);
     return -EIO;
   }
   psync_fs_update_openfile_fileid_locked(of, cr->fileid);
   psync_sql_unlock();
   ret=open_write_files(of, 0);
   if (unlikely_log(ret) || psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)){
-    pthread_mutex_unlock(&of->mutex);
     if (!ret)
       ret=-EIO;
     return ret;
@@ -2065,7 +2058,6 @@ PSYNC_NOINLINE static int psync_fs_reopen_static_file_for_writing(psync_openfile
   cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
   if (unlikely_log(!cr)){
     psync_sql_unlock();
-    pthread_mutex_unlock(&of->mutex);
     return -EIO;
   }
   psync_fs_update_openfile_fileid_locked(of, cr->fileid);
@@ -2088,15 +2080,12 @@ PSYNC_NOINLINE static int psync_fs_reopen_static_file_for_writing(psync_openfile
   of->modified=1;
   of->staticfile=0;
   ret=open_write_files(of, 1);
-  if (unlikely_log(ret)){
-    pthread_mutex_unlock(&of->mutex);
+  if (unlikely_log(ret))
     return ret;
-  }
   if (psync_file_pwrite(of->datafile, of->staticdata, of->currentsize, 0)!=of->currentsize)
     ret=-PRINT_RETURN_CONST(EIO);
   else
     ret=1;
-  pthread_mutex_unlock(&of->mutex);
   return ret;
 }
 
@@ -2285,8 +2274,10 @@ retry:
       ret=psync_fs_reopen_file_for_writing(of);
       if (ret==1)
         goto retry;
-      else if (ret<0)
+      else if (ret<0){
+        pthread_mutex_unlock(&of->mutex);
         return ret;
+      }
     }
     if (of->encrypted)
       return psync_fs_crypto_write_modified_locked(of, buf, size, offset);
@@ -2295,8 +2286,10 @@ retry:
         ret=psync_fs_reopen_static_file_for_writing(of);
         if (ret==1)
           goto retry;
-        else
+        else{
+          pthread_mutex_unlock(&of->mutex);
           return ret;
+        }
       }
       else
         ret=psync_fs_write_modified(of, buf, size, offset);
@@ -2898,11 +2891,11 @@ static void psync_fs_refresh_folder_th(void *folderidp){
 
 void psync_fs_refresh_folder_delayed(psync_folderid_t folderid) {
   psync_folderid_t *folderidp;
-  
+
   folderidp = (psync_folderid_t *)psync_malloc(sizeof(psync_folderid_t));
   *folderidp = folderid;
   psync_run_thread1("refresh folder thread",psync_fs_refresh_folder_th, folderidp);
-  
+
 }
 
 void psync_fs_refresh_folder(psync_folderid_t folderid){
