@@ -3034,6 +3034,8 @@ int psync_run_update_file(const char *path){
 int psync_invalidate_os_cache_needed(){
 #if defined(P_OS_WINDOWS)
   return 1;
+#elif defined(P_OS_MACOSX)
+  return 1;
 #else
   return 0;
 #endif
@@ -3063,8 +3065,7 @@ int psync_invalidate_os_cache(const char *path){
     return -1;
   }
   else if (pid){
-    psync_milisleep(1000);//Artificialy delay refresh of the finder for correct overlays.
-    const char *cmd="tell application \"Finder\"\n\
+   /* const char *cmd="tell application \"Finder\"\n\
   repeat with i from 1 to count of Finder windows\n\
     tell window i\n\
       try\n\
@@ -3089,7 +3090,8 @@ end tell\n";
     else{
       debug(D_ERROR, "execution of osascript failed");
       return -1;
-    }
+    }*/
+   return 0;
   }
   else{
     int fd;
@@ -3100,8 +3102,9 @@ end tell\n";
     dup2(fd, STDOUT_FILENO);
     dup2(fd, STDERR_FILENO);
     close(fd);
-    execl("/bin/sh", "/bin/sh", "-c", "osascript", NULL);
-    debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed");
+    execl("/bin/sh", "/bin/sh", "-c", "\"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt\"", NULL);
+    execl("/bin/sh", "/bin/sh", "-c", "\"pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt\"", NULL);
+    //debug(D_ERROR, "exec of \"/bin/sh -c osascript\" failed");
     exit(1);
   }
 #else
