@@ -836,17 +836,20 @@ static void psync_set_run_status(uint32_t status){
 
 int psync_pause(){
   psync_set_run_status(PSTATUS_RUN_PAUSE);
+  psync_rebuild_icons();
   return 0;
 }
 
 int psync_stop(){
   psync_set_run_status(PSTATUS_RUN_STOP);
   psync_timer_notify_exception();
+  psync_rebuild_icons();
   return 0;
 }
 
 int psync_resume(){
   psync_set_run_status(PSTATUS_RUN_RUN);
+  psync_rebuild_icons();
   return 0;
 }
 

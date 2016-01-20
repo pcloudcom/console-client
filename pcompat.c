@@ -3041,6 +3041,80 @@ int psync_invalidate_os_cache_needed(){
 #endif
 }
 
+#define REBUILD_ICON_BUFFER_SIZE 1024
+
+int psync_rebuild_icons()
+{
+  TCHAR buf[REBUILD_ICON_BUFFER_SIZE] = { 0 };
+  HKEY hRegKey = 0;
+  DWORD dwRegValue;
+  DWORD dwRegValueTemp;
+  DWORD dwSize;
+  DWORD_PTR dwResult;
+  LONG lRegResult;
+  int result = 0;
+  
+  // we're going to change the Shell Icon Size value
+  const TCHAR* sRegValueName = L"Shell Icon Size";
+
+  lRegResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Control Panel\\Desktop\\WindowMetrics",
+    0, KEY_READ | KEY_WRITE, &hRegKey);
+  if (lRegResult != ERROR_SUCCESS)
+    goto Cleanup;
+
+  // Read registry value
+  dwSize = REBUILD_ICON_BUFFER_SIZE;
+  lRegResult = RegQueryValueEx(hRegKey, sRegValueName, NULL, NULL,
+    (LPBYTE)buf, &dwSize);
+  if (lRegResult != ERROR_FILE_NOT_FOUND)
+  {
+    // If registry key doesn't exist create it using system current setting
+    int iDefaultIconSize = GetSystemMetrics(SM_CXICON);
+    if (0 == iDefaultIconSize)
+      iDefaultIconSize = 32;
+    _snprintf(buf, REBUILD_ICON_BUFFER_SIZE, L"%d", iDefaultIconSize);
+  }
+  else if (lRegResult != ERROR_SUCCESS)
+    goto Cleanup;
+
+  // Change registry value
+  dwRegValue = _wtoi(buf);
+  dwRegValueTemp = dwRegValue - 1;
+
+  dwSize = _snprintf(buf, REBUILD_ICON_BUFFER_SIZE, L"%lu", dwRegValueTemp) + sizeof(TCHAR);
+  lRegResult = RegSetValueEx(hRegKey, sRegValueName, 0, REG_SZ,
+    (LPBYTE)buf, dwSize);
+  if (lRegResult != ERROR_SUCCESS)
+    goto Cleanup;
+
+
+  // Update all windows
+  SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETNONCLIENTMETRICS,
+    0, SMTO_ABORTIFHUNG, 5000, &dwResult);
+
+  // Reset registry value
+  dwSize = _snprintf(buf, REBUILD_ICON_BUFFER_SIZE, L"%lu", dwRegValue) + sizeof(TCHAR);
+  lRegResult = RegSetValueEx(hRegKey, sRegValueName, 0, REG_SZ,
+    (LPBYTE)buf, dwSize);
+  if (lRegResult != ERROR_SUCCESS)
+    goto Cleanup;
+
+  // Update all windows
+  SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETNONCLIENTMETRICS,
+    0, SMTO_ABORTIFHUNG, 5000, &dwResult);
+  
+  SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+
+  result = 1;
+
+Cleanup:
+  if (hRegKey != 0)
+  {
+    RegCloseKey(hRegKey);
+  }
+  return result;
+}
+
 int psync_invalidate_os_cache(const char *path){
 #if defined(P_OS_WINDOWS)
   wchar_t *wpath;
