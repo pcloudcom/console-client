@@ -3043,6 +3043,7 @@ int psync_invalidate_os_cache_needed(){
 
 #define REBUILD_ICON_BUFFER_SIZE 1024
 
+#if defined(P_OS_WINDOWS)
 int psync_rebuild_icons()
 {
   TCHAR buf[REBUILD_ICON_BUFFER_SIZE] = { 0 };
@@ -3114,6 +3115,9 @@ Cleanup:
   }
   return result;
 }
+#else
+int psync_rebuild_icons(){return 0;}
+#endif
 
 int psync_invalidate_os_cache(const char *path){
 #if defined(P_OS_WINDOWS)
