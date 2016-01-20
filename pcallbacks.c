@@ -199,8 +199,9 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
       }
     }
   }
-  else
-    dw=cat_const(dw, "Everything Downloaded");
+  else {
+    psync_rebuild_icons();
+    dw=cat_const(dw, "Everything Downloaded");}
 
   if (status->filestoupload){
     speed=status->uploadspeed;
@@ -224,8 +225,9 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
       }
     }
   }
-  else
-    up=cat_const(up, "Everything Uploaded");
+  else {
+    psync_rebuild_icons();
+    up=cat_const(up, "Everything Uploaded");}
 
   assert(dw<downloadstr+MAX_STATUS_STR_LEN);
   assert(up<uploadstr+MAX_STATUS_STR_LEN);

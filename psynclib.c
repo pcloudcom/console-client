@@ -832,24 +832,22 @@ int psync_is_name_to_ignore(const char *name){
 static void psync_set_run_status(uint32_t status){
   psync_set_status(PSTATUS_TYPE_RUN, status);
   psync_set_uint_value("runstatus", status);
+  psync_rebuild_icons();
 }
 
 int psync_pause(){
   psync_set_run_status(PSTATUS_RUN_PAUSE);
-  psync_rebuild_icons();
   return 0;
 }
 
 int psync_stop(){
   psync_set_run_status(PSTATUS_RUN_STOP);
   psync_timer_notify_exception();
-  psync_rebuild_icons();
   return 0;
 }
 
 int psync_resume(){
   psync_set_run_status(PSTATUS_RUN_RUN);
-  psync_rebuild_icons();
   return 0;
 }
 

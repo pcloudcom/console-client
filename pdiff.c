@@ -190,6 +190,7 @@ static psync_socket *get_connected_socket(){
     sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
     if (unlikely_log(!sock)){
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
+      psync_rebuild_icons();
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
@@ -209,6 +210,7 @@ static psync_socket *get_connected_socket(){
     if (unlikely_log(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
+      psync_rebuild_icons();
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       psync_api_conn_fail_inc();
       continue;
@@ -1925,8 +1927,10 @@ static void check_overquota(){
   int isover=(used_quota>=current_quota);
   if (isover!=lisover){
     lisover=isover;
-    if (isover)
+    if (isover) {
       psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_OVERQUOTA);
+      psync_rebuild_icons();
+    }
     else
       psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
   }
@@ -2005,6 +2009,7 @@ static void handle_exception(psync_socket **sock, subscribed_ids *ids, char ex){
     *sock=get_connected_socket();
     debug(D_NOTICE, "got new socket");
     psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+    psync_rebuild_icons();
     psync_syncer_check_delayed_syncs();
     ids->diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
     send_diff_command(*sock, *ids);
@@ -2016,6 +2021,7 @@ static void handle_exception(psync_socket **sock, subscribed_ids *ids, char ex){
       psync_socket_close_bad(*sock);
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+      psync_rebuild_icons();
       psync_syncer_check_delayed_syncs();
       send_diff_command(*sock, *ids);
     }
@@ -2232,6 +2238,7 @@ restart:
   }
   check_overquota();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+  psync_rebuild_icons();
   initialdownload=0;
   psync_run_analyze_if_needed();
   psync_syncer_check_delayed_syncs();
