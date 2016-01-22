@@ -46,7 +46,10 @@
 #endif
 
 static int sync_offline() {
-  if  (psync_status_is_offline() || (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL))
+  if  (psync_status_is_offline() || 
+       (psync_status_get(PSTATUS_TYPE_ACCFULL) == PSTATUS_ACCFULL_OVERQUOTA) || 
+       (psync_status_get(PSTATUS_TYPE_DISKFULL) == PSTATUS_DISKFULL_FULL) ||
+       (psync_status_get(PSTATUS_TYPE_RUN) == PSTATUS_RUN_PAUSE))
     return 1;
   else return 0;
 }
@@ -118,13 +121,13 @@ static int fsexternal_status_folderid(psync_fsfolderid_t folder_id, int level)
     if (synctsk > 0) {
       if (level  == 0) {
         if (sync_offline())
-            return 2;
-        else return 1; 
+            return 1;
+        else return 2; 
       } else {  
         if ((psync_sync_status_folderid(folder_id, syncid) != INSYNC)) {
           if (sync_offline())
-              return 2;
-          else return 1;
+              return 1;
+          else return 2;
         }
       }
     }

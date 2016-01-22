@@ -511,4 +511,6 @@ int psync_munlock(void *ptr, size_t size);
 
 int psync_get_page_size();
 
+int psync_rebuild_icons();
+
 #endif

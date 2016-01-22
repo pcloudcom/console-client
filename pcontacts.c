@@ -45,7 +45,9 @@ int do_call_contactlist(result_visitor vis, void *param) {
   } else if (psync_my_user) {
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass)};
     sock = psync_apipool_get();
-    bres = send_command(sock, "contactlist", params);
+    if (sock)
+      bres = send_command(sock, "contactlist", params);
+    else return -2;
   } else return -1;
   if (likely(bres))
     psync_apipool_release(sock);
