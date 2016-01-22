@@ -257,7 +257,16 @@ static void status_change_thread(void *ptr){
     if (((status_old.filestodownload > 0 ) && (psync_status.filestodownload == 0)) ||
         ((psync_status.filestodownload > 0 ) && (status_old.filestodownload == 0)) ||
         ((status_old.filestoupload > 0 ) && (psync_status.filestoupload == 0)) ||
-        ((psync_status.filestoupload > 0 ) && (status_old.filestoupload == 0))
+        ((psync_status.filestoupload > 0 ) && (status_old.filestoupload == 0)) ||
+        ((psync_status.localisfull != status_old.localisfull)) ||
+        ((psync_status.remoteisfull != status_old.remoteisfull)) ||
+        ((psync_status.status != status_old.status) && (
+          (psync_status.status == PSTATUS_STOPPED) ||
+          (psync_status.status == PSTATUS_PAUSED) ||
+          (psync_status.status == PSTATUS_OFFLINE) ||
+          (status_old.status == PSTATUS_STOPPED) ||
+          (status_old.status == PSTATUS_PAUSED) ||
+          (status_old.status == PSTATUS_OFFLINE) ) )
     )
       psync_rebuild_icons();
     status_old = psync_status;
