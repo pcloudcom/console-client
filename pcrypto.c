@@ -460,9 +460,9 @@ void psync_crypto_aes256_encode_sector(psync_crypto_aes256_sector_encoder_decode
   psync_hmac_sha512_update(&ctx, rnd, PSYNC_AES256_BLOCK_SIZE);
   psync_hmac_sha512_final(hmacsha1bin, &ctx);
   if (unlikely(datalen<PSYNC_AES256_BLOCK_SIZE)){
-    memcpy(out, rnd, datalen);
     memcpy(aessrc, rnd, PSYNC_AES256_BLOCK_SIZE);
     xor_cnt_inplace(aessrc, data, datalen);
+    memcpy(out, rnd, datalen);
     memcpy(aesdst, hmacsha1bin, PSYNC_AES256_BLOCK_SIZE);
     psync_aes256_encode_2blocks_consec(enc->encoder, aessrc, aessrc);
     memcpy(authout, aessrc, PSYNC_AES256_BLOCK_SIZE*2);
