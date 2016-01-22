@@ -31,6 +31,7 @@
 #include "plibs.h"
 #include "plist.h"
 #include "pfolder.h"
+#include "prunratelimit.h"
 
 #define MAX_STATUS_STR_LEN 64
 #define DONT_SHOW_TIME_IF_SEC_OVER (2*86400)
@@ -268,7 +269,7 @@ static void status_change_thread(void *ptr){
           (status_old.status == PSTATUS_PAUSED) ||
           (status_old.status == PSTATUS_OFFLINE) ) )
     )
-      psync_rebuild_icons();
+      psync_run_ratelimited("Rebuild icons.", psync_rebuild_icons, 1, 1);
     status_old = psync_status;
     pthread_mutex_unlock(&statusmutex);
     if (!psync_do_run)
