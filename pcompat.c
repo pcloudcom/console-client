@@ -424,11 +424,11 @@ void psync_yield_cpu(){
 }
 
 static void thread_started(){
-  debug(D_NOTICE, "thread started");
+  //debug(D_NOTICE, "thread started"); //This repeats too many times because of the overlays
 }
 
 static void thread_exited(){
-  debug(D_NOTICE, "thread exited");
+ // debug(D_NOTICE, "thread exited"); //This repeats too many times because of the overlays
 }
 
 static void *thread_entry0(void *data){
