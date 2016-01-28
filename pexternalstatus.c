@@ -119,7 +119,7 @@ static int fsexternal_status_folderid(psync_fsfolderid_t folder_id, int level)
   if (syncid) {
     synctsk = task_for_sync_nolock(syncid);
     if (synctsk > 0) {
-      if (level  == 0) {
+      if (level  == 1) {
         if (sync_offline())
             return 1;
         else return 2; 

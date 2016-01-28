@@ -343,7 +343,6 @@ void psync_set_local_full(int over){
     isover=over;
     if (isover) {
       psync_set_status(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_FULL);
-      psync_rebuild_icons();
     }
     else
       psync_set_status(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_OK);
