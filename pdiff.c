@@ -1169,6 +1169,11 @@ void psync_diff_delete_folder(const binresult *meta){
   start_download();
 }
 
+static void stop_crypto_thread(){
+  psync_crypto_stop();
+  delete_cached_crypto_keys();
+}
+
 static void process_modifyuserinfo(const binresult *entry){
   const binresult *res, *cres;
   psync_sql_res *q;
@@ -1208,10 +1213,8 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_string(q, 1, "cryptosetup");
   psync_sql_bind_uint(q, 2, u);
   psync_sql_run(q);
-  if (!u){
-    psync_crypto_stop();
-    delete_cached_crypto_keys();
-  }
+  if (!u)
+    psync_run_thread("stop crypto moduserinfo", stop_crypto_thread);
   psync_sql_bind_string(q, 1, "cryptosubscription");
   psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
   psync_sql_run(q);
