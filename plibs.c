@@ -682,6 +682,9 @@ int psync_sql_tryupgradelock(){
     return -1;
   else{
     rd_lock_data *lock=record_rdunlock();
+    sqllockcnt++;
+    assert(sqllockcnt==1);
+    sqllockstart=sqlrdlockstart;
     record_wrlock(lock->file, lock->line);
     debug(D_NOTICE, "upgraded read lock taken at %s:%u to a write lock", lock->file, lock->line);
     psync_free(lock);

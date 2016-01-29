@@ -1,4 +1,4 @@
-CC=cc
+#CC=cc
 AR=ar rcu
 RANLIB=ranlib
 #USESSL=openssl
