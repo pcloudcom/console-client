@@ -2349,10 +2349,14 @@ int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, u
 
 void psync_logout2(uint32_t auth_status, int doinvauth);
 
+static void logout2_thread(){
+  psync_logout2(PSTATUS_AUTH_BADTOKEN, 0);
+}
+
 // this is called when ANY api call returns non zero result
 void psync_process_api_error(uint64_t result){
   if (result==2000)
-    psync_logout2(PSTATUS_AUTH_BADTOKEN, 0);
+    psync_run_thread("logout from process_api_error", logout2_thread);
 }
 
 static void psync_netlibs_timer(psync_timer_t timer, void *ptr){

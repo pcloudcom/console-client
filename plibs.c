@@ -641,7 +641,11 @@ void psync_sql_rdlock(){
 
 void psync_sql_rdunlock(){
 #if IS_DEBUG
-  assert(sqlrdlockcnt>0);
+  if (unlikely(sqlrdlockcnt==0)){
+    debug(D_NOTICE, "called with no read locks, did we upgrade the lock? calling psync_sql_unlock");
+    psync_sql_unlock();
+    return;
+  }
   if (--sqlrdlockcnt==0){
     struct timespec end;
     unsigned long msec;
@@ -682,7 +686,8 @@ int psync_sql_tryupgradelock(){
     return -1;
   else{
     rd_lock_data *lock=record_rdunlock();
-    sqllockcnt++;
+    sqllockcnt=sqlrdlockcnt;
+    sqlrdlockcnt=0;
     assert(sqllockcnt==1);
     sqllockstart=sqlrdlockstart;
     record_wrlock(lock->file, lock->line);
