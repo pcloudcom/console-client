@@ -210,7 +210,7 @@ void psync_rwlock_wrlock(psync_rwlock_t *rw){
   if (psync_rwlock_check_wrrecursive_in(rw))
     return;
   pthread_mutex_lock(&rw->mutex);
-  while (rw->rcount || rw->wcount){
+  while (rw->rcount || rw->wcount || (rw->opts&PSYNC_RW_OPT_RESERVED)){
     rw->wwait++;
     pthread_cond_wait(&rw->wcond, &rw->mutex);
     rw->wwait--;
@@ -224,7 +224,7 @@ int psync_rwlock_trywrlock(psync_rwlock_t *rw){
   if (psync_rwlock_check_wrrecursive_in(rw))
     return 0;
   pthread_mutex_lock(&rw->mutex);
-  if (rw->rcount || rw->wcount){
+  if (rw->rcount || rw->wcount || (rw->opts&PSYNC_RW_OPT_RESERVED)){
     pthread_mutex_unlock(&rw->mutex);
     return -1;
   }
@@ -238,7 +238,7 @@ int psync_rwlock_timedwrlock(psync_rwlock_t *rw, const struct timespec *abstime)
   if (psync_rwlock_check_wrrecursive_in(rw))
     return 0;
   pthread_mutex_lock(&rw->mutex);
-  while (rw->rcount || rw->wcount){
+  while (rw->rcount || rw->wcount || (rw->opts&PSYNC_RW_OPT_RESERVED)){
     rw->wwait++;
     if (unlikely(pthread_cond_timedwait(&rw->wcond, &rw->mutex, abstime))){
       if (--rw->wwait==0 && !rw->wcount && rw->rwait)
