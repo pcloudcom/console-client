@@ -2883,13 +2883,6 @@ int psync_fs_need_per_folder_refresh_f(){
 static void psync_fs_refresh_folder_th(void *folderidp){
   psync_folderid_t folderid;
   psync_milisleep(1000);//Artificialy delay refresh of the finder for correct overlays.
-#if defined(P_OS_MACOSX)
-  int ret = 0;
-  debug(D_NOTICE, "running osascript to refresh finder");
-  ret = system("/bin/sh -c \"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt\"");
-  ret = system("/bin/sh -c \"pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt\"");
-  debug(D_ERROR, "Reseting Finder Ext");
-#endif  
   folderid = *((psync_folderid_t *)(folderidp));
   psync_fs_refresh_folder(folderid);
   psync_free(folderidp);
