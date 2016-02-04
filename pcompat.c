@@ -3035,7 +3035,7 @@ int psync_invalidate_os_cache_needed(){
 #if defined(P_OS_WINDOWS)
   return 1;
 #elif defined(P_OS_MACOSX)
-  return 1;
+  return 0;
 #else
   return 0;
 #endif
@@ -3114,6 +3114,14 @@ Cleanup:
     RegCloseKey(hRegKey);
   }
   return;
+}
+#elif defined(P_OS_MACOSX)
+void psync_rebuild_icons(){
+  int ret = 0;
+  debug(D_NOTICE, "Stopping finder plugin to refresh all icons.");
+  ret = system("/bin/sh -c \"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt\"");
+  ret = system("/bin/sh -c \"pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt\"");
+  debug(D_ERROR, "Reseting Finder Ext"); 
 }
 #else
 void psync_rebuild_icons(){return;}
