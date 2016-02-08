@@ -1060,9 +1060,13 @@ static psync_crypto_aes256_text_decoder_t psync_crypto_get_temp_folder_decoder_l
     if (enckey){
       symkey=psync_ssl_rsa_decrypt_data(crypto_privkey, enckey, enckeylen);
       psync_free(enckey);
+      if (symkey==PSYNC_INVALID_SYM_KEY)
+        debug(D_WARNING, "got key from database that fails rsa decrypt");
     }
-    else
+    else{
       symkey=PSYNC_INVALID_SYM_KEY;
+      debug(D_WARNING, "got key from database that fails base64_decode");
+    }
   }
   else{
     psync_sql_free_result(res);
