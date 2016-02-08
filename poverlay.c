@@ -65,8 +65,8 @@ static int get_item_from_cache(const char* key, external_status* stat){
   overlay_cache_t * rec = NULL;
   uint64_t now = 0;
   
-  strncpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
-  strncpy(reckey + CACHE_PREF_LEN , key, ketlen);
+  memcpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
+  memcpy(reckey + CACHE_PREF_LEN , key, ketlen + 1);
   
   if ((rec = (overlay_cache_t *) psync_cache_get(reckey))) {
     now = psync_millitime();
