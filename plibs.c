@@ -351,8 +351,12 @@ int psync_sql_connect(const char *db){
   psync_stat_t st;
   uint64_t dbver;
   int initdbneeded=0;
-
   int code;
+
+  assert(sqlite3_libversion_number()==SQLITE_VERSION_NUMBER);
+  assert(!strcmp(sqlite3_sourceid(), SQLITE_SOURCE_ID));
+  assert(!strcmp(sqlite3_libversion(), SQLITE_VERSION));
+  debug(D_NOTICE, "Using sqlite version %s source %s", sqlite3_libversion(), sqlite3_sourceid());
   if (!sqlite3_threadsafe()){
     debug(D_CRITICAL, "sqlite is compiled without thread support");
     return -1;
@@ -425,10 +429,13 @@ int psync_sql_close(){
   psync_db=NULL;
   if (unlikely(code!=SQLITE_OK)){
     debug(D_CRITICAL, "error when closing database: %d", code);
-    return -1;
+    code=sqlite3_close_v2(psync_db);
+    if (unlikely(code!=SQLITE_OK)){
+      debug(D_CRITICAL, "error when closing database even with sqlite3_close_v2: %d", code);
+      return -1;
+    }
   }
-  else
-    return 0;
+  return 0;
 }
 
 int psync_sql_reopen(const char *path){
@@ -1138,10 +1145,20 @@ psync_sql_res *psync_sql_query_rdlock(const char *sql){
 #endif
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_query_nolock_nocache(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_query_nolock_nocache(const char *sql){
+#endif
   sqlite3_stmt *stmt;
   psync_sql_res *res;
   int code, cnt;
+#if IS_DEBUG
+  if (!psync_sql_islocked()){
+    debug(D_BUG, "illegal use of psync_sql_query_nolock, can only be used while holding lock, invoked from %s:%u, sql: %s", file, line, sql);
+    abort();
+  }
+#endif
   psync_sql_check_query_plan(sql);
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
@@ -1157,8 +1174,18 @@ psync_sql_res *psync_sql_query_nolock_nocache(const char *sql){
   return res;
 }
 
+#if IS_DEBUG
+psync_sql_res *psync_sql_do_query_nolock(const char *sql, const char *file, unsigned line){
+#else
 psync_sql_res *psync_sql_query_nolock(const char *sql){
+#endif
   psync_sql_res *ret;
+#if IS_DEBUG
+  if (!psync_sql_islocked()){
+    debug(D_BUG, "illegal use of psync_sql_query_nolock, can only be used while holding lock, invoked from %s:%u, sql: %s", file, line, sql);
+    abort();
+  }
+#endif
   ret=(psync_sql_res *)psync_cache_get(sql);
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
@@ -1166,12 +1193,19 @@ psync_sql_res *psync_sql_query_nolock(const char *sql){
     return ret;
   }
   else
+#if IS_DEBUG
+    return psync_sql_do_query_nolock_nocache(sql, file, line);
+#else
     return psync_sql_query_nolock_nocache(sql);
+#endif
 }
 
 static void psync_sql_free_cache(void *ptr){
   psync_sql_res *res=(psync_sql_res *)ptr;
   sqlite3_finalize(res->stmt);
+#if IS_DEBUG
+  memset(res, 0xff, sizeof(psync_sql_res));
+#endif
   psync_free(res);
 }
 
@@ -1196,6 +1230,9 @@ static void psync_sql_res_unlock(psync_sql_res *res){
 void psync_sql_free_result(psync_sql_res *res){
   int code=sqlite3_reset(res->stmt);
   psync_sql_res_unlock(res);
+#if IS_DEBUG
+  memset(res->row, 0xff, res->column_count*sizeof(psync_variant));
+#endif
   if (code==SQLITE_OK)
     psync_cache_add(res->sql, res, PSYNC_QUERY_CACHE_SEC, psync_sql_free_cache, PSYNC_QUERY_MAX_CNT);
   else
@@ -1205,6 +1242,9 @@ void psync_sql_free_result(psync_sql_res *res){
 void psync_sql_free_result_nocache(psync_sql_res *res){
   sqlite3_finalize(res->stmt);
   psync_sql_res_unlock(res);
+#if IS_DEBUG
+  memset(res, 0xff, sizeof(psync_sql_res));
+#endif
   psync_free(res);
 }
 
@@ -1235,6 +1275,9 @@ psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
   res=psync_new(psync_sql_res);
   res->stmt=stmt;
   res->sql=sql;
+#if IS_DEBUG
+  res->column_count=0;
+#endif
   res->locked=SQL_WRITE_LOCK;
   return res;
 }

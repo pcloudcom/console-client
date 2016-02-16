@@ -221,6 +221,8 @@ void psync_sql_checkpoint_unlock();
 #define psync_sql_query(sql) psync_sql_do_query(sql, __FILE__, __LINE__)
 #define psync_sql_query_rdlock_nocache(sql) psync_sql_do_query_rdlock_nocache(sql, __FILE__, __LINE__)
 #define psync_sql_query_rdlock(sql) psync_sql_do_query_rdlock(sql, __FILE__, __LINE__)
+#define psync_sql_query_nolock_nocache(sql) psync_sql_do_query_nolock_nocache(sql, __FILE__, __LINE__)
+#define psync_sql_query_nolock(sql) psync_sql_do_query_nolock(sql, __FILE__, __LINE__)
 #define psync_sql_prep_statement_nocache(sql) psync_sql_do_prep_statement_nocache(sql, __FILE__, __LINE__)
 #define psync_sql_prep_statement(sql) psync_sql_do_prep_statement(sql, __FILE__, __LINE__)
 
@@ -234,6 +236,8 @@ psync_sql_res *psync_sql_do_query_nocache(const char *sql, const char *file, uns
 psync_sql_res *psync_sql_do_query(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_do_query_rdlock_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_do_query_rdlock(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_query_nolock_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_do_query_nolock(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_do_prep_statement_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_do_prep_statement(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 
@@ -249,6 +253,8 @@ psync_sql_res *psync_sql_query_nocache(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_query_rdlock(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_nolock(const char *sql) PSYNC_NONNULL(1);
+psync_sql_res *psync_sql_query_nolock_nocache(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_prep_statement(const char *sql) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_prep_statement_nocache(const char *sql) PSYNC_NONNULL(1);
 
@@ -270,8 +276,6 @@ char *psync_sql_cellstr(const char *sql) PSYNC_NONNULL(1);
 int64_t psync_sql_cellint(const char *sql, int64_t dflt) PSYNC_NONNULL(1);
 char **psync_sql_rowstr(const char *sql) PSYNC_NONNULL(1);
 psync_variant *psync_sql_row(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_query_nolock(const char *sql) PSYNC_NONNULL(1);
-psync_sql_res *psync_sql_query_nolock_nocache(const char *sql) PSYNC_NONNULL(1);
 void psync_sql_reset(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run(psync_sql_res *res) PSYNC_NONNULL(1);
 void psync_sql_run_free(psync_sql_res *res) PSYNC_NONNULL(1);
