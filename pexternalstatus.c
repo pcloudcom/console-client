@@ -56,25 +56,28 @@ static int sync_offline() {
 
 static int folder_in_sync_nolock(psync_fsfolderid_t folderid) {
   psync_sql_res *res = NULL;
-  psync_variant_row row;
+  psync_uint_row row;
+  uint64_t result;
   
   if ((folderid == 0)||(folderid == PSYNC_INVALID_FSFOLDERID))
     return 0;
   
   res=psync_sql_query_nolock("select id from syncfolder where folderid = ?;");
   psync_sql_bind_uint(res, 1, folderid);
-  while ((row = psync_sql_fetch_row(res))) {
+  while ((row = psync_sql_fetch_rowint(res))) {
+    result = row[0];
     psync_sql_free_result(res);
-    return psync_get_snumber(row[0]);
+    return result;
   }
   
   psync_sql_free_result(res);
   
   res = psync_sql_query_nolock("select parentfolderid from folder where id = ?;");
   psync_sql_bind_uint(res, 1, folderid);
-  while ((row = psync_sql_fetch_row(res))) {
+  while ((row = psync_sql_fetch_rowint(res))) {
+    result = folder_in_sync_nolock(row[0]);
     psync_sql_free_result(res);
-    return folder_in_sync_nolock(psync_get_snumber(row[0]));
+    return result;
   }
   psync_sql_free_result(res);
    
@@ -83,13 +86,16 @@ static int folder_in_sync_nolock(psync_fsfolderid_t folderid) {
 
 static int task_for_sync_nolock(int syncid){
   psync_sql_res *res = NULL;
-  psync_variant_row row;
+  psync_uint_row row;
+  uint64_t ret;
   
   res=psync_sql_query_nolock("select 1 from localfile as f, task as t, localfolder as fl where t.syncid = ? and t.localitemid = f.id and f.localparentfolderid = fl.id limit 1;");
   psync_sql_bind_uint(res, 1, syncid);
-  while ((row = psync_sql_fetch_row(res))) {
+  while ((row = psync_sql_fetch_rowint(res))) {
+    ret = row[0];
     psync_sql_free_result(res);
-    return psync_get_snumber(row[0]);
+    return ret;
+    
   }
   
   psync_sql_free_result(res);
