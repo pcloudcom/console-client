@@ -32,6 +32,7 @@
 #include "pnetlibs.h"
 #include "pstatus.h"
 #include "pcache.h"
+#include "pfsupload.h"
 #include "pfscrypto.h"
 #include "pcrc32c.h"
 #include <errno.h>
@@ -2983,6 +2984,11 @@ static void psync_pagecache_upload_to_cache(){
     else if (type==PAGE_TASK_TYPE_MODIFY)
       psync_pagecache_modify_to_cache(taskid, hash, oldhash);
     psync_sql_start_transaction();
+    res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    if (psync_sql_affected_rows())
+      psync_fsupload_wake();
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);

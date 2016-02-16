@@ -3135,6 +3135,7 @@ static int psync_fs_do_start(){
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
   fuse_opt_add_arg(&args, "-oauto_unmount");
+//  fuse_opt_add_arg(&args, "-ouse_ino");
   fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   fuse_opt_add_arg(&args, "-ononempty");
 #endif
