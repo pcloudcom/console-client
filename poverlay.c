@@ -51,7 +51,9 @@ void instance_thread(LPVOID){}
 
 #endif //defined(P_OS_WINDOWS)
 
-poverlay_callback callbacks[15];
+poverlay_callback * callbacks;
+static int callbacks_size = 15;
+static const int calbacks_lower_band = 20;
 
 #define CACHE_PREF "P_OVERLA_CACHE_PREFIX"
 #define CACHE_PREF_LEN 21
@@ -100,16 +102,23 @@ static void add_item_to_cache(const char* key, external_status* stat){
 
 int psync_add_overlay_callback(int id, poverlay_callback callback) 
 {
-  if (id < 20)
+  poverlay_callback * callbacks_old = callbacks;
+  int callbacks_size_old = callbacks_size;
+  if (id < calbacks_lower_band)
     return -1;
-  if (id > 35)
-    return -2;
-  callbacks[id - 20] = callback;
+  if (id > (calbacks_lower_band + callbacks_size)) {
+     callbacks_size = id - calbacks_lower_band + 1;
+     init_overlay_callbacks();
+     memcpy(callbacks,callbacks_old, callbacks_size_old*sizeof(poverlay_callback));
+     psync_free(callbacks_old);
+  }
+  callbacks[id - calbacks_lower_band] = callback;
   return 0;
 }
 
 void init_overlay_callbacks() {
-  memset(&callbacks, 0, 15);
+  callbacks = (poverlay_callback *) psync_malloc(sizeof(poverlay_callback)*callbacks_size);
+  memset(callbacks, 0, sizeof(poverlay_callback)*callbacks_size);
 }
 
 void psync_stop_overlays(){
