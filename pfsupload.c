@@ -357,7 +357,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   }
   if (newfile){
     psync_ops_create_file_in_db(meta);
-    psync_pagecache_creat_to_pagecache(taskid, hash);
+    psync_pagecache_creat_to_pagecache(taskid, hash, 0);
     psync_fstask_file_created(folderid, taskid, name, fileid);
     psync_fs_task_to_file(taskid, fileid);
   }
@@ -1102,10 +1102,12 @@ static int psync_process_task_creat(fsupload_task_t *task){
   psync_fstask_file_created(task->folderid, task->id, task->text1, fileid);
   if (task->text2)
     set_key_for_fileid(fileid, hash, task->text2);
-  psync_pagecache_creat_to_pagecache(task->id, hash);
   psync_fs_task_to_file(task->id, fileid);
   task->int2=fileid;
   debug(D_NOTICE, "file %lu/%s uploaded", (unsigned long)task->folderid, task->text1);
+  psync_sql_commit_transaction();
+  psync_pagecache_creat_to_pagecache(task->id, hash, 1);
+  psync_sql_start_transaction();
   return 0;
 }
 
