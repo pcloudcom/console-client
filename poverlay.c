@@ -29,6 +29,9 @@
 #include "pexternalstatus.h"
 #include "pcache.h"
 
+int overlays_running = 1;
+int callbacks_running = 1;
+
 #if defined(P_OS_WINDOWS)
 
 #include "poverlay_win.c"
@@ -65,8 +68,8 @@ static int get_item_from_cache(const char* key, external_status* stat){
   overlay_cache_t * rec = NULL;
   uint64_t now = 0;
   
-  strncpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
-  strncpy(reckey + CACHE_PREF_LEN , key, ketlen);
+  memcpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
+  memcpy(reckey + CACHE_PREF_LEN , key, ketlen + 1);
   
   if ((rec = (overlay_cache_t *) psync_cache_get(reckey))) {
     now = psync_millitime();
@@ -109,6 +112,20 @@ void init_overlay_callbacks() {
   memset(&callbacks, 0, 15);
 }
 
+void psync_stop_overlays(){
+  overlays_running = 0;
+}
+void psync_start_overlays(){
+  overlays_running = 1;
+}
+
+void psync_stop_overlay_callbacks(){
+  callbacks_running = 0;
+}
+void psync_start_overlay_callbacks(){
+  callbacks_running = 1;
+}
+
 void get_answer_to_request(message *request, message *replay)
 {
   char msg[4] = "Ok.";
@@ -116,9 +133,11 @@ void get_answer_to_request(message *request, message *replay)
   msg[3] = '\0';
   //debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   if (request->type < 20 ) {
-    if (!get_item_from_cache(request->value, &stat)) {
+    
+    if (overlays_running && !get_item_from_cache(request->value, &stat)) {
      stat = do_psync_external_status(request->value);
     }
+    
     if (stat == INSYNC) {
       replay->type = 10;
     }
@@ -136,7 +155,7 @@ void get_answer_to_request(message *request, message *replay)
     replay->length = sizeof(message)+4;
     strncpy(replay->value, msg, 4);
     add_item_to_cache(request->value, &stat);
-  } else if (request->type < 36) {
+  } else if ((callbacks_running)&&(request->type < 36)) {
     int ind = request->type - 20;
     int ret = 0;
     if (callbacks[ind]) {

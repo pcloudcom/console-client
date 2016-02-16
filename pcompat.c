@@ -3119,8 +3119,7 @@ Cleanup:
 void psync_rebuild_icons(){
   int ret = 0;
   debug(D_NOTICE, "Stopping finder plugin to refresh all icons.");
-  ret = system("/bin/sh -c \"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt\"");
-  ret = system("/bin/sh -c \"pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt\"");
+  ret = system("/bin/sh -c \"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt;sleep 0.5;pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt;\"");
   debug(D_ERROR, "Reseting Finder Ext"); 
 }
 #else

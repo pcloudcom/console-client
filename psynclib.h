@@ -1138,6 +1138,10 @@ typedef int (*poverlay_callback)(const char* path);
  */
 
 int psync_add_overlay_callback(int id, poverlay_callback callback);
+void psync_stop_overlays();
+void psync_start_overlays();
+void psync_stop_overlay_callbacks();
+void psync_start_overlay_callbacks();
 
 
 #ifdef __cplusplus
