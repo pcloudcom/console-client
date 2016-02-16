@@ -286,7 +286,8 @@ static void psync_fstask_depend(uint64_t taskid, uint64_t dependontaskid){
 
 static uint32_t psync_fstask_depend_on_name(uint64_t taskid, psync_fsfolderid_t folderid, const char *name, size_t len){
   psync_sql_res *res;
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO fstaskdepend (fstaskid, dependfstaskid) SELECT ?, id FROM fstask WHERE folderid=? AND text1=? AND id!=?");
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO fstaskdepend (fstaskid, dependfstaskid) SELECT ?, id FROM fstask "
+                               "WHERE folderid=? AND text1=? AND id!=? AND status!=3");
   psync_sql_bind_uint(res, 1, taskid);
   psync_sql_bind_int(res, 2, folderid);
   psync_sql_bind_lstring(res, 3, name, len);
@@ -297,7 +298,8 @@ static uint32_t psync_fstask_depend_on_name(uint64_t taskid, psync_fsfolderid_t 
 
 static uint32_t psync_fstask_depend_on_name2(uint64_t taskid, uint64_t taskid2,psync_fsfolderid_t folderid, const char *name, size_t len){
   psync_sql_res *res;
-  res=psync_sql_prep_statement("INSERT OR IGNORE INTO fstaskdepend (fstaskid, dependfstaskid) SELECT ?, id FROM fstask WHERE folderid=? AND text1=? AND id NOT IN (?, ?)");
+  res=psync_sql_prep_statement("INSERT OR IGNORE INTO fstaskdepend (fstaskid, dependfstaskid) SELECT ?, id FROM fstask "
+                               "WHERE folderid=? AND text1=? AND id NOT IN (?, ?) AND status!=3");
   psync_sql_bind_uint(res, 1, taskid);
   psync_sql_bind_int(res, 2, folderid);
   psync_sql_bind_lstring(res, 3, name, len);

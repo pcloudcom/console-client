@@ -32,6 +32,7 @@
 #include "pnetlibs.h"
 #include "pstatus.h"
 #include "pcache.h"
+#include "pfsupload.h"
 #include "pfscrypto.h"
 #include "pcrc32c.h"
 #include <errno.h>
@@ -2699,7 +2700,7 @@ static void psync_check_clean_running(){
   }
 }
 
-static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash){
+static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash, int pause){
   char *filename;
   psync_cache_page_t *page;
   uint64_t pageid;
@@ -2739,7 +2740,7 @@ static void psync_pagecache_new_upload_to_cache(uint64_t taskid, uint64_t hash){
     if (rd<PSYNC_FS_PAGE_SIZE)
       break;
     pageid++;
-    if (pageid%64==0){
+    if (pause && pageid%64==0){
       psync_check_clean_running();
       psync_milisleep(10);
     }
@@ -2979,10 +2980,15 @@ static void psync_pagecache_upload_to_cache(){
     oldhash=row[4];
     psync_sql_free_result(res);
     if (type==PAGE_TASK_TYPE_CREAT)
-      psync_pagecache_new_upload_to_cache(taskid, hash);
+      psync_pagecache_new_upload_to_cache(taskid, hash, 1);
     else if (type==PAGE_TASK_TYPE_MODIFY)
       psync_pagecache_modify_to_cache(taskid, hash, oldhash);
     psync_sql_start_transaction();
+    res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    if (psync_sql_affected_rows())
+      psync_fsupload_wake();
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
@@ -3012,8 +3018,11 @@ static void psync_pagecache_add_task(uint32_t type, uint64_t taskid, uint64_t ha
     psync_run_thread("upload to cache", psync_pagecache_upload_to_cache);
 }
 
-void psync_pagecache_creat_to_pagecache(uint64_t taskid, uint64_t hash){
-  psync_pagecache_add_task(PAGE_TASK_TYPE_CREAT, taskid, hash, 0);
+void psync_pagecache_creat_to_pagecache(uint64_t taskid, uint64_t hash, int onthisthread){
+  if (onthisthread)
+    psync_pagecache_new_upload_to_cache(taskid, hash, 0);
+  else
+    psync_pagecache_add_task(PAGE_TASK_TYPE_CREAT, taskid, hash, 0);
 }
 
 void psync_pagecache_modify_to_pagecache(uint64_t taskid, uint64_t hash, uint64_t oldhash){
