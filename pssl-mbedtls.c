@@ -743,7 +743,7 @@ SSE2FUNC void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc
       "xorps %%xmm0, %%xmm3\n"
       "movdqa 48(%1), %%xmm5\n"
       "pxor %%xmm0, %%xmm4\n"
-      "movdqa 16(%0), %%xmm1\n"
+      "movdqu 16(%0), %%xmm1\n"
       "pxor %%xmm0, %%xmm5\n"
       "1:\n"
       "lea 32(%0), %0\n"

@@ -379,6 +379,6 @@ int psync_rwlock_holding_wrlock(psync_rwlock_t *rw){
 int psync_rwlock_holding_lock(psync_rwlock_t *rw){
   psync_rwlock_lockcnt_t cnt;
   cnt=psync_rwlock_get_count(rw);
-  return cnt.cnt[0]!=0 && cnt.cnt[1]!=0;
+  return cnt.cnt[0]!=0 || cnt.cnt[1]!=0;
 }
 
