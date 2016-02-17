@@ -3043,9 +3043,13 @@ int psync_invalidate_os_cache_needed(){
 
 #define REBUILD_ICON_BUFFER_SIZE 1024
 
+extern int overlays_running;
+
 #if defined(P_OS_WINDOWS)
 void psync_rebuild_icons()
 {
+  if (!overlays_running)
+    return;
   TCHAR buf[REBUILD_ICON_BUFFER_SIZE] = { 0 };
   HKEY hRegKey = 0;
   DWORD dwRegValue;
@@ -3118,12 +3122,19 @@ Cleanup:
 #elif defined(P_OS_MACOSX)
 void psync_rebuild_icons(){
   int ret = 0;
+  
+  if (!overlays_running)
+    return;
+  
   debug(D_NOTICE, "Stopping finder plugin to refresh all icons.");
   ret = system("/bin/sh -c \"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt;sleep 0.5;pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt;\"");
   debug(D_ERROR, "Reseting Finder Ext"); 
 }
 #else
-void psync_rebuild_icons(){return;}
+void psync_rebuild_icons(){
+  if (!overlays_running)
+    return;
+  return;}
 #endif
 
 int psync_invalidate_os_cache(const char *path){
