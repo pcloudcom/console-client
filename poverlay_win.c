@@ -32,7 +32,8 @@
 #include <strsafe.h>
 
 #define POVERLAY_BUFSIZE 600
-
+#define MAX_SEM_COUNT 10
+#define THREADCOUNT 12
 
 #include "poverlay.h"
 
@@ -42,6 +43,8 @@ void overlay_main_loop(VOID)
 {
   BOOL   fConnected = FALSE;
   HANDLE hPipe = INVALID_HANDLE_VALUE;
+  HANDLE ghSemaphore;
+  DWORD dwWaitResult;
 
   // The main loop creates an instance of the named pipe and
   // then waits for a client to connect to it. When the client
@@ -52,6 +55,25 @@ void overlay_main_loop(VOID)
   for (;;)
   {
     //debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
+
+
+    ghSemaphore = CreateSemaphore(
+      NULL,           // default security attributes
+      MAX_SEM_COUNT,  // initial count
+      MAX_SEM_COUNT,  // maximum count
+      NULL);          // unnamed semaphore
+
+    if (ghSemaphore == NULL)
+    {
+      printf("CreateSemaphore error: %d\n", GetLastError());
+      return 1;
+    }
+
+    dwWaitResult = WaitForSingleObject(
+      ghSemaphore,   // handle to semaphore
+      INFINITE);           // zero-second time-out interval
+
+
     hPipe = CreateNamedPipe(
       PORT,                     // pipe name
       PIPE_ACCESS_DUPLEX,       // read/write access
@@ -86,6 +108,9 @@ void overlay_main_loop(VOID)
     }
     else
       CloseHandle(hPipe);
+
+    CloseHandle(ghSemaphore);
+
   }
 
   return;
