@@ -411,6 +411,7 @@ char *psync_get_default_database_path();
 char *psync_get_home_dir();
 void psync_run_thread(const char *name, psync_thread_start0 run);
 void psync_run_thread1(const char *name, psync_thread_start1 run, void *ptr);
+void psync_milisleep_nosqlcheck(uint64_t millisec);
 void psync_milisleep(uint64_t millisec);
 time_t psync_time();
 void psync_nanotime(struct timespec *tm);

@@ -493,19 +493,22 @@ static void psync_check_no_sql_lock(uint64_t millisec){
 #endif
 }
 
-void psync_milisleep(uint64_t millisec){
+void psync_milisleep_nosqlcheck(uint64_t millisec){
 #if defined(P_OS_POSIX)
   struct timespec tm;
-  psync_check_no_sql_lock(millisec);
   tm.tv_sec=millisec/1000;
   tm.tv_nsec=(millisec%1000)*1000000;
   nanosleep(&tm, NULL);
 #elif defined(P_OS_WINDOWS)
-  psync_check_no_sql_lock(millisec);
   Sleep(millisec);
 #else
 #error "Function not implemented for your operating system"
 #endif
+}
+
+void psync_milisleep(uint64_t millisec){
+  psync_check_no_sql_lock(millisec);
+  psync_milisleep_nosqlcheck(millisec);
 }
 
 time_t psync_time(){
@@ -3058,7 +3061,7 @@ void psync_rebuild_icons()
   DWORD_PTR dwResult;
   LONG lRegResult;
   int result = 0;
-  
+
   // we're going to change the Shell Icon Size value
   const TCHAR* sRegValueName = L"Shell Icon Size";
 
@@ -3107,7 +3110,7 @@ void psync_rebuild_icons()
   // Update all windows
   SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETNONCLIENTMETRICS,
     0, SMTO_ABORTIFHUNG, 5000, &dwResult);
-  
+
   SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
 
   result = 1;
@@ -3122,13 +3125,13 @@ Cleanup:
 #elif defined(P_OS_MACOSX)
 void psync_rebuild_icons(){
   int ret = 0;
-  
+
   if (!overlays_running)
     return;
-  
+
   debug(D_NOTICE, "Stopping finder plugin to refresh all icons.");
   ret = system("/bin/sh -c \"pluginkit -e ignore -i com.pcloud.pcloud.macos.pCloudFinderExt;sleep 0.5;pluginkit -e use -i com.pcloud.pcloud.macos.pCloudFinderExt;\"");
-  debug(D_ERROR, "Reseting Finder Ext"); 
+  debug(D_ERROR, "Reseting Finder Ext");
 }
 #else
 void psync_rebuild_icons(){

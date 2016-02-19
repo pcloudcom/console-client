@@ -416,7 +416,7 @@ int psync_sql_close(){
       psync_cache_clean_all();
       tries++;
       if (tries>100){
-        psync_milisleep(tries-90);
+        psync_milisleep_nosqlcheck(tries-90);
         if (tries>200){
           debug(D_ERROR, "failed to close database");
           break;
