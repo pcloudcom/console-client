@@ -567,7 +567,7 @@ static void psync_fs_refresh_crypto_folders(){
   fids=psync_crypto_folderids();
   fid=fids;
   while (*fid!=PSYNC_CRYPTO_INVALID_FOLDERID){
-    psync_fs_refresh_folder_delayed(*fid);
+    psync_fs_refresh_folder(*fid);
     fid++;
   }
   psync_free(fids);

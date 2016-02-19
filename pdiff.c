@@ -2041,6 +2041,11 @@ static int cmp_folderid(const void *ptr1, const void *ptr2){
     return 0;
 }
 
+typedef struct {
+  psync_folderid_t *refresh_folders;
+  uint32_t refresh_last;
+} refresh_folders_ptr_t;
+
 static psync_folderid_t *refresh_folders=NULL;
 static uint32_t refresh_allocated=0;
 static uint32_t refresh_last=0;
@@ -2058,9 +2063,27 @@ static void psync_diff_refresh_fs_add_folder(psync_folderid_t folderid){
   }
 }
 
+static void psync_diff_refresh_thread(void *ptr){
+  refresh_folders_ptr_t *fr;
+  psync_folderid_t lastfolderid;
+  uint32_t i;
+  psync_milisleep(1000);
+  fr=(refresh_folders_ptr_t *)ptr;
+  qsort(fr->refresh_folders, fr->refresh_last, sizeof(psync_folderid_t), cmp_folderid);
+  lastfolderid=(psync_folderid_t)-1;
+  for (i=0; i<fr->refresh_last; i++)
+    if (fr->refresh_folders[i]!=lastfolderid){
+      psync_fs_refresh_folder(fr->refresh_folders[i]);
+      lastfolderid=fr->refresh_folders[i];
+    }
+  psync_free(fr->refresh_folders);
+  psync_free(fr);
+}
+
 static void psync_diff_refresh_fs(const binresult *entries){
   if (psync_fs_need_per_folder_refresh()){
     const binresult *meta;
+    refresh_folders_ptr_t *ptr;
     psync_folderid_t folderid, lastfolderid;
     uint32_t i;
     lastfolderid=(psync_folderid_t)-1;
@@ -2079,14 +2102,10 @@ static void psync_diff_refresh_fs(const binresult *entries){
     }
     if (!refresh_last)
       return;
-    lastfolderid=(psync_folderid_t)-1;
-    qsort(refresh_folders, refresh_last, sizeof(psync_folderid_t), cmp_folderid);
-    for (i=0; i<refresh_last; i++)
-      if (refresh_folders[i]!=lastfolderid){
-        psync_fs_refresh_folder_delayed(refresh_folders[i]);
-        lastfolderid=refresh_folders[i];
-      }
-    psync_free(refresh_folders);
+    ptr=psync_new(refresh_folders_ptr_t);
+    ptr->refresh_folders=refresh_folders;
+    ptr->refresh_last=refresh_last;
+    psync_run_thread1("fs folder refresh", psync_diff_refresh_thread, ptr);
     refresh_folders=NULL;
     refresh_allocated=0;
     refresh_last=0;
@@ -2222,12 +2241,13 @@ restart:
       newdiffid=psync_find_result(res, "diffid", PARAM_NUM)->num;
       debug(D_NOTICE, "processing diff with %u entries", (unsigned)entries->length);
       ids.diffid=process_entries(entries, newdiffid);
-      psync_diff_refresh_fs(entries);
+      // psync_diff_refresh_fs(entries); -- don't do this for initial loading
       debug(D_NOTICE, "got diff with %u entries, new diffid %lu", (unsigned)entries->length, (unsigned long)ids.diffid);
     }
     result=entries->length;
     psync_free(res);
   } while (result);
+  psync_fs_refresh_folder(0);
   debug(D_NOTICE, "initial sync finished");
   if (psync_diff_check_quota(sock)){
     psync_socket_close(sock);

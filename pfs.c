@@ -2880,23 +2880,6 @@ int psync_fs_need_per_folder_refresh_f(){
 #endif
 }
 
-static void psync_fs_refresh_folder_th(void *folderidp){
-  psync_folderid_t folderid;
-  psync_milisleep(1000);//Artificialy delay refresh of the finder for correct overlays.
-  folderid = *((psync_folderid_t *)(folderidp));
-  psync_fs_refresh_folder(folderid);
-  psync_free(folderidp);
-}
-
-void psync_fs_refresh_folder_delayed(psync_folderid_t folderid) {
-  psync_folderid_t *folderidp;
-
-  folderidp = (psync_folderid_t *)psync_malloc(sizeof(psync_folderid_t));
-  *folderidp = folderid;
-  psync_run_thread1("refresh folder thread",psync_fs_refresh_folder_th, folderidp);
-
-}
-
 void psync_fs_refresh_folder(psync_folderid_t folderid){
   char *path, *fpath;
   unsigned char rndbuff[20];
