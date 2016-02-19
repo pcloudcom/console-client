@@ -380,6 +380,7 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
   psync_sql_res *res;
   psync_variant_row row;
   const char *cstr;
+  *length = 0;
   res=psync_sql_query("SELECT mail FROM baccountemail WHERE id=?");
   psync_sql_bind_uint(res, 1, userid);
   if ((row=psync_sql_fetch_row(res))){
@@ -392,10 +393,12 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
     email_visitor_params params = {email, length};
     do_psync_account_users(userids, 1, &copy_email, &params);
    
-    q=psync_sql_prep_statement("INSERT INTO baccountemail  (id, mail) VALUES (?, ?)");
-    psync_sql_bind_uint(q, 1, userid);
-    psync_sql_bind_lstring(q, 2, *email,  *length);
-    psync_sql_run_free(q);
+    if (*length) {
+      q=psync_sql_prep_statement("INSERT INTO baccountemail  (id, mail) VALUES (?, ?)");
+      psync_sql_bind_uint(q, 1, userid);
+      psync_sql_bind_lstring(q, 2, *email,  *length);
+      psync_sql_run_free(q);
+    }
   }
   psync_sql_free_result(res);
 }
