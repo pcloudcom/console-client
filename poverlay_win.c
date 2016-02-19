@@ -52,22 +52,21 @@ void overlay_main_loop(VOID)
   // with that client, and this loop is free to wait for the
   // next client connect request. It is an infinite loop.
 
+  ghSemaphore = CreateSemaphore(
+    NULL,           // default security attributes
+    MAX_SEM_COUNT,  // initial count
+    MAX_SEM_COUNT,  // maximum count
+    NULL);          // unnamed semaphore
+
+  if (ghSemaphore == NULL)
+  {
+    printf("CreateSemaphore error: %d\n", GetLastError());
+    return 1;
+  }
+
   for (;;)
   {
     //debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
-
-
-    ghSemaphore = CreateSemaphore(
-      NULL,           // default security attributes
-      MAX_SEM_COUNT,  // initial count
-      MAX_SEM_COUNT,  // maximum count
-      NULL);          // unnamed semaphore
-
-    if (ghSemaphore == NULL)
-    {
-      printf("CreateSemaphore error: %d\n", GetLastError());
-      return 1;
-    }
 
     dwWaitResult = WaitForSingleObject(
       ghSemaphore,   // handle to semaphore
@@ -109,10 +108,17 @@ void overlay_main_loop(VOID)
     else
       CloseHandle(hPipe);
 
-    CloseHandle(ghSemaphore);
+    if (!ReleaseSemaphore(
+      ghSemaphore,  // handle to semaphore
+      1,            // increase count by one
+      NULL))       // not interested in previous count
+    {
+      debug(D_WARNING,"ReleaseSemaphore error: %d\n", GetLastError());
+    }
 
   }
 
+  CloseHandle(ghSemaphore);
   return;
 }
 
