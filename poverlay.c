@@ -190,3 +190,7 @@ void get_answer_to_request(message *request, message *replay)
     }
 
 }
+
+
+int psync_overlays_running(){return overlays_running;}
+int psync_ovr_callbacks_running(){return callbacks_running;}

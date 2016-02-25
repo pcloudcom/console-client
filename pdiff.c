@@ -1395,7 +1395,7 @@ static void do_send_eventdata(void * param) {
 
   get_ba_member_email(data->fromuserid, &email, &emaillen);
   fill_str(data->event_data->fromemail, email, emaillen);
-   psync_free(email);
+  psync_free(email);
 
   if(data->touserid)
     get_ba_member_email(data->touserid, &email, &emaillen);

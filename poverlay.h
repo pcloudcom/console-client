@@ -27,8 +27,8 @@ void psync_stop_overlays();
 void psync_start_overlays();
 void psync_stop_overlay_callbacks();
 void psync_start_overlay_callbacks();
-int psync_overlays_running(){return overlays_running;}
-int psync_ovr_callbacks_running(){return callbacks_running;}
+int psync_overlays_running();
+int psync_ovr_callbacks_running();
 
 void init_overlay_callbacks();
 int psync_add_overlay_callback(int id, poverlay_callback callback);
