@@ -376,7 +376,7 @@ int cache_links(char **err /*OUT*/) {
       return -2;
     }
     bres = send_command(api, "listpublinks", params);
-  } else if (psync_my_user) {
+  } else if (psync_my_user  && psync_my_pass) {
 
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
     api = psync_apipool_get();
@@ -761,7 +761,7 @@ int cache_upload_links(char **err /*OUT*/) {
       return -2;
     }
     bres = send_command(api, "listuploadlinks", params);
-  } else if (psync_my_user) {
+  } else if (psync_my_user  && psync_my_pass) {
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp"),  P_STR("iconformat","id")};
     api = psync_apipool_get();
     if (unlikely(!api)) {
