@@ -1124,7 +1124,18 @@ static int open_write_files(psync_openfile_t *of, int trunc){
 static void psync_fs_del_creat(psync_fspath_t *fpath, psync_openfile_t *of){
   psync_fstask_creat_t *cr;
   psync_fstask_folder_t *folder;
+  psync_sql_res *res;
   psync_sql_lock();
+  psync_sql_start_transaction();
+  res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+  psync_sql_bind_uint(res, 1, -of->fileid);
+  psync_sql_run_free(res);
+  if (psync_sql_affected_rows())
+    psync_fsupload_wake();
+  res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
+  psync_sql_bind_uint(res, 1, -of->fileid);
+  psync_sql_run_free(res);
+  psync_sql_commit_transaction();
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
   if (likely(folder)){
     if (likely((cr=psync_fstask_find_creat(folder, fpath->name, 0)))){
