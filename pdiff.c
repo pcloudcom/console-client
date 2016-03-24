@@ -115,6 +115,8 @@ static binresult *get_userinfo_user_digest(psync_socket *sock, const char *usern
                       P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
                       P_STR("device", device),
                       P_BOOL("getauth", 1),
+                      P_BOOL("getapiserver", 1),
+                      P_BOOL("cryptokeyssign", 1),
                       P_NUM("os", P_OS_ID)};
   return send_command(sock, "userinfo", params);
 }
@@ -187,7 +189,7 @@ static psync_socket *get_connected_socket(){
     }
     psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
     saveauth=psync_setting_get_bool(_PS(saveauth));
-    sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+    sock=psync_api_connect(apiserver, psync_setting_get_bool(_PS(usessl)));
     if (unlikely_log(!sock)){
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
@@ -202,6 +204,7 @@ static psync_socket *get_connected_socket(){
                          P_STR("device", device),
                          P_BOOL("getauth", 1),
                          P_BOOL("cryptokeyssign", 1),
+                         P_BOOL("getapiserver", 1),
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
@@ -361,6 +364,9 @@ static psync_socket *get_connected_socket(){
       psync_sql_statement("DELETE FROM setting WHERE id='pass'");
     else
       psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth')");
+    cres=psync_find_result(psync_find_result(res, "apiserver", PARAM_HASH), "binapi", PARAM_ARRAY);
+    if (cres->length)
+      psync_apipool_set_server(cres->array[0]->str);
     psync_free(res);
     if (isbusiness){
       binparam params[]={P_STR("timeformat", "timestamp"),

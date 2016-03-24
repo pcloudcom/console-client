@@ -341,6 +341,7 @@ typedef struct {
   psync_socket_buffer *buffer;
   psync_socket_t sock;
   int pending;
+  uint32_t misc;
 } psync_socket;
 
 typedef uint64_t psync_inode_t;

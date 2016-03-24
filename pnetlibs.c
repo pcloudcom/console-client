@@ -39,8 +39,6 @@
 #include "pcache.h"
 #include "ptree.h"
 
-#define API_CACHE_KEY "ApiConn"
-
 struct time_bytes {
   time_t tm;
   psync_uint_t bytes;
@@ -99,9 +97,25 @@ static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], uploa
 
 static sem_t api_pool_sem;
 
+char apiserver[64]=PSYNC_API_HOST;
+static char apikey[68]="API:"PSYNC_API_HOST;
+
+static uint32_t hash_func(const char *key){
+  uint32_t c, hash;
+  hash=0;
+  while ((c=(uint32_t)*key++))
+    hash=c+(hash<<5)+hash;
+  return hash;
+}
+
 static psync_socket *psync_get_api(){
+  psync_socket *sock;
   sem_wait(&api_pool_sem);
-  return psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+  debug(D_NOTICE, "connecting to %s", apiserver);
+  sock=psync_api_connect(apiserver, psync_setting_get_bool(_PS(usessl)));
+  if (sock)
+    sock->misc=hash_func(apiserver);
+  return sock;
 }
 
 static void psync_ret_api(void *ptr){
@@ -136,16 +150,26 @@ static int api_sock_is_broken(psync_socket *ret){
       return 1;
     }
     else{
-      debug(D_NOTICE, "got api connection from cache");
+      debug(D_NOTICE, "got api connection from cache, key %s", apikey);
       return 0;
     }
+  }
+}
+
+void psync_apipool_set_server(const char *binapi) {
+  size_t len;
+  len=strlen(binapi)+1;
+  if (len<=sizeof(apiserver)) {
+    memcpy(apiserver, binapi, len);
+    memcpy(apikey+4, binapi, len);
+    debug(D_NOTICE, "set %s as best api server", apiserver);
   }
 }
 
 psync_socket *psync_apipool_get(){
   psync_socket *ret;
   while (1){
-    ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
+    ret=(psync_socket *)psync_cache_get(apikey);
     if (!ret)
       break;
     if (!api_sock_is_broken(ret))
@@ -160,7 +184,7 @@ psync_socket *psync_apipool_get(){
 psync_socket *psync_apipool_get_from_cache(){
   psync_socket *ret;
   while (1){
-    ret=(psync_socket *)psync_cache_get(API_CACHE_KEY);
+    ret=(psync_socket *)psync_cache_get(apikey);
     if (!ret)
       break;
     if (!api_sock_is_broken(ret))
@@ -170,7 +194,7 @@ psync_socket *psync_apipool_get_from_cache(){
 }
 
 void psync_apipool_prepare(){
-  if (psync_cache_has(API_CACHE_KEY))
+  if (psync_cache_has(apikey))
     return;
   else{
     psync_socket *ret;
@@ -285,7 +309,10 @@ void psync_apipool_release(psync_socket *api){
     return;
   }
 #endif
-  psync_cache_add(API_CACHE_KEY, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
+  if (hash_func(apiserver)==api->misc)
+    psync_cache_add(apikey, api, PSYNC_APIPOOL_MAXIDLESEC, psync_ret_api, PSYNC_APIPOOL_MAXIDLE);
+  else
+    psync_ret_api(api);
 }
 
 void psync_apipool_release_bad(psync_socket *api){
@@ -630,7 +657,7 @@ psync_socket *psync_socket_connect_download(const char *host, int unsigned port,
 psync_socket *psync_api_connect_download(){
   psync_socket *sock;
   int64_t dwlspeed;
-  sock=psync_api_connect(psync_setting_get_bool(_PS(usessl)));
+  sock=psync_api_connect(apiserver, psync_setting_get_bool(_PS(usessl)));
   if (sock){
     dwlspeed=psync_setting_get_int(_PS(maxdownloadspeed));
     if (dwlspeed!=-1 && dwlspeed<PSYNC_MAX_SPEED_RECV_BUFFER){
