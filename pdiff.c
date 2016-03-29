@@ -231,6 +231,8 @@ static psync_socket *get_connected_socket(){
       }
       else if (result==4000)
         psync_milisleep(5*60*1000);
+      else if (result==2205)
+        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
       else
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
@@ -2167,7 +2169,7 @@ static void psync_run_analyze_if_needed(){
 }
 
 static int psync_diff_check_quota(psync_socket *sock){
-  binparam diffparams[]={P_STR("timeformat", "timestamp")};
+  binparam diffparams[]={P_STR("timeformat", "timestamp"), P_BOOL("getapiserver", 1)};
   binresult *res;
   const binresult *uq;
   uint64_t oused_quota, result;
@@ -2188,6 +2190,9 @@ static int psync_diff_check_quota(psync_socket *sock){
     psync_set_uint_value("usedquota", used_quota);
     psync_send_eventid(PEVENT_USEDQUOTA_CHANGED);
   }
+  uq=psync_find_result(psync_find_result(res, "apiserver", PARAM_HASH), "binapi", PARAM_ARRAY);
+  if (uq->length)
+    psync_apipool_set_server(uq->array[0]->str);
   psync_free(res);
   return 0;
 }
