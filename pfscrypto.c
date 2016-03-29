@@ -268,7 +268,7 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
     off=psync_fs_crypto_auth_offset(0, sectorid);
     ssize=PSYNC_CRYPTO_SECTOR_SIZE;
   }
-  debug(D_NOTICE, "reading first sector from offset %lu, size %u", (unsigned long)off, (unsigned)ssize);
+//  debug(D_NOTICE, "reading first sector from offset %lu, size %u", (unsigned long)off, (unsigned)ssize);
   rd=psync_file_pread(of->datafile, buff, ssize, off);
   if (unlikely_log(rd!=ssize))
     return -1;
@@ -1315,7 +1315,7 @@ int psync_fs_crypto_write_modified_locked_nu(psync_openfile_t *of, const char *b
   psync_pagecache_read_range *ranges;
   char *tmpbuf;
   psync_crypto_offsets_t offsets;
-  uint64_t eoffset;
+  uint64_t eoffset, end;
   size_t isize;
   ssize_t bw;
   psync_crypto_sectorid_t firstsectorid, lastsectorid, sectorid, esectorid;
@@ -1353,8 +1353,12 @@ retry:
     itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
     if (itr && itr->from<=eoffset)
       continue;
-    if ((sectorid==firstsectorid && offset%PSYNC_CRYPTO_SECTOR_SIZE!=0) || (sectorid==lastsectorid && (offset+size)%PSYNC_CRYPTO_SECTOR_SIZE!=0))
-      psync_interval_tree_add(&needtodwl, eoffset, eoffset+PSYNC_CRYPTO_SECTOR_SIZE);
+    if ((sectorid==firstsectorid && offset%PSYNC_CRYPTO_SECTOR_SIZE!=0) || (sectorid==lastsectorid && (offset+size)%PSYNC_CRYPTO_SECTOR_SIZE!=0)){
+      end=eoffset+PSYNC_CRYPTO_SECTOR_SIZE;
+      if (itr && itr->from<end)
+        end=itr->from;
+      psync_interval_tree_add(&needtodwl, eoffset, end);
+    }
     if (sectorid!=firstsectorid && sectorid%PSYNC_CRYPTO_HASH_TREE_SECTORS!=0)
       continue;
     // Here we create offsets by current size as if the file grew, we would have already moved all trailing checksums to a new location and
@@ -1363,12 +1367,15 @@ retry:
       psync_fs_crypto_offsets_by_plainsize(of->extender->extendedto, &offsets);
     else
       psync_fs_crypto_offsets_by_plainsize(of->currentsize, &offsets);
-    for (l=0; l<offsets.treelevels; l++){
+    for (l=0; l<=offsets.treelevels; l++){
       psync_fs_crypto_get_auth_sector_off(sectorid, l, &offsets, &eoffset, &asize, &aid);
       itr=psync_interval_tree_first_interval_containing_or_after(of->writeintervals, eoffset);
       if (itr && itr->from<=eoffset)
         continue;
-      psync_interval_tree_add(&needtodwl, eoffset, eoffset+asize);
+      end=eoffset+asize;
+      if (itr && itr->from<end)
+        end=itr->from;
+      psync_interval_tree_add(&needtodwl, eoffset, end);
     }
   }
   if (needtodwl){
@@ -1431,6 +1438,7 @@ retry:
           psync_free(tmpbuf);
           goto retry;
         }
+        debug(D_NOTICE, "wrote %u bytes to offset %lu", (unsigned)ranges[l].size, (unsigned long)ranges[l].offset);
         bw=psync_file_pwrite(of->datafile, ranges[l].buf, ranges[l].size, ranges[l].offset);
         if (bw!=ranges[l].size){
           debug(D_ERROR, "write to datafile of %u bytes returned %d", (unsigned)ranges[l].size, (int)bw);
