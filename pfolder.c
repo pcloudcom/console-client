@@ -252,6 +252,7 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
   psync_sql_res *res;
   psync_variant_row row;
   const char *str;
+  psync_folderid_t cfolderid;
   size_t len;
   uint32_t flags;
   e=NULL;
@@ -270,6 +271,7 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
     row=psync_sql_fetch_row(res);
     if (unlikely_log(!row))
       break;
+    cfolderid=folderid;
     flags=psync_get_number(row[2]);
     folderid=psync_get_number(row[0]);
     str=psync_get_lstring(row[1], &len);
@@ -277,7 +279,7 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
     psync_sql_free_result(res);
     if (e){
       if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
-        e=str_list_decode(folderid, e);
+        e=str_list_decode(cfolderid, e);
         if (unlikely_log(!e))
           goto err;
       }
