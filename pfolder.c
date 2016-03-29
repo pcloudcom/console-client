@@ -248,7 +248,7 @@ static string_list *str_list_decode(psync_folderid_t folderid, string_list *e){
 }
 
 static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folderid){
-  string_list *e;
+  string_list *e, *c;
   psync_sql_res *res;
   psync_variant_row row;
   const char *str;
@@ -271,6 +271,10 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
     if (unlikely_log(!row))
       break;
     flags=psync_get_number(row[2]);
+    folderid=psync_get_number(row[0]);
+    str=psync_get_lstring(row[1], &len);
+    c=str_to_list_element(str, len);
+    psync_sql_free_result(res);
     if (e){
       if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
         e=str_list_decode(folderid, e);
@@ -279,10 +283,7 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
       }
       psync_list_add_head(lst, &e->list);
     }
-    folderid=psync_get_number(row[0]);
-    str=psync_get_lstring(row[1], &len);
-    e=str_to_list_element(str, len);
-    psync_sql_free_result(res);
+    e=c;
   }
   psync_sql_free_result(res);
   debug(D_ERROR, "folder %lu not found in database", (unsigned long)folderid);
@@ -343,9 +344,7 @@ char *psync_get_path_by_folderid_sep(psync_folderid_t folderid, const char *sep,
   char *ret;
   int res;
   psync_list_init(&folderlist);
-  psync_sql_rdlock();
   res=psync_add_path_to_list_decode(&folderlist, folderid);
-  psync_sql_rdunlock();
   if (unlikely_log(res)){
     psync_free_string_list(&folderlist);
     return PSYNC_INVALID_PATH;
