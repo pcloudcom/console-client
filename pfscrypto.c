@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -212,7 +212,7 @@ static int psync_fs_crypto_read_newfile_full_sector_from_log(psync_openfile_t *o
   rd=psync_file_pread(of->logfile, &hdr, sizeof(hdr), se->logoffset);
   if (unlikely(rd!=sizeof(hdr))){
     debug(D_ERROR, "read from log of %u bytes returned %d", (unsigned)sizeof(hdr), (int)rd);
-    return -EIO;    
+    return -EIO;
   }
   if (hdr.type!=PSYNC_CRYPTO_LOG_DATA){
     debug(D_ERROR, "bad log record type %u", (unsigned)hdr.type);
@@ -268,6 +268,7 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
     off=psync_fs_crypto_auth_offset(0, sectorid);
     ssize=PSYNC_CRYPTO_SECTOR_SIZE;
   }
+  debug(D_NOTICE, "reading first sector from offset %lu, size %u", (unsigned long)off, (unsigned)ssize);
   rd=psync_file_pread(of->datafile, buff, ssize, off);
   if (unlikely_log(rd!=ssize))
     return -1;
@@ -290,7 +291,8 @@ static int psync_fs_crypto_do_local_tree_check(psync_openfile_t *of, psync_crypt
     if (unlikely_log(rd!=ssize))
       return -1;
     if (unlikely(memcmp(buff+authoff, auth, sizeof(auth)))){
-      debug(D_WARNING, "verify failed on level %u, sectorid %u, off %lu, ssize %u", (unsigned)level, (unsigned)sectorid, (unsigned long)off, (unsigned)ssize);
+      debug(D_WARNING, "verify failed on level %u, sectorid %u, off %lu, ssize %u, authoff %u",
+            (unsigned)level, (unsigned)sectorid, (unsigned long)off, (unsigned)ssize, (unsigned)authoff);
       return -1;
     }
     psync_crypto_sign_auth_sector(of->encoder, buff, ssize, auth);
@@ -522,7 +524,7 @@ static void psync_fs_crypto_set_sector_log_offset(psync_openfile_t *of, psync_cr
   psync_tree_added_at(&of->sectorsinlog, &tr->tree, &ntr->tree);
 }
 
-static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sectorid_t oldsectorid, psync_crypto_sectorid_t newsectorid, 
+static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sectorid_t oldsectorid, psync_crypto_sectorid_t newsectorid,
                                           psync_crypto_auth_sector_t *autharr, psync_crypto_offsets_t *offsets){
   psync_crypto_log_header hdr;
   psync_crypto_offsets_t ooffsets;
@@ -726,7 +728,7 @@ static int psync_fs_crypto_process_log(psync_file_t lfd, psync_file_t dfd, psync
     return -1;
   }
   if (unlikely(mr->crc!=psync_crc32c(PSYNC_CRC_INITIAL, mr, offsetof(psync_crypto_master_record, crc)))){
-    debug(D_WARNING, "got log file with bad master record CRC, expected %u got %u", (unsigned)mr->crc, 
+    debug(D_WARNING, "got log file with bad master record CRC, expected %u got %u", (unsigned)mr->crc,
           (unsigned)psync_crc32c(PSYNC_CRC_INITIAL, mr, offsetof(psync_crypto_master_record, crc)));
     return -1;
   }
@@ -870,7 +872,7 @@ static int psync_fs_crypto_log_flush_and_process(psync_openfile_t *of, const cha
   return 0;
 err_eio:
   psync_file_close(fd);
-  return -EIO; 
+  return -EIO;
 }
 
 static int psync_fs_write_interval_tree_to_log(psync_openfile_t *of){
@@ -956,8 +958,8 @@ static int psync_fs_crypto_do_finalize_log(psync_openfile_t *of, int fullsync){
   olog=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
   fileidhex[sizeof(psync_fsfileid_t)]='f';
   flog=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  if (unlikely_log(psync_file_rename_overwrite(olog, flog)) || 
-      unlikely_log((of->logfile=psync_file_open(olog, P_O_RDWR, P_O_CREAT|P_O_TRUNC))==INVALID_HANDLE_VALUE) || 
+  if (unlikely_log(psync_file_rename_overwrite(olog, flog)) ||
+      unlikely_log((of->logfile=psync_file_open(olog, P_O_RDWR, P_O_CREAT|P_O_TRUNC))==INVALID_HANDLE_VALUE) ||
       unlikely_log(psync_fs_crypto_init_log(of))){
     psync_free(olog);
     psync_free(flog);
@@ -1022,7 +1024,7 @@ PSYNC_NOINLINE static void psync_fs_crypto_reset_log_to_off(psync_openfile_t *of
       debug(D_WARNING, "could not create new file %s", log);
     else if (psync_fs_crypto_init_log(of))
       debug(D_WARNING, "could not init log file %s", log);
-    
+
   }
   else
     debug(D_NOTICE, "no need to reset log");
@@ -1381,7 +1383,7 @@ retry:
       // if we are past initialsize, we are probably trying to download uncommited auth sector
       if (itr->from>=eoffset)
         break;
-      debug(D_NOTICE, "need to download from offset %lu size %lu to do a write at offset %lu size %lu", 
+      debug(D_NOTICE, "need to download from offset %lu size %lu to do a write at offset %lu size %lu",
             (unsigned long)itr->from, (unsigned long)(itr->to-itr->from), (unsigned long)offset, (unsigned long)size);
       if (itr->to>eoffset)
         itr->to=eoffset;
@@ -1493,7 +1495,7 @@ static int psync_fs_crypto_ftruncate_down(psync_openfile_t *of, uint64_t size){
       if (of->extender->extendedto>size)
         psync_fs_crypto_kill_extender_locked(of);
       else{
-        debug(D_NOTICE, "extender is so far extended up to %lu, switching target from %lu to %lu and we are done", 
+        debug(D_NOTICE, "extender is so far extended up to %lu, switching target from %lu to %lu and we are done",
               (unsigned long)of->extender->extendedto, (unsigned long)of->extender->extendto, (unsigned long)size);
         of->extender->extendto=size;
         of->currentsize=size;
@@ -1564,7 +1566,7 @@ static void psync_fs_extender_thread(void *ptr){
   uint64_t cs;
   int ret;
   of=(psync_openfile_t *)ptr;
-  pthread_mutex_lock(&of->mutex);  
+  pthread_mutex_lock(&of->mutex);
   assert(of->extender);
   ext=of->extender;
   while (!ext->kill && ext->extendedto<ext->extendto){
@@ -1688,7 +1690,7 @@ retry:
       return psync_fs_crypto_ftruncate_down(of, size);
   }
   else
-    ret=0;  
+    ret=0;
   return ret;
 }
 

@@ -279,13 +279,14 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
       if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
         e=str_list_decode(folderid, e);
         if (unlikely_log(!e))
-          break;
+          goto err;
       }
       psync_list_add_head(lst, &e->list);
     }
     e=c;
   }
   psync_sql_free_result(res);
+err:
   debug(D_ERROR, "folder %lu not found in database", (unsigned long)folderid);
   return -1;
 }

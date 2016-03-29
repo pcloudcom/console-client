@@ -2570,10 +2570,16 @@ int psync_pagecache_readv_locked(psync_openfile_t *of, psync_pagecache_read_rang
   psync_page_waiter_t *pwt;
   char *pbuff;
   psync_list waiting;
-  int i, ret;
+  int i, ret, needkey;
   initialsize=of->initialsize;
   hash=of->hash;
   fileid=of->remotefileid;
+  if (of->encrypted && of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER && initialsize){
+    needkey=1;
+    of->encoder=PSYNC_CRYPTO_LOADING_SECTOR_ENCODER;
+  }
+  else
+    needkey=0;
   pthread_mutex_unlock(&of->mutex);
   rq=psync_new(psync_request_t);
   psync_list_init(&rq->ranges);
@@ -2623,7 +2629,7 @@ int psync_pagecache_readv_locked(psync_openfile_t *of, psync_pagecache_read_rang
       unlock_wait(hash);
     }
   }
-  if (psync_list_isempty(&rq->ranges)){
+  if (psync_list_isempty(&rq->ranges) && !needkey){
     if (psync_list_isempty(&waiting)){
       psync_free(rq);
       return 0;
@@ -2633,10 +2639,23 @@ int psync_pagecache_readv_locked(psync_openfile_t *of, psync_pagecache_read_rang
     rq->of=of;
     rq->fileid=fileid;
     rq->hash=hash;
+    rq->needkey=needkey;
     psync_fs_inc_of_refcnt_and_readers(of);
     psync_run_thread1("readv unmodified", psync_pagecache_read_unmodified_thread, rq);
   }
   ret=0;
+  if (needkey){
+    debug(D_NOTICE, "waiting for key to download");
+    pthread_mutex_lock(&of->mutex);
+    while (of->encoder==PSYNC_CRYPTO_LOADING_SECTOR_ENCODER)
+      pthread_cond_wait(&enc_key_cond, &of->mutex);
+    if (of->encoder==PSYNC_CRYPTO_FAILED_SECTOR_ENCODER){
+      debug(D_NOTICE, "failed to download key");
+      ret=-1;
+    }
+    pthread_mutex_unlock(&of->mutex);
+    debug(D_NOTICE, "waited for key to download");
+  }
   lock_wait(hash);
   psync_list_for_each_element(pwt, &waiting, psync_page_waiter_t, listwaiter){
     while (!pwt->ready){
