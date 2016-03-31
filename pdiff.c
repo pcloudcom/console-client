@@ -231,8 +231,10 @@ static psync_socket *get_connected_socket(){
       }
       else if (result==4000)
         psync_milisleep(5*60*1000);
-      else if (result==2205)
-        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
+      else if (result==2205){
+        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
+        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+      }
       else
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
