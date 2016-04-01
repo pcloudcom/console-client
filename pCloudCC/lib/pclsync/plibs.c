@@ -353,6 +353,9 @@ int psync_sql_connect(const char *db){
   int initdbneeded=0;
   int code;
 
+//   printf("Using sqlite version %s source %s \n", sqlite3_libversion(), sqlite3_sourceid());
+//   printf("Macros sqlite version %s source %s \n",  SQLITE_VERSION, SQLITE_SOURCE_ID);
+  
   assert(sqlite3_libversion_number()==SQLITE_VERSION_NUMBER);
   assert(!strcmp(sqlite3_sourceid(), SQLITE_SOURCE_ID));
   assert(!strcmp(sqlite3_libversion(), SQLITE_VERSION));
