@@ -1,0 +1,10 @@
+﻿Build started 6/18/2015 12:02:52 PM.
+Project "F:\pclsync\lib\mbedtls\vc-build\ALL_BUILD.vcxproj" on node 2 (Build target(s)).
+CustomBuild:
+  Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt
+  CMake does not need to re-run because F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp is up-to-date.
+Done Building Project "F:\pclsync\lib\mbedtls\vc-build\ALL_BUILD.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:00.12

@@ -1,0 +1,31 @@
+diff --git a/pcompat.c b/pcompat.c
+index 0fe7286..ccabbc0 100644
+--- a/pcompat.c
++++ b/pcompat.c
+@@ -3053,6 +3053,7 @@ int psync_rebuild_icons()
+   DWORD_PTR dwResult;
+   LONG lRegResult;
+   int result = 0;
++  
+   // we're going to change the Shell Icon Size value
+   const TCHAR* sRegValueName = L"Shell Icon Size";
+ 
+@@ -3101,8 +3102,8 @@ int psync_rebuild_icons()
+   // Update all windows
+   SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETNONCLIENTMETRICS,
+     0, SMTO_ABORTIFHUNG, 5000, &dwResult);
+-
+-  SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH, NULL, NULL);
++  
++  SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+ 
+   result = 1;
+ 
+@@ -3121,7 +3122,6 @@ int psync_invalidate_os_cache(const char *path){
+   wpath=utf8_to_wchar_path(path);
+   SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATH, wpath, NULL);
+   psync_free(wpath);
+-  psync_rebuild_icons();
+   return 0;
+ #elif defined(P_OS_MACOSX)
+   int pfds[2];

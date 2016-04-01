@@ -1,0 +1,77 @@
+﻿  xtea.c
+  x509write_csr.c
+  x509write_crt.c
+  x509_csr.c
+  x509_crt.c
+  x509_crl.c
+  x509_create.c
+  x509.c
+  version_features.c
+  version.c
+  timing.c
+  threading.c
+  ssl_tls.c
+  ssl_srv.c
+f:\pclsync\lib\mbedtls\library\ssl_srv.c(2955): warning C4146: unary minus operator applied to unsigned type, result still unsigned
+  ssl_cli.c
+  ssl_ciphersuites.c
+  ssl_cache.c
+  sha512.c
+  sha256.c
+  sha1.c
+  Generating Code...
+  Compiling...
+  rsa.c
+  ripemd160.c
+  platform.c
+  pkwrite.c
+  pkparse.c
+  pkcs5.c
+  pkcs12.c
+  pkcs11.c
+  pk_wrap.c
+  pk.c
+  pem.c
+  pbkdf2.c
+  padlock.c
+  oid.c
+  net.c
+  memory_buffer_alloc.c
+  md_wrap.c
+  md5.c
+  md4.c
+  md2.c
+  Generating Code...
+  Compiling...
+  md.c
+  hmac_drbg.c
+  havege.c
+  gcm.c
+  error.c
+  entropy_poll.c
+  entropy.c
+  ecp_curves.c
+  ecp.c
+  ecdsa.c
+  ecdh.c
+  dhm.c
+  des.c
+  debug.c
+  ctr_drbg.c
+  cipher_wrap.c
+  cipher.c
+  certs.c
+  ccm.c
+  camellia.c
+  Generating Code...
+  Compiling...
+  blowfish.c
+  bignum.c
+  base64.c
+  asn1write.c
+  asn1parse.c
+  arc4.c
+  aesni.c
+  aes.c
+  Generating Code...
+  mbedTLS.vcxproj -> F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\mbedTLS.lib

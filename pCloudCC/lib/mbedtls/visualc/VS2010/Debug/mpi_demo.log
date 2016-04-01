@@ -1,0 +1,4 @@
+﻿C:\Program Files\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(381,5): warning MSB8028: The intermediate directory (Debug\) contains files shared from another project (aescrypt2.vcxproj, crypt_and_hash.vcxproj, dh_client.vcxproj, dh_genprime.vcxproj, dh_server.vcxproj, generic_sum.vcxproj, gen_key.vcxproj, hello.vcxproj, key_app.vcxproj, key_app_writer.vcxproj, mbedTLS.vcxproj, md5sum.vcxproj, sha1sum.vcxproj, sha2sum.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  mpi_demo.c
+mbedTLS.lib(bignum.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+  mpi_demo.vcxproj -> F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\mpi_demo.exe

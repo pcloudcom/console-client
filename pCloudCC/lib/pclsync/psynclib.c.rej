@@ -1,0 +1,23 @@
+--- a/psynclib.c
++++ b/psynclib.c
+@@ -836,20 +836,17 @@
+ 
+ int psync_pause(){
+   psync_set_run_status(PSTATUS_RUN_PAUSE);
+-  psync_rebuild_icons();
+   return 0;
+ }
+ 
+ int psync_stop(){
+   psync_set_run_status(PSTATUS_RUN_STOP);
+   psync_timer_notify_exception();
+-  psync_rebuild_icons();
+   return 0;
+ }
+ 
+ int psync_resume(){
+   psync_set_run_status(PSTATUS_RUN_RUN);
+-  psync_rebuild_icons();
+   return 0;
+ }
+ 

@@ -1,0 +1,11 @@
+﻿C:\Program Files\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(381,5): warning MSB8028: The intermediate directory (Debug\) contains files shared from another project (aescrypt2.vcxproj, crypt_and_hash.vcxproj, dh_client.vcxproj, generic_sum.vcxproj, hello.vcxproj, mbedTLS.vcxproj, md5sum.vcxproj, sha1sum.vcxproj, sha2sum.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  dh_genprime.c
+mbedTLS.lib(aes.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(bignum.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ctr_drbg.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(entropy.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(entropy_poll.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(net.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha512.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(timing.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+  dh_genprime.vcxproj -> F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\dh_genprime.exe

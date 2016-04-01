@@ -1,0 +1,12 @@
+﻿Build started 6/18/2015 12:02:44 PM.
+Project "F:\pclsync\lib\mbedtls\vc-build\ZERO_CHECK.vcxproj" on node 2 (Build target(s)).
+CustomBuild:
+  Checking Build System
+  CMake does not need to re-run because F:/pclsync/lib/mbedtls/vc-build/CMakeFiles/generate.stamp is up-to-date.
+  CMake does not need to re-run because F:/pclsync/lib/mbedtls/vc-build/library/CMakeFiles/generate.stamp is up-to-date.
+  CMake does not need to re-run because F:/pclsync/lib/mbedtls/vc-build/include/CMakeFiles/generate.stamp is up-to-date.
+Done Building Project "F:\pclsync\lib\mbedtls\vc-build\ZERO_CHECK.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:00.29

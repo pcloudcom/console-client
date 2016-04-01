@@ -1,0 +1,10 @@
+﻿C:\Program Files\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(381,5): warning MSB8028: The intermediate directory (Debug\) contains files shared from another project (aescrypt2.vcxproj, crypt_and_hash.vcxproj, hello.vcxproj, mbedTLS.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  generic_sum.c
+mbedTLS.lib(md.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(md5.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(md_wrap.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ripemd160.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha1.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha256.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha512.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+  generic_sum.vcxproj -> F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\generic_sum.exe

@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="F:\pclsync\lib\mbedtls\programs\pkey\rsa_verify_pss.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="F:\pclsync\lib\mbedtls\programs\pkey\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{2831F768-F81A-44D6-8F1C-A8CFC65ECF9F}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

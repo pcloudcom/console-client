@@ -1,0 +1,41 @@
+﻿C:\Program Files\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(381,5): warning MSB8028: The intermediate directory (Debug\) contains files shared from another project (aescrypt2.vcxproj, crypt_and_hash.vcxproj, dh_client.vcxproj, dh_genprime.vcxproj, dh_server.vcxproj, generic_sum.vcxproj, gen_key.vcxproj, hello.vcxproj, key_app.vcxproj, key_app_writer.vcxproj, mbedTLS.vcxproj, md5sum.vcxproj, mpi_demo.vcxproj, pk_decrypt.vcxproj, sha1sum.vcxproj, sha2sum.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  pk_encrypt.c
+mbedTLS.lib(aes.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(arc4.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(asn1parse.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(asn1write.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(base64.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(bignum.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(blowfish.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(camellia.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ccm.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(cipher.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(cipher_wrap.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ctr_drbg.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(des.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ecdsa.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ecp.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ecp_curves.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(entropy.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(entropy_poll.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(error.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(gcm.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(hmac_drbg.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(md.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(md5.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(md_wrap.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(net.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(oid.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(pem.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(pk.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(pk_wrap.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(pkcs12.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(pkcs5.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(pkparse.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(ripemd160.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(rsa.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha1.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha256.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha512.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(timing.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+  pk_encrypt.vcxproj -> F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\pk_encrypt.exe

@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="F:\pclsync\lib\mbedtls\programs\ssl\ssl_pthread_server.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="F:\pclsync\lib\mbedtls\programs\ssl\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{36A4ED3B-C082-4262-A280-7A9B7363F1DB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,319 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|Win32">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|Win32">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGUID>{522B5745-AEF3-4C5E-9A25-077B06D4ECEA}</ProjectGUID>
+    <Keyword>Win32Proj</Keyword>
+    <Platform>Win32</Platform>
+    <ProjectName>ALL_BUILD</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+    <PropertyGroup>
+      <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="F:\pclsync\lib\mbedtls\CMakeLists.txt">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/ZERO_CHECK.vcxproj">
+      <Project>980F22A1-DD7C-4B62-A1DD-8D6C6F40237B</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/aes/aescrypt2.vcxproj">
+      <Project>187151AE-E2FB-445A-BCC4-6BF7670F453B</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/test/benchmark.vcxproj">
+      <Project>29333F62-D4AF-4AE6-8E60-337E4D279130</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/x509/cert_app.vcxproj">
+      <Project>62B67B4E-F015-4BE0-B96A-0EB33AC9672A</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/x509/cert_req.vcxproj">
+      <Project>AB40AD48-5E0D-40E0-A865-7019027E9581</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/x509/cert_write.vcxproj">
+      <Project>B23E7A92-5BA8-493F-8C92-7950BA7B6A77</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/x509/crl_app.vcxproj">
+      <Project>F5D01DF0-9F6C-4135-B273-D6C4CCFBA6A8</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/aes/crypt_and_hash.vcxproj">
+      <Project>6E3236A5-E91F-40CE-B91A-82B21AFD8BCC</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/dh_client.vcxproj">
+      <Project>09A7A675-3B06-4EBC-B7C0-4700600B013C</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/dh_genprime.vcxproj">
+      <Project>EFDAA859-AB29-4A45-A9A5-A538E009E315</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/dh_server.vcxproj">
+      <Project>B0C71758-9661-42B0-9E24-7AA4D4D5DA6F</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/ecdsa.vcxproj">
+      <Project>D42C2068-C391-4F93-B757-D7C99D0D0C15</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/random/gen_entropy.vcxproj">
+      <Project>FE7F9032-1587-401A-B107-DE70FB7C8A9F</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/gen_key.vcxproj">
+      <Project>D5285559-CF78-4FCF-96FE-EDE10F3FEF62</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/random/gen_random_ctr_drbg.vcxproj">
+      <Project>3C800847-246A-445E-AF49-0A15A8BCD469</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/random/gen_random_havege.vcxproj">
+      <Project>BF1D00C0-DB22-43C1-B4FB-37C371F02E15</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/hash/generic_sum.vcxproj">
+      <Project>5AB067B6-915E-4CF1-92BD-B24AFBC50A1B</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/hash/hello.vcxproj">
+      <Project>1A0448D6-8E9F-4B7A-A670-2755286F81F4</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/key_app.vcxproj">
+      <Project>D63B1826-04B5-4ED3-9B7D-6D4C5D4C93E0</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/key_app_writer.vcxproj">
+      <Project>76628AD5-C340-4B60-8DC4-C185A3B44728</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/library/mbedtls.vcxproj">
+      <Project>38C6351C-1BF2-45AD-B578-4F38592CB54A</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/hash/md5sum.vcxproj">
+      <Project>E810BC68-BF5C-4A21-958F-C2C5EA0D35D5</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/mini_client.vcxproj">
+      <Project>D6F82364-FE08-4BA3-81A1-1D07F5C5D0AB</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/mpi_demo.vcxproj">
+      <Project>112E3818-9B4F-450F-BE39-EF1082DD488B</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/util/pem2der.vcxproj">
+      <Project>1175CFE2-902C-4CD9-8DA5-847C8969358E</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/pk_decrypt.vcxproj">
+      <Project>3AAB5AA2-CB11-4656-83D3-4641C11BFFC7</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/pk_encrypt.vcxproj">
+      <Project>355045A7-1D80-4306-9701-4197B212F94F</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/pk_sign.vcxproj">
+      <Project>25D2FD37-410B-45E5-8477-2AE1E8F97ECB</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/pk_verify.vcxproj">
+      <Project>91D674CF-665B-450C-95FA-E629F9E7FF4E</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/x509/req_app.vcxproj">
+      <Project>FFFC04A1-5BB6-4B58-A28A-2315AC180C03</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_decrypt.vcxproj">
+      <Project>78FB9DF2-2CE2-4E88-A584-8805B105773B</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_encrypt.vcxproj">
+      <Project>DE710BE0-654F-458D-B453-315FD0DC9D92</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_genkey.vcxproj">
+      <Project>EE549FA8-F14B-4865-9325-B393C3CEAC8D</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_sign.vcxproj">
+      <Project>A9825D20-4FD3-419E-9C2D-4CF8877BF6B4</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_sign_pss.vcxproj">
+      <Project>8BFCA969-5927-4D13-9EF1-82F4CE182FF8</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_verify.vcxproj">
+      <Project>CA596FA8-A635-4681-B288-2F81A260A662</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/pkey/rsa_verify_pss.vcxproj">
+      <Project>C87436B4-51AE-4B5C-9A56-E5D2B3DCBC6B</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/test/selftest.vcxproj">
+      <Project>4B7B0B22-A22C-4597-A15D-8FFE7038CA32</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/hash/sha1sum.vcxproj">
+      <Project>C194D586-8D69-4682-B3CE-C13EA115899F</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/hash/sha2sum.vcxproj">
+      <Project>C40B59A4-C307-4F64-B0A4-384E28201C73</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/test/ssl_cert_test.vcxproj">
+      <Project>A34552DF-0204-4F7B-A75A-69D78E6B0454</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_client1.vcxproj">
+      <Project>6F43E262-5C9E-4D1B-AB8A-13964AB69DA3</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_client2.vcxproj">
+      <Project>BBE36DB4-0422-456D-AFA6-11E6F26C4F98</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_fork_server.vcxproj">
+      <Project>EB63C3E9-F3BA-44D5-A8FF-E7B34430C2AF</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_mail_client.vcxproj">
+      <Project>82351D3F-E83C-415A-AC08-65E2848A6022</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_pthread_server.vcxproj">
+      <Project>A318BF34-E8BA-48A4-A79F-9B5B7AE6A6ED</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_server.vcxproj">
+      <Project>447D1708-CE21-4482-BE30-3FFE6D9AE52E</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/ssl/ssl_server2.vcxproj">
+      <Project>8CE161FE-39B7-4578-B79D-1BD36BDFB450</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/test/ssl_test.vcxproj">
+      <Project>2C6EB99C-3B52-418C-8F27-12A12A651614</Project>
+    </ProjectReference>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/programs/util/strerror.vcxproj">
+      <Project>EB7B5C4F-C152-49A9-AC10-39B8FDAAB459</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

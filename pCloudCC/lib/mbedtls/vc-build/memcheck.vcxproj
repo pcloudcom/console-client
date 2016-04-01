@@ -1,0 +1,261 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|Win32">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|Win32">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGUID>{495BAFEA-0037-4C5A-84D3-78B6718877F3}</ProjectGUID>
+    <Keyword>Win32Proj</Keyword>
+    <Platform>Win32</Platform>
+    <ProjectName>memcheck</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+    <PropertyGroup>
+      <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+      <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">
+    <Midl>
+      <AdditionalIncludeDirectories>F:\pclsync\lib\mbedtls\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="F:\pclsync\lib\mbedtls\CMakeLists.txt">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">Building Custom Rule F:/pclsync/lib/mbedtls/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">setlocal
+C:\CMake\bin\cmake.exe -HF:/pclsync/lib/mbedtls -BF:/pclsync/lib/mbedtls/vc-build --check-stamp-file F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">F:/pclsync/lib/mbedtls/CMakeLists.txt;F:\pclsync\lib\mbedtls\CMakeLists.txt;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeSystem.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInitialize.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeSystemSpecificInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeGenericSystem.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\WindowsPaths.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC-C.cmake;C:\CMake\share\cmake-3.2\Modules\Platform\Windows-MSVC.cmake;F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\3.2.3\CMakeRCCompiler.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeRCInformation.cmake;C:\CMake\share\cmake-3.2\Modules\CMakeCommonLanguageInclude.cmake;F:\pclsync\lib\mbedtls\CMakeLists.txt;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\8610c76a1a5d3228f3c160850d08e0e5\memcheck.rule">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">setlocal
+sed -i.bak s+/usr/bin/valgrind+`which valgrind`+ DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+ctest -O memcheck.log -D ExperimentalMemCheck
+if %errorlevel% neq 0 goto :cmEnd
+tail -n1 memcheck.log | grep 'Memory checking results:' &gt; /dev/null
+if %errorlevel% neq 0 goto :cmEnd
+rm -f memcheck.log
+if %errorlevel% neq 0 goto :cmEnd
+mv DartConfiguration.tcl.bak DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">F:/pclsync/lib/mbedtls/vc-build/CMakeFiles/8610c76a1a5d3228f3c160850d08e0e5/memcheck.rule;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\memcheck</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">setlocal
+sed -i.bak s+/usr/bin/valgrind+`which valgrind`+ DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+ctest -O memcheck.log -D ExperimentalMemCheck
+if %errorlevel% neq 0 goto :cmEnd
+tail -n1 memcheck.log | grep 'Memory checking results:' &gt; /dev/null
+if %errorlevel% neq 0 goto :cmEnd
+rm -f memcheck.log
+if %errorlevel% neq 0 goto :cmEnd
+mv DartConfiguration.tcl.bak DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">F:/pclsync/lib/mbedtls/vc-build/CMakeFiles/8610c76a1a5d3228f3c160850d08e0e5/memcheck.rule;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\memcheck</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">setlocal
+sed -i.bak s+/usr/bin/valgrind+`which valgrind`+ DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+ctest -O memcheck.log -D ExperimentalMemCheck
+if %errorlevel% neq 0 goto :cmEnd
+tail -n1 memcheck.log | grep 'Memory checking results:' &gt; /dev/null
+if %errorlevel% neq 0 goto :cmEnd
+rm -f memcheck.log
+if %errorlevel% neq 0 goto :cmEnd
+mv DartConfiguration.tcl.bak DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">F:/pclsync/lib/mbedtls/vc-build/CMakeFiles/8610c76a1a5d3228f3c160850d08e0e5/memcheck.rule;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\memcheck</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|Win32'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'"></Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">setlocal
+sed -i.bak s+/usr/bin/valgrind+`which valgrind`+ DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+ctest -O memcheck.log -D ExperimentalMemCheck
+if %errorlevel% neq 0 goto :cmEnd
+tail -n1 memcheck.log | grep 'Memory checking results:' &gt; /dev/null
+if %errorlevel% neq 0 goto :cmEnd
+rm -f memcheck.log
+if %errorlevel% neq 0 goto :cmEnd
+mv DartConfiguration.tcl.bak DartConfiguration.tcl
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">F:/pclsync/lib/mbedtls/vc-build/CMakeFiles/8610c76a1a5d3228f3c160850d08e0e5/memcheck.rule;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\memcheck</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|Win32'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="F:\pclsync\lib\mbedtls\vc-build\CMakeFiles\memcheck" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="F:/pclsync/lib/mbedtls/vc-build/ZERO_CHECK.vcxproj">
+      <Project>980F22A1-DD7C-4B62-A1DD-8D6C6F40237B</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

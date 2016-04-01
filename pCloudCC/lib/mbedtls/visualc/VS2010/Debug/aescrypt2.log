@@ -1,0 +1,5 @@
+﻿C:\Program Files\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(381,5): warning MSB8028: The intermediate directory (Debug\) contains files shared from another project (mbedTLS.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  aescrypt2.c
+mbedTLS.lib(aes.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+mbedTLS.lib(sha256.obj) : warning LNK4204: 'F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\vc120.pdb' is missing debugging information for referencing module; linking object as if no debug info
+  aescrypt2.vcxproj -> F:\pclsync\lib\mbedtls\visualc\VS2010\Debug\aescrypt2.exe
