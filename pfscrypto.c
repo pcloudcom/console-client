@@ -313,7 +313,8 @@ static int psync_fs_crypto_wait_no_extender_locked(psync_openfile_t *of){
     ret=of->extender->error;
     do {
       pthread_mutex_unlock(&of->mutex);
-      pthread_mutex_lock(&of->mutex);
+      psync_milisleep(1);
+      psync_fs_lock_file(of);
     } while (of->extender);
     debug(D_NOTICE, "waited for extender to finish");
     return ret;
@@ -1240,7 +1241,7 @@ int psync_fs_crypto_read_modified_locked(psync_openfile_t *of, char *buf, uint64
     debug(D_WARNING, "reading from remote failed with error %d", rfr);
     return rfr;
   }
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   if (unlikely(offset+size>of->currentsize)){
     debug(D_NOTICE, "file size changed during read");
     if (offset>=of->currentsize)
@@ -1419,7 +1420,7 @@ retry:
       psync_interval_tree_free(needtodwl);
       ret=psync_pagecache_readv_locked(of, ranges, icnt);
       // we are unlocked now
-      pthread_mutex_lock(&of->mutex);
+      psync_fs_lock_file(of);
       if (unlikely(ret)){
         psync_free(ranges);
         psync_free(tmpbuf);
@@ -1533,7 +1534,7 @@ retry:
     // unlocked now
     if (ret<0)
       return ret;
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (unlikely(of->writeid!=writeid)){
       debug(D_NOTICE, "writeid changed, restarting");
       goto retry;
@@ -1543,7 +1544,7 @@ retry:
     // unlocked now
     if (ret<0)
       return ret;
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (unlikely(of->writeid!=writeid)){
       debug(D_NOTICE, "writeid changed, restarting");
       goto retry;
@@ -1574,7 +1575,7 @@ static void psync_fs_extender_thread(void *ptr){
   uint64_t cs;
   int ret;
   of=(psync_openfile_t *)ptr;
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   assert(of->extender);
   ext=of->extender;
   while (!ext->kill && ext->extendedto<ext->extendto){
@@ -1598,12 +1599,12 @@ static void psync_fs_extender_thread(void *ptr){
     pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "extender at %lu of %lu", (unsigned long)ext->extendedto, (unsigned long)ext->extendto);
     psync_yield_cpu();
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (ext->waiters){
       pthread_cond_broadcast(&ext->cond);
       pthread_mutex_unlock(&of->mutex);
       psync_yield_cpu();
-      pthread_mutex_lock(&of->mutex);
+      psync_fs_lock_file(of);
     }
     if (of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE){
       ret=psync_fs_crypto_finalize_log(of, 0);
@@ -1626,7 +1627,7 @@ static void psync_fs_extender_thread(void *ptr){
     pthread_cond_broadcast(&ext->cond);
     pthread_mutex_unlock(&of->mutex);
     psync_milisleep(1);
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
   }
   of->extender=NULL;
   pthread_mutex_unlock(&of->mutex);

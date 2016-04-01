@@ -156,7 +156,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       if (fl->writeid==writeid){
         if (fl->encrypted){
           if (fl->logfile){
@@ -258,7 +258,7 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       fl->uploading=1;
       pthread_mutex_unlock(&fl->mutex);
       break;
@@ -280,7 +280,7 @@ int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t 
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       if (fl->currentfolder->folderid!=folderid){
         psync_fstask_release_folder_tasks_locked(fl->currentfolder);
         fl->currentfolder=psync_fstask_get_or_create_folder_tasks_locked(folderid);
@@ -308,7 +308,7 @@ static int psync_fs_relock_fileid(psync_fsfileid_t fileid){
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       pthread_mutex_unlock(&fl->mutex);
       psync_sql_rdunlock();
       return 1;
@@ -336,7 +336,7 @@ void psync_fs_mark_openfile_deleted(uint64_t taskid){
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
       debug(D_NOTICE, "file being deleted %s is still open, marking as deleted", fl->currentname);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       fl->deleted=1;
       pthread_mutex_unlock(&fl->mutex);
       res=psync_sql_prep_statement("UPDATE fstask SET status=12 WHERE id=?");
@@ -366,7 +366,7 @@ int64_t psync_fs_get_file_writeid(uint64_t taskid){
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       d=fl->writeid;
       pthread_mutex_unlock(&fl->mutex);
       psync_sql_rdunlock();
@@ -547,7 +547,7 @@ static int fill_stat_from_open_file(psync_fsfileid_t fileid, struct FUSE_STAT *s
       tr=tr->right;
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
-      pthread_mutex_lock(&fl->mutex);
+      psync_fs_lock_file(fl);
       stbuf->st_size=fl->currentsize;
       debug(D_NOTICE, "found open file with size %lu", (unsigned long)fl->currentsize);
       if (!psync_fstat(fl->logfile, &st))
@@ -933,7 +933,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
     else{
       fl=psync_tree_element(tr, psync_openfile_t, tree);
       if (lock){
-        pthread_mutex_lock(&fl->mutex);
+        psync_fs_lock_file(fl);
         psync_fs_inc_of_refcnt_locked(fl);
       }
       else
@@ -991,7 +991,7 @@ static psync_openfile_t *psync_fs_create_file(psync_fsfileid_t fileid, psync_fsf
     fl->logfile=INVALID_HANDLE_VALUE;
   }
   if (lock)
-    pthread_mutex_lock(&fl->mutex);
+    psync_fs_lock_file(fl);
   psync_sql_unlock();
   return fl;
 }
@@ -1562,7 +1562,7 @@ void psync_fs_inc_of_refcnt_locked(psync_openfile_t *of){
 }
 
 void psync_fs_inc_of_refcnt(psync_openfile_t *of){
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   psync_fs_inc_of_refcnt_locked(of);
   pthread_mutex_unlock(&of->mutex);
 }
@@ -1621,9 +1621,10 @@ retry:
   psync_sql_lock();
   if (pthread_mutex_trylock(&of->mutex)){
     psync_sql_unlock();
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (psync_sql_trylock()){
       pthread_mutex_unlock(&of->mutex);
+      psync_milisleep(1);
       goto retry;
     }
   }
@@ -1633,7 +1634,7 @@ void psync_fs_dec_of_refcnt(psync_openfile_t *of){
   uint32_t refcnt;
   psync_fs_get_both_locks(of);
   refcnt=--of->refcnt;
-  if (refcnt==0)
+  if (!refcnt)
     psync_tree_del(&openfiles, &of->tree);
   psync_sql_unlock();
   pthread_mutex_unlock(&of->mutex);
@@ -1642,7 +1643,7 @@ void psync_fs_dec_of_refcnt(psync_openfile_t *of){
 }
 
 void psync_fs_inc_of_refcnt_and_readers(psync_openfile_t *of){
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   of->refcnt++;
   of->runningreads++;
   pthread_mutex_unlock(&of->mutex);
@@ -1702,7 +1703,7 @@ static void psync_fs_upload_release_timer(void *ptr){
 static void psync_fs_write_timer(psync_timer_t timer, void *ptr){
   psync_openfile_t *of;
   of=(psync_openfile_t *)ptr;
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   psync_timer_stop(timer);
   of->writetimer=PSYNC_INVALID_TIMER;
   debug(D_NOTICE, "got write timer for file %s", of->currentname);
@@ -1716,7 +1717,6 @@ static void psync_fs_write_timer(psync_timer_t timer, void *ptr){
     }
     if (unlikely(of->encrypted && psync_fs_crypto_flush_file(of))){
       debug(D_WARNING, "we are in timer and we failed to flush crypto file, life sux");
-      pthread_mutex_unlock(&of->mutex);
       goto unlock_ex;
     }
     of->releasedforupload=1;
@@ -1740,7 +1740,7 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
   psync_fs_set_thread_name();
   debug(D_NOTICE, "flush %s", path);
   of=fh_to_openfile(fi->fh);
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   if (of->modified){
     psync_sql_res *res;
     uint64_t writeid;
@@ -1796,7 +1796,7 @@ static int psync_fs_fsync(const char *path, int datasync, struct fuse_file_info 
   psync_fs_set_thread_name();
   debug(D_NOTICE, "fsync %s", path);
   of=fh_to_openfile(fi->fh);
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   if (!of->modified || of->staticfile){
     pthread_mutex_unlock(&of->mutex);
     return 0;
@@ -1858,7 +1858,7 @@ static int psync_fs_read(const char *path, char *buf, size_t size, fuse_off_t of
   psync_fs_set_thread_name();
   of=fh_to_openfile(fi->fh);
   currenttime=psync_timer_time();
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   if (of->currentsec==currenttime){
     of->bytesthissec+=size;
     if (of->currentspeed<of->bytesthissec)
@@ -1901,7 +1901,7 @@ static void psync_fs_inc_writeid_locked(psync_openfile_t *of){
     if (unlikely(psync_sql_trylock())){
       pthread_mutex_unlock(&of->mutex);
       psync_sql_lock();
-      pthread_mutex_lock(&of->mutex);
+      psync_fs_lock_file(of);
     }
     if (of->releasedforupload){
       of->releasedforupload=0;
@@ -1956,7 +1956,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     enc=psync_cloud_crypto_get_file_encoder(of->remotefileid, of->hash, 0);
     if (unlikely(psync_crypto_is_error(enc)))
       return -psync_fs_crypto_err_to_errno(psync_crypto_to_error(enc));
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (of->encoder==PSYNC_CRYPTO_UNLOADED_SECTOR_ENCODER)
       of->encoder=enc;
     else
@@ -1968,7 +1968,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
     // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
     pthread_mutex_unlock(&of->mutex);
     psync_sql_lock();
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (of->newfile || of->modified){
       psync_sql_unlock();
       return 1;
@@ -2058,7 +2058,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_static_file_for_writing(psync_openfile
     // we have to take sql_lock and retake of->mutex AFTER, then check if the case is still !of->newfile && !of->modified
     pthread_mutex_unlock(&of->mutex);
     psync_sql_lock();
-    pthread_mutex_lock(&of->mutex);
+    psync_fs_lock_file(of);
     if (!of->staticfile){
       psync_sql_unlock();
       return 1;
@@ -2199,7 +2199,7 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
   if (psync_status.uploadspeed==0){
     if (freed || psync_pagecache_free_from_read_cache(size)>=size){
       debug(D_NOTICE, "there is no active upload and we managed to free from cache, not throttling write");
-      pthread_mutex_lock(&of->mutex);
+      psync_fs_lock_file(of);
       return 1;
     }
   }
@@ -2213,7 +2213,7 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
   debug(D_NOTICE, "limiting write speed to %luKb (%lub)/sec, speed multiplier %lu", (unsigned long)speed/1024, (unsigned long)speed, (unsigned long)mult);
   psync_fs_throttle(size, speed);
   debug(D_NOTICE, "continuing write");
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   return 1;
 }
 
@@ -2263,7 +2263,7 @@ static int psync_fs_write(const char *path, const char *buf, size_t size, fuse_o
   psync_fs_set_thread_name();
 //  debug(D_NOTICE, "write to %s of %lu at %lu", path, (unsigned long)size, (unsigned long)offset);
   of=fh_to_openfile(fi->fh);
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   ret=psync_fs_check_write_space(of, size, offset);
   if (unlikely_log(ret<=0))
     return ret;
@@ -2780,7 +2780,7 @@ static int psync_fs_ftruncate(const char *path, fuse_off_t size, struct fuse_fil
   psync_fs_set_thread_name();
   debug(D_NOTICE, "ftruncate %s %lu", path, (unsigned long)size);
   of=fh_to_openfile(fi->fh);
-  pthread_mutex_lock(&of->mutex);
+  psync_fs_lock_file(of);
   ret=psync_fs_ftruncate_of_locked(of, size);
   pthread_mutex_unlock(&of->mutex);
   return PRINT_RETURN_FORMAT(ret, " for ftruncate of %s to %lu", path, (unsigned long)size);
