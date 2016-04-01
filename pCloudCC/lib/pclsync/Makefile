@@ -22,7 +22,7 @@ else
     UNAME_S := $(shell uname -s)
     UNAME_V := $(shell uname -v)
     ifeq ($(UNAME_S),Linux)
-        CFLAGS += -DP_OS_LINUX
+        CFLAGS += -DP_OS_LINUX -I../sqlite
             ifneq (,$(findstring Debian,$(UNAME_V)))
                 CFLAGS += -DP_OS_DEBIAN
             endif
@@ -55,7 +55,7 @@ ifeq ($(USESSL),securetransport)
 endif
 ifeq ($(USESSL),mbed)
   OBJ += pssl-mbedtls.o
-  CFLAGS += -DP_SSL_MBEDTLS -I./lib/mbedtls/include/
+  CFLAGS += -DP_SSL_MBEDTLS -I../mbedtls/include
 endif
 
 OBJ1=overlay_client.o

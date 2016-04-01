@@ -15,7 +15,6 @@
 #include <string.h>
 #include <map>
 #include <string>
-#include <apr-1.0/apr_poll.h>
 
 namespace control_tools{
 

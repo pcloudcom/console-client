@@ -32,6 +32,7 @@
 #include <iosfwd>
 #include <string>
 #include <boost/shared_ptr.hpp>
+#include <iostream>
 
 struct pstatus_struct_;
 
