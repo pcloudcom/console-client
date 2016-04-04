@@ -13,11 +13,11 @@ set (SQLITE3_PATH ${CMAKE_SOURCE_DIR}/lib/sqlite)
 add_subdirectory(${MBEDTLS_PATH})
 
 include_directories(${SQLITE3_PATH})
-add_custom_target(
-  sqlite3_lib
-  COMMAND ./configure && make
-  WORKING_DIRECTORY ${SQLITE3_PATH}
-)
+# add_custom_target(
+#   sqlite3_lib
+#   COMMAND ./configure && make
+#   WORKING_DIRECTORY ${SQLITE3_PATH}
+# )
 
 include_directories(${PCLSYNC_PATH})
 # add_custom_target(

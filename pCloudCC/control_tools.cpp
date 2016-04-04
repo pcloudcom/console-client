@@ -74,7 +74,7 @@ void process_commands()
   }
 }
 
-int demonize(bool do_commands) {
+int daemonize(bool do_commands) {
   pid_t pid, sid;
 
   pid = fork();

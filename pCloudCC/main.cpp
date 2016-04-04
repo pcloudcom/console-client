@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
   std::cout << "pCloud console client v."<< version << std::endl;
   std::string username;
   std::string password;
-  bool demon = false;
+  bool daemon = false;
   bool commands = false;
   bool commands_only = false;
   
@@ -24,10 +24,10 @@ int main(int argc, char **argv) {
         ("password,p", po::value<std::string>(&password), "pCloud account password")
         ("crypto,c", po::value<std::string>(), "Crypto password")
         ("passascrypto,s", po::value<std::string>(), "Use user password as crypto password also.")
-        ("deamonize,d", po::bool_switch(&demon), "Demonize the process.")
-        ("commands ,o", po::bool_switch(&commands), "Parent stays alive and processes command after demoziation. ")
+        ("daemonize,d", po::bool_switch(&daemon), "Daemonize the process.")
+        ("commands ,o", po::bool_switch(&commands), "Parent stays alive and processes commands. ")
         ("mountpoint,m", po::value<std::string>(), "Mount point where drive to be mounted.")
-        ("commands_only,k", po::bool_switch(&commands_only),"Demon already started pass only commands")
+        ("commands_only,k", po::bool_switch(&commands_only),"Daemon already started pass only commands")
     ;
 
     po::variables_map vm;        
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     
     for (int i = 1; i < argc;++i)
       memset(argv[i],0,strlen(argv[i]));
-    if (demon){
+    if (daemon){
       strncpy(argv[0], "pCloudDriveDeamon", strlen(argv[0]));
     } else {
       strncpy(argv[0], "pCloudDrive", strlen(argv[0]));
@@ -81,8 +81,8 @@ int main(int argc, char **argv) {
   }
 
   
-    if (demon)
-      ct::demonize(commands);
+    if (daemon)
+      ct::daemonize(commands);
     else {
       if (!console_client::clibrary::init())
         sleep(360000);

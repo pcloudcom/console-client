@@ -31,7 +31,7 @@ namespace control_tools {
 int start_crypto(const char * pass);
 int stop_crypto();
 int finalize();
-int demonize(bool do_commands);
+int daemonize(bool do_commands);
 void process_commands();
 }
 
