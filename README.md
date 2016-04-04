@@ -3,13 +3,16 @@
 This is a simple linux console client for pCloud cloud storage. 
 
 ## Required libraries 
-Zlib, Boost, Pthread, Fuse
+[Zlib](http://zlib.net/)  A Massively Spiffy Yet Delicately Unobtrusive Compression Library
+[Boost](http://www.boost.org/) Boost system and boost program options libraries used.
+[Pthread](http://www.gnu.org/) 
+[Fuse](https://github.com/libfuse/libfuse) Filesystem in Userspace.
 
 Also requires 
-CMake and Automake build systems.
+[CMake](https://cmake.org/) build system.
 
 On ubuntu you can run the following command:
-sudo apt-get install cmake zlib1g-dev  libboost-all-dev libpthread-stubs0-dev libfuse-dev automake
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev
 
 ## Usage
 - ./pcl_client -h
