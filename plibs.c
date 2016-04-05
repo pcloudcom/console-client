@@ -476,6 +476,7 @@ typedef struct {
   psync_list list;
   const char *file;
   const char *thread;
+  struct timespec tm;
   unsigned line;
 } rd_lock_data;
 
@@ -511,12 +512,13 @@ static void record_wrunlock(){
   wrlocked=0;
 }
 
-static void record_rdlock(const char *file, unsigned line){
+static void record_rdlock(const char *file, unsigned line, struct timespec *tm){
   rd_lock_data *lock;
   lock=psync_new(rd_lock_data);
   lock->file=file;
   lock->thread=psync_thread_name;
   lock->line=line;
+  memcpy(&lock->tm, tm, sizeof(struct timespec));
   pthread_mutex_lock(&rdmutex);
   psync_list_add_tail(&rdlocks, &lock->list);
   pthread_mutex_unlock(&rdmutex);
@@ -534,13 +536,20 @@ static rd_lock_data *record_rdunlock(){
   return lock;
 }
 
+static void time_format(time_t tm, unsigned long ns, char *result);
+
 static void dump_locks(){
   rd_lock_data *lock;
-  if (wrlocked)
-    debug(D_ERROR, "write lock taken by thread %s at %s:%u", wrlockthread, wrlockfile, wrlockline);
+  char dttime[36];
+  if (wrlocked){
+    time_format(sqllockstart.tv_sec, sqllockstart.tv_nsec, dttime);
+    debug(D_ERROR, "write lock taken by thread %s from %s:%u at %s", wrlockthread, wrlockfile, wrlockline, dttime);
+  }
   pthread_mutex_lock(&rdmutex);
-  psync_list_for_each_element(lock, &rdlocks, rd_lock_data, list)
-    debug(D_ERROR, "read lock taken by thread %s at %s:%u", lock->thread, lock->file, lock->line);
+  psync_list_for_each_element(lock, &rdlocks, rd_lock_data, list){
+    time_format(lock->tm.tv_sec, lock->tm.tv_nsec, dttime);
+    debug(D_ERROR, "read lock taken by thread %s from %s:%u at %s", lock->thread, lock->file, lock->line, dttime);
+  }
   pthread_mutex_unlock(&rdmutex);
 }
 
@@ -579,6 +588,7 @@ void psync_sql_do_lock(const char *file, unsigned line){
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)
       debug(D_WARNING, "waited %lu milliseconds for database write lock", msec);
+    assert(sqllockcnt==0);
     sqllockcnt++;
     memcpy(&sqllockstart, &end, sizeof(struct timespec));
     record_wrlock(file, line);
@@ -603,7 +613,7 @@ void psync_sql_unlock(){
     psync_nanotime(&end);
     msec=(end.tv_sec-sqllockstart.tv_sec)*1000+end.tv_nsec/1000000-sqllockstart.tv_nsec/1000000;
     if (msec>=10)
-      debug(D_WARNING, "held database write lock for %lu milliseconds taken at %s:%u", msec, wrlockfile, wrlockline);
+      debug(D_WARNING, "held database write lock for %lu milliseconds taken from %s:%u", msec, wrlockfile, wrlockline);
     record_wrunlock();
     psync_rwlock_unlock(&psync_db_lock);
   }
@@ -633,11 +643,11 @@ void psync_sql_do_rdlock(const char *file, unsigned line){
       debug(D_WARNING, "waited %lu milliseconds for database read lock", msec);
     sqlrdlockcnt++;
     memcpy(&sqlrdlockstart, &end, sizeof(struct timespec));
-    record_rdlock(file, line);
+    record_rdlock(file, line, &sqlrdlockstart);
   }
   else if (++sqlrdlockcnt==1){
     psync_nanotime(&sqlrdlockstart);
-    record_rdlock(file, line);
+    record_rdlock(file, line, &sqlrdlockstart);
   }
 }
 #else
@@ -698,7 +708,7 @@ int psync_sql_tryupgradelock(){
     assert(sqllockcnt==1);
     sqllockstart=sqlrdlockstart;
     record_wrlock(lock->file, lock->line);
-    debug(D_NOTICE, "upgraded read lock taken at %s:%u to a write lock", lock->file, lock->line);
+    debug(D_NOTICE, "upgraded read lock taken from %s:%u to a write lock", lock->file, lock->line);
     psync_free(lock);
     return 0;
   }
