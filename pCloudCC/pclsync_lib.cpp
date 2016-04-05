@@ -30,12 +30,31 @@
 
 #include <iostream>
 
+
 namespace cc  = console_client;
 namespace clib  = cc::clibrary;
 
 static clib::pclsync_lib  g_lib;
 
 clib::pclsync_lib& clib::get_lib(){return g_lib;}
+
+#include <string>
+#include <iostream>
+#include <cstdio>
+#include <memory>
+
+static std::string exec(const char* cmd) {
+    boost::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) return "ERROR";
+    char buffer[128];
+    std::string result = "";
+    while (!feof(pipe.get())) {
+        if (fgets(buffer, 128, pipe.get()) != NULL)
+            result += buffer;
+    }
+    return result;
+}
+
 
 void event_handler(psync_eventtype_t event, psync_eventdata_t eventdata){
  if (event<PEVENT_FIRST_USER_EVENT){
@@ -114,9 +133,11 @@ static int finalize (const char* path) {
   psync_destroy();
   exit(0);
 }
-
+static const std::string client_name = " Console Client v.2.0.1";
 int clib::init()//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto, int usesrypto_userpass)
 {
+  std::string software_string = exec("lsb_release -ds");
+  psync_set_software_string(software_string.append(client_name).c_str());
   if (g_lib.setup_crypto_ && g_lib.crypto_pass_.empty() )
     return 3;
   g_lib.was_init_ = true;
