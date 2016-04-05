@@ -1592,6 +1592,8 @@ static int psync_net_get_upload_checksums(psync_socket *api, psync_uploadid_t up
     // should we delete the uploadid from db as well so we don't loop constantly?
     return PSYNC_NET_TEMPFAIL;
   }
+  if (!hdr.filesize)
+    return PSYNC_NET_PERMFAIL;
   cs=(psync_file_checksums *)psync_malloc(offsetof(psync_file_checksums, blocks)+(sizeof(psync_block_checksum)+sizeof(uint32_t))*i);
   cs->filesize=hdr.filesize;
   cs->blocksize=hdr.blocksize;
@@ -1989,7 +1991,7 @@ static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_ch
   unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
   if (unlikely_log(psync_file_seek(fd, off, P_SEEK_SET)==-1))
     return PSYNC_NET_TEMPFAIL;
-  debug(D_NOTICE, "scanning in range starting %lu, length %lu", (unsigned long)off, (unsigned long)len);
+  debug(D_NOTICE, "scanning in range starting %lu, length %lu, blocksize %u", (unsigned long)off, (unsigned long)len, (unsigned)checksums->blocksize);
   if (checksums->blocksize*2>PSYNC_COPY_BUFFER_SIZE || len<PSYNC_COPY_BUFFER_SIZE)
     buffersize=checksums->blocksize*2;
   else
@@ -2022,12 +2024,12 @@ static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_ch
       }
       blockidx=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
       if (blockidx){
-//        debug(D_NOTICE, "got block, buffoff=%lu, outbyteoff=%lu, off=%lu", buffoff, outbyteoff, off);
+//        debug(D_NOTICE, "got block, buffoff+outbyteoff=%lu, off=%lu, blockidx=%u", buffoff+outbyteoff, off, (unsigned)(blockidx-1));
         if (buffoff+outbyteoff+checksums->blocksize<=len)
           blen=checksums->blocksize;
         else
           blen=len-buffoff-outbyteoff;
-        if (ur && ur->off+ur->len==(blockidx-1)*checksums->blocksize)
+        if (ur && ur->off+ur->len==(blockidx-1)*checksums->blocksize && ur->uploadoffset+ur->len==off+buffoff+outbyteoff)
           ur->len+=blen;
         else{
           ur=psync_new(psync_upload_range_list_t);

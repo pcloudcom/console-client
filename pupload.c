@@ -871,16 +871,18 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     }
 restart:
     if (le->type==PSYNC_URANGE_UPLOAD){
-      debug(D_NOTICE, "uploading %lu bytes", (unsigned long)le->len);
+      debug(D_NOTICE, "uploading %lu bytes to offset %lu", (unsigned long)le->len, (unsigned long)le->uploadoffset);
       ret=upload_range(api, le, upload, uploadid, fd);
     }
     else if (le->type==PSYNC_URANGE_COPY_FILE){
-      debug(D_NOTICE, "copying %lu bytes from fileid %lu hash %lu offset %lu", (unsigned long)le->len, (unsigned long)le->file.fileid,
-                                                                               (unsigned long)le->file.hash, (unsigned long)le->off);
+      debug(D_NOTICE, "copying %lu bytes to offset %lu from fileid %lu hash %lu offset %lu", (unsigned long)le->len, (unsigned long)le->uploadoffset,
+                                                                                             (unsigned long)le->file.fileid, (unsigned long)le->file.hash,
+                                                                                             (unsigned long)le->off);
       ret=upload_from_file(api, le, uploadid, upload);
     }
     else if (le->type==PSYNC_URANGE_COPY_UPLOAD){
-      debug(D_NOTICE, "copying %lu bytes from uploadid %lu offset %lu", (unsigned long)le->len, (unsigned long)le->uploadid, (unsigned long)le->off);
+      debug(D_NOTICE, "copying %lu bytes to offset %lu from uploadid %lu offset %lu", (unsigned long)le->len, (unsigned long)le->uploadoffset,
+                                                                                      (unsigned long)le->uploadid, (unsigned long)le->off);
       ret=upload_from_upload(api, le, uploadid, upload);
     }
     else if (le->type==PSYNC_URANGE_LAST)
