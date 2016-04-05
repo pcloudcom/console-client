@@ -23,7 +23,7 @@ Allowed options:
 -  -p [ --password ] arg     pCloud account password
 -  -c [ --crypto ] arg       Crypto password
 -  -s [ --passascrypto ] arg Use user password as crypto password also.
--  -d [ --damonize ]        Daemonize the process.
+-  -d [ --daemonize ]        Daemonize the process.
 -  -o [ --commands  ]        Parent stays alive and processes command after daemoziation. 
 -  -m [ --mountpoint ] arg   Mount point where drive to be mounted.
 -  -k [ --commands_only ]    Daemon already started pass only commands

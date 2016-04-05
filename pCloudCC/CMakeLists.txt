@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 project(pcl_client)
 
+INCLUDE(CPack)
+
 find_package(Boost COMPONENTS system program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIR})
@@ -51,3 +53,5 @@ add_dependencies(pclsync sqlite3_lib)
 add_dependencies(pcl_client sqlite3_lib pclsync )
 
 install(TARGETS pcl_client RUNTIME DESTINATION bin)
+
+
