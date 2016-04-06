@@ -1243,6 +1243,17 @@ int pk_parse_public_key( pk_context *ctx,
 
     ret = pk_parse_subpubkey( &p, p + keylen, ctx );
 
+#if defined(POLARSSL_RSA_C)
+    if( ret != 0 )
+    {
+        pk_init_ctx( ctx, pk_info_from_type( POLARSSL_PK_RSA ) );
+        p = (unsigned char *) key;
+        ret = pk_get_rsapubkey( &p, p + keylen, pk_rsa( *ctx ) );
+        if( ret != 0)
+          pk_free( ctx );
+    }
+#endif /* POLARSSL_RSA_C */
+
 #if defined(POLARSSL_PEM_PARSE_C)
     pem_free( &pem );
 #endif
