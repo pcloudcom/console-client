@@ -38,9 +38,9 @@ To create a debian package form the source use:
 
 ## Other distributions
 - Binary packages  
-  [pcloudcc-2.0.1-Linux.sh](https://github.com/libfuse/libfuse)   
-  [pcloudcc-2.0.1-Linux.tar.gz](https://github.com/libfuse/libfuse)  
-  [pcloudcc-2.0.1-Linux.tar.Z](https://github.com/libfuse/libfuse)  
-  [pcloudcc_2.0.1-1_amd64.deb](https://github.com/libfuse/libfuse)  
+  [pcloudcc-2.0.1-Linux.sh](https://my.pcloud.com/publink/show?code=XZO7zQZ78ctjSJYvzkhz2mpXjpYMYR3JwjV)   
+  [pcloudcc-2.0.1-Linux.tar.gz](https://my.pcloud.com/publink/show?code=XZ67zQZ0g2x2gBY4HBi5PmjTRairHiblMmk)  
+  [pcloudcc-2.0.1-Linux.tar.Z](https://my.pcloud.com/publink/show?code=XZq7zQZ1glJyYog7L7X1ef8o54GtmjXJT57)  
+  [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZA7zQZrSgwBshWrl8UryJRIGE6o4ljHAi7)  
 - Source  
-  [pcloudcc_2.0.1_Source.tar.gz](https://github.com/libfuse/libfuse)  
+  [pcloudcc_2.0.1_Source.tar.gz](https://my.pcloud.com/publink/show?code=XZI7zQZrxhTlHgqi0YEodNz1l0upmwcSJik)  
