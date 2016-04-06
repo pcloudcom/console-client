@@ -15,7 +15,7 @@ On Ubuntu you can run the following command:
 > sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev  
 
 ## Usage
-./pcl_client -h  
+./pcloudcc -h  
   pCloud console client v.2.0.1  
 Allowed options:  
 -  -h [ --help ]             produce help message
