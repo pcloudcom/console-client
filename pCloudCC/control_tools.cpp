@@ -57,7 +57,7 @@ int finalize(){
 }
 void process_commands()
 {
-  std::cout<< "Supported commands are:" << std::endl << "startcrypto <crypto pass>, stopcrypto, finalize, q, quit" << std::endl;
+  std::cout<< "Supported commands are:" << std::endl << "startcrypto <crypto pass>, stopcrypt, q, quit" << std::endl;
   std::cout<< "> " ;
   for (std::string line; std::getline(std::cin, line);) {
     if (!line.compare("finalize")) {

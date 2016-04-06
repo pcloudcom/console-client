@@ -18,15 +18,15 @@ On Ubuntu you can run the following command:
 ./pcloudcc -h  
   pCloud console client v.2.0.1  
 Allowed options:  
--  -h [ --help ]             produce help message
--  -u [ --username ] arg     pCloud account name
--  -p [ --password ] arg     pCloud account password
--  -c [ --crypto ] arg       Crypto password
+-  -h [ --help ]             produce help message.
+-  -u [ --username ] arg     pCloud account name.
+-  -p [ --password ] arg     pCloud account password.
+-  -c [ --crypto ] arg       Crypto password.
 -  -s [ --passascrypto ] arg Use user password as crypto password also.
 -  -d [ --daemonize ]        Daemonize the process.
 -  -o [ --commands  ]        Parent stays alive and processes commands. 
 -  -m [ --mountpoint ] arg   Mount point where drive to be mounted.
--  -k [ --commands_only ]    Daemon already started pass only commands
+-  -k [ --commands_only ]    Daemon already started pass only commands.
   
 If you whant to be able to mount the files system as non root user you will have to create file   
 /etc/fuse.conf   

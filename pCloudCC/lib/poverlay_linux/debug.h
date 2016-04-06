@@ -19,7 +19,7 @@
 }
 
 #ifndef DEBUG_LEVEL
-#define DEBUG_LEVEL D_ERROR
+#define DEBUG_LEVEL D_NOTICE
 #endif
 
 #define DEBUG_FILE "/tmp/overlay_client.log"

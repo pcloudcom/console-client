@@ -122,6 +122,7 @@ static void status_change(pstatus_t* status) {
 }
 
 static int statrt_crypto (const char* pass) {
+  g_lib.get_out() << "calling startcrypto pass: "<<pass << std::endl;
   g_lib.crypto_pass_ = pass;
   lib_setup_cripto();
 }
