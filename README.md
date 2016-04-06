@@ -24,7 +24,7 @@ Allowed options:
 -  -c [ --crypto ] arg       Crypto password
 -  -s [ --passascrypto ] arg Use user password as crypto password also.
 -  -d [ --daemonize ]        Daemonize the process.
--  -o [ --commands  ]        Parent stays alive and processes command after daemoziation. 
+-  -o [ --commands  ]        Parent stays alive and processes commands. 
 -  -m [ --mountpoint ] arg   Mount point where drive to be mounted.
 -  -k [ --commands_only ]    Daemon already started pass only commands
   
@@ -34,14 +34,13 @@ and put user_allow_other in it.
 
 ## Debian
 To create a debian package form the source use:  
-> dh_make  
 > debuild -i -us -uc -b  
 
 ## Other distributions
 - Binary packages  
-  [pcl_client-2.0.1-Linux.sh](https://github.com/libfuse/libfuse)   
-  [pcl_client-2.0.1-Linux.tar.gz](https://github.com/libfuse/libfuse)  
-  [pcl_client-2.0.1-Linux.tar.Z](https://github.com/libfuse/libfuse)  
+  [pcloudcc-2.0.1-Linux.sh](https://github.com/libfuse/libfuse)   
+  [pcloudcc-2.0.1-Linux.tar.gz](https://github.com/libfuse/libfuse)  
+  [pcloudcc-2.0.1-Linux.tar.Z](https://github.com/libfuse/libfuse)  
   [pcloudcc_2.0.1-1_amd64.deb](https://github.com/libfuse/libfuse)  
 - Source  
-  [pcloudcc_2.0.1-1_Source.tar.gz](https://github.com/libfuse/libfuse)  
+  [pcloudcc_2.0.1_Source.tar.gz](https://github.com/libfuse/libfuse)  

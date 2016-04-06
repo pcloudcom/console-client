@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
-project(pcl_client)
+project(pcloudcc)
 
-INCLUDE(CPack)
+#INCLUDE(CPack)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
@@ -11,7 +11,7 @@ unset(Boost_LIBRARY_DIRS CACHE)
 find_package(Boost COMPONENTS system program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIR})
-
+#set (CMAKE_CXX_FLAGS "-static -Wl,-Bstatic")
 #set (CMAKE_CXX_FLAGS "-Wl,-Bstatic")
 set (PCLSYNC_PATH ${CMAKE_SOURCE_DIR}/lib/pclsync)
 set (MBEDTLS_PATH ${CMAKE_SOURCE_DIR}/lib/mbedtls)
@@ -45,18 +45,18 @@ include_directories(${OVERLAY_CLENT_PATH})
 link_directories(${PCLSYNC_PATH} ${MBEDTLS_PATH}/library ${SQLITE3_PATH} ${OVERLAY_CLENT_PATH})
 
 
-add_executable(pcl_client main.cpp pclsync_lib.cpp control_tools.cpp ${OVERLAY_CLENT_PATH}/overlay_client.c ${OVERLAY_CLENT_PATH}/debug.c ${SQLITE3_PATH}/sqlite3.c)
+add_executable(pcloudcc main.cpp pclsync_lib.cpp control_tools.cpp ${OVERLAY_CLENT_PATH}/overlay_client.c ${OVERLAY_CLENT_PATH}/debug.c ${SQLITE3_PATH}/sqlite3.c)
 
 
-target_link_libraries(pcl_client psynclib mbedtls fuse pthread z dl
+target_link_libraries(pcloudcc psynclib mbedtls fuse pthread z dl
 )
 
-target_link_libraries(pcl_client ${Boost_LIBRARIES})
+target_link_libraries(pcloudcc ${Boost_LIBRARIES})
 
 add_dependencies(pclsync sqlite3_lib)
 
-add_dependencies(pcl_client sqlite3_lib pclsync )
+add_dependencies(pcloudcc sqlite3_lib pclsync )
 
-install(TARGETS pcl_client RUNTIME DESTINATION bin)
+install(TARGETS pcloudcc RUNTIME DESTINATION bin)
 
 

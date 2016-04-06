@@ -1,0 +1,15 @@
+Source: pcloudcc
+Section: bisection
+Priority: optional
+Maintainer: Ivan Stoev <ivan.stoev@pcloud.com>
+Build-Depends: debhelper (>= 8.0.0), cmake
+Standards-Version: 3.9.4
+Homepage: https://gitlab.pcloud.com/ivan.stoev/console_client
+#Vcs-Git: git: git@gitlab.pcloud.com:ivan.stoev/console_client.git
+#Vcs-Browser: https://gitlab.pcloud.com/ivan.stoev/console_client
+
+Package: pcloudcc
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: pCloud console client.
+ A simple console client for pCloud storage. 
