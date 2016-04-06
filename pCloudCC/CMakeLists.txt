@@ -3,11 +3,16 @@ project(pcl_client)
 
 INCLUDE(CPack)
 
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+unset(Boost_INCLUDE_DIR CACHE)
+unset(Boost_LIBRARY_DIRS CACHE)
+
 find_package(Boost COMPONENTS system program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIR})
 
-#set (CMAKE_CXX_FLAGS "-fsanitize=address")
+#set (CMAKE_CXX_FLAGS "-Wl,-Bstatic")
 set (PCLSYNC_PATH ${CMAKE_SOURCE_DIR}/lib/pclsync)
 set (MBEDTLS_PATH ${CMAKE_SOURCE_DIR}/lib/mbedtls)
 set (SQLITE3_PATH ${CMAKE_SOURCE_DIR}/lib/sqlite)
