@@ -66,13 +66,11 @@ void psync_rwlock_destroy(psync_rwlock_t *rw){
 
 static psync_rwlock_lockcnt_t psync_rwlock_get_count(psync_rwlock_t *rw){
   psync_rwlock_lockcnt_t locks;
-  locks.ptr=pthread_getspecific(rw->cntkey);;
+  locks.ptr=pthread_getspecific(rw->cntkey);
   return locks;
 }
 
 static void psync_rwlock_set_count(psync_rwlock_t *rw, psync_rwlock_lockcnt_t cnt){
-/*  if (cnt.cnt[1]==1)
-    debug(D_NOTICE, "Getting write lock.");*/
   pthread_setspecific(rw->cntkey, cnt.ptr);
 }
 
