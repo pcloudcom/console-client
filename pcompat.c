@@ -488,7 +488,8 @@ static void psync_check_no_sql_lock(uint64_t millisec){
 #if IS_DEBUG
   if (psync_sql_islocked()){
     debug(D_CRITICAL, "trying to sleep while holding sql lock, aborting");
-  abort();
+    psync_sql_dump_locks();
+    abort();
   }
 #endif
 }

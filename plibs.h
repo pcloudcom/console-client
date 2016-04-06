@@ -241,6 +241,8 @@ psync_sql_res *psync_sql_do_query_nolock(const char *sql, const char *file, unsi
 psync_sql_res *psync_sql_do_prep_statement_nocache(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 psync_sql_res *psync_sql_do_prep_statement(const char *sql, const char *file, unsigned line) PSYNC_NONNULL(1);
 
+void psync_sql_dump_locks();
+
 #else
 
 int psync_sql_trylock();

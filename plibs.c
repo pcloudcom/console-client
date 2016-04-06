@@ -538,7 +538,7 @@ static rd_lock_data *record_rdunlock(){
 
 static void time_format(time_t tm, unsigned long ns, char *result);
 
-static void dump_locks(){
+void psync_sql_dump_locks(){
   rd_lock_data *lock;
   char dttime[36];
   if (wrlocked){
@@ -581,7 +581,7 @@ void psync_sql_do_lock(const char *file, unsigned line){
     end.tv_sec+=30;
     if (psync_rwlock_timedwrlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql write lock timed out called from %s:%u", file, line);
-      dump_locks();
+      psync_sql_dump_locks();
       abort();
     }
     psync_nanotime(&end);
@@ -634,7 +634,7 @@ void psync_sql_do_rdlock(const char *file, unsigned line){
     end.tv_sec+=30;
     if (psync_rwlock_timedrdlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql read lock timed out, called from %s:%u", file, line);
-      dump_locks();
+      psync_sql_dump_locks();
       abort();
     }
     psync_nanotime(&end);
