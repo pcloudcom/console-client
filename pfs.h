@@ -157,7 +157,7 @@ static inline void psync_fs_do_lock_file(psync_openfile_t *of, const char *file,
 }
 #else
 static inline psync_fs_lock_file(psync_openfile_t *of){
-  pthread_mutex_lock(of->mutex);
+  pthread_mutex_lock(&of->mutex);
 }
 #endif
 
