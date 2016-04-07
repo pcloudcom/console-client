@@ -38,9 +38,9 @@ To create a debian package form the source use:
 
 ## Other distributions
 - Binary packages  
-  [pcloudcc-2.0.1-Linux.sh](https://my.pcloud.com/publink/show?code=XZO7zQZ78ctjSJYvzkhz2mpXjpYMYR3JwjV)   
-  [pcloudcc-2.0.1-Linux.tar.gz](https://my.pcloud.com/publink/show?code=XZ67zQZ0g2x2gBY4HBi5PmjTRairHiblMmk)  
-  [pcloudcc-2.0.1-Linux.tar.Z](https://my.pcloud.com/publink/show?code=XZq7zQZ1glJyYog7L7X1ef8o54GtmjXJT57)  
-  [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZA7zQZrSgwBshWrl8UryJRIGE6o4ljHAi7)  
+  [pcloudcc-2.0.1-Linux.sh](https://my.pcloud.com/publink/show?code=XZJnzQZCFLB8o9PGEF4wG4sHCWGHHhUw4aV)   
+  [pcloudcc-2.0.1-Linux.tar.gz](https://my.pcloud.com/publink/show?code=XZ0nzQZCzi5PmcxoNhf8b7jR8cnwflRRJlV)  
+  [pcloudcc-2.0.1-Linux.tar.Z](https://my.pcloud.com/publink/show?code=XZoezQZxMTJDHe7LSXy7Xqzzme7ThrQcDly)  
+  [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZ4nzQZOOG10GPkUSBbHWzgBzdHxVj18E4y)  
 - Source  
-  [pcloudcc_2.0.1_Source.tar.gz](https://my.pcloud.com/publink/show?code=XZI7zQZrxhTlHgqi0YEodNz1l0upmwcSJik)  
+  [pcloudcc_2.0.1_Source.tar.gz](https://my.pcloud.com/publink/show?code=XZFnzQZlcxeTHPnqahzlYd0V3oCIXygETq7)  
