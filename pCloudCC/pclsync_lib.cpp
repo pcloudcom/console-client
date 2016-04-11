@@ -30,6 +30,12 @@
 
 #include <iostream>
 
+#include <iostream>
+#include <string>
+#include <termios.h>
+#include <unistd.h>
+#include <stdio.h>
+
 
 namespace cc  = console_client;
 namespace clib  = cc::clibrary;
@@ -37,11 +43,6 @@ namespace clib  = cc::clibrary;
 static clib::pclsync_lib  g_lib;
 
 clib::pclsync_lib& clib::get_lib(){return g_lib;}
-
-#include <string>
-#include <iostream>
-#include <cstdio>
-#include <memory>
 
 static std::string exec(const char* cmd) {
     boost::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
@@ -55,6 +56,22 @@ static std::string exec(const char* cmd) {
     return result;
 }
 
+
+void clib::pclsync_lib::get_pass_from_console()
+{
+  if (g_lib.daemon_) {
+     g_lib.get_out() << "Not able to read password when started as daemon." << std::endl;
+     exit(1);
+  }
+  termios oldt;
+  tcgetattr(STDIN_FILENO, &oldt);
+  termios newt = oldt;
+  newt.c_lflag &= ~ECHO;
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+  g_lib.get_out() << "Please, enter password" << std::endl;
+  getline(std::cin, password_);
+  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+}
 
 void event_handler(psync_eventtype_t event, psync_eventdata_t eventdata){
  if (event<PEVENT_FIRST_USER_EVENT){
@@ -90,16 +107,43 @@ static void  lib_setup_cripto(){
   g_lib.crypto_on_ = true;
 }
 
+static char const * status2string (uint32_t status){
+  switch (status){
+    case PSTATUS_READY: return "READY";
+    case PSTATUS_DOWNLOADING: return "DOWNLOADING";
+    case PSTATUS_UPLOADING: return "UPLOADING";
+    case PSTATUS_DOWNLOADINGANDUPLOADING: return "DOWNLOADINGANDUPLOADING";
+    case PSTATUS_LOGIN_REQUIRED: return "LOGIN_REQUIRED";
+    case PSTATUS_BAD_LOGIN_DATA: return "BAD_LOGIN_DATA";
+    case PSTATUS_BAD_LOGIN_TOKEN : return "BAD_LOGIN_TOKEN";
+    case PSTATUS_ACCOUNT_FULL: return "ACCOUNT_FULL";
+    case PSTATUS_DISK_FULL: return "DISK_FULL";
+    case PSTATUS_PAUSED: return "PAUSED";
+    case PSTATUS_STOPPED: return "STOPPED";
+    case PSTATUS_OFFLINE: return "OFFLINE";
+    case PSTATUS_CONNECTING: return "CONNECTING";
+    case PSTATUS_SCANNING: return "SCANNING";
+    case PSTATUS_USER_MISMATCH: return "USER_MISMATCH";
+    case PSTATUS_ACCOUT_EXPIRED: return "ACCOUT_EXPIRED";
+    default :return "Unrecognized status";
+  }
+}
+
 static void status_change(pstatus_t* status) {
   static int cryptocheck=0;
   static int mount_set=0;
-  g_lib.get_out() << "Down: " <<  status->downloadstr << "| Up: " << status->uploadstr <<", status is " << status->status << std::endl;
+  g_lib.get_out() << "Down: " <<  status->downloadstr << "| Up: " << status->uploadstr <<", status is " << status2string(status->status) << std::endl;
   *g_lib.status_ = *status;
   if (status->status==PSTATUS_LOGIN_REQUIRED){
-    psync_set_user_pass(g_lib.get_username().c_str(), g_lib.get_password().c_str(), 1);
+    psync_set_user_pass(g_lib.get_username().c_str(), g_lib.get_password().c_str(), (int) g_lib.save_pass_);
     g_lib.get_out() << "logging in" << std::endl;
   }
   else if (status->status==PSTATUS_BAD_LOGIN_DATA){
+    if (!g_lib.newuser_) {
+      g_lib.get_pass_from_console();
+      psync_set_user_pass(g_lib.get_username().c_str(), g_lib.get_password().c_str(), (int) g_lib.save_pass_);
+    }
+    else {
     g_lib.get_out() << "registering" << std::endl;
     if (psync_register(g_lib.get_username().c_str(), g_lib.get_password().c_str(),1, NULL)){
       g_lib.get_out() << "both login and registration failed" << std::endl;
@@ -107,7 +151,9 @@ static void status_change(pstatus_t* status) {
     }
     else{
       g_lib.get_out() << "registered, logging in" << std::endl;
-      psync_set_user_pass(g_lib.get_username().c_str(), g_lib.get_password().c_str(), 1);
+      psync_set_user_pass(g_lib.get_username().c_str(), g_lib.get_password().c_str(), (int) g_lib.save_pass_);
+    }
+      
     }
   }
   if (status->status==PSTATUS_READY || status->status==PSTATUS_UPLOADING || status->status==PSTATUS_DOWNLOADING || status->status==PSTATUS_DOWNLOADINGANDUPLOADING){
@@ -158,7 +204,7 @@ int clib::init()//std::string& username, std::string& password, std::string* cry
 
   if (username_old){
     if (g_lib.username_.compare(username_old) != 0){
-      g_lib.get_out() << "logged in with user " << username_old <<", not "<< g_lib.username_ <<", unlinking and exiting"<<std::endl;
+      g_lib.get_out() << "logged in with user " << username_old <<", not "<< g_lib.username_ <<", unlinking"<<std::endl;
       psync_unlink();
       psync_free(username_old);
       return 2;

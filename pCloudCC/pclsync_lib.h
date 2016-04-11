@@ -56,6 +56,7 @@ namespace console_client {
       const std::string& get_password() {return password_;}
       const std::string& get_crypto_pass() {return crypto_pass_;};
       const std::string& get_mount() {return mount_;}
+      void get_pass_from_console();
 
     
     public:
@@ -70,6 +71,9 @@ namespace console_client {
       bool setup_crypto_;
       bool to_set_mount_;
       bool crypto_on_;
+      bool newuser_;
+      bool save_pass_;
+      bool daemon_;
     };
     
     int init();//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto = 1, int usesrypto_userpass = 0);

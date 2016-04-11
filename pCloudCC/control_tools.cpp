@@ -42,7 +42,7 @@ int stop_crypto(){
   if (SendCall(STOPCRYPTO, "", &ret, &errm))
     std::cout << "Stop Crypto failed. return is " << ret<< " and message is "<<errm << std::endl;
   else 
-    std::cout << "Crypto Stoped. "<< std::endl;
+    std::cout << "Crypto Stopped. "<< std::endl;
   free(errm);  
 }
 int finalize(){
@@ -57,7 +57,7 @@ int finalize(){
 }
 void process_commands()
 {
-  std::cout<< "Supported commands are:" << std::endl << "startcrypto <crypto pass>, stopcrypt, q, quit" << std::endl;
+  std::cout<< "Supported commands are:" << std::endl << "startcrypto <crypto pass>, stopcrypto, finalize, q, quit" << std::endl;
   std::cout<< "> " ;
   for (std::string line; std::getline(std::cin, line);) {
     if (!line.compare("finalize")) {
@@ -81,12 +81,12 @@ int daemonize(bool do_commands) {
   if (pid < 0) 
     exit(EXIT_FAILURE);
   if (pid > 0) {
-    std::cout << "Demon process crated. Process id is: " << pid << std::endl;
+    std::cout << "Daemon process crated. Process id is: " << pid << std::endl;
     if (do_commands) {
       process_commands();
     }
     else 
-      std::cout  << "sudo kill -9 "<<pid<< std::endl<<"To stop it."<< std::endl;
+      std::cout  << "sudo kill -9 "<<pid<< std::endl<<" To stop it."<< std::endl;
     exit(EXIT_SUCCESS);
   }  
   umask(0);
