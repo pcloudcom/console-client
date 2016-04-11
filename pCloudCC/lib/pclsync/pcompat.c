@@ -127,8 +127,12 @@ int psync_user_is_admin(){
       return 1;
   return 0;
 #else
-  if (geteuid() == 0)
+  __uid_t uid;
+  if ((uid = geteuid()) == 0) {
+    debug(D_NOTICE, "Root effective user detected! Uid is %d", uid);
     return 1;
+  }
+  debug(D_NOTICE, "Non root effective user. Uid is %d", uid);
   return 0;
 #endif
 }
