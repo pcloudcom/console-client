@@ -42,13 +42,13 @@ add_custom_target(
 set (OVERLAY_CLENT_PATH ${CMAKE_SOURCE_DIR}/lib/poverlay_linux)
 include_directories(${OVERLAY_CLENT_PATH})
 
+
 link_directories(${PCLSYNC_PATH} ${MBEDTLS_PATH}/library ${SQLITE3_PATH} ${OVERLAY_CLENT_PATH})
 
 
 add_executable(pcloudcc main.cpp pclsync_lib.cpp control_tools.cpp ${OVERLAY_CLENT_PATH}/overlay_client.c ${OVERLAY_CLENT_PATH}/debug.c ${SQLITE3_PATH}/sqlite3.c)
 
-
-target_link_libraries(pcloudcc psynclib mbedtls fuse pthread z dl
+target_link_libraries(pcloudcc psynclib ${MBEDTLS_PATH}/library/libmbedtls.a fuse pthread z dl
 )
 
 target_link_libraries(pcloudcc ${Boost_LIBRARIES})

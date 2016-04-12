@@ -41,7 +41,7 @@ Available commands are : startcrypto <crypto pass>, stopcrypto, finalize, q, qui
 - startcrypto <crypto pass> - starts cripto using given password.
 -  stopcrypto – stops the crypto.
 -   finalize – stops the running daemon.
-- quit, q  - exits the current client. Daemon sties  alive.
+- quit, q  - exits the current client. Daemon stays alive.
 
 
 Example usage scenario:  
