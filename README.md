@@ -44,7 +44,7 @@ Available commands are : startcrypto <crypto pass>, stopcrypto, finalize, q, qui
 - quit, q  - exits the current client. Daemon sties  alive.
 
 
-###Example usage scenario:  
+Example usage scenario:  
 - Start the service manually
 
 > pcloudcc -u example@myemail.com -p -s   
