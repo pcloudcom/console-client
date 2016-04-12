@@ -31,7 +31,7 @@ int start_crypto(const char * pass) {
   int ret;
   char* errm;
   if (SendCall(STARTCRYPTO, pass, &ret, &errm))
-    std::cout << "Satrt Crypto failed. return is " << ret<< " and message is "<<errm << std::endl;
+    std::cout << "Start Crypto failed. return is " << ret<< " and message is "<<errm << std::endl;
   else 
     std::cout << "Crypto started. "<< std::endl;
   free(errm);  
@@ -81,7 +81,7 @@ int daemonize(bool do_commands) {
   if (pid < 0) 
     exit(EXIT_FAILURE);
   if (pid > 0) {
-    std::cout << "Daemon process crated. Process id is: " << pid << std::endl;
+    std::cout << "Daemon process created. Process id is: " << pid << std::endl;
     if (do_commands) {
       process_commands();
     }
