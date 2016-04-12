@@ -91,30 +91,3 @@ To create a debian package form the source use:
   [pcloudcc_2.0.1_Source.tar.gz](https://my.pcloud.com/publink/show?code=XZkJfQZRtCdmBOOkR4fKrbvxqKxujzmM6w7)  
 
 
-pcloudcc_2.0.1-1_amd64.deb
-
-
-
-
-
-pcloudcc-2.0.1-Linux.sh
-
-
-pcloudcc-2.0.1-Linux.tar.gz
-
-
-pcloudcc-2.0.1-Linux.tar.Z
-
-
-
-
-
-pcloudcc-2.0.1-Linux_i386.tar.gz
-
-
-
-
-
-pcloudcc-2.0.1-Source.tar.gz
-
-
