@@ -1714,3 +1714,8 @@ void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t *ret) {
     *ret = row[0];
   psync_sql_free_result(res);
 }
+
+int psync_setlanguage(const char *language, char **err){
+  binparam params[]={P_STR("language", language)};
+  return run_command("setlanguage", params, err);
+}

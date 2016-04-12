@@ -1146,6 +1146,8 @@ void psync_start_overlays();
 void psync_stop_overlay_callbacks();
 void psync_start_overlay_callbacks();
 
+int psync_setlanguage(const char *language, char **err);
+
 
 #ifdef __cplusplus
 }
