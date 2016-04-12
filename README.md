@@ -46,18 +46,23 @@ Available commands are : startcrypto <crypto pass>, stopcrypto, finalize, q, qui
 
 Example usage scenario:  
 - Start the service manually
+
 > pcloudcc -u example@myemail.com -p -s   
+
 Enter password and  use -s switch to save the password. Verify that file system starts and mounts normally. If you don't have existing user use -n switch to register new user:  
 
 > pcloudcc -u example@myemail.com -p -s -n
+
 Notice that a new user may take a while to mount. Please, be patient.   
 
 - Start the daemon service:
+
 > pcloudcc -u example@myemail.com -d  
 
 Verify file system is mounted.  
 
 - At that point you can test passing some commands.
+
 > pcloudcc -u example@myemail.com -k  
 
 Or starting the daemon with -o. Test unlocking and locking crypto if you have subscription for it.   
