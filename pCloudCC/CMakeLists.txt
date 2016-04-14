@@ -17,6 +17,7 @@ set (PCLSYNC_PATH ${CMAKE_SOURCE_DIR}/lib/pclsync)
 set (MBEDTLS_PATH ${CMAKE_SOURCE_DIR}/lib/mbedtls)
 set (SQLITE3_PATH ${CMAKE_SOURCE_DIR}/lib/sqlite)
 
+set (CMAKE_INSTALL_LOCAL_ONLY ON)
 add_subdirectory(${MBEDTLS_PATH})
 
 include_directories(${SQLITE3_PATH})
@@ -55,7 +56,7 @@ target_link_libraries(pcloudcc ${Boost_LIBRARIES})
 
 add_dependencies(pclsync sqlite3_lib)
 
-add_dependencies(pcloudcc sqlite3_lib pclsync )
+add_dependencies(pcloudcc sqlite3_lib mbedtls pclsync )
 
 install(TARGETS pcloudcc RUNTIME DESTINATION bin)
 
