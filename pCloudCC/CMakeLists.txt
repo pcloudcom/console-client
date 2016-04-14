@@ -17,8 +17,7 @@ set (PCLSYNC_PATH ${CMAKE_SOURCE_DIR}/lib/pclsync)
 set (MBEDTLS_PATH ${CMAKE_SOURCE_DIR}/lib/mbedtls)
 set (SQLITE3_PATH ${CMAKE_SOURCE_DIR}/lib/sqlite)
 
-set (CMAKE_INSTALL_LOCAL_ONLY ON)
-add_subdirectory(${MBEDTLS_PATH})
+#add_subdirectory(${MBEDTLS_PATH})
 
 include_directories(${SQLITE3_PATH})
 # add_custom_target(
@@ -38,6 +37,12 @@ add_custom_target(
   pclsync
   COMMAND make fs
   WORKING_DIRECTORY ${PCLSYNC_PATH}
+)
+
+add_custom_target(
+  mbedtls
+  COMMAND cmake . && make
+  WORKING_DIRECTORY ${MBEDTLS_PATH}
 )
 
 set (OVERLAY_CLENT_PATH ${CMAKE_SOURCE_DIR}/lib/poverlay_linux)

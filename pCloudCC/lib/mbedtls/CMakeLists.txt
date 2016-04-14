@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 project(MBEDTLS C)
 
 string(REGEX MATCH "Clang" CMAKE_COMPILER_IS_CLANG "${CMAKE_C_COMPILER_ID}")
-
+set (CMAKE_INSTALL_LOCAL_ONLY ON)
 if(CMAKE_COMPILER_IS_GNUCC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -W -Wdeclaration-after-statement -Wwrite-strings -Wlogical-op")
   set(CMAKE_C_FLAGS_RELEASE     "-O2")
