@@ -75,18 +75,20 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 ## Debian
 To create a debian package form the source use:  
 > debuild -i -us -uc -b  
-
+ 
 ## Other distributions
 - Binary packages 64 bit   
-  [pcloudcc-2.0.1-Linux.sh](https://my.pcloud.com/publink/show?code=XZSJfQZ8WLwavzS3mBd3hL2XRF4EH0KNKTX)   
-  [pcloudcc-2.0.1-Linux.tar.gz](https://my.pcloud.com/publink/show?code=XZhJfQZFEVhUfCloBbnxcHq3MBishd2reIy)  
-  [pcloudcc-2.0.1-Linux.tar.Z](https://my.pcloud.com/publink/show?code=XZmJfQZHwRI0Fje0vX3LVndD9EPSXhkwoNk)  
-  [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZyJfQZtehgkk6mzTuG9zYK5D6skfbo2eS7)  
+  [pcloudcc-2.0.1-Linux.sh](https://my.pcloud.com/publink/show?code=XZIO6QZBewsXMlCJ6mEttJzXiTKRhok7iGX)   
+  [pcloudcc-2.0.1-Linux.tar.gz](https://my.pcloud.com/publink/show?code=XZAO6QZSRxj3JUvwIQvlk3EiU6UKX5JL5TX)  
+  [pcloudcc-2.0.1-Linux.tar.Z](https://my.pcloud.com/publink/show?code=XZiO6QZySxjE0EnCNmjUfipRRtXxBzFnq5X)  
+  [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZWU6QZicBWupBzUr0l6lLw5WMo7Vu6GVLy)  
 - Binary packages 32 bit   
-  [pcloudcc-2.0.1-Linux_i386.sh](https://my.pcloud.com/publink/show?code=XZzJfQZj1uph6VKtgVWWNFUfuUAN8NeIpE7)   
-  [pcloudcc-2.0.1-Linux_i386.tar.gz](https://my.pcloud.com/publink/show?code=XZpJfQZa1T9rIiIvRyppo78dDcmkSfbSJry)  
-  [pcloudcc-2.0.1-Linux_i386.tar.Z](https://my.pcloud.com/publink/show?code=XZJJfQZEoEjfYVTiDhBxahTgOB6BYSGmKlX)  
-  [pcloudcc_2.0.1-1_i386.deb](https://my.pcloud.com/publink/show?code=XZv5fQZLq6o3mXJjvLkLEjWvFUkLQijEsJy)  
+  [pcloudcc-2.0.1-Linux_i386.sh](https://my.pcloud.com/publink/show?code=XZ7U6QZKtLlf40oSc4Mz6sP6ghQVJVoRBK7)   
+  [pcloudcc-2.0.1-Linux_i386.tar.gz](https://my.pcloud.com/publink/show?code=XZVU6QZQIR4lTopco5xVD9zMqEuDjUHPCyV)  
+  [pcloudcc-2.0.1-Linux_i386.tar.Z](https://my.pcloud.com/publink/show?code=XZ5U6QZFTJom9WP2SH7IoHg34yyvhzHu1ey)  
+  [pcloudcc_2.0.1-1_i386.deb](https://my.pcloud.com/publink/show?code=XZCU6QZOu6tcmVmlV8l6M4WEJc3L7zBPLWk)  
+- Ubunutu 12.04 64 bit   
+  [pcloudcc_2.0.1-1_amd64_ubuntu.12.04.deb](https://my.pcloud.com/publink/show?code=XZ9U6QZDBl8feM2eHYY6Aro4F2EKYj0RoQX)   
 - Source  
   [pcloudcc_2.0.1_Source.tar.gz](https://my.pcloud.com/publink/show?code=XZkJfQZRtCdmBOOkR4fKrbvxqKxujzmM6w7)  
 
