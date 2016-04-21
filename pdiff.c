@@ -43,6 +43,7 @@
 #include "pfs.h"
 #include "pnotifications.h"
 #include "pnetlibs.h"
+#include "pcache.h"
 #include "pbusinessaccount.h"
 #include "publiclinks.h"
 #include "pcontacts.h"
@@ -2026,8 +2027,10 @@ static void handle_exception(psync_socket **sock, subscribed_ids *ids, char ex){
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
     if (!send_command_no_res(*sock, "nop", diffparams) || psync_select_in(&(*sock)->sock, 1, PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000)!=0){
+      const char *prefixes[]={"API:", "HTTP"};
       debug(D_NOTICE, "reconnecting diff");
       psync_socket_close_bad(*sock);
+      psync_cache_clean_starting_with_one_of(prefixes, ARRAY_SIZE(prefixes));
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
       psync_syncer_check_delayed_syncs();
@@ -2217,10 +2220,10 @@ static void psync_diff_thread(){
   const binresult *entries;
   uint64_t newdiffid, result;
   psync_socket_t exceptionsock, socks[2];
-  subscribed_ids ids = {0,0,0,0};
-  int sel,ret = 0;
+  subscribed_ids ids = {0, 0, 0, 0};
+  int sel, ret=0;
   char ex;
-  char *err = NULL;
+  char *err=NULL;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
 restart:

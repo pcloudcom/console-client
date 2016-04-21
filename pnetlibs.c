@@ -875,7 +875,7 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   char ch, lch;
   char cachekey[256];
   usessl=psync_setting_get_bool(_PS(usessl));
-  cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, host)+1;
+  cl=snprintf(cachekey, sizeof(cachekey)-1, "HTTP%d-%s", usessl, host)+1;
   cachekey[sizeof(cachekey)-1]=0;
   sock=(psync_socket *)psync_cache_get(cachekey);
   if (!sock){
@@ -1067,7 +1067,7 @@ static void connect_cache_thread(void *ptr){
   else{
     if (sock){
       char cachekey[256];
-      snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", node->usessl, node->host);
+      snprintf(cachekey, sizeof(cachekey)-1, "HTTP%d-%s", node->usessl, node->host);
       cachekey[sizeof(cachekey)-1]=0;
       psync_cache_add(cachekey, sock, 25, (psync_cache_free_callback)psync_socket_close_download, PSYNC_MAX_IDLE_HTTP_CONNS);
     }
@@ -1224,7 +1224,7 @@ psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const ch
   usessl=psync_setting_get_bool(_PS(usessl));
   sock=NULL;
   for (i=0; i<hosts->length; i++){
-    cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+    cl=snprintf(cachekey, sizeof(cachekey)-1, "HTTP%d-%s", usessl, hosts->array[i]->str)+1;
     cachekey[sizeof(cachekey)-1]=0;
     sock=(psync_socket *)psync_cache_get(cachekey);
     if (sock){
@@ -1242,7 +1242,7 @@ psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const ch
   if (!sock){
     for (i=0; i<hosts->length; i++)
       if ((sock=connect_cache_wait_for_http_connection(hosts->array[i]->str, usessl))){
-        cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+        cl=snprintf(cachekey, sizeof(cachekey)-1, "HTTP%d-%s", usessl, hosts->array[i]->str)+1;
         cachekey[sizeof(cachekey)-1]=0;
         *host=hosts->array[i]->str;
         break;
@@ -1251,7 +1251,7 @@ psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const ch
       for (i=0; i<hosts->length; i++){
         sock=psync_socket_connect(hosts->array[i]->str, usessl?443:80, usessl);
         if (sock){
-          cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+          cl=snprintf(cachekey, sizeof(cachekey)-1, "HTTP%d-%s", usessl, hosts->array[i]->str)+1;
           cachekey[sizeof(cachekey)-1]=0;
           *host=hosts->array[i]->str;
           break;
@@ -1284,7 +1284,7 @@ psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *host
   usessl=psync_setting_get_bool(_PS(usessl));
   sock=NULL;
   for (i=0; i<hosts->length; i++){
-    cl=snprintf(cachekey, sizeof(cachekey)-1, "HT%d-%s", usessl, hosts->array[i]->str)+1;
+    cl=snprintf(cachekey, sizeof(cachekey)-1, "HTTP%d-%s", usessl, hosts->array[i]->str)+1;
     cachekey[sizeof(cachekey)-1]=0;
     sock=(psync_socket *)psync_cache_get(cachekey);
     if (sock){
