@@ -169,7 +169,8 @@ static psync_socket *get_connected_socket(){
   int saveauth, isbusiness, cryptosetup;
   auth=user=pass=NULL;
   psync_is_business = 0;
-  while (1){
+  int digest = 1;
+  while (1){    
     psync_free(auth);
     psync_free(user);
     psync_free(pass);
@@ -197,8 +198,22 @@ static psync_socket *get_connected_socket(){
       continue;
     }
     device=psync_deviceid();
-    if (user && pass)
-      res=get_userinfo_user_pass(sock, user, pass, device);
+
+    if (user && pass && pass[0])
+      if (digest)
+        res=get_userinfo_user_pass(sock, user, pass, device);
+      else
+      {
+        binparam params[]={P_STR("timeformat", "timestamp"),
+                         P_STR("username", user),
+                         P_STR("password", pass),
+                         P_STR("device", device),
+                         P_BOOL("getauth", 1),
+                         P_BOOL("cryptokeyssign", 1),
+                         P_BOOL("getapiserver", 1),
+                         P_NUM("os", P_OS_ID)};
+      res=send_command(sock, "userinfo", params);
+      }
     else {
       binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", auth),

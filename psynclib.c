@@ -292,14 +292,16 @@ void psync_set_user_pass(const char *username, const char *password, int save){
   clear_db(save);
   if (save){
     psync_set_string_value("user", username);
-    psync_set_string_value("pass", password);
+    if (password && password[0])
+      psync_set_string_value("pass", password);
   }
   else{
     pthread_mutex_lock(&psync_my_auth_mutex);
     psync_free(psync_my_user);
     psync_my_user=psync_strdup(username);
     psync_free(psync_my_pass);
-    psync_my_pass=psync_strdup(password);
+    if (password && password[0])
+      psync_my_pass=psync_strdup(password);
     pthread_mutex_unlock(&psync_my_auth_mutex);
   }
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
