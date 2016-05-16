@@ -1576,6 +1576,41 @@ err:
   psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
 }
 
+static void clean_stuck_tasks(){
+  psync_sql_res *res;
+  psync_full_result_int *fr;
+  uint64_t taskid;
+  const char *cachepath;
+  char *filename;
+  uint32_t i;
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  res=psync_sql_query_rdlock("SELECT f.id FROM fstask f LEFT JOIN pagecachetask p ON f.id=p.taskid WHERE f.status=3");
+  fr=psync_sql_fetchall_int(res);
+  for (i=0; i<fr->rows; i++){
+    taskid=psync_get_result_cell(fr, i, 0);
+    psync_binhex(fileidhex, &taskid, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    psync_file_delete(filename);
+    psync_free(filename);
+    fileidhex[sizeof(psync_fsfileid_t)]='i';
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    psync_file_delete(filename);
+    psync_free(filename);
+    psync_sql_start_transaction();
+    res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    psync_sql_commit_transaction();
+  }
+  psync_free(fr);
+}
+
 static void psync_fsupload_check_tasks(){
   fsupload_task_t *task;
   psync_sql_res *res;
@@ -1641,6 +1676,7 @@ static void psync_fsupload_check_tasks(){
 }
 
 static void psync_fsupload_thread(){
+  clean_stuck_tasks();
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatusesnooverquota, ARRAY_SIZE(requiredstatusesnooverquota));
     // it is better to sleep a bit to give a chance to events to accumulate
