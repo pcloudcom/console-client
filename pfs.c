@@ -3095,6 +3095,7 @@ static void psync_fs_init_once(){
 }
 
 static void psync_fuse_thread(){
+  int fr;
   pthread_mutex_lock(&start_mutex);
   if (!initonce){
     psync_fs_init_once();
@@ -3102,9 +3103,9 @@ static void psync_fuse_thread(){
   }
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
-  fuse_loop_mt(psync_fuse);
+  fr=fuse_loop_mt(psync_fuse);
+  debug(D_NOTICE, "fuse_loop_mt exited with code %d, running fuse_destroy", fr);
   pthread_mutex_lock(&start_mutex);
-  debug(D_NOTICE, "fuse_loop_mt exited, running fuse_destroy");
   fuse_destroy(psync_fuse);
   debug(D_NOTICE, "fuse_destroy exited");
 /*#if defined(P_OS_MACOSX)
