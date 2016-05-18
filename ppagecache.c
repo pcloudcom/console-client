@@ -3024,7 +3024,6 @@ static void psync_pagecache_add_task(uint32_t type, uint64_t taskid, uint64_t ha
   int run;
   // TODO: remove this check
   if (type==PAGE_TASK_TYPE_MODIFY){
-    psync_sql_start_transaction();
     res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
@@ -3033,7 +3032,6 @@ static void psync_pagecache_add_task(uint32_t type, uint64_t taskid, uint64_t ha
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
-    psync_sql_commit_transaction();
     return;
   }
   run=0;
