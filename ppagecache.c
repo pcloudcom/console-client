@@ -3022,6 +3022,20 @@ static void psync_pagecache_upload_to_cache(){
 static void psync_pagecache_add_task(uint32_t type, uint64_t taskid, uint64_t hash, uint64_t oldhash){
   psync_sql_res *res;
   int run;
+  // TODO: remove this check
+  if (type==PAGE_TASK_TYPE_MODIFY){
+    psync_sql_start_transaction();
+    res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    if (psync_sql_affected_rows())
+      psync_fsupload_wake();
+    res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    psync_sql_commit_transaction();
+    return;
+  }
   run=0;
   res=psync_sql_prep_statement("INSERT INTO pagecachetask (type, taskid, hash, oldhash) VALUES (?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, type);
