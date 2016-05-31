@@ -3023,7 +3023,7 @@ static void psync_pagecache_add_task(uint32_t type, uint64_t taskid, uint64_t ha
   psync_sql_res *res;
   int run;
   // TODO: remove this check
-  if (type==PAGE_TASK_TYPE_MODIFY){
+/*  if (type==PAGE_TASK_TYPE_MODIFY){
     res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
@@ -3033,7 +3033,7 @@ static void psync_pagecache_add_task(uint32_t type, uint64_t taskid, uint64_t ha
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
     return;
-  }
+  }*/
   run=0;
   res=psync_sql_prep_statement("INSERT INTO pagecachetask (type, taskid, hash, oldhash) VALUES (?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, type);

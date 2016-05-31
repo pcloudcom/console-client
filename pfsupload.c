@@ -385,7 +385,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   psync_sql_bind_uint(sql, 2, writeid);
   psync_sql_run_free(sql);
   if (!psync_sql_affected_rows()){
-    debug(D_BUG, "upload of %s cancelled due to writeid mismatch, psync_fs_update_openfile should have catched that", name);
+    debug(D_BUG, "upload of %s cancelled due to writeid mismatch, writeid %lu, psync_fs_update_openfile should have catched that", name, (long unsigned)writeid);
     psync_sql_rollback_transaction();
     return -1;
   }
@@ -767,7 +767,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
   psync_file_t fd;
   psync_fs_err_t err;
   int ret;
-  debug(D_NOTICE, "uploading modified file %s as %lu/%s", filename, (unsigned long)folderid, name);
+  debug(D_NOTICE, "uploading modified file %s writeid %lu as %lu/%s", filename, (unsigned long)writeid, (unsigned long)folderid, name);
   asize=0;
   fd=psync_file_open(indexname, P_O_RDONLY, 0);
   if (unlikely(fd==INVALID_HANDLE_VALUE)){

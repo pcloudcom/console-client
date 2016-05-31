@@ -235,8 +235,11 @@ int psync_fs_update_openfile(uint64_t taskid, uint64_t writeid, psync_fileid_t n
   psync_sql_bind_uint(res, 1, taskid);
   if ((row=psync_sql_fetch_rowint(res)) && row[0]==writeid)
     ret=0;
-  else
+  else{
+    if (row)
+      debug(D_NOTICE, "writeid of fileid %ld differs %lu!=%lu", (long)fileid, (unsigned long)row[0], (unsigned long)writeid);
     ret=-1;
+  }
   psync_sql_free_result(res);
   psync_sql_unlock();
   return ret;
