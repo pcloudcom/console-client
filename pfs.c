@@ -107,6 +107,7 @@ static int64_t psync_fake_fileid=INT64_MIN;
 
 static pthread_mutex_t start_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t start_cond=PTHREAD_COND_INITIALIZER;
+static pthread_cond_t write_cond=PTHREAD_COND_INITIALIZER;
 static int started=0;
 static int initonce=0;
 static int waitingforlogin=0;
@@ -2296,6 +2297,7 @@ retry:
     if (of->encrypted)
       return psync_fs_crypto_write_modified_locked(of, buf, size, offset);
     else{
+      debug(D_NOTICE, "write of %lu bytes at offset %lu", (unsigned long)size, (unsigned long)offset);
       if (unlikely(of->staticfile)){
         ret=psync_fs_reopen_static_file_for_writing(of);
         if (ret==1)

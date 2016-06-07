@@ -3050,10 +3050,7 @@ int psync_invalidate_os_cache_needed(){
 extern int overlays_running;
 
 #if defined(P_OS_WINDOWS)
-void psync_rebuild_icons()
-{
-  if (!overlays_running)
-    return;
+void psync_rebuild_icons(){
   TCHAR buf[REBUILD_ICON_BUFFER_SIZE] = { 0 };
   HKEY hRegKey = 0;
   DWORD dwRegValue;
@@ -3065,6 +3062,9 @@ void psync_rebuild_icons()
 
   // we're going to change the Shell Icon Size value
   const TCHAR* sRegValueName = L"Shell Icon Size";
+
+  if (!overlays_running)
+	  return;
 
   lRegResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Control Panel\\Desktop\\WindowMetrics",
     0, KEY_READ | KEY_WRITE, &hRegKey);

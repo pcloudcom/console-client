@@ -100,7 +100,6 @@ typedef struct {
   psync_file_t datafile;
   psync_file_t indexfile;
   uint32_t refcnt;
-  uint32_t condwaiters;
   uint32_t runningreads;
   uint32_t currentspeed;
   uint32_t bytesthissec;

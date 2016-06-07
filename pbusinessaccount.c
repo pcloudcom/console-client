@@ -421,14 +421,15 @@ int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vi
       idsp = idsp + k + 1;
     }
     if (i > 0)
-      *(idsp - 1) = '\0';
+		*(idsp - 1) = '\0';
 
-    //debug(D_NOTICE, "Account_teams numids %d\n", nids);
+	//debug(D_NOTICE, "Account_teams numids %d\n", nids);
+	  {
+		  binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("teamids", ids), P_STR("showeveryone", "1") };
 
-    binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"),  P_STR("teamids", ids), P_STR("showeveryone", "1")};
-
-    sock = psync_apipool_get();
-    bres = send_command(sock, "account_teams", params);
+		  sock = psync_apipool_get();
+	    bres = send_command(sock, "account_teams", params);
+	  }
   } else {
     if (psync_my_auth[0]) {
       binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("showeveryone", "1")};

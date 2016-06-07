@@ -390,7 +390,9 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
     return -1;
   }
   psync_sql_commit_transaction();
-  debug(D_NOTICE, "file %lu/%s uploaded (mtime=%lu)", (unsigned long)folderid, name, (unsigned long)psync_find_result(meta, "modified", PARAM_NUM)->num);
+  debug(D_NOTICE, "file %lu/%s uploaded (mtime=%lu, size=%lu)", (unsigned long)folderid, name, 
+    (unsigned long)psync_find_result(meta, "modified", PARAM_NUM)->num,
+    (unsigned long)psync_find_result(meta, "size", PARAM_NUM)->num);
   psync_status_recalc_to_upload_async();
   return 0;
 }
@@ -829,6 +831,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
   fsize=psync_file_size(fd);
   if (unlikely_log(fsize==-1))
     goto err3;
+  debug(D_NOTICE, "file size=%lu", (unsigned long)fsize);
   coff=0;
   reqs=0;
   cinterval=psync_interval_tree_get_first(tree);
@@ -1679,7 +1682,7 @@ static void psync_fsupload_thread(){
   clean_stuck_tasks();
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatusesnooverquota, ARRAY_SIZE(requiredstatusesnooverquota));
-    // it is better to sleep a bit to give a chance to events to accumulate
+    // it is better to sleep a bit to give a chance for events to accumulate
     psync_milisleep(10);
     psync_fsupload_check_tasks();
     pthread_mutex_lock(&upload_mutex);
