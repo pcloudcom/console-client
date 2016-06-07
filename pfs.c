@@ -107,7 +107,6 @@ static int64_t psync_fake_fileid=INT64_MIN;
 
 static pthread_mutex_t start_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t start_cond=PTHREAD_COND_INITIALIZER;
-static pthread_cond_t write_cond=PTHREAD_COND_INITIALIZER;
 static int started=0;
 static int initonce=0;
 static int waitingforlogin=0;
