@@ -152,6 +152,8 @@ static int cache_pages_reset=1;
 static psync_list free_pages;
 static psync_list wait_page_hash[PAGE_WAITER_HASH];
 static char *pages_base;
+static uint32_t free_page_waiters=0;
+static int flush_page_running=0;
 
 static psync_cachepage_to_update cachepages_to_update[DB_CACHE_UPDATE_HASH];
 static uint32_t cachepages_to_update_cnt=0;
@@ -161,6 +163,7 @@ static pthread_mutex_t clean_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t clean_cache_cond=PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t flush_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t free_page_cond=PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t url_cache_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t url_cache_cond=PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t wait_page_mutex;
@@ -219,17 +222,29 @@ static psync_cache_page_t *psync_pagecache_get_free_page(int runflushcacheinside
   if (likely(!psync_list_isempty(&free_pages)))
     page=psync_list_remove_head_element(&free_pages, psync_cache_page_t, list);
   else{
-    debug(D_NOTICE, "no free pages, flushing cache");
-    pthread_mutex_unlock(&cache_mutex);
-    flush_pages(1);
-    pthread_mutex_lock(&cache_mutex);
-    while (unlikely(psync_list_isempty(&free_pages))){
+    if (flush_page_running){
+      debug(D_NOTICE, "no free pages, but somebody is flushing cache, waiting for a page");
+      do {
+        free_page_waiters++;
+        pthread_cond_wait(&free_page_cond, &cache_mutex);
+        free_page_waiters--;
+      } while (flush_page_running && psync_list_isempty(&free_pages));
+    }
+    if (psync_list_isempty(&free_pages)){
+      debug(D_NOTICE, "no free pages, flushing cache");
       pthread_mutex_unlock(&cache_mutex);
-      debug(D_NOTICE, "no free pages after flush, sleeping");
-      psync_milisleep(200);
       flush_pages(1);
       pthread_mutex_lock(&cache_mutex);
+      while (unlikely(psync_list_isempty(&free_pages))){
+        pthread_mutex_unlock(&cache_mutex);
+        debug(D_NOTICE, "no free pages after flush, sleeping");
+        psync_milisleep(200);
+        flush_pages(1);
+        pthread_mutex_lock(&cache_mutex);
+      }
     }
+    else
+      debug(D_NOTICE, "waited for a free page");
     page=psync_list_remove_head_element(&free_pages, psync_cache_page_t, list);
   }
   cache_pages_free--;
@@ -1122,6 +1137,9 @@ static int flush_pages(int nosleep){
   time_t ctime;
   uint32_t cpih;
   int ret, diskfull;
+  pthread_mutex_lock(&cache_mutex);
+  flush_page_running++;
+  pthread_mutex_unlock(&cache_mutex);
   flushedbetweentimers=1;
   pthread_mutex_lock(&flush_cache_mutex);
   diskfull=check_disk_full();
@@ -1158,6 +1176,8 @@ static int flush_pages(int nosleep){
     }
     debug(D_NOTICE, "discarded %u pages", (unsigned)i);
     psync_list_init(&pages_to_flush);
+    if (free_page_waiters)
+      pthread_cond_broadcast(&free_page_cond);
   }
   if (cache_pages_in_hash){
     debug(D_NOTICE, "flushing cache free_db_pages=%u", (unsigned)free_db_pages);
@@ -1256,7 +1276,7 @@ static int flush_pages(int nosleep){
         pthread_mutex_unlock(&cache_mutex);
         psync_sql_free_result(res);
         psync_sql_commit_transaction();
-        if (!nosleep)
+        if (!nosleep && !free_page_waiters)
           psync_milisleep(1);
         psync_sql_start_transaction();
         pthread_mutex_lock(&cache_mutex);
@@ -1292,10 +1312,13 @@ static int flush_pages(int nosleep){
       psync_list_add_head(&free_pages, &page->list);
       cache_pages_free++;
       if (nosleep!=1 && updates%64==0){
+        if (free_page_waiters)
+          pthread_cond_broadcast(&free_page_cond);
         pthread_mutex_unlock(&cache_mutex);
         psync_sql_free_result(res);
         psync_sql_commit_transaction();
-        psync_milisleep(1);
+        if (!free_page_waiters) // it is ok if we read a stale value, because we don't hold cache_mutex any more
+          psync_milisleep(1);
         psync_sql_start_transaction();
         pthread_mutex_lock(&cache_mutex);
         res=psync_sql_prep_statement("UPDATE OR IGNORE pagecache SET hash=?, pageid=?, type="NTO_STR(PAGE_TYPE_READ)", lastuse=?, usecnt=?, size=?, crc=? WHERE id=?");
@@ -1320,7 +1343,8 @@ static int flush_pages(int nosleep){
           pthread_mutex_unlock(&cache_mutex);
           psync_sql_free_result(res);
           psync_sql_commit_transaction();
-          psync_milisleep(1);
+          if (!free_page_waiters)
+            psync_milisleep(1);
           psync_sql_start_transaction();
           pthread_mutex_lock(&cache_mutex);
           res=psync_sql_prep_statement("UPDATE pagecache SET lastuse=?, usecnt=usecnt+? WHERE id=?");
@@ -1332,6 +1356,11 @@ static int flush_pages(int nosleep){
     lastflush=ctime;
   }
   flushcacherun=0;
+  flush_page_running--;
+  if (free_page_waiters){
+    debug(D_NOTICE, "finished flushing cache, but there are still free page waiters, broadcasting");
+    pthread_cond_broadcast(&free_page_cond);
+  }
   if (updates){
     pthread_mutex_unlock(&cache_mutex);
     ret=psync_sql_commit_transaction();
