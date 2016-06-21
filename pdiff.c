@@ -77,6 +77,7 @@ static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 static paccount_cache_callback_t psync_cache_callback=NULL;
 static uint32_t psync_is_business=0;
+static  int psync_digest = 1;
 
 void do_register_account_events_callback(paccount_cache_callback_t callback){
   psync_cache_callback=callback;
@@ -169,7 +170,7 @@ static psync_socket *get_connected_socket(){
   int saveauth, isbusiness, cryptosetup;
   auth=user=pass=NULL;
   psync_is_business = 0;
-  int digest = 1;
+ 
   while (1){    
     psync_free(auth);
     psync_free(user);
@@ -200,7 +201,7 @@ static psync_socket *get_connected_socket(){
     device=psync_deviceid();
 
     if (user && pass && pass[0])
-      if (digest)
+      if (psync_digest)
         res=get_userinfo_user_pass(sock, user, pass, device);
       else
       {
@@ -239,6 +240,11 @@ static psync_socket *get_connected_socket(){
       psync_socket_close(sock);
       psync_free(res);
       if (result==2000){
+        if (psync_digest)
+        {
+          psync_digest = 0;
+          continue;
+        }
         if (user && pass)
           psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
         else
@@ -252,7 +258,7 @@ static psync_socket *get_connected_socket(){
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       } else if (result == 2237)
       {
-        digest = 0;
+        psync_digest = 0;
         continue;
       }
         
