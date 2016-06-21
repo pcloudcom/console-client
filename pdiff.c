@@ -250,7 +250,12 @@ static psync_socket *get_connected_socket(){
       else if (result==2205 || result==2229){
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+      } else if (result == 2237)
+      {
+        digest = 0;
+        continue;
       }
+        
       else
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
