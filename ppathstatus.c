@@ -374,6 +374,8 @@ static psync_path_status_t rdunlock_return_in_prog() {
 }
 
 static psync_path_status_t psync_path_status_drive_folder_locked(psync_folderid_t folderid) {
+  if (get_folder_tasks(folderid, 0))
+    return rdunlock_return_in_prog();
   psync_sql_rdunlock();
   return PSYNC_PATH_STATUS_IN_SYNC;
 }
@@ -472,6 +474,7 @@ restart:
             folderid=ce->itemid;
             flags=ce->flags;
             found=1;
+            poff=off+1;
             break;
           }
         if (found)
@@ -504,6 +507,7 @@ restart:
         memcpy(ce->hash, hash, sizeof(hash));
         ce->itemid=folderid;
         ce->flags=flags;
+        poff=off+1;
       }
     }
   if (poff==path_len)
@@ -519,7 +523,7 @@ restart:
   h=(hash[0]+hash[2])%PATH_HASH_SIZE;
   found=0;
   psync_list_for_each_element (ce, &path_cache_hash[h], path_cache_entry_t, list_hash)
-    if (!memcmp(hash, ce->hash, sizeof(hash)) && (ce->flags&ENTRY_FLAG_FOLDER)) {
+    if (!memcmp(hash, ce->hash, sizeof(hash))) {
       if (wrlocked) {
         psync_list_del(&ce->list_lru);
         psync_list_add_tail(&path_cache_lru, &ce->list_lru);

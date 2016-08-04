@@ -139,8 +139,9 @@ void psync_start_overlay_callbacks(){
 
 void get_answer_to_request(message *request, message *replay)
 {
-  char msg[4] = "Ok.";
   external_status stat = INVSYNC;
+  memcpy(replay->value, "Ok.", 4);
+  replay->length=sizeof(message)+4;
   //debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   if (request->type < 20 ) {
 
@@ -182,7 +183,7 @@ void get_answer_to_request(message *request, message *replay)
         break;
       default:
         replay->type=13;
-        memcpy(msg, "No.", 4);
+        memcpy(replay->value, "No.", 4);
     }
   } else if ((callbacks_running)&&(request->type < 36)) {
     int ind = request->type - 20;
@@ -190,22 +191,18 @@ void get_answer_to_request(message *request, message *replay)
     if (callbacks[ind]) {
       if ((ret = callbacks[ind](request->value)) == 0) {
         replay->type = 0;
-        replay->length = sizeof(message)+4;
-        strncpy(replay->value, msg, 4);
       } else {
         replay->type = ret;
-        strncpy(msg,"No.\0",4);
+        memcpy(replay->value, "No.", 4);
       }
-      strncpy(replay->value, msg, 4);
-      replay->length = sizeof(message)+4;
     } else {
       replay->type = 13;
-      strncpy(replay->value, "No callback with this id registered.\0", 37);
+      memcpy(replay->value, "No callback with this id registered.", 37);
       replay->length = sizeof(message)+37;
     }
   } else {
       replay->type = 13;
-      strncpy(replay->value, "Invalid type.\0", 14);
+      memcpy(replay->value, "Invalid type.", 14);
       replay->length = sizeof(message)+14;
     }
 
