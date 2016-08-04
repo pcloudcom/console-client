@@ -1637,17 +1637,28 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
-/*external_status psync_filesystem_status(char *path) {
-  return do_psync_external_status(path);
+external_status psync_filesystem_status(const char *path) {
+  switch (psync_path_status_get_status(psync_path_status_get(path))) {
+    case PSYNC_PATH_STATUS_IN_SYNC:
+      return INSYNC;
+    case PSYNC_PATH_STATUS_IN_PROG:
+      return INPROG;
+    case PSYNC_PATH_STATUS_PAUSED:
+    case PSYNC_PATH_STATUS_REMOTE_FULL:
+    case PSYNC_PATH_STATUS_LOCAL_FULL:
+      return NOSYNC;
+    default:
+      return INVSYNC;
+  }
 }
 
 external_status psync_status_file(const char *path) {
-  return do_psync_external_status_file(path);
+  return psync_filesystem_status(path);
 }
 
 external_status psync_status_folder(const char *path) {
-  return do_psync_external_status_folder(path);
-}*/
+  return psync_filesystem_status(path);
+}
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
   return do_psync_file_public_link(path, code, err, 0, 0, 0);
