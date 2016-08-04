@@ -29,6 +29,8 @@
 #include "plist.h"
 #include "plibs.h"
 #include "pfs.h"
+#include "pfolder.h"
+#include "pcloudcrypto.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -40,7 +42,8 @@
 
 #define FOLDER_TASKS_HASH_SIZE 1024
 
-#define ENTRY_FLAG_FOLDER 1
+#define ENTRY_FLAG_FOLDER    1
+#define ENTRY_FLAG_ENCRYPTED 2
 
 typedef struct {
   uint32_t hash[4];
@@ -423,8 +426,29 @@ static void comp_hash(const char *s, size_t len, uint32_t *out, uint64_t seed1, 
   out[3]=d;
 }
 
+static int move_encname_to_buff(psync_folderid_t folderid, char *buff, size_t buff_size, const char *name, size_t namelen) {
+  psync_crypto_aes256_text_encoder_t enc;
+  char *encname;
+  size_t len;
+  if (unlikely(namelen>=buff_size))
+    return -1;
+  memcpy(buff, name, namelen);
+  buff[namelen]=0;
+  enc=psync_cloud_crypto_get_folder_encoder(folderid);
+  if (unlikely(psync_crypto_is_error(enc)))
+    return -1;
+  encname=psync_cloud_crypto_encode_filename(enc, buff);
+  psync_cloud_crypto_release_folder_encoder(folderid, enc);
+  len=strlen(encname);
+  if (unlikely(len>=sizeof(buff)))
+    return -1;
+  memcpy(buff, encname, len+1);
+  psync_free(encname);
+  return 0;
+}
+
 static psync_path_status_t psync_path_status_drive(const char *path, size_t path_len) {
-  char buff[1032];
+  char buff[2048];
   uint32_t hash[4], h;
   psync_fstask_folder_t *folder;
   path_cache_entry_t *ce;
@@ -433,6 +457,8 @@ static psync_path_status_t psync_path_status_drive(const char *path, size_t path
   psync_folderid_t folderid;
   uint64_t flags;
   size_t off, poff;
+  const char *name;
+  size_t namelen;
   int wrlocked, found;
   while (is_slash(*path)) {
     path++;
@@ -445,7 +471,7 @@ static psync_path_status_t psync_path_status_drive(const char *path, size_t path
 restart:
   poff=0;
   folderid=0;
-  flags=0;
+  flags=ENTRY_FLAG_FOLDER;
   for (off=0; off<path_len; off++)
     if (is_slash(path[off])) {
       if (off && is_slash(path[off-1])) {
@@ -455,8 +481,13 @@ restart:
         if (folder) {
           if (unlikely(off-poff>=sizeof(buff)))
             return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
-          memcpy(buff, path+poff, off-poff);
-          buff[off-poff]=0;
+          if (likely((flags&ENTRY_FLAG_ENCRYPTED)==0)) {
+            memcpy(buff, path+poff, off-poff);
+            buff[off-poff]=0;
+          } else {
+            if (unlikely(move_encname_to_buff(folderid, buff, sizeof(buff), path+poff, off-poff)))
+              return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
+          }
           if (psync_fstask_find_mkdir(folder, buff, 0))
             return rdunlock_return_in_prog();
           if (psync_fstask_find_rmdir(folder, buff, 0))
@@ -479,10 +510,17 @@ restart:
           }
         if (found)
           continue;
-        //TODO: handle encrypted folders by encoding name to buff
         res=psync_sql_query_nolock("SELECT id, permissions, flags, userid FROM folder WHERE parentfolderid=? AND name=?");
         psync_sql_bind_uint(res, 1, folderid);
-        psync_sql_bind_lstring(res, 2, path+poff, off-poff);
+        if (likely((flags&ENTRY_FLAG_ENCRYPTED)==0)) {
+          psync_sql_bind_lstring(res, 2, path+poff, off-poff);
+        } else {
+          psync_sql_free_result(res);
+          if (unlikely(move_encname_to_buff(folderid, buff, sizeof(buff), path+poff, off-poff)))
+            return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
+          psync_sql_bind_string(res, 2, buff);
+
+        }
         row=psync_sql_fetch_rowint(res);
         if (!row) {
           psync_sql_free_result(res);
@@ -499,6 +537,8 @@ restart:
         }
         folderid=row[0];
         flags=ENTRY_FLAG_FOLDER;
+        if (row[2]&PSYNC_FOLDER_FLAG_ENCRYPTED)
+          flags|=ENTRY_FLAG_ENCRYPTED;
         psync_sql_free_result(res);
         ce=psync_list_remove_head_element(&path_cache_lru, path_cache_entry_t, list_lru);
         psync_list_add_tail(&path_cache_lru, &ce->list_lru);
@@ -513,12 +553,21 @@ restart:
   if (poff==path_len)
     return psync_path_status_drive_folder_locked(folderid);
   folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
+  name=path+poff;
+  namelen=path_len-poff;
   if (folder) {
-    if (psync_fstask_find_mkdir(folder, path+poff, 0))
+    if (unlikely(flags&ENTRY_FLAG_ENCRYPTED)) {
+      if (unlikely(move_encname_to_buff(folderid, buff, sizeof(buff), path+poff, path_len-poff)))
+        return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
+      name=buff;
+      namelen=strlen(buff);
+    }
+    if (psync_fstask_find_mkdir(folder, name, 0))
       return rdunlock_return_in_prog();
-    if (psync_fstask_find_creat(folder, path+poff, 0))
+    if (psync_fstask_find_creat(folder, name, 0))
       return rdunlock_return_in_prog();
   }
+  // we do the hash with the unencrypted name
   comp_hash(path+poff, path_len-poff, hash, folderid, drv_hash_seed);
   h=(hash[0]+hash[2])%PATH_HASH_SIZE;
   found=0;
@@ -535,20 +584,26 @@ restart:
     }
   if (found) {
     if (flags&ENTRY_FLAG_FOLDER) {
-      if (folder && psync_fstask_find_rmdir(folder, path+poff, 0))
+      if (folder && psync_fstask_find_rmdir(folder, name, 0))
         return rdunlock_return(PSYNC_PATH_STATUS_NOT_FOUND);
       else
         return psync_path_status_drive_folder_locked(folderid);
     } else {
-      if (folder && psync_fstask_find_unlink(folder, path+poff, 0))
+      if (folder && psync_fstask_find_unlink(folder, name, 0))
         return rdunlock_return(PSYNC_PATH_STATUS_NOT_FOUND);
       else
         return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
     }
   }
+  if (unlikely (!folder && (flags&ENTRY_FLAG_ENCRYPTED))) {
+    if (unlikely(move_encname_to_buff(folderid, buff, sizeof(buff), path+poff, path_len-poff)))
+      return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
+    name=buff;
+    namelen=strlen(buff);
+  }
   res=psync_sql_query_nolock("SELECT id, permissions, flags, userid FROM folder WHERE parentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, folderid);
-  psync_sql_bind_lstring(res, 2, path+poff, path_len-poff);
+  psync_sql_bind_lstring(res, 2, name, namelen);
   row=psync_sql_fetch_rowint(res);
   if (!row || (folder && psync_fstask_find_rmdir(folder, path+poff, 0))) {
     psync_sql_free_result(res);
@@ -556,7 +611,7 @@ restart:
       return rdunlock_return(PSYNC_PATH_STATUS_NOT_FOUND);
     res=psync_sql_query_nolock("SELECT id FROM file WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, folderid);
-    psync_sql_bind_lstring(res, 2, path+poff, path_len-poff);
+    psync_sql_bind_lstring(res, 2, name, namelen);
     row=psync_sql_fetch_rowint(res);
     if (!row) {
       psync_sql_free_result(res);
@@ -572,7 +627,7 @@ restart:
       goto restart;
     }
     folderid=row[0];
-    flags=0;
+    flags&=~ENTRY_FLAG_FOLDER;
     psync_sql_free_result(res);
     ce=psync_list_remove_head_element(&path_cache_lru, path_cache_entry_t, list_lru);
     psync_list_add_tail(&path_cache_lru, &ce->list_lru);
