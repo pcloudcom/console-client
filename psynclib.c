@@ -1637,7 +1637,7 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
-external_status psync_filesystem_status(char *path) {
+/*external_status psync_filesystem_status(char *path) {
   return do_psync_external_status(path);
 }
 
@@ -1647,7 +1647,7 @@ external_status psync_status_file(const char *path) {
 
 external_status psync_status_folder(const char *path) {
   return do_psync_external_status_folder(path);
-}
+}*/
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
   return do_psync_file_public_link(path, code, err, 0, 0, 0);
