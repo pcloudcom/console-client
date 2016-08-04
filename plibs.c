@@ -659,7 +659,6 @@ void psync_sql_rdlock(){
 void psync_sql_rdunlock(){
 #if IS_DEBUG
   if (unlikely(sqlrdlockcnt==0)){
-    debug(D_NOTICE, "called with no read locks, did we upgrade the lock? calling psync_sql_unlock");
     psync_sql_unlock();
     return;
   }
@@ -708,7 +707,6 @@ int psync_sql_tryupgradelock(){
     assert(sqllockcnt==1);
     sqllockstart=sqlrdlockstart;
     record_wrlock(lock->file, lock->line);
-    debug(D_NOTICE, "upgraded read lock taken from %s:%u to a write lock", lock->file, lock->line);
     psync_free(lock);
     return 0;
   }
