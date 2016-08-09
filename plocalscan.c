@@ -63,8 +63,6 @@ typedef struct {
   char name[1];
 } sync_folderlist;
 
-typedef sync_folderlist sync_folderlist_tuple[2];
-
 static pthread_mutex_t scan_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t scan_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t scan_wakes=0;

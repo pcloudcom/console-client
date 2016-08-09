@@ -499,6 +499,8 @@ static psync_path_status_t psync_path_status_drive(const char *path, size_t path
   }
   wrlocked=0;
   psync_sql_rdlock();
+  if (!get_folder_tasks(0, 0))
+    return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
   if (!path_len)
     return psync_path_status_drive_folder_locked(0);
 restart:
@@ -539,6 +541,8 @@ restart:
             flags=ce->flags;
             found=1;
             poff=off+1;
+            if (!get_folder_tasks(folderid, 0))
+              return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
             break;
           }
         if (found)
@@ -581,6 +585,8 @@ restart:
         ce->itemid=folderid;
         ce->flags=flags;
         poff=off+1;
+        if (!get_folder_tasks(folderid, 0))
+          return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC);
       }
     }
   if (poff==path_len)
