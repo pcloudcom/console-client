@@ -1209,7 +1209,9 @@ static void stop_crypto_thread(){
 static void process_modifyuserinfo(const binresult *entry){
   const binresult *res, *cres;
   psync_sql_res *q;
-  uint64_t u;
+  uint64_t u, crexp, crsub = 0;
+  int crst = 0,crstat;
+  
   if (!entry)
     return;
   res=psync_find_result(entry, "userinfo", PARAM_HASH);
@@ -1247,15 +1249,39 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_run(q);
   if (!u)
     psync_run_thread("stop crypto moduserinfo", stop_crypto_thread);
+  else 
+    crst = 1;
   psync_sql_bind_string(q, 1, "cryptosubscription");
-  psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
+  crsub =  psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num;
+  psync_sql_bind_uint(q, 2, crsub);
   psync_sql_run(q);
   cres=psync_check_result(res, "cryptoexpires", PARAM_NUM);
+  crexp = cres?cres->num:0;
   psync_sql_bind_string(q, 1, "cryptoexpires");
-  psync_sql_bind_uint(q, 2, cres?cres->num:0);
+  psync_sql_bind_uint(q, 2, crexp);
+  psync_sql_run(q);
+  if (psync_is_business || crsub){
+    if (crst)
+      crstat = 5;
+    else  crstat = 4;
+  } else {
+    if (!crst)
+      crstat = 1;
+    else 
+    {
+      if (psync_millitime() > crexp)
+        crstat = 3;
+      else 
+        crstat = 2;
+    }
+  }
+  psync_sql_bind_string(q, 1, "cryptostatus");
+  psync_sql_bind_uint(q, 2, crstat);
   psync_sql_run(q);
   psync_sql_free_result(q);
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
+  
+  
 }
 
 #define fill_str(f, s, sl)\
