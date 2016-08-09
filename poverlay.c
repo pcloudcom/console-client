@@ -77,11 +77,14 @@ static int get_item_from_cache(const char* key, external_status* stat){
     now = psync_millitime();
     if ((now - rec->timestamp) < 100) {
       *stat = rec->stat;
+      psync_cache_add(reckey, rec, 1, psync_free, 1);
+      psync_free(reckey);
       return 1;
     } else {
       psync_free(rec);
     }
   }
+  psync_free(reckey);
   return 0;
 }
 
@@ -95,7 +98,8 @@ static void add_item_to_cache(const char* key, external_status* stat){
 
   rec->stat = *stat;
   rec->timestamp = psync_millitime();
-  psync_cache_add(key, rec, 1, psync_free, 1);
+  psync_cache_add(reckey, rec, 1, psync_free, 1);
+  psync_free(reckey);
 }
 
   

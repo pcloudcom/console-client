@@ -262,6 +262,12 @@ typedef struct pstatus_struct_ {
 #define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -7
 #define PSYNC_CRYPTO_INTERNAL_ERROR        -8
 
+#define PSYNC_CRYPTO_STATUS_NEW 1
+#define PSYNC_CRYPTO_STATUS_TRIAL 2
+#define PSYNC_CRYPTO_STATUS_EXPIRED 3
+#define PSYNC_CRYPTO_STATUS_ACTIVE 4
+#define PSYNC_CRYPTO_STATUS_SETUP 5
+
 #define PSYNC_CRYPTO_INVALID_FOLDERID      ((psync_folderid_t)-1)
 
 #ifndef DEFAULT_FUSE_VOLUME_NAME
@@ -1147,7 +1153,6 @@ void psync_stop_overlay_callbacks();
 void psync_start_overlay_callbacks();
 
 int psync_setlanguage(const char *language, char **err);
-
 
 #ifdef __cplusplus
 }
