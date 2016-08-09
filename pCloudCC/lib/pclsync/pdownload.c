@@ -43,6 +43,7 @@
 #include "plocalscan.h"
 #include "pupload.h"
 #include "pasyncnet.h"
+#include "ppathstatus.h"
 
 typedef struct {
   psync_list list;
@@ -270,14 +271,14 @@ static int call_func_for_folder_name(psync_folderid_t localfolderid, psync_folde
   return res;
 }
 
-static void delete_local_folder_from_db(psync_folderid_t localfolderid){
+static void delete_local_folder_from_db(psync_folderid_t localfolderid, psync_syncid_t syncid){
   psync_sql_res *res;
   psync_uint_row row;
   if (likely(localfolderid)){
-    res=psync_sql_query("SELECT id FROM localfolder WHERE localparentfolderid=?");
+    res=psync_sql_query("SELECT id, syncid FROM localfolder WHERE localparentfolderid=?");
     psync_sql_bind_uint(res, 1, localfolderid);
     while ((row=psync_sql_fetch_rowint(res)))
-      delete_local_folder_from_db(row[0]);
+      delete_local_folder_from_db(row[0], row[1]);
     psync_sql_free_result(res);
     res=psync_sql_query("SELECT id FROM localfile WHERE localparentfolderid=?");
     psync_sql_bind_uint(res, 1, localfolderid);
@@ -291,12 +292,14 @@ static void delete_local_folder_from_db(psync_folderid_t localfolderid){
     psync_sql_bind_uint(res, 1, localfolderid);
     psync_sql_run_free(res);
   }
+  psync_path_status_sync_folder_deleted(syncid, localfolderid);
 }
 
 static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid, psync_folderid_t localfolderid,
                              psync_folderid_t newlocalparentfolderid, const char *newname){
   psync_sql_res *res;
   psync_variant_row row;
+  psync_uint_row urow;
   char *oldpath, *newpath;
   psync_syncid_t oldsyncid;
   int ret;
@@ -324,6 +327,15 @@ static int task_renamefolder(psync_syncid_t newsyncid, psync_folderid_t folderid
   }
   psync_sql_start_transaction();
   psync_restart_localscan();
+  res=psync_sql_query_nolock("SELECT syncid, localparentfolderid FROM localfolder WHERE id=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  if ((urow=psync_sql_fetch_rowint(res))) {
+    psync_path_status_sync_folder_moved(localfolderid, urow[0], urow[1], newsyncid, newlocalparentfolderid);
+    psync_sql_free_result(res);
+  } else {
+    psync_sql_free_result(res);
+    debug(D_NOTICE, "localfolderid %u not found in localfolder", (unsigned)localfolderid);
+  }
   res=psync_sql_prep_statement("UPDATE localfolder SET syncid=?, localparentfolderid=?, name=? WHERE id=?");
   psync_sql_bind_uint(res, 1, newsyncid);
   psync_sql_bind_uint(res, 2, newlocalparentfolderid);
@@ -1019,8 +1031,10 @@ static void task_run_download_file_thread(void *ptr){
     set_task_inprogress(dt->taskid, 0);
     psync_wake_download();
   }
-  else
+  else{
     delete_task(dt->taskid);
+    psync_path_status_sync_folder_task_completed(dt->dwllist.syncid, dt->localfolderid);
+  }
   free_download_task(dt);
   psync_status_recalc_to_download_async();
 }
@@ -1208,6 +1222,7 @@ static void task_del_folder_rec_do(const char *localpath, psync_folderid_t local
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
+  psync_path_status_sync_folder_deleted(syncid, localfolderid);
 }
 
 static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t folderid, psync_syncid_t syncid){
@@ -1244,7 +1259,7 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
       res=call_func_for_folder_name(localitemid, itemid, name, syncid, PEVENT_LOCAL_FOLDER_DELETED, task_rmdir, 0, "local folder deleted");
       if (!res){
         psync_sql_start_transaction();
-        delete_local_folder_from_db(localitemid);
+        delete_local_folder_from_db(localitemid, syncid);
         psync_sql_commit_transaction();
       }
       break;
@@ -1292,8 +1307,10 @@ static void download_thread(){
                          psync_get_string_or_null(row[6]),
                          psync_get_number_or_null(row[7]))){
         delete_task(taskid);
-      if (type==PSYNC_DOWNLOAD_FILE)
-        psync_status_recalc_to_download_async();
+        if (type==PSYNC_DOWNLOAD_FILE){
+          psync_status_recalc_to_download_async();
+          psync_path_status_sync_folder_task_completed(psync_get_number(row[2]), psync_get_number(row[4]));
+        }
       }
       else if (type!=PSYNC_DOWNLOAD_FILE)
         psync_milisleep(PSYNC_SLEEP_ON_FAILED_DOWNLOAD);

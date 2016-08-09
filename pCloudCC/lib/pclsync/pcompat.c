@@ -127,12 +127,6 @@ int psync_user_is_admin(){
       return 1;
   return 0;
 #else
-  __uid_t uid;
-  if ((uid = geteuid()) == 0) {
-    debug(D_NOTICE, "Root effective user detected! Uid is %d", uid);
-    return 1;
-  }
-  debug(D_NOTICE, "Non root effective user. Uid is %d", uid);
   return 0;
 #endif
 }
@@ -494,7 +488,8 @@ static void psync_check_no_sql_lock(uint64_t millisec){
 #if IS_DEBUG
   if (psync_sql_islocked()){
     debug(D_CRITICAL, "trying to sleep while holding sql lock, aborting");
-  abort();
+    psync_sql_dump_locks();
+    abort();
   }
 #endif
 }
@@ -3055,10 +3050,7 @@ int psync_invalidate_os_cache_needed(){
 extern int overlays_running;
 
 #if defined(P_OS_WINDOWS)
-void psync_rebuild_icons()
-{
-  if (!overlays_running)
-    return;
+void psync_rebuild_icons(){
   TCHAR buf[REBUILD_ICON_BUFFER_SIZE] = { 0 };
   HKEY hRegKey = 0;
   DWORD dwRegValue;
@@ -3070,6 +3062,9 @@ void psync_rebuild_icons()
 
   // we're going to change the Shell Icon Size value
   const TCHAR* sRegValueName = L"Shell Icon Size";
+
+  if (!overlays_running)
+	  return;
 
   lRegResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Control Panel\\Desktop\\WindowMetrics",
     0, KEY_READ | KEY_WRITE, &hRegKey);
@@ -3143,7 +3138,8 @@ void psync_rebuild_icons(){
 void psync_rebuild_icons(){
   if (!overlays_running)
     return;
-  return;}
+  return;
+}
 #endif
 
 int psync_invalidate_os_cache(const char *path){

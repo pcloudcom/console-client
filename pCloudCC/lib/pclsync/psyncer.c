@@ -36,6 +36,7 @@
 #include "pstatus.h"
 #include "pcallbacks.h"
 #include "ptree.h"
+#include "ppathstatus.h"
 #include <string.h>
 
 typedef struct {
@@ -384,8 +385,10 @@ void psync_syncer_check_delayed_syncs(){
       syncid=-1;
     psync_sql_free_result(stmt);
     delete_delayed_sync(id);
-    if (!psync_sql_commit_transaction() && syncid!=-1)
+    if (!psync_sql_commit_transaction() && syncid!=-1) {
+      psync_path_status_reload_syncs();
       psync_syncer_new(syncid);
+    }
   }
   psync_sql_free_result(res);
 }

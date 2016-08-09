@@ -23,7 +23,10 @@ static const int STOP = 0;
 enum command_ids_ {
   STARTCRYPTO = 20,
   STOPCRYPTO,
-  FINALIZE
+  FINALIZE,
+  LISTSYNC,
+  ADDSYNC,
+  STOPSYNC
 };
 
   
@@ -101,7 +104,7 @@ int daemonize(bool do_commands) {
   close(STDOUT_FILENO);
   close(STDERR_FILENO);
   
-  if (console_client::clibrary::init())
+  if (console_client::clibrary::pclsync_lib::init())
      exit(EXIT_FAILURE);
   while (1) {
     sleep(10);

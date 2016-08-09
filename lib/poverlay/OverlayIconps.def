@@ -1,9 +1,0 @@
-
-LIBRARY      "OverlayIconPS"
-
-EXPORTS
-	DllGetClassObject       PRIVATE
-	DllCanUnloadNow         PRIVATE
-	GetProxyDllInfo         PRIVATE
-	DllRegisterServer		PRIVATE
-	DllUnregisterServer		PRIVATE

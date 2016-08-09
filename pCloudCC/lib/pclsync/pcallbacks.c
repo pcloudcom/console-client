@@ -201,7 +201,7 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
       }
     }
   }
-  else 
+  else
     dw=cat_const(dw, "Everything Downloaded");
 
   if (status->filestoupload){
@@ -226,7 +226,7 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
       }
     }
   }
-  else 
+  else
     up=cat_const(up, "Everything Uploaded");
 
   assert(dw<downloadstr+MAX_STATUS_STR_LEN);
@@ -269,7 +269,7 @@ static void status_change_thread(void *ptr){
           (status_old.status == PSTATUS_PAUSED) ||
           (status_old.status == PSTATUS_OFFLINE) ) )
     )
-      psync_run_ratelimited("Rebuild icons.", psync_rebuild_icons, 1, 1);
+      psync_run_ratelimited("rebuild icons", psync_rebuild_icons, 1, 1);
     status_old = psync_status;
     pthread_mutex_unlock(&statusmutex);
     if (!psync_do_run)

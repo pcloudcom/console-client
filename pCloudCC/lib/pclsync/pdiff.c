@@ -43,10 +43,12 @@
 #include "pfs.h"
 #include "pnotifications.h"
 #include "pnetlibs.h"
+#include "pcache.h"
 #include "pbusinessaccount.h"
 #include "publiclinks.h"
 #include "pcontacts.h"
 #include "pcloudcrypto.h"
+#include "ppathstatus.h"
 #include <ctype.h>
 
 
@@ -168,6 +170,7 @@ static psync_socket *get_connected_socket(){
   int saveauth, isbusiness, cryptosetup;
   auth=user=pass=NULL;
   psync_is_business = 0;
+  int digest = 1;
   while (1){
     psync_free(auth);
     psync_free(user);
@@ -196,8 +199,22 @@ static psync_socket *get_connected_socket(){
       continue;
     }
     device=psync_deviceid();
-    if (user && pass)
-      res=get_userinfo_user_pass(sock, user, pass, device);
+
+    if (user && pass && pass[0])
+      if (digest)
+        res=get_userinfo_user_pass(sock, user, pass, device);
+      else
+      {
+        binparam params[]={P_STR("timeformat", "timestamp"),
+                         P_STR("username", user),
+                         P_STR("password", pass),
+                         P_STR("device", device),
+                         P_BOOL("getauth", 1),
+                         P_BOOL("cryptokeyssign", 1),
+                         P_BOOL("getapiserver", 1),
+                         P_NUM("os", P_OS_ID)};
+      res=send_command(sock, "userinfo", params);
+      }
     else {
       binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", auth),
@@ -231,8 +248,15 @@ static psync_socket *get_connected_socket(){
       }
       else if (result==4000)
         psync_milisleep(5*60*1000);
-      else if (result==2205)
-        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
+      else if (result==2205 || result==2229){
+        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
+        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+      } else if (result == 2237)
+      {
+        digest = 0;
+        continue;
+      }
+
       else
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
@@ -609,6 +633,7 @@ static void process_modifyfolder(const binresult *entry){
     psync_sql_bind_uint(res, 1, mtime);
     psync_sql_bind_uint(res, 2, parentfolderid);
     psync_sql_run_free(res);
+    psync_path_status_folder_moved(folderid, oldparentfolderid, parentfolderid);
   }
   /* We should check if oldparentfolderid is in downloadlist, not folderid. If parentfolderid is not in and
    * folderid is in, it means that folder that is a "root" of a syncid is modified, we do not care about that.
@@ -722,6 +747,7 @@ static void process_deletefolder(const binresult *entry){
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
+  psync_path_status_folder_deleted(folderid);
   if (psync_is_folder_in_downloadlist(folderid)){
     psync_del_folder_from_downloadlist(folderid);
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=?");
@@ -1183,7 +1209,9 @@ static void stop_crypto_thread(){
 static void process_modifyuserinfo(const binresult *entry){
   const binresult *res, *cres;
   psync_sql_res *q;
-  uint64_t u;
+  uint64_t u, crexp, crsub = 0;
+  int crst = 0,crstat;
+  
   if (!entry)
     return;
   res=psync_find_result(entry, "userinfo", PARAM_HASH);
@@ -1221,15 +1249,41 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_run(q);
   if (!u)
     psync_run_thread("stop crypto moduserinfo", stop_crypto_thread);
+  else 
+    crst = 1;
   psync_sql_bind_string(q, 1, "cryptosubscription");
-  psync_sql_bind_uint(q, 2, psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num);
+  crsub =  psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num;
+  psync_sql_bind_uint(q, 2, crsub);
   psync_sql_run(q);
   cres=psync_check_result(res, "cryptoexpires", PARAM_NUM);
+  crexp = cres?cres->num:0;
   psync_sql_bind_string(q, 1, "cryptoexpires");
-  psync_sql_bind_uint(q, 2, cres?cres->num:0);
+  psync_sql_bind_uint(q, 2, crexp);
+  psync_sql_run(q);
+  debug(D_WARNING, "Tracing crypto cryptosubscription [%lld] cripto_status [%d] psync_is_business[%ld]",(long long)crsub, crst, (long)psync_is_business);
+  debug(D_WARNING, "Tracing crypto time - cryptoexpires [%lld] psync_millitime [%lld]",(long long)crexp, (long long)psync_millitime());
+  if (psync_is_business || crsub){
+    if (crst)
+      crstat = 5;
+    else  crstat = 4;
+  } else {
+    if (!crst)
+      crstat = 1;
+    else 
+    {
+      if (psync_time() > crexp)
+        crstat = 3;
+      else 
+        crstat = 2;
+    }
+  }
+  psync_sql_bind_string(q, 1, "cryptostatus");
+  psync_sql_bind_uint(q, 2, crstat);
   psync_sql_run(q);
   psync_sql_free_result(q);
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
+  
+  
 }
 
 #define fill_str(f, s, sl)\
@@ -1917,6 +1971,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_set_uint_value("usedquota", used_quota);
   //update_ba_emails();
   //update_ba_teams();
+  psync_path_status_clear_path_cache();
   psync_sql_commit_transaction();
   psync_diff_unlock();
   if (needdownload){
@@ -2024,8 +2079,10 @@ static void handle_exception(psync_socket **sock, subscribed_ids *ids, char ex){
   else if (ex=='e'){
     binparam diffparams[]={P_STR("id", "ignore")};
     if (!send_command_no_res(*sock, "nop", diffparams) || psync_select_in(&(*sock)->sock, 1, PSYNC_SOCK_TIMEOUT_ON_EXCEPTION*1000)!=0){
+      const char *prefixes[]={"API:", "HTTP"};
       debug(D_NOTICE, "reconnecting diff");
       psync_socket_close_bad(*sock);
+      psync_cache_clean_starting_with_one_of(prefixes, ARRAY_SIZE(prefixes));
       *sock=get_connected_socket();
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
       psync_syncer_check_delayed_syncs();
@@ -2215,10 +2272,10 @@ static void psync_diff_thread(){
   const binresult *entries;
   uint64_t newdiffid, result;
   psync_socket_t exceptionsock, socks[2];
-  subscribed_ids ids = {0,0,0,0};
-  int sel,ret = 0;
+  subscribed_ids ids = {0, 0, 0, 0};
+  int sel, ret=0;
   char ex;
-  char *err = NULL;
+  char *err=NULL;
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_send_status_update();
 restart:

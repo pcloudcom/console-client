@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -253,7 +253,7 @@ psync_fsfolderid_t psync_fsfolderid_by_path(const char *path, uint32_t *pflags){
       elen=len;
     }
     row=psync_sql_fetch_rowint(res);
-    folder=psync_fstask_get_folder_tasks_locked(cfolderid);
+    folder=psync_fstask_get_folder_tasks_rdlocked(cfolderid);
     if (folder){
       char *name=psync_strndup(ename, elen);
       if ((mk=psync_fstask_find_mkdir(folder, name, 0))){
@@ -268,7 +268,6 @@ psync_fsfolderid_t psync_fsfolderid_by_path(const char *path, uint32_t *pflags){
       }
       else
         hasit=0;
-      psync_fstask_release_folder_tasks_locked(folder);
       psync_free(name);
     }
     else{

@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -31,6 +31,7 @@
 #include "pupload.h"
 #include "pstatus.h"
 #include "pcallbacks.h"
+#include "ppathstatus.h"
 
 static void create_task1(psync_uint_t type, psync_syncid_t syncid, uint64_t entryid, uint64_t localentryid){
   psync_sql_res *res;
@@ -105,20 +106,28 @@ void psync_task_delete_local_folder_recursive(psync_syncid_t syncid, psync_folde
   create_task1(PSYNC_DELREC_LOCAL_FOLDER, syncid, folderid, localfolderid);
 }
 
-void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, 
+void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid,
                                     psync_folderid_t newlocalparentfolderid, const char *newname){
   create_task2(PSYNC_RENAME_LOCAL_FOLDER, syncid, folderid, localfolderid, newlocalparentfolderid, newname);
 }
 
+void psync_task_download_file_silent(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
+  psync_sql_res *res;
+  res=psync_sql_prep_statement("INSERT INTO task (type, syncid, itemid, localitemid, name) VALUES (?, ?, ?, ?, ?)");
+  psync_sql_bind_uint(res, 1, PSYNC_DOWNLOAD_FILE);
+  psync_sql_bind_uint(res, 2, syncid);
+  psync_sql_bind_uint(res, 3, fileid);
+  psync_sql_bind_uint(res, 4, localfolderid);
+  psync_sql_bind_string(res, 5, name);
+  psync_path_status_sync_folder_task_added_locked(syncid, localfolderid);
+  psync_sql_run_free(res);
+}
+
 void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
-  create_task3(PSYNC_DOWNLOAD_FILE, syncid, fileid, localfolderid, name);
+  psync_task_download_file_silent(syncid, fileid, localfolderid, name);
   psync_wake_download();
   psync_status_recalc_to_download();
   psync_send_status_update();
-}
-
-void psync_task_download_file_silent(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name){
-  create_task3(PSYNC_DOWNLOAD_FILE, syncid, fileid, localfolderid, name);
 }
 
 void psync_task_rename_local_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t fileid, psync_folderid_t oldlocalfolderid,
@@ -147,14 +156,14 @@ void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t loc
   create_task3(PSYNC_CREATE_REMOTE_FOLDER, syncid, 0, localfolderid, name);
 }
 
+void psync_task_upload_file_silent(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
+  create_task3(PSYNC_UPLOAD_FILE, syncid, 0, localfileid, name);
+}
+
 void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
   create_task3(PSYNC_UPLOAD_FILE, syncid, 0, localfileid, name);
   psync_wake_upload();
   psync_status_recalc_to_upload_async();
-}
-
-void psync_task_upload_file_silent(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name){
-  create_task3(PSYNC_UPLOAD_FILE, syncid, 0, localfileid, name);
 }
 
 void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,

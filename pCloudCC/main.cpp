@@ -18,14 +18,15 @@ int main(int argc, char **argv) {
   bool newuser = false;
   bool passwordsw = false;
   bool save_pass = false;
+  bool crypto = false;
   
   try {
     po::options_description desc("Allowed options");
     desc.add_options()
         ("help,h", "produce help message")
         ("username,u", po::value<std::string>(&username), "pCloud account name")
-        ("password,p", po::bool_switch(&passwordsw), "pCloud account password")
-        ("crypto,c", po::value<std::string>(), "Crypto password")
+        ("password,p", po::bool_switch(&passwordsw), "Ask pCloud account password")
+        ("crypto,c",  po::bool_switch(&crypto), "Ask crypto password")
         ("passascrypto,y", po::value<std::string>(), "Use user password as crypto password also.")
         ("daemonize,d", po::bool_switch(&daemon), "Daemonize the process.")
         ("commands ,o", po::bool_switch(&commands), "Parent stays alive and processes commands. ")
@@ -61,28 +62,29 @@ int main(int argc, char **argv) {
       std::cout << "Username option is required!!!"  << "\n";
       return 1;
     }
-    console_client::clibrary::get_lib().username_ = username;
+    console_client::clibrary::pclsync_lib::get_lib().username_ = username;
     
     if (passwordsw) {
-      console_client::clibrary::get_lib().get_pass_from_console();
+      console_client::clibrary::pclsync_lib::get_lib().get_pass_from_console();
     }
     
-    if ((!vm.count("crypto")) && (!vm.count("passascrypto")) ){
-      console_client::clibrary::get_lib().setup_crypto_ = false;
-    } else {
-      console_client::clibrary::get_lib().setup_crypto_ = true;
-      if (vm.count("crypto"))
-        console_client::clibrary::get_lib().crypto_pass_ = vm["crypto"].as<std::string>();
-      else 
-        console_client::clibrary::get_lib().crypto_pass_ = password;
-    }
+    if (crypto) {
+      console_client::clibrary::pclsync_lib::get_lib().setup_crypto_ = true;
+      if (vm.count("passascrypto"))
+        console_client::clibrary::pclsync_lib::get_lib().crypto_pass_ = password;
+      else {
+        std::cout << "Enter crypto password."  << "\n";
+        console_client::clibrary::pclsync_lib::get_lib().get_cryptopass_from_console();
+      }
+    } else 
+       console_client::clibrary::pclsync_lib::get_lib().setup_crypto_ = false;
     
     if (vm.count("mountpoint"))
-        console_client::clibrary::get_lib().mount_ = vm["mountpoint"].as<std::string>();
+        console_client::clibrary::pclsync_lib::get_lib().mount_ = vm["mountpoint"].as<std::string>();
     
-    console_client::clibrary::get_lib().newuser_ = newuser;
-    console_client::clibrary::get_lib().save_pass_ = save_pass;
-    console_client::clibrary::get_lib().daemon_ = daemon;
+    console_client::clibrary::pclsync_lib::get_lib().newuser_ = newuser;
+    console_client::clibrary::pclsync_lib::get_lib().save_pass_ = save_pass;
+    console_client::clibrary::pclsync_lib::get_lib().daemon_ = daemon;
   }
   catch(std::exception& e) {
     std::cerr << "error: " << e.what() << "\n";
@@ -98,7 +100,7 @@ int main(int argc, char **argv) {
     else {
       if (commands)
         std::cout << "Option commnads/o  ignored."  << "\n";
-      if (!console_client::clibrary::init())
+      if (!console_client::clibrary::pclsync_lib::init())
         sleep(360000);
     }
   

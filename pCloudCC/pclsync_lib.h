@@ -28,11 +28,7 @@
 #ifndef PCLSYNC_LIB_H
 #define PCLSYNC_LIB_H
 
-#include <auto_ptr.h>
-#include <iosfwd>
 #include <string>
-#include <boost/shared_ptr.hpp>
-#include <iostream>
 
 struct pstatus_struct_;
 
@@ -46,23 +42,29 @@ namespace console_client {
       ~pclsync_lib();
       pclsync_lib();
     
-      std::ostream& get_out() {
-        if (out_)
-          return *out_;
-        else
-          return std::cout;
-      }
       const std::string& get_username() {return username_;}
       const std::string& get_password() {return password_;}
       const std::string& get_crypto_pass() {return crypto_pass_;};
       const std::string& get_mount() {return mount_;}
-      void get_pass_from_console();
-
-    
-    public:
-      std::auto_ptr<pstatus_struct_> status_;
       
-      boost::shared_ptr<std::ostream> out_;
+      void set_username(const std::string& arg) { username_ = arg;}
+      void set_password(const std::string& arg) { password_ = arg;}
+      void set_crypto_pass(const std::string& arg) { crypto_pass_ = arg;};
+      void set_mount(const std::string& arg) { mount_ = arg;}
+     
+      void get_pass_from_console();
+      void get_cryptopass_from_console();
+
+      static int init();//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto = 1, int usesrypto_userpass = 0);
+      static pclsync_lib& get_lib();
+      
+      static int statrt_crypto (const char* pass);
+      static int stop_crypto (const char* path);
+      static int finalize (const char* path);
+      
+    public:
+     pstatus_struct_* status_;
+
       std::string username_;
       std::string password_;
       std::string crypto_pass_;
@@ -74,11 +76,13 @@ namespace console_client {
       bool newuser_;
       bool save_pass_;
       bool daemon_;
+      
+      static pclsync_lib g_lib;
+      
+    private:
+      void do_get_pass_from_console(std::string& password);
+
     };
-    
-    int init();//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto = 1, int usesrypto_userpass = 0);
-    
-    pclsync_lib& get_lib();
     
   }
 }

@@ -40,6 +40,7 @@
 #include "pupload.h"
 #include "pfscrypto.h"
 #include "pcache.h"
+#include "ppathstatus.h"
 #include <string.h>
 
 typedef struct {
@@ -385,12 +386,14 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   psync_sql_bind_uint(sql, 2, writeid);
   psync_sql_run_free(sql);
   if (!psync_sql_affected_rows()){
-    debug(D_BUG, "upload of %s cancelled due to writeid mismatch, psync_fs_update_openfile should have catched that", name);
+    debug(D_BUG, "upload of %s cancelled due to writeid mismatch, writeid %lu, psync_fs_update_openfile should have catched that", name, (long unsigned)writeid);
     psync_sql_rollback_transaction();
     return -1;
   }
   psync_sql_commit_transaction();
-  debug(D_NOTICE, "file %lu/%s uploaded (mtime=%lu)", (unsigned long)folderid, name, (unsigned long)psync_find_result(meta, "modified", PARAM_NUM)->num);
+  debug(D_NOTICE, "file %lu/%s uploaded (mtime=%lu, size=%lu)", (unsigned long)folderid, name,
+    (unsigned long)psync_find_result(meta, "modified", PARAM_NUM)->num,
+    (unsigned long)psync_find_result(meta, "size", PARAM_NUM)->num);
   psync_status_recalc_to_upload_async();
   return 0;
 }
@@ -767,7 +770,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
   psync_file_t fd;
   psync_fs_err_t err;
   int ret;
-  debug(D_NOTICE, "uploading modified file %s as %lu/%s", filename, (unsigned long)folderid, name);
+  debug(D_NOTICE, "uploading modified file %s writeid %lu as %lu/%s", filename, (unsigned long)writeid, (unsigned long)folderid, name);
   asize=0;
   fd=psync_file_open(indexname, P_O_RDONLY, 0);
   if (unlikely(fd==INVALID_HANDLE_VALUE)){
@@ -829,6 +832,7 @@ int upload_modify(uint64_t taskid, psync_folderid_t folderid, const char *name, 
   fsize=psync_file_size(fd);
   if (unlikely_log(fsize==-1))
     goto err3;
+  debug(D_NOTICE, "file size=%lu", (unsigned long)fsize);
   coff=0;
   reqs=0;
   cinterval=psync_interval_tree_get_first(tree);
@@ -1576,6 +1580,41 @@ err:
   psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
 }
 
+static void clean_stuck_tasks(){
+  psync_sql_res *res;
+  psync_full_result_int *fr;
+  uint64_t taskid;
+  const char *cachepath;
+  char *filename;
+  uint32_t i;
+  char fileidhex[sizeof(psync_fsfileid_t)*2+2];
+  cachepath=psync_setting_get_string(_PS(fscachepath));
+  res=psync_sql_query_rdlock("SELECT f.id FROM fstask f LEFT JOIN pagecachetask p ON f.id=p.taskid WHERE f.status=3");
+  fr=psync_sql_fetchall_int(res);
+  for (i=0; i<fr->rows; i++){
+    taskid=psync_get_result_cell(fr, i, 0);
+    psync_binhex(fileidhex, &taskid, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    psync_file_delete(filename);
+    psync_free(filename);
+    fileidhex[sizeof(psync_fsfileid_t)]='i';
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    psync_file_delete(filename);
+    psync_free(filename);
+    psync_sql_start_transaction();
+    res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
+    psync_sql_bind_uint(res, 1, taskid);
+    psync_sql_run_free(res);
+    psync_sql_commit_transaction();
+  }
+  psync_free(fr);
+}
+
 static void psync_fsupload_check_tasks(){
   fsupload_task_t *task;
   psync_sql_res *res;
@@ -1641,9 +1680,10 @@ static void psync_fsupload_check_tasks(){
 }
 
 static void psync_fsupload_thread(){
+  clean_stuck_tasks();
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatusesnooverquota, ARRAY_SIZE(requiredstatusesnooverquota));
-    // it is better to sleep a bit to give a chance to events to accumulate
+    // it is better to sleep a bit to give a chance for events to accumulate
     psync_milisleep(10);
     psync_fsupload_check_tasks();
     pthread_mutex_lock(&upload_mutex);

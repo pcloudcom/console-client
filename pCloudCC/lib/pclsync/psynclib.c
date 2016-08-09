@@ -59,6 +59,7 @@
 #include "pcontacts.h"
 #include "poverlay.h"
 #include "pasyncnet.h"
+#include "ppathstatus.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -204,6 +205,7 @@ int psync_init(){
   psync_settings_init();
   psync_status_init();
   psync_timer_sleep_handler(psync_stop_crypto_on_sleep);
+  psync_path_status_init();
   if (IS_DEBUG){
     psync_libstate=1;
     pthread_mutex_unlock(&psync_libstate_mutex);
@@ -292,14 +294,16 @@ void psync_set_user_pass(const char *username, const char *password, int save){
   clear_db(save);
   if (save){
     psync_set_string_value("user", username);
-    psync_set_string_value("pass", password);
+    if (password && password[0])
+      psync_set_string_value("pass", password);
   }
   else{
     pthread_mutex_lock(&psync_my_auth_mutex);
     psync_free(psync_my_user);
     psync_my_user=psync_strdup(username);
     psync_free(psync_my_pass);
-    psync_my_pass=psync_strdup(password);
+    if (password && password[0])
+      psync_my_pass=psync_strdup(password);
     pthread_mutex_unlock(&psync_my_auth_mutex);
   }
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
@@ -481,6 +485,7 @@ void psync_unlink(){
   debug(D_NOTICE, "clearing database, finished");
   psync_fs_pause_until_login();
   psync_fs_clean_tasks();
+  psync_path_status_init();
   psync_sql_unlock();
   psync_sql_checkpoint_unlock();
   psync_settings_reset();
@@ -581,6 +586,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (ret==PSYNC_INVALID_SYNCID)
     return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
   psync_sql_sync();
+  psync_path_status_reload_syncs();
   psync_syncer_new(ret);
   return ret;
 }
@@ -690,11 +696,13 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
+  psync_path_status_sync_delete(syncid);
   psync_sql_commit_transaction();
   psync_localnotify_del_sync(syncid);
   psync_stop_sync_download(syncid);
   psync_stop_sync_upload(syncid);
   psync_sql_sync();
+  psync_path_status_reload_syncs();
   psync_syncer_new(syncid);
   return 0;
 }
@@ -748,6 +756,8 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_localnotify_del_sync(syncid);
     psync_restart_localscan();
     psync_sql_sync();
+    psync_path_status_sync_delete(syncid);
+    psync_path_status_reload_syncs();
     return 0;
   }
 }
@@ -791,12 +801,18 @@ pentry_t *psync_stat_path(const char *remotepath){
   return psync_folder_stat_path(remotepath);
 }
 
-int psync_is_name_to_ignore(const char *name){
+int psync_is_lname_to_ignore(const char *name, size_t namelen){
   const char *ign, *sc, *pt;
   char *namelower;
   unsigned char *lp;
   size_t ilen, off, pl;
-  namelower=psync_strdup(name);
+  char buff[120];
+  if (namelen>=sizeof(buff))
+    namelower=(char *)psync_malloc(namelen+1);
+  else
+    namelower=buff;
+  memcpy(namelower, name, namelen);
+  namelower[namelen]=0;
   lp=(unsigned char *)namelower;
   while (*lp){
     *lp=tolower(*lp);
@@ -820,13 +836,19 @@ int psync_is_name_to_ignore(const char *name){
     while (pl && isspace((unsigned char)pt[pl-1]))
       pl--;
     if (psync_match_pattern(namelower, pt, pl)){
-      psync_free(namelower);
+      if (namelower!=buff)
+        psync_free(namelower);
       debug(D_NOTICE, "ignoring file/folder %s", name);
       return 1;
     }
   } while (sc);
-  psync_free(namelower);
+  if (namelower!=buff)
+    psync_free(namelower);
   return 0;
+}
+
+int psync_is_name_to_ignore(const char *name){
+  return psync_is_lname_to_ignore(name, strlen(name));
 }
 
 static void psync_set_run_status(uint32_t status){
@@ -1629,16 +1651,27 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
-external_status psync_filesystem_status(char *path) {
-  return do_psync_external_status(path);
+external_status psync_filesystem_status(const char *path) {
+  switch (psync_path_status_get_status(psync_path_status_get(path))) {
+    case PSYNC_PATH_STATUS_IN_SYNC:
+      return INSYNC;
+    case PSYNC_PATH_STATUS_IN_PROG:
+      return INPROG;
+    case PSYNC_PATH_STATUS_PAUSED:
+    case PSYNC_PATH_STATUS_REMOTE_FULL:
+    case PSYNC_PATH_STATUS_LOCAL_FULL:
+      return NOSYNC;
+    default:
+      return INVSYNC;
+  }
 }
 
 external_status psync_status_file(const char *path) {
-  return do_psync_external_status_file(path);
+  return psync_filesystem_status(path);
 }
 
 external_status psync_status_folder(const char *path) {
-  return do_psync_external_status_folder(path);
+  return psync_filesystem_status(path);
 }
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
@@ -1713,4 +1746,9 @@ void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t *ret) {
   while ((row=psync_sql_fetch_rowint(res)))
     *ret = row[0];
   psync_sql_free_result(res);
+}
+
+int psync_setlanguage(const char *language, char **err){
+  binparam params[]={P_STR("language", language)};
+  return run_command("setlanguage", params, err);
 }

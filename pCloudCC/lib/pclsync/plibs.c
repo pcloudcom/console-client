@@ -49,6 +49,13 @@ struct run_after_ptr {
   void *ptr;
 };
 
+typedef struct {
+  psync_list list;
+  psync_transaction_callback_t commit_callback;
+  psync_transaction_callback_t rollback_callback;
+  void *ptr;
+} tran_callback_t;
+
 static const uint8_t __hex_lookupl[513]={
   "000102030405060708090a0b0c0d0e0f"
   "101112131415161718191a1b1c1d1e1f"
@@ -112,6 +119,10 @@ int psync_recache_contacts=1;
 PSYNC_THREAD uint32_t psync_error=0;
 
 static pthread_mutex_t psync_db_checkpoint_mutex;
+
+static int in_transaction=0;
+static int transaction_failed=0;
+static psync_list tran_callbacks;
 
 
 char *psync_strdup(const char *str){
@@ -353,9 +364,6 @@ int psync_sql_connect(const char *db){
   int initdbneeded=0;
   int code;
 
-//   printf("Using sqlite version %s source %s \n", sqlite3_libversion(), sqlite3_sourceid());
-//   printf("Macros sqlite version %s source %s \n",  SQLITE_VERSION, SQLITE_SOURCE_ID);
-  
   assert(sqlite3_libversion_number()==SQLITE_VERSION_NUMBER);
   assert(!strcmp(sqlite3_sourceid(), SQLITE_SOURCE_ID));
   assert(!strcmp(sqlite3_libversion(), SQLITE_VERSION));
@@ -479,6 +487,7 @@ typedef struct {
   psync_list list;
   const char *file;
   const char *thread;
+  struct timespec tm;
   unsigned line;
 } rd_lock_data;
 
@@ -514,12 +523,13 @@ static void record_wrunlock(){
   wrlocked=0;
 }
 
-static void record_rdlock(const char *file, unsigned line){
+static void record_rdlock(const char *file, unsigned line, struct timespec *tm){
   rd_lock_data *lock;
   lock=psync_new(rd_lock_data);
   lock->file=file;
   lock->thread=psync_thread_name;
   lock->line=line;
+  memcpy(&lock->tm, tm, sizeof(struct timespec));
   pthread_mutex_lock(&rdmutex);
   psync_list_add_tail(&rdlocks, &lock->list);
   pthread_mutex_unlock(&rdmutex);
@@ -537,13 +547,20 @@ static rd_lock_data *record_rdunlock(){
   return lock;
 }
 
-static void dump_locks(){
+static void time_format(time_t tm, unsigned long ns, char *result);
+
+void psync_sql_dump_locks(){
   rd_lock_data *lock;
-  if (wrlocked)
-    debug(D_ERROR, "write lock taken by thread %s at %s:%u", wrlockthread, wrlockfile, wrlockline);
+  char dttime[36];
+  if (wrlocked){
+    time_format(sqllockstart.tv_sec, sqllockstart.tv_nsec, dttime);
+    debug(D_ERROR, "write lock taken by thread %s from %s:%u at %s", wrlockthread, wrlockfile, wrlockline, dttime);
+  }
   pthread_mutex_lock(&rdmutex);
-  psync_list_for_each_element(lock, &rdlocks, rd_lock_data, list)
-    debug(D_ERROR, "read lock taken by thread %s at %s:%u", lock->thread, lock->file, lock->line);
+  psync_list_for_each_element(lock, &rdlocks, rd_lock_data, list){
+    time_format(lock->tm.tv_sec, lock->tm.tv_nsec, dttime);
+    debug(D_ERROR, "read lock taken by thread %s from %s:%u at %s", lock->thread, lock->file, lock->line, dttime);
+  }
   pthread_mutex_unlock(&rdmutex);
 }
 
@@ -575,13 +592,14 @@ void psync_sql_do_lock(const char *file, unsigned line){
     end.tv_sec+=30;
     if (psync_rwlock_timedwrlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql write lock timed out called from %s:%u", file, line);
-      dump_locks();
+      psync_sql_dump_locks();
       abort();
     }
     psync_nanotime(&end);
     msec=(end.tv_sec-start.tv_sec)*1000+end.tv_nsec/1000000-start.tv_nsec/1000000;
     if (msec>=5)
       debug(D_WARNING, "waited %lu milliseconds for database write lock", msec);
+    assert(sqllockcnt==0);
     sqllockcnt++;
     memcpy(&sqllockstart, &end, sizeof(struct timespec));
     record_wrlock(file, line);
@@ -606,7 +624,7 @@ void psync_sql_unlock(){
     psync_nanotime(&end);
     msec=(end.tv_sec-sqllockstart.tv_sec)*1000+end.tv_nsec/1000000-sqllockstart.tv_nsec/1000000;
     if (msec>=10)
-      debug(D_WARNING, "held database write lock for %lu milliseconds taken at %s:%u", msec, wrlockfile, wrlockline);
+      debug(D_WARNING, "held database write lock for %lu milliseconds taken from %s:%u", msec, wrlockfile, wrlockline);
     record_wrunlock();
     psync_rwlock_unlock(&psync_db_lock);
   }
@@ -627,7 +645,7 @@ void psync_sql_do_rdlock(const char *file, unsigned line){
     end.tv_sec+=30;
     if (psync_rwlock_timedrdlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql read lock timed out, called from %s:%u", file, line);
-      dump_locks();
+      psync_sql_dump_locks();
       abort();
     }
     psync_nanotime(&end);
@@ -636,11 +654,11 @@ void psync_sql_do_rdlock(const char *file, unsigned line){
       debug(D_WARNING, "waited %lu milliseconds for database read lock", msec);
     sqlrdlockcnt++;
     memcpy(&sqlrdlockstart, &end, sizeof(struct timespec));
-    record_rdlock(file, line);
+    record_rdlock(file, line, &sqlrdlockstart);
   }
   else if (++sqlrdlockcnt==1){
     psync_nanotime(&sqlrdlockstart);
-    record_rdlock(file, line);
+    record_rdlock(file, line, &sqlrdlockstart);
   }
 }
 #else
@@ -652,7 +670,6 @@ void psync_sql_rdlock(){
 void psync_sql_rdunlock(){
 #if IS_DEBUG
   if (unlikely(sqlrdlockcnt==0)){
-    debug(D_NOTICE, "called with no read locks, did we upgrade the lock? calling psync_sql_unlock");
     psync_sql_unlock();
     return;
   }
@@ -701,7 +718,6 @@ int psync_sql_tryupgradelock(){
     assert(sqllockcnt==1);
     sqllockstart=sqlrdlockstart;
     record_wrlock(lock->file, lock->line);
-    debug(D_NOTICE, "upgraded read lock taken at %s:%u to a write lock", lock->file, lock->line);
     psync_free(lock);
     return 0;
   }
@@ -756,30 +772,72 @@ int psync_sql_statement(const char *sql){
 
 #if IS_DEBUG
 int psync_sql_do_start_transaction(const char *file, unsigned line){
+  psync_sql_res *res;
   psync_sql_do_lock(file, line);
-  if (unlikely(psync_sql_do_statement("BEGIN", file, line))){
+  res=psync_sql_do_prep_statement("BEGIN", file, line);
 #else
 int psync_sql_start_transaction(){
+  psync_sql_res *res;
   psync_sql_lock();
-  if (unlikely(psync_sql_statement("BEGIN"))){
+  res=psync_sql_prep_statement("BEGIN");
 #endif
-    psync_sql_unlock();
+  assert(!in_transaction);
+  if (unlikely(!res || psync_sql_run_free(res)))
     return -1;
+  in_transaction=1;
+  transaction_failed=0;
+  psync_list_init(&tran_callbacks);
+  return 0;
+}
+
+static void run_commit_callbacks(int success){
+  tran_callback_t *cb;
+  psync_list *l1, *l2;
+  psync_list_for_each_safe(l1, l2, &tran_callbacks) {
+    cb=psync_list_element(l1, tran_callback_t, list);
+    if (success)
+      cb->commit_callback(cb->ptr);
+    else
+      cb->rollback_callback(cb->ptr);
+    psync_free(cb);
   }
-  else
-    return 0;
 }
 
 int psync_sql_commit_transaction(){
-  int code=psync_sql_statement("COMMIT");
-  psync_sql_unlock();
-  return code;
+  assert(in_transaction);
+  if (likely(!transaction_failed)){
+    psync_sql_res *res=psync_sql_prep_statement("COMMIT");
+    if (likely(!psync_sql_run_free(res))){
+      run_commit_callbacks(1);
+      in_transaction=0;
+      psync_sql_unlock();
+      return 0;
+    }
+  }
+  else
+    debug(D_NOTICE, "rolling back transaction as some statements failed");
+  psync_sql_rollback_transaction();
+  return -1;
 }
 
 int psync_sql_rollback_transaction(){
-  int code=psync_sql_statement("ROLLBACK");
+  psync_sql_res *res=psync_sql_prep_statement("ROLLBACK");
+  assert(in_transaction);
+  psync_sql_run_free(res);
+  run_commit_callbacks(0);
+  in_transaction=0;
   psync_sql_unlock();
-  return code;
+  return 0;
+}
+
+void psync_sql_transation_add_callbacks(psync_transaction_callback_t commit_callback, psync_transaction_callback_t rollback_callback, void *ptr){
+  tran_callback_t *cb;
+  assert(in_transaction);
+  cb=psync_new(tran_callback_t);
+  cb->commit_callback=commit_callback;
+  cb->rollback_callback=rollback_callback;
+  cb->ptr=ptr;
+  psync_list_add_tail(&tran_callbacks, &cb->list);
 }
 
 #if IS_DEBUG && 0
@@ -1310,41 +1368,58 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
 #endif
 }
 
-void psync_sql_reset(psync_sql_res *res){
+int psync_sql_reset(psync_sql_res *res){
   int code=sqlite3_reset(res->stmt);
-  if (unlikely(code!=SQLITE_OK))
+  if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errmsg(psync_db));
+    return -1;
+  }
+  else
+    return 0;
 }
 
-void psync_sql_run(psync_sql_res *res){
+int psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
-  if (unlikely(code!=SQLITE_DONE))
+  if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    transaction_failed=1;
+    return -1;
+  }
   code=sqlite3_reset(res->stmt);
   if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errmsg(psync_db));
+  return 0;
 }
 
-void psync_sql_run_free_nocache(psync_sql_res *res){
+int psync_sql_run_free_nocache(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
-  if (unlikely(code!=SQLITE_DONE))
+  if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    code=-1;
+    transaction_failed=1;
+  }
+  else
+    code=0;
   sqlite3_finalize(res->stmt);
   psync_sql_res_unlock(res);
   psync_free(res);
+  return code;
 }
 
-void psync_sql_run_free(psync_sql_res *res){
+int psync_sql_run_free(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE || (code=sqlite3_reset(res->stmt))!=SQLITE_OK)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
     sqlite3_finalize(res->stmt);
+    transaction_failed=1;
     psync_sql_res_unlock(res);
     psync_free(res);
+    return -1;
   }
   else{
     psync_sql_res_unlock(res);
     psync_cache_add(res->sql, res, PSYNC_QUERY_CACHE_SEC, psync_sql_free_cache, PSYNC_QUERY_MAX_CNT);
+    return 0;
   }
 }
 
@@ -1945,6 +2020,202 @@ int psync_task_complete(void *h, void *data){
   }
   pthread_mutex_unlock(&tm->mutex);
   return ret;
+}
+
+
+#define rot(x,k) (((x)<<(k))|((x)>>(32-(k))))
+static uint32_t pq_rnd() {
+  static uint32_t a=0x95ae3d25, b=0xe225d755, c=0xc63a2ae7, d=0xe4556265;
+  uint32_t e=a-rot(b, 27);
+  a=b^rot(c, 17);
+  b=c+d;
+  c=d+e;
+  d=e+a;
+  return d;
+}
+
+#define QSORT_TRESH  8
+#define QSORT_MTR   64
+#define QSORT_REC_M (16*1024)
+
+static inline unsigned char *med3(unsigned char *a, unsigned char *b, unsigned char *c, int (*compar)(const void *, const void *)) {
+  return compar(a, b)<0?
+            (compar(b, c)<0?b:compar(a, c)<0?c:a):
+            (compar(b, c)>0?b:compar(a, c)>0?c:a);
+}
+
+unsigned char *pq_choose_part(unsigned char *base, size_t cnt, size_t size, int (*compar)(const void *, const void *)) {
+  if (cnt>=QSORT_REC_M) {
+    cnt/=3;
+    return med3(pq_choose_part(base, cnt, size, compar), pq_choose_part(base+cnt*size, cnt, size, compar), pq_choose_part(base+cnt*size*2, cnt, size, compar), compar);
+  } else {
+    return med3(base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, compar);
+  }
+}
+
+static inline void pqsswap(unsigned char *a, unsigned char *b, size_t size) {
+  unsigned char tmp;
+  do {
+    tmp=*a;
+    *a++=*b;
+    *b++=tmp;
+  } while (--size);
+}
+
+static inline void pqsswap32(unsigned char *a, unsigned char *b, size_t size) {
+  uint32_t tmp;
+  do {
+    tmp=*(uint32_t *)a;
+    *(uint32_t *)a=*(uint32_t *)b;
+    *(uint32_t *)b=tmp;
+    a+=sizeof(uint32_t);
+    b+=sizeof(uint32_t);
+  } while (--size);
+}
+
+
+typedef struct {
+  unsigned char *lo;
+  unsigned char *hi;
+} psq_stack_t;
+
+void psync_pqsort(void *base, size_t cnt, size_t sort_first, size_t size, int (*compar)(const void *, const void *)) {
+  psq_stack_t stack[sizeof(size_t)*8];
+  psq_stack_t *top;
+  unsigned char *lo, *hi, *mid, *l, *r, *sf;
+  size_t tresh, n, u32size;
+  tresh=QSORT_TRESH*size;
+  sf=(unsigned char *)base+sort_first*size;
+  if (size%sizeof(uint32_t)==0 && (uintptr_t)base%sizeof(uint32_t)==0)
+    u32size=size/sizeof(uint32_t);
+  else
+    u32size=0;
+  if (cnt>QSORT_TRESH) {
+    top=stack+1;
+    lo=(unsigned char *)base;
+    hi=lo+(cnt-1)*size;
+    do {
+      n=(hi-lo)/size;
+      if (n<=QSORT_MTR) {
+        mid=lo+(n>>1)*size;
+        if (compar(mid, lo)<0)
+          pqsswap(mid, lo, size);
+        if (compar(hi, mid)<0) {
+          pqsswap(mid, hi, size);
+          if (compar(mid, lo)<0)
+            pqsswap(mid, lo, size);
+        }
+        // we already sure *hi and *lo are good, so they will be skipped without checking
+        l=lo;
+        r=hi;
+      } else {
+        mid=pq_choose_part(lo, n, size, compar);
+        l=lo-size;
+        r=hi+size;
+      }
+      if (u32size) {
+        do {
+          do {
+            l+=size;
+          } while (compar(l, mid)<0);
+          do {
+            r-=size;
+          } while (compar(mid, r)<0);
+          if (l>=r)
+            break;
+          pqsswap32(l, r, u32size);
+          if (mid==l) {
+            mid=r;
+            r+=size;
+          } else if (mid==r) {
+            mid=l;
+            l-=size;
+          }
+        } while (1);
+      } else {
+        do {
+          do {
+            l+=size;
+          } while (compar(l, mid)<0);
+          do {
+            r-=size;
+          } while (compar(mid, r)<0);
+          if (l>=r)
+            break;
+          pqsswap(l, r, size);
+          if (mid==l) {
+            mid=r;
+            r+=size;
+          } else if (mid==r) {
+            mid=l;
+            l-=size;
+          }
+        } while (1);
+      }
+      if (hi-mid<=tresh || mid>=sf) {
+        if (mid-lo<=tresh) {
+          top--;
+          lo=top->lo;
+          hi=top->hi;
+        } else {
+          hi=mid-size;
+        }
+      } else if (mid-lo<=tresh) {
+        lo=mid+size;
+      } else if (hi-mid<mid-lo) {
+        top->lo=lo;
+        top->hi=mid-size;
+        top++;
+        lo=mid+size;
+      } else {
+        top->lo=mid+size;
+        top->hi=hi;
+        top++;
+        hi=mid-size;
+      }
+    } while (top!=stack);
+  } else if (cnt<=1) {
+    return;
+  }
+  lo=(unsigned char *)base;
+  hi=lo+(cnt-1)*size;
+  sf+=size*QSORT_TRESH;
+  if (sf<hi)
+    hi=sf;
+  r=lo+QSORT_TRESH*size+4;
+  if (r>hi)
+    r=hi;
+  for (l=lo+size; l<=r; l+=size)
+    if (compar(l, lo)<0)
+      lo=l;
+  pqsswap((unsigned char *)base, lo, size);
+  l=(unsigned char *)base+size;
+  hi-=size;
+  while (l<=hi) {
+    lo=l;
+    l+=size;
+    while (compar(l, lo)<0)
+      lo-=size;
+    lo+=size;
+    if (lo!=l) {
+      unsigned char *t=l+size;
+      if (u32size) {
+        while ((t-=sizeof(uint32_t))>=l) {
+          uint32_t tmp=*(uint32_t *)t;
+          for (r=mid=t; (mid-=size)>=lo; r=mid)
+            *(uint32_t *)r=*(uint32_t *)mid;
+          *(uint32_t *)r=tmp;
+        }
+      } else {
+        while (--t>=l) {
+          unsigned char tmp=*t;
+          for (r=mid=t; (mid-=size)>=lo; r=mid)
+            *r=*mid;
+          *r=tmp;
+        }
+      }
+    }
+  }
 }
 
 void psync_try_free_memory(){
