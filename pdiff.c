@@ -747,6 +747,7 @@ static void process_deletefolder(const binresult *entry){
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
+  psync_path_status_folder_deleted(folderid);
   if (psync_is_folder_in_downloadlist(folderid)){
     psync_del_folder_from_downloadlist(folderid);
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=?");
@@ -773,7 +774,6 @@ static void process_deletefolder(const binresult *entry){
     psync_sql_run(st2);
     psync_fs_folder_deleted(folderid);
   }
-  psync_path_status_del_from_parent_cache(folderid);
 }
 
 static void check_for_deletedfileid(const binresult *meta){

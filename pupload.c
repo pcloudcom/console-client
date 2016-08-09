@@ -39,6 +39,7 @@
 #include "pdiff.h"
 #include "plist.h"
 #include "plocalscan.h"
+#include "pfileops.h"
 
 typedef struct {
   psync_list list;
@@ -141,19 +142,11 @@ static int task_wait_no_uploads(uint64_t taskid){
 }
 
 static int64_t do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt){
-  psync_socket *api;
   binresult *res;
   uint64_t result;
-  api=psync_apipool_get();
-  if (unlikely(!api))
+  res=psync_do_api_run_command(cmd, cmdlen, params, paramscnt);
+  if (unlikely(!res))
     return -1;
-  res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
-  if (likely(res))
-    psync_apipool_release(api);
-  else{
-    psync_apipool_release_bad(api);
-    return -1;
-  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   psync_free(res);
   if (unlikely(result)){
@@ -166,11 +159,8 @@ static int64_t do_run_command_res(const char *cmd, size_t cmdlen, const binparam
 static int do_run_command(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt){
   uint64_t result;
   result=do_run_command_res(cmd, cmdlen, params, paramscnt);
-  if (unlikely(result)){
-    psync_process_api_error(result);
-    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+  if (unlikely(result))
     return psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL?-1:0;
-  }
   else
     return 0;
 }
@@ -293,10 +283,27 @@ static int task_renamefile(uint64_t taskid, psync_syncid_t syncid, psync_fileid_
 
 static int task_renameremotefolder(psync_folderid_t folderid, psync_folderid_t newparentfolderid, const char *newname){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname)};
+  binresult *res;
+  uint64_t result;
   int ret;
-  ret=run_command("renamefolder", params);
-  if (likely(!ret))
+  res=psync_api_run_command("renamefolder", params);
+  if (unlikely(!res))
+    return -1;
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (likely(!result)){
+    ret=0;
     debug(D_NOTICE, "remote folderid %lu moved/renamed to (%lu)/%s", (long unsigned)folderid, (long unsigned)newparentfolderid, newname);
+    if (!psync_sql_start_transaction()){
+      psync_ops_update_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
+      psync_sql_commit_transaction();
+    }
+  }
+  else{
+    ret=-1;
+    psync_process_api_error(result);
+    debug(D_NOTICE, "command renamefolder returned %lu: %s", (unsigned long)result, psync_find_result(res, "error", PARAM_STR)->str);
+  }
+  psync_free(res);
   return ret;
 }
 

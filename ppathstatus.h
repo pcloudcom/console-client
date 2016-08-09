@@ -62,6 +62,7 @@ void psync_path_status_del_from_parent_cache(psync_folderid_t folderid);
 void psync_path_status_drive_folder_changed(psync_folderid_t folderid);
 
 void psync_path_status_folder_moved(psync_folderid_t folderid, psync_folderid_t old_parent_folderid, psync_folderid_t new_parent_folderid);
+void psync_path_status_folder_deleted(psync_folderid_t folderid);
 
 psync_path_status_t psync_path_status_get(const char *path);
 

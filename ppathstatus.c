@@ -80,6 +80,12 @@ typedef struct {
   path_sync_list_entry_t syncs[];
 } path_sync_list_t;
 
+typedef struct {
+  psync_folderid_t folderid;
+  psync_folderid_t old_parent_folderid;
+  psync_folderid_t new_parent_folderid;
+} folder_moved_params_t;
+
 static char *drive_path=NULL;
 static size_t drive_path_len;
 static path_sync_list_t *syncs=NULL;
@@ -244,6 +250,8 @@ static psync_folderid_t get_parent_folder(psync_folderid_t folderid) {
   psync_uint_row row;
   parent_cache_entry_t *p;
   uint32_t h;
+  if (folderid==0)
+    return PSYNC_INVALID_FOLDERID;
   h=hash_folderid(folderid)%PARENT_HASH_SIZE;
   psync_list_for_each_element (p, &parent_cache_hash[h], parent_cache_entry_t, list_hash)
     if (p->folderid==folderid) {
@@ -255,9 +263,9 @@ static psync_folderid_t get_parent_folder(psync_folderid_t folderid) {
   psync_sql_bind_uint(res, 1, folderid);
   row=psync_sql_fetch_rowint(res);
   if (unlikely(!row)) {
-    debug(D_ERROR, "can not find parent folder for folderid %lu", (unsigned long)folderid);
+    debug(D_WARNING, "can not find parent folder for folderid %lu", (unsigned long)folderid);
     psync_sql_free_result(res);
-    return 0;
+    return PSYNC_INVALID_FOLDERID;
   }
   p=psync_list_remove_head_element(&parent_cache_lru, parent_cache_entry_t, list_lru);
   psync_list_del(&p->list_hash);
@@ -289,8 +297,7 @@ void psync_path_status_drive_folder_changed(psync_folderid_t folderid) {
     assert(!ft->own_tasks);
     assert(!ft->child_task_cnt);
     ft->own_tasks=1;
-    while (folderid!=0) {
-      folderid=get_parent_folder(folderid);
+    while ((folderid=get_parent_folder(folderid))!=PSYNC_INVALID_FOLDERID) {
       ft=get_folder_tasks(folderid, 1);
       ft->child_task_cnt++;
       if (ft->child_task_cnt>1 || ft->own_tasks)
@@ -301,8 +308,7 @@ void psync_path_status_drive_folder_changed(psync_folderid_t folderid) {
     assert(!ft->child_task_cnt);
     assert(ft->own_tasks);
     free_folder_tasks(ft);
-    while (folderid!=0) {
-      folderid=get_parent_folder(folderid);
+    while ((folderid=get_parent_folder(folderid))!=PSYNC_INVALID_FOLDERID) {
       ft=get_folder_tasks(folderid, 0);
       assert(ft); // if assert fails, the problem is not the assert, don't change it to "if (!ft) break;"
       ft->child_task_cnt--;
@@ -314,44 +320,71 @@ void psync_path_status_drive_folder_changed(psync_folderid_t folderid) {
   psync_sql_unlock();
 }
 
-void psync_path_status_folder_moved(psync_folderid_t folderid, psync_folderid_t old_parent_folderid, psync_folderid_t new_parent_folderid) {
-  parent_cache_entry_t *p;
-  folder_tasks_t *ft, *pft;
-  uint32_t h;
-  if (old_parent_folderid==new_parent_folderid)
-    return;
-  h=hash_folderid(folderid)%PARENT_HASH_SIZE;
-  psync_sql_lock();
-  psync_list_for_each_element (p, &parent_cache_hash[h], parent_cache_entry_t, list_hash)
-    if (p->folderid==folderid) {
-      assert(p->parentfolderid==old_parent_folderid);
-      p->parentfolderid=new_parent_folderid;
-    }
-  ft=get_folder_tasks(folderid, 0);
-  if (!ft) {
-    psync_sql_unlock();
-    return;
-  }
+static void folder_moved(psync_folderid_t folderid, psync_folderid_t old_parent_folderid, psync_folderid_t new_parent_folderid) {
+  folder_tasks_t *pft;
   pft=get_folder_tasks(old_parent_folderid, 0);
   assert(pft);
   pft->child_task_cnt--;
   while (!pft->child_task_cnt && !pft->own_tasks) {
     free_folder_tasks(pft);
-    if (old_parent_folderid==0)
-      break;
     old_parent_folderid=get_parent_folder(old_parent_folderid);
+    if (old_parent_folderid==PSYNC_INVALID_FOLDERID)
+      break;
     pft=get_folder_tasks(old_parent_folderid, 0);
     assert(pft);
     pft->child_task_cnt--;
   }
   pft=get_folder_tasks(new_parent_folderid, 1);
   pft->child_task_cnt++;
-  while (pft->child_task_cnt==1 && !pft->own_tasks && new_parent_folderid!=0) {
-    new_parent_folderid=get_parent_folder(new_parent_folderid);
+  while (pft->child_task_cnt==1 && !pft->own_tasks && (new_parent_folderid=get_parent_folder(new_parent_folderid))!=PSYNC_INVALID_FOLDERID) {
     pft=get_folder_tasks(new_parent_folderid, 1);
     pft->child_task_cnt++;
   }
-  psync_sql_unlock();
+}
+
+static void folder_moved_commit(void *ptr) {
+  folder_moved_params_t *mp=(folder_moved_params_t *)ptr;
+  folder_moved(mp->folderid, mp->old_parent_folderid, mp->new_parent_folderid);
+  psync_free(mp);
+}
+
+void psync_path_status_folder_moved(psync_folderid_t folderid, psync_folderid_t old_parent_folderid, psync_folderid_t new_parent_folderid) {
+  parent_cache_entry_t *p;
+  folder_moved_params_t *mp;
+  uint32_t h;
+  if (old_parent_folderid==new_parent_folderid)
+    return;
+  h=hash_folderid(folderid)%PARENT_HASH_SIZE;
+  psync_list_for_each_element (p, &parent_cache_hash[h], parent_cache_entry_t, list_hash)
+    if (p->folderid==folderid) {
+      assert(p->parentfolderid==old_parent_folderid);
+      p->parentfolderid=new_parent_folderid;
+      break;
+    }
+  if (!get_folder_tasks(folderid, 0))
+    return;
+  mp=psync_new(folder_moved_params_t);
+  mp->folderid=folderid;
+  mp->old_parent_folderid=old_parent_folderid;
+  mp->new_parent_folderid=new_parent_folderid;
+  psync_sql_transation_add_callbacks(folder_moved_commit, psync_free, mp);
+}
+
+void psync_path_status_folder_deleted(psync_folderid_t folderid) {
+  folder_tasks_t *ft;
+  ft=get_folder_tasks(folderid, 0);
+  if (ft) {
+    free_folder_tasks(ft);
+    while ((folderid=get_parent_folder(folderid))!=PSYNC_INVALID_FOLDERID) {
+      ft=get_folder_tasks(folderid, 0);
+      assert(ft); // if assert fails, the problem is not the assert, don't change it to "if (!ft) break;"
+      ft->child_task_cnt--;
+      if (ft->child_task_cnt || ft->own_tasks)
+        break;
+      free_folder_tasks(ft);
+    }
+  }
+  psync_path_status_del_from_parent_cache(folderid);
 }
 
 static inline int is_slash(char ch) {
