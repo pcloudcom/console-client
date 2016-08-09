@@ -40,6 +40,7 @@
 #include "pupload.h"
 #include "pfscrypto.h"
 #include "pcache.h"
+#include "ppathstatus.h"
 #include <string.h>
 
 typedef struct {
@@ -390,7 +391,7 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
     return -1;
   }
   psync_sql_commit_transaction();
-  debug(D_NOTICE, "file %lu/%s uploaded (mtime=%lu, size=%lu)", (unsigned long)folderid, name, 
+  debug(D_NOTICE, "file %lu/%s uploaded (mtime=%lu, size=%lu)", (unsigned long)folderid, name,
     (unsigned long)psync_find_result(meta, "modified", PARAM_NUM)->num,
     (unsigned long)psync_find_result(meta, "size", PARAM_NUM)->num);
   psync_status_recalc_to_upload_async();

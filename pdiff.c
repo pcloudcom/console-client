@@ -48,6 +48,7 @@
 #include "publiclinks.h"
 #include "pcontacts.h"
 #include "pcloudcrypto.h"
+#include "ppathstatus.h"
 #include <ctype.h>
 
 
@@ -170,7 +171,7 @@ static psync_socket *get_connected_socket(){
   auth=user=pass=NULL;
   psync_is_business = 0;
   int digest = 1;
-  while (1){    
+  while (1){
     psync_free(auth);
     psync_free(user);
     psync_free(pass);
@@ -255,7 +256,7 @@ static psync_socket *get_connected_socket(){
         digest = 0;
         continue;
       }
-        
+
       else
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
@@ -632,6 +633,7 @@ static void process_modifyfolder(const binresult *entry){
     psync_sql_bind_uint(res, 1, mtime);
     psync_sql_bind_uint(res, 2, parentfolderid);
     psync_sql_run_free(res);
+    psync_path_status_folder_moved(folderid, oldparentfolderid, parentfolderid);
   }
   /* We should check if oldparentfolderid is in downloadlist, not folderid. If parentfolderid is not in and
    * folderid is in, it means that folder that is a "root" of a syncid is modified, we do not care about that.
@@ -745,6 +747,7 @@ static void process_deletefolder(const binresult *entry){
   }
   meta=psync_find_result(entry, "metadata", PARAM_HASH);
   folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
+  psync_path_status_folder_deleted(folderid);
   if (psync_is_folder_in_downloadlist(folderid)){
     psync_del_folder_from_downloadlist(folderid);
     res=psync_sql_query("SELECT syncid, localfolderid FROM syncedfolder WHERE folderid=?");
@@ -1966,6 +1969,7 @@ static uint64_t process_entries(const binresult *entries, uint64_t newdiffid){
   psync_set_uint_value("usedquota", used_quota);
   //update_ba_emails();
   //update_ba_teams();
+  psync_path_status_clear_path_cache();
   psync_sql_commit_transaction();
   psync_diff_unlock();
   if (needdownload){

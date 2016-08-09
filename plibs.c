@@ -49,6 +49,13 @@ struct run_after_ptr {
   void *ptr;
 };
 
+typedef struct {
+  psync_list list;
+  psync_transaction_callback_t commit_callback;
+  psync_transaction_callback_t rollback_callback;
+  void *ptr;
+} tran_callback_t;
+
 static const uint8_t __hex_lookupl[513]={
   "000102030405060708090a0b0c0d0e0f"
   "101112131415161718191a1b1c1d1e1f"
@@ -112,6 +119,10 @@ int psync_recache_contacts=1;
 PSYNC_THREAD uint32_t psync_error=0;
 
 static pthread_mutex_t psync_db_checkpoint_mutex;
+
+static int in_transaction=0;
+static int transaction_failed=0;
+static psync_list tran_callbacks;
 
 
 char *psync_strdup(const char *str){
@@ -659,7 +670,6 @@ void psync_sql_rdlock(){
 void psync_sql_rdunlock(){
 #if IS_DEBUG
   if (unlikely(sqlrdlockcnt==0)){
-    debug(D_NOTICE, "called with no read locks, did we upgrade the lock? calling psync_sql_unlock");
     psync_sql_unlock();
     return;
   }
@@ -708,7 +718,6 @@ int psync_sql_tryupgradelock(){
     assert(sqllockcnt==1);
     sqllockstart=sqlrdlockstart;
     record_wrlock(lock->file, lock->line);
-    debug(D_NOTICE, "upgraded read lock taken from %s:%u to a write lock", lock->file, lock->line);
     psync_free(lock);
     return 0;
   }
@@ -763,30 +772,72 @@ int psync_sql_statement(const char *sql){
 
 #if IS_DEBUG
 int psync_sql_do_start_transaction(const char *file, unsigned line){
+  psync_sql_res *res;
   psync_sql_do_lock(file, line);
-  if (unlikely(psync_sql_do_statement("BEGIN", file, line))){
+  res=psync_sql_do_prep_statement("BEGIN", file, line);
 #else
 int psync_sql_start_transaction(){
+  psync_sql_res *res;
   psync_sql_lock();
-  if (unlikely(psync_sql_statement("BEGIN"))){
+  res=psync_sql_prep_statement("BEGIN");
 #endif
-    psync_sql_unlock();
+  assert(!in_transaction);
+  if (unlikely(!res || psync_sql_run_free(res)))
     return -1;
+  in_transaction=1;
+  transaction_failed=0;
+  psync_list_init(&tran_callbacks);
+  return 0;
+}
+
+static void run_commit_callbacks(int success){
+  tran_callback_t *cb;
+  psync_list *l1, *l2;
+  psync_list_for_each_safe(l1, l2, &tran_callbacks) {
+    cb=psync_list_element(l1, tran_callback_t, list);
+    if (success)
+      cb->commit_callback(cb->ptr);
+    else
+      cb->rollback_callback(cb->ptr);
+    psync_free(cb);
   }
-  else
-    return 0;
 }
 
 int psync_sql_commit_transaction(){
-  int code=psync_sql_statement("COMMIT");
-  psync_sql_unlock();
-  return code;
+  assert(in_transaction);
+  if (likely(!transaction_failed)){
+    psync_sql_res *res=psync_sql_prep_statement("COMMIT");
+    if (likely(!psync_sql_run_free(res))){
+      run_commit_callbacks(1);
+      in_transaction=0;
+      psync_sql_unlock();
+      return 0;
+    }
+  }
+  else
+    debug(D_NOTICE, "rolling back transaction as some statements failed");
+  psync_sql_rollback_transaction();
+  return -1;
 }
 
 int psync_sql_rollback_transaction(){
-  int code=psync_sql_statement("ROLLBACK");
+  psync_sql_res *res=psync_sql_prep_statement("ROLLBACK");
+  assert(in_transaction);
+  psync_sql_run_free(res);
+  run_commit_callbacks(0);
+  in_transaction=0;
   psync_sql_unlock();
-  return code;
+  return 0;
+}
+
+void psync_sql_transation_add_callbacks(psync_transaction_callback_t commit_callback, psync_transaction_callback_t rollback_callback, void *ptr){
+  tran_callback_t *cb;
+  assert(in_transaction);
+  cb=psync_new(tran_callback_t);
+  cb->commit_callback=commit_callback;
+  cb->rollback_callback=rollback_callback;
+  cb->ptr=ptr;
+  psync_list_add_tail(&tran_callbacks, &cb->list);
 }
 
 #if IS_DEBUG && 0
@@ -1317,41 +1368,58 @@ psync_sql_res *psync_sql_prep_statement(const char *sql){
 #endif
 }
 
-void psync_sql_reset(psync_sql_res *res){
+int psync_sql_reset(psync_sql_res *res){
   int code=sqlite3_reset(res->stmt);
-  if (unlikely(code!=SQLITE_OK))
+  if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errmsg(psync_db));
+    return -1;
+  }
+  else
+    return 0;
 }
 
-void psync_sql_run(psync_sql_res *res){
+int psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
-  if (unlikely(code!=SQLITE_DONE))
+  if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    transaction_failed=1;
+    return -1;
+  }
   code=sqlite3_reset(res->stmt);
   if (unlikely(code!=SQLITE_OK))
     debug(D_ERROR, "sqlite3_reset returned error: %s", sqlite3_errmsg(psync_db));
+  return 0;
 }
 
-void psync_sql_run_free_nocache(psync_sql_res *res){
+int psync_sql_run_free_nocache(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
-  if (unlikely(code!=SQLITE_DONE))
+  if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    code=-1;
+    transaction_failed=1;
+  }
+  else
+    code=0;
   sqlite3_finalize(res->stmt);
   psync_sql_res_unlock(res);
   psync_free(res);
+  return code;
 }
 
-void psync_sql_run_free(psync_sql_res *res){
+int psync_sql_run_free(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE || (code=sqlite3_reset(res->stmt))!=SQLITE_OK)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
     sqlite3_finalize(res->stmt);
+    transaction_failed=1;
     psync_sql_res_unlock(res);
     psync_free(res);
+    return -1;
   }
   else{
     psync_sql_res_unlock(res);
     psync_cache_add(res->sql, res, PSYNC_QUERY_CACHE_SEC, psync_sql_free_cache, PSYNC_QUERY_MAX_CNT);
+    return 0;
   }
 }
 

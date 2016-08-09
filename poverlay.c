@@ -26,7 +26,7 @@
 #include "pcompat.h"
 #include "plibs.h"
 #include "poverlay.h"
-#include "pexternalstatus.h"
+#include "ppathstatus.h"
 #include "pcache.h"
 
 int overlays_running = 1;
@@ -44,7 +44,7 @@ int callbacks_running = 1;
 
 #include "poverlay_mac.c"
 
-#else 
+#else
 
 void overlay_main_loop(VOID){}
 void instance_thread(LPVOID){}
@@ -54,6 +54,8 @@ void instance_thread(LPVOID){}
 poverlay_callback * callbacks;
 static int callbacks_size = 15;
 static const int calbacks_lower_band = 20;
+
+/* disable cache, psync_path_status_get() has many layers of caching internally
 
 #define CACHE_PREF "P_OVERLA_CACHE_PREFIX"
 #define CACHE_PREF_LEN 21
@@ -69,10 +71,10 @@ static int get_item_from_cache(const char* key, external_status* stat){
   char* reckey =  psync_malloc(ketlen + CACHE_PREF_LEN + 1);
   overlay_cache_t * rec = NULL;
   uint64_t now = 0;
-  
+
   memcpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
   memcpy(reckey + CACHE_PREF_LEN , key, ketlen + 1);
-  
+
   if ((rec = (overlay_cache_t *) psync_cache_get(reckey))) {
     now = psync_millitime();
     if ((now - rec->timestamp) < 100) {
@@ -92,7 +94,7 @@ static void add_item_to_cache(const char* key, external_status* stat){
   int ketlen = strlen(key);
   char* reckey =  psync_malloc(ketlen + CACHE_PREF_LEN + 1);
   overlay_cache_t * rec = psync_malloc(sizeof(overlay_cache_t));
-  
+
   strncpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
   strncpy(reckey + CACHE_PREF_LEN , key, ketlen);
 
@@ -102,9 +104,9 @@ static void add_item_to_cache(const char* key, external_status* stat){
   psync_free(reckey);
 }
 
-  
+*/
 
-int psync_add_overlay_callback(int id, poverlay_callback callback) 
+int psync_add_overlay_callback(int id, poverlay_callback callback)
 {
   poverlay_callback * callbacks_old = callbacks;
   int callbacks_size_old = callbacks_size;
@@ -141,16 +143,16 @@ void psync_start_overlay_callbacks(){
 
 void get_answer_to_request(message *request, message *replay)
 {
-  char msg[4] = "Ok.";
   external_status stat = INVSYNC;
-  msg[3] = '\0';
+  memcpy(replay->value, "Ok.", 4);
+  replay->length=sizeof(message)+4;
   //debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
   if (request->type < 20 ) {
-    
-    if (overlays_running && !get_item_from_cache(request->value, &stat)) {
+
+/*    if (overlays_running && !get_item_from_cache(request->value, &stat)) {
      stat = do_psync_external_status(request->value);
     }
-    
+
     if (stat == INSYNC) {
       replay->type = 10;
     }
@@ -163,33 +165,48 @@ void get_answer_to_request(message *request, message *replay)
     }
     else {
       replay->type = 13;
-      strncpy(msg,"No.\0",4);
+      memcpy(msg, "No.", 4);
     }
     replay->length = sizeof(message)+4;
     strncpy(replay->value, msg, 4);
     add_item_to_cache(request->value, &stat);
+    */
+    if (overlays_running)
+      stat=psync_path_status_get(request->value);
+    switch (psync_path_status_get_status(stat)) {
+      case PSYNC_PATH_STATUS_IN_SYNC:
+        replay->type=10;
+        break;
+      case PSYNC_PATH_STATUS_IN_PROG:
+        replay->type=12;
+        break;
+      case PSYNC_PATH_STATUS_PAUSED:
+      case PSYNC_PATH_STATUS_REMOTE_FULL:
+      case PSYNC_PATH_STATUS_LOCAL_FULL:
+        replay->type=11;
+        break;
+      default:
+        replay->type=13;
+        memcpy(replay->value, "No.", 4);
+    }
   } else if ((callbacks_running)&&(request->type < 36)) {
     int ind = request->type - 20;
     int ret = 0;
     if (callbacks[ind]) {
       if ((ret = callbacks[ind](request->value)) == 0) {
         replay->type = 0;
-        replay->length = sizeof(message)+4;
-        strncpy(replay->value, msg, 4);
       } else {
         replay->type = ret;
-        strncpy(msg,"No.\0",4);
+        memcpy(replay->value, "No.", 4);
       }
-      strncpy(replay->value, msg, 4);
-      replay->length = sizeof(message)+4;
     } else {
       replay->type = 13;
-      strncpy(replay->value, "No callback with this id registered.\0", 37);
+      memcpy(replay->value, "No callback with this id registered.", 37);
       replay->length = sizeof(message)+37;
     }
   } else {
       replay->type = 13;
-      strncpy(replay->value, "Invalid type.\0", 14);
+      memcpy(replay->value, "Invalid type.", 14);
       replay->length = sizeof(message)+14;
     }
 

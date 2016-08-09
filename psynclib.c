@@ -59,6 +59,7 @@
 #include "pcontacts.h"
 #include "poverlay.h"
 #include "pasyncnet.h"
+#include "ppathstatus.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -204,6 +205,7 @@ int psync_init(){
   psync_settings_init();
   psync_status_init();
   psync_timer_sleep_handler(psync_stop_crypto_on_sleep);
+  psync_path_status_init();
   if (IS_DEBUG){
     psync_libstate=1;
     pthread_mutex_unlock(&psync_libstate_mutex);
@@ -483,6 +485,7 @@ void psync_unlink(){
   debug(D_NOTICE, "clearing database, finished");
   psync_fs_pause_until_login();
   psync_fs_clean_tasks();
+  psync_path_status_init();
   psync_sql_unlock();
   psync_sql_checkpoint_unlock();
   psync_settings_reset();
@@ -583,6 +586,7 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (ret==PSYNC_INVALID_SYNCID)
     return_isyncid(PERROR_FOLDER_ALREADY_SYNCING);
   psync_sql_sync();
+  psync_path_status_reload_syncs();
   psync_syncer_new(ret);
   return ret;
 }
@@ -697,6 +701,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   psync_stop_sync_download(syncid);
   psync_stop_sync_upload(syncid);
   psync_sql_sync();
+  psync_path_status_reload_syncs();
   psync_syncer_new(syncid);
   return 0;
 }
@@ -750,6 +755,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_localnotify_del_sync(syncid);
     psync_restart_localscan();
     psync_sql_sync();
+    psync_path_status_reload_syncs();
     return 0;
   }
 }
@@ -1631,16 +1637,27 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
-external_status psync_filesystem_status(char *path) {
-  return do_psync_external_status(path);
+external_status psync_filesystem_status(const char *path) {
+  switch (psync_path_status_get_status(psync_path_status_get(path))) {
+    case PSYNC_PATH_STATUS_IN_SYNC:
+      return INSYNC;
+    case PSYNC_PATH_STATUS_IN_PROG:
+      return INPROG;
+    case PSYNC_PATH_STATUS_PAUSED:
+    case PSYNC_PATH_STATUS_REMOTE_FULL:
+    case PSYNC_PATH_STATUS_LOCAL_FULL:
+      return NOSYNC;
+    default:
+      return INVSYNC;
+  }
 }
 
 external_status psync_status_file(const char *path) {
-  return do_psync_external_status_file(path);
+  return psync_filesystem_status(path);
 }
 
 external_status psync_status_folder(const char *path) {
-  return do_psync_external_status_folder(path);
+  return psync_filesystem_status(path);
 }
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
