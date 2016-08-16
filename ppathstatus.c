@@ -1145,7 +1145,7 @@ restart:
         res=psync_sql_query_nolock("SELECT id FROM localfolder WHERE syncid=? AND localparentfolderid=? AND name=?");
         psync_sql_bind_uint(res, 1, syncid);
         psync_sql_bind_uint(res, 2, extract_localfolderid(folderid));
-        psync_sql_bind_lstring(res, 2, path+poff, off-poff);
+        psync_sql_bind_lstring(res, 3, path+poff, off-poff);
         row=psync_sql_fetch_rowint(res);
         if (!row) {
           psync_sql_free_result(res);
@@ -1202,8 +1202,7 @@ restart:
   res=psync_sql_query_nolock("SELECT id FROM localfolder WHERE syncid=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, extract_localfolderid(folderid));
-  psync_sql_bind_lstring(res, 2, path+poff, path_len-poff);
-  row=psync_sql_fetch_rowint(res);
+  psync_sql_bind_lstring(res, 3, path+poff, path_len-poff);
   if ((row=psync_sql_fetch_rowint(res))) {
     folderid=row[0];
     psync_sql_free_result(res);
@@ -1228,7 +1227,7 @@ restart:
   res=psync_sql_query_nolock("SELECT id FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, extract_localfolderid(folderid));
-  psync_sql_bind_lstring(res, 2, path+poff, path_len-poff);
+  psync_sql_bind_lstring(res, 3, path+poff, path_len-poff);
   if ((row=psync_sql_fetch_rowint(res))) {
     flags=row[0];
     psync_sql_free_result(res);
