@@ -33,6 +33,7 @@
 #include "pcloudcrypto.h"
 #include "ptree.h"
 #include "ptasks.h"
+#include "pstatus.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -741,8 +742,17 @@ static psync_path_status_t rdunlock_return(psync_path_status_t st) {
 }
 
 static psync_path_status_t rdunlock_return_in_prog() {
+  static const uint32_t requiredstatuses[]={
+    PSTATUS_COMBINE(PSTATUS_TYPE_RUN, PSTATUS_RUN_RUN),
+    PSTATUS_COMBINE(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING|PSTATUS_ONLINE_SCANNING|PSTATUS_ONLINE_ONLINE),
+    PSTATUS_COMBINE(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK),
+    PSTATUS_COMBINE(PSTATUS_TYPE_DISKFULL, PSTATUS_DISKFULL_OK)
+  };
   psync_sql_rdunlock();
-  return PSYNC_PATH_STATUS_IN_PROG;
+  if (psync_statuses_ok_array(requiredstatuses, ARRAY_SIZE(requiredstatuses)))
+    return PSYNC_PATH_STATUS_IN_PROG;
+  else
+    return PSYNC_PATH_STATUS_PAUSED; //TODO: fix to return proper status
 }
 
 static psync_path_status_t psync_path_status_drive_folder_locked(psync_folderid_t folderid) {
