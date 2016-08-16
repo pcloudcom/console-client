@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -66,7 +66,7 @@
 void psync_task_create_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
 void psync_task_delete_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, const char *remotepath);
 void psync_task_delete_local_folder_recursive(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid);
-void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid, 
+void psync_task_rename_local_folder(psync_syncid_t syncid, psync_folderid_t folderid, psync_folderid_t localfolderid,
                                     psync_folderid_t newlocalparentfolderid, const char *newname);
 void psync_task_download_file(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name);
 void psync_task_download_file_silent(psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid, const char *name);
@@ -80,8 +80,8 @@ void psync_task_create_remote_folder(psync_syncid_t syncid, psync_folderid_t loc
 void psync_task_upload_file(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name);
 void psync_task_upload_file_silent(psync_syncid_t syncid, psync_fileid_t localfileid, const char *name);
 
-/* newname should be passed here instead of reading it from localfile in time of renaming as there might be many pending 
- * renames and filename conflict is possible 
+/* newname should be passed here instead of reading it from localfile in time of renaming as there might be many pending
+ * renames and filename conflict is possible
  */
 void psync_task_rename_remote_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, psync_fileid_t localfileid,
                                    psync_folderid_t newlocalparentfolderid, const char *newname);

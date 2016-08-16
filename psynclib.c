@@ -696,6 +696,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE syncid=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
+  psync_path_status_sync_delete(syncid);
   psync_sql_commit_transaction();
   psync_localnotify_del_sync(syncid);
   psync_stop_sync_download(syncid);
@@ -755,6 +756,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_localnotify_del_sync(syncid);
     psync_restart_localscan();
     psync_sql_sync();
+    psync_path_status_sync_delete(syncid);
     psync_path_status_reload_syncs();
     return 0;
   }
@@ -799,12 +801,18 @@ pentry_t *psync_stat_path(const char *remotepath){
   return psync_folder_stat_path(remotepath);
 }
 
-int psync_is_name_to_ignore(const char *name){
+int psync_is_lname_to_ignore(const char *name, size_t namelen){
   const char *ign, *sc, *pt;
   char *namelower;
   unsigned char *lp;
   size_t ilen, off, pl;
-  namelower=psync_strdup(name);
+  char buff[120];
+  if (namelen>=sizeof(buff))
+    namelower=(char *)psync_malloc(namelen+1);
+  else
+    namelower=buff;
+  memcpy(namelower, name, namelen);
+  namelower[namelen]=0;
   lp=(unsigned char *)namelower;
   while (*lp){
     *lp=tolower(*lp);
@@ -828,13 +836,19 @@ int psync_is_name_to_ignore(const char *name){
     while (pl && isspace((unsigned char)pt[pl-1]))
       pl--;
     if (psync_match_pattern(namelower, pt, pl)){
-      psync_free(namelower);
+      if (namelower!=buff)
+        psync_free(namelower);
       debug(D_NOTICE, "ignoring file/folder %s", name);
       return 1;
     }
   } while (sc);
-  psync_free(namelower);
+  if (namelower!=buff)
+    psync_free(namelower);
   return 0;
+}
+
+int psync_is_name_to_ignore(const char *name){
+  return psync_is_lname_to_ignore(name, strlen(name));
 }
 
 static void psync_set_run_status(uint32_t status){
