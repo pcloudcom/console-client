@@ -706,11 +706,14 @@ static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char
       psync_sql_bind_uint(sres, 2, size);
       psync_sql_bind_lstring(sres, 3, (const char *)hashhex, PSYNC_HASH_DIGEST_HEXLEN);
       psync_sql_run_free(sres);
-      if (psync_check_result(meta, "conflicted", PARAM_BOOL))
+      if (psync_check_result(meta, "conflicted", PARAM_BOOL)){
+        psync_sql_commit_transaction();
         set_local_file_conflicted(localfileid, fileid, hash, localpath, psync_find_result(meta, "name", PARAM_STR)->str, taskid);
-      else
+      }
+      else{
         set_local_file_remote_id(localfileid, fileid, hash);
-      psync_sql_commit_transaction();
+        psync_sql_commit_transaction();
+      }
       ret=PSYNC_NET_OK;
     }
     psync_free(res);
