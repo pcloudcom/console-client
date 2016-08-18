@@ -326,6 +326,8 @@ void *psync_task_get_result(psync_task_manager_t tm, int id);
 void psync_task_free(psync_task_manager_t tm);
 int psync_task_complete(void *h, void *data);
 
+void psync_pqsort(void *base, size_t cnt, size_t sort_first, size_t size, int (*compar)(const void *, const void *));
+
 void psync_try_free_memory();
 
 int psync_debug(const char *file, const char *function, int unsigned line, int unsigned level, const char *fmt, ...) PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
