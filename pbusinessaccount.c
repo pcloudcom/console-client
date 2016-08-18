@@ -532,7 +532,7 @@ void cache_account_emails() {
   psync_sql_res *q;
 
   psync_sql_lock();
-  q=psync_sql_prep_statement("DELETE FROM baccountemail ");
+  q=psync_sql_prep_statement("DELETE FROM baccountemail");
   psync_sql_run_free(q);
 
   do_psync_account_users(userids, 0, &insert_cache_email, params);

@@ -3138,7 +3138,8 @@ void psync_rebuild_icons(){
 void psync_rebuild_icons(){
   if (!overlays_running)
     return;
-  return;}
+  return;
+}
 #endif
 
 int psync_invalidate_os_cache(const char *path){
