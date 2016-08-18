@@ -143,7 +143,7 @@ void psync_start_overlay_callbacks(){
 
 void get_answer_to_request(message *request, message *replay)
 {
-  external_status stat = INVSYNC;
+  psync_path_status_t stat=PSYNC_PATH_STATUS_NOT_OURS;
   memcpy(replay->value, "Ok.", 4);
   replay->length=sizeof(message)+4;
   //debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
