@@ -455,12 +455,17 @@ static void scan_delete_file(sync_folderlist *fl){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fileid_t fileid;
+  psync_folderid_t localparentfolderid;
+  psync_syncid_t syncid;
   debug(D_NOTICE, "file deleted %s", fl->name);
   // it is also possible to use fl->remoteid, but the file might have just been uploaded by the upload thread
-  res=psync_sql_query("SELECT fileid FROM localfile WHERE id=?");
+  res=psync_sql_query("SELECT fileid, syncid, localparentfolderid FROM localfile WHERE id=?");
   psync_sql_bind_uint(res, 1, fl->localid);
-  if (likely_log(row=psync_sql_fetch_rowint(res)))
+  if (likely_log(row=psync_sql_fetch_rowint(res))){
     fileid=row[0];
+    syncid=row[1];
+    localparentfolderid=row[2];
+  }
   else{
     psync_sql_free_result(res);
     return;
@@ -472,6 +477,7 @@ static void scan_delete_file(sync_folderlist *fl){
   psync_sql_run_free(res);
   if (fileid)
     psync_task_delete_remote_file(fl->syncid, fileid);
+  psync_path_status_sync_folder_task_completed(syncid, localparentfolderid);
 }
 
 static void scan_create_folder(sync_folderlist *fl){

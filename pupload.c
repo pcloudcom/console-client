@@ -443,21 +443,13 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
 
 static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("size", fsize), P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN)};
-  psync_socket *api;
   binresult *res;
   const binresult *metas, *meta;
   uint64_t result;
   int ret;
-  api=psync_apipool_get();
-  if (unlikely(!api))
+  res=psync_api_run_command("getfilesbychecksum", params);
+  if (!res)
     return -1;
-  res=send_command(api, "getfilesbychecksum", params);
-  if (likely(res))
-    psync_apipool_release(api);
-  else{
-    psync_apipool_release_bad(api);
-    return -1;
-  }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
   if (unlikely(result)){
     psync_free(res);
