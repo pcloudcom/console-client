@@ -377,20 +377,13 @@ static void set_local_file_conflicted(psync_fileid_t localfileid, psync_fileid_t
 
 static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("hash", hash), P_NUM("tofolderid", folderid), P_STR("toname", name)};
-  psync_socket *api;
   binresult *res;
   const binresult *meta;
   uint64_t result;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    return -1;
   psync_diff_lock();
-  res=send_command(api, "copyfile", params);
-  if (likely(res))
-    psync_apipool_release(api);
-  else{
+  res=psync_api_run_command("copyfile", params);
+  if (unlikely(!res)){
     psync_diff_unlock();
-    psync_apipool_release_bad(api);
     return -1;
   }
   result=psync_find_result(res, "result", PARAM_NUM)->num;
@@ -966,6 +959,24 @@ static void delete_uploadids(psync_fileid_t localfileid){
   psync_free(rows);
 }
 
+static void delete_from_localfile(psync_fileid_t localfileid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_query("SELECT syncid, localparentfolderid FROM localfile WHERE id=?");
+  psync_sql_bind_uint(res, 1, localfileid);
+  if ((row=psync_sql_fetch_rowint(res))){
+    psync_syncid_t syncid=row[0];
+    psync_folderid_t folderid=row[1];
+    psync_sql_free_result(res);
+    res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
+    psync_sql_bind_uint(res, 1, localfileid);
+    psync_sql_run_free(res);
+    psync_path_status_sync_folder_task_completed(syncid, folderid);
+  }
+  else
+    psync_sql_free_result(res);
+}
+
 static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, const char *name, upload_list_t *upload){
   psync_sql_res *res;
   psync_uint_row row;
@@ -1042,14 +1053,12 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     ret=psync_get_local_file_checksum_part(localpath, hashhex, &fsize, phashhex, ufsize);
   else
     ret=psync_get_local_file_checksum(localpath, hashhex, &fsize);
-  if (ret){
+  if (unlikely(ret)){
     debug(D_WARNING, "could not open local file %s, deleting it from localfile", localpath);
-    res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
-    psync_sql_bind_uint(res, 1, localfileid);
-    psync_sql_run_free(res);
     psync_unlock_file(lock);
     psync_free(nname);
     psync_free(localpath);
+    delete_from_localfile(localfileid);
     return 0;
   }
   if (fsize!=upload->filesize){
