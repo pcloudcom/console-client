@@ -1011,6 +1011,8 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
           ctime=psync_stat_mtime(&st);
         if (psync_stat_mtime(&st)+PSYNC_UPLOAD_OLDER_THAN_SEC>ctime)
           psync_milisleep((psync_stat_mtime(&st)+PSYNC_UPLOAD_OLDER_THAN_SEC-ctime)*1000+500);
+        else
+          psync_milisleep(500);
         if (psync_stat(localpath, &st)){
           debug(D_NOTICE, "can not stat %s anymore, failing for now", localpath);
           psync_free(localpath);
