@@ -507,11 +507,11 @@ static psync_folderid_t get_sync_parent_folder(sync_data_t *sd, psync_folderid_t
   uint32_t h;
   if (folderid==0)
     return PSYNC_INVALID_FOLDERID;
-  h=hash_folderid(folderid)%PARENT_HASH_SIZE;
+  h=hash_folderid(folderid)%SYNC_PARENT_HASH_SIZE;
   psync_list_for_each_element (p, &sd->parent_cache_hash[h], parent_cache_entry_t, list_hash)
     if (p->folderid==folderid) {
       psync_list_del(&p->list_lru);
-      psync_list_add_tail(&parent_cache_lru, &p->list_lru);
+      psync_list_add_tail(&sd->parent_cache_lru, &p->list_lru);
       return p->parentfolderid;
     }
   res=psync_sql_query_nolock("SELECT localparentfolderid FROM localfolder WHERE id=?");
