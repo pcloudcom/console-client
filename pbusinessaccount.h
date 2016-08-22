@@ -34,7 +34,7 @@ int do_psync_account_stopshare(psync_shareid_t usershareids[], int nusershareid,
 int do_psync_account_modifyshare(psync_shareid_t usrshrids[], uint32_t uperms[], int nushid, 
                            psync_shareid_t tmshrids[], uint32_t tperms[], int ntmshid, char **err);
 
-int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vis, void *param);
+//int do_psync_account_users(psync_userid_t iserids[], int nids, result_visitor vis, void *param);
 int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param);
 
 void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /*OUT*/);
