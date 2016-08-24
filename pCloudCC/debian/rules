@@ -2,10 +2,10 @@
 # -*- makefile -*-
 
 # Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
+export DH_VERBOSE=1
 
-override_dh_shlibdeps:
-    dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
+#override_dh_shlibdeps:
+#    dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
 
 %:
 	dh $@ 
