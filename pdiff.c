@@ -1260,7 +1260,7 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_string(q, 1, "cryptoexpires");
   psync_sql_bind_uint(q, 2, crexp);
   psync_sql_run(q);
-  debug(D_NOTICE, "Tracing crypto time - cryptoexpires [%lld] psync_millitime [%lld]",(long long)crexp, (long long)psync_millitime());
+  //debug(D_NOTICE, "Tracing crypto time - cryptoexpires [%lld] psync_millitime [%lld]",(long long)crexp, (long long)psync_millitime());
   if (psync_is_business || crsub){
     if (crst)
       crstat = 5;
@@ -1270,7 +1270,7 @@ static void process_modifyuserinfo(const binresult *entry){
       crstat = 1;
     else 
     {
-      if (psync_millitime() > crexp)
+      if (psync_time() > crexp)
         crstat = 3;
       else 
         crstat = 2;
