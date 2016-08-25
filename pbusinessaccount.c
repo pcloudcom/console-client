@@ -324,6 +324,7 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
   {
     binresult *bres;
     const binresult *users;
+	char* fname, *lname;
     
     binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_NUM("userids", userid) };
     bres = psync_api_run_command("account_users", params);
@@ -342,17 +343,21 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
       debug(D_WARNING, "Account_users returned empty result!\n");
       return;
     } else {
-      const char *emailret = psync_find_result(users->array[0], "email", PARAM_STR)->str;
-      *length = strlen(emailret);
-      *email = psync_strndup(emailret, *length);
+      const char *resret = psync_find_result(users->array[0], "email", PARAM_STR)->str;
+	  *length = strlen(resret);
+	  *email = psync_strndup(resret, *length);
+	  fname = psync_find_result(users->array[0], "firstname", PARAM_STR)->str;
+	  lname = psync_find_result(users->array[0], "lastname", PARAM_STR)->str;
     }
     psync_free(bres);
 
     if (*length) {
       psync_sql_res *q;
-      q=psync_sql_prep_statement("INSERT INTO baccountemail  (id, mail) VALUES (?, ?)");
+      q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail, firstname, lastname) VALUES (?, ?, ?, ?)");
       psync_sql_bind_uint(q, 1, userid);
       psync_sql_bind_lstring(q, 2, *email,  *length);
+	  psync_sql_bind_lstring(q, 3, fname, strlen(fname));
+	  psync_sql_bind_lstring(q, 4, lname, strlen(lname));
       psync_sql_run_free(q);
     }
   
@@ -437,7 +442,7 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
   
   binresult *bres;
   int i;
-  const binresult *users;
+  const binresult *teams;
 
   res=psync_sql_query("SELECT name FROM baccountteam WHERE id=?");
   psync_sql_bind_uint(res, 1, teamid);
@@ -462,23 +467,19 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
   if (api_error_result(bres))
     return;
   
-  users = psync_find_result(bres, "teams", PARAM_ARRAY);
+  teams = psync_find_result(bres, "teams", PARAM_ARRAY);
 
   //debug(D_NOTICE, "Result contains %d teams\n", users->length);
 
-  if (!users->length){
+  if (!teams->length){
     psync_free(bres);
     debug(D_WARNING, "Account_teams returned empty result!\n");
     return;
-  } else {
-    
-    for (i = 0; i < users->length; ++i){
-      //vis(i, users->array[i], param);
-        const char *emailret = "";
-        emailret = psync_find_result(users->array[i], "name", PARAM_STR)->str;
-        *length = strlen(emailret);
-        *name = psync_strndup(emailret, *length);
-    }
+  } else {    
+    const char *teamret = "";
+    teamret = psync_find_result(teams->array[0], "name", PARAM_STR)->str;
+    *length = strlen(teamret);
+    *name = psync_strndup(teamret, *length);
   }
   psync_free(bres);
  
@@ -488,8 +489,7 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
   psync_sql_bind_lstring(q, 2, *name,  *length);
   psync_sql_run_free(q);
   
-  return;
- 
+  return; 
 }
 
 // static void insert_cache_email(int i, const binresult *user, void *_this) {
@@ -517,9 +517,6 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
 // }
 
 void cache_account_emails() {
-  psync_sql_res *q;
-
-  //do_psync_account_users(userids, 0, &insert_cache_email, params);
   binresult *bres;
   int i;
   const binresult *users;
@@ -546,7 +543,7 @@ void cache_account_emails() {
     debug(D_WARNING, "Account_users returned empty result!\n");
     goto end_close;
   } else {
-    
+    psync_sql_res *q;
     psync_sql_start_transaction();
     q=psync_sql_prep_statement("DELETE FROM baccountemail");
     if (unlikely(psync_sql_run_free(q))) {
@@ -556,21 +553,31 @@ void cache_account_emails() {
     
     for (i = 0; i < users->length; ++i) {
       const char *nameret = 0;
-      const binresult *team = users->array[i];
-      uint64_t teamid = 0;
+      const binresult *user = users->array[i];
+	  uint64_t userid = 0;
       psync_sql_res *res;
+	  char* fname, *lname;
+	  int active = 0;
+	  int frozen = 0;
 
-      nameret = psync_find_result(team, "name", PARAM_STR)->str;
-      teamid = psync_find_result(team, "id", PARAM_NUM)->num;
-      //debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)teamid);
+	  active = psync_find_result(user, "active", PARAM_BOOL)->num;
+	  frozen = psync_find_result(user, "frozen", PARAM_BOOL)->num;
+	  nameret = psync_find_result(user, "email", PARAM_STR)->str;
+	  userid = psync_find_result(user, "id", PARAM_NUM)->num;
+	  fname = psync_find_result(user, "firstname", PARAM_STR)->str;
+	  lname = psync_find_result(user, "lastname", PARAM_STR)->str;
 
-      res=psync_sql_prep_statement("INSERT INTO baccountteam  (id, name) VALUES (?, ?)");
-      psync_sql_bind_uint(res, 1, teamid);
-      psync_sql_bind_lstring(res, 2, nameret, strlen(nameret));
-      if (unlikely(psync_sql_run_free(res))) {
-        psync_sql_rollback_transaction();
-        goto end_close;
-      }
+	  if (userid && (active || frozen)) {
+        res = psync_sql_prep_statement("INSERT INTO baccountemail  (id, mail, firstname, lastname) VALUES (?, ?, ?, ?)");
+        psync_sql_bind_uint(res, 1, userid);
+        psync_sql_bind_lstring(res, 2, nameret, strlen(nameret));
+        psync_sql_bind_lstring(res, 3, fname, strlen(fname));
+        psync_sql_bind_lstring(res, 4, lname, strlen(lname));
+        if (unlikely(psync_sql_run_free(res))) {
+      	  psync_sql_rollback_transaction();
+      	  goto end_close;
+        }
+	  }
     }
     psync_sql_commit_transaction();
   }
@@ -646,8 +653,10 @@ void cache_account_teams() {
       res=psync_sql_prep_statement("INSERT INTO baccountteam  (id, name) VALUES (?, ?)");
       psync_sql_bind_uint(res, 1, teamid);
       psync_sql_bind_lstring(res, 2, nameret, strlen(nameret));
-      psync_sql_run_free(res);
+	  if (unlikely(psync_sql_run_free(res)))
+		  psync_sql_rollback_transaction();
     }
+	psync_sql_commit_transaction();
       //vis(i, users->array[i], param);
   }
   psync_free(bres);
