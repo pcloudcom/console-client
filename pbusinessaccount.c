@@ -364,77 +364,6 @@ void get_ba_member_email(uint64_t userid, char** email /*OUT*/, size_t *length /
   }
 }
 
-/*
-int do_psync_account_teams(psync_userid_t teamids[], int nids, result_visitor vis, void *param) {
-  binresult *bres;
-  char *ids = NULL;
-  char *idsp = 0;
-  int k,i;
-  const binresult *users;
-
-  if (nids) {
-    ids = (char *) psync_malloc(nids*FOLDERID_ENTRY_SIZE);
-    idsp = ids;
-    for (i = 0; i < nids; ++i) {
-      k = sprintf(idsp, "%lld", (long long) teamids[i]);
-      if (unlikely(k <= 0 )) break;
-      idsp[k] = ',';
-      idsp = idsp + k + 1;
-    }
-    if (i > 0)
-      *(idsp - 1) = '\0';
-  
-    //debug(D_NOTICE, "Account_teams numids %d\n", nids);
-    {
-      binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("teamids", ids), P_STR("showeveryone", "1") };
-      bres = psync_api_run_command("account_teams", params);
-    }
-  } else {
-    if (psync_my_auth[0]) {
-      binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp"), P_STR("showeveryone", "1")};
-      bres = psync_api_run_command("account_teams", params);
-    } else if (psync_my_user && psync_my_pass) {
-      binparam params[] =  {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp"), P_STR("showeveryone", "1")};
-      bres = psync_api_run_command("account_teams", params);
-    } else return -1;
-  }
-  if (!bres) {
-    debug(D_WARNING, "Send command returned in valid result.\n");
-    return -1;
-  }
-  
-  if (api_error_result(bres))
-    return;
-  
-  users = psync_find_result(bres, "teams", PARAM_ARRAY);
-
-  //debug(D_NOTICE, "Result contains %d teams\n", users->length);
-
-  if (!users->length){
-    psync_free(bres);
-    psync_free(ids);
-    debug(D_WARNING, "Account_teams returned empty result!\n");
-    return -2;
-  } else {
-    for (i = 0; i < users->length; ++i)
-      vis(i, users->array[i], param);
-  }
-  psync_free(bres);
-  psync_free(ids);
-  return 0;
-}
-*/
-
-/*
-static void copy_team(int i, const binresult *user, void *_this) {
-  const char *emailret = "";
-  team_visitor_params *params = (team_visitor_params *) _this;
-  emailret = psync_find_result(user, "name", PARAM_STR)->str;
-  *(params->length) = strlen(emailret);
-  *(params->name) = psync_strndup(emailret, *(params->length));
-}
-*/
-
 void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT*/) {
   psync_sql_res *res;
   psync_variant_row row;
@@ -491,30 +420,6 @@ void get_ba_team_name(uint64_t teamid, char** name /*OUT*/, size_t *length /*OUT
   
   return; 
 }
-
-// static void insert_cache_email(int i, const binresult *user, void *_this) {
-//   const char *char_field = 0;
-//   char_field = psync_find_result(user, "email", PARAM_STR)->str;
-//   uint64_t id = 0;
-//   psync_sql_res *q;
-//   int active = 0;
-//   int frozen = 0;
-// 
-//   active = psync_find_result(user, "active", PARAM_BOOL)->num;
-//   frozen = psync_find_result(user, "frozen", PARAM_BOOL)->num;
-//   id = psync_find_result(user, "id", PARAM_NUM)->num;
-// 
-//   if (id && (active || frozen)) {
-//     q=psync_sql_prep_statement("REPLACE INTO baccountemail  (id, mail, firstname, lastname) VALUES (?, ?, ?, ?)");
-//     psync_sql_bind_uint(q, 1, id);
-//     psync_sql_bind_lstring(q, 2, char_field, strlen(char_field));
-//     char_field = psync_find_result(user, "firstname", PARAM_STR)->str;
-//     psync_sql_bind_lstring(q, 3, char_field, strlen(char_field));
-//     char_field = psync_find_result(user, "lastname", PARAM_STR)->str;
-//     psync_sql_bind_lstring(q, 4, char_field, strlen(char_field));
-//     psync_sql_run_free(q);
-//   }
-// }
 
 void cache_account_emails() {
   binresult *bres;
@@ -584,23 +489,6 @@ void cache_account_emails() {
 end_close:
   psync_free(bres);
 }
-/*
-static void insert_cache_team(int i, const binresult *team, void *_this) {
-  const char *nameret = 0;
-  nameret = psync_find_result(team, "name", PARAM_STR)->str;
-  uint64_t teamid = 0;
-  psync_sql_res *q;
-
-  teamid = psync_find_result(team, "id", PARAM_NUM)->num;
-
-  //debug(D_NOTICE, "Team name %s team id %lld\n", nameret,(long long)teamid);
-
-  q=psync_sql_prep_statement("REPLACE INTO baccountteam  (id, name) VALUES (?, ?)");
-  psync_sql_bind_uint(q, 1, teamid);
-  psync_sql_bind_lstring(q, 2, nameret, strlen(nameret));
-  psync_sql_run_free(q);
-
-}*/
 
 void cache_account_teams() {
   //do_psync_account_teams(teamids, 0, &insert_cache_team, params);
