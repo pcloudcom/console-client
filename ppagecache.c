@@ -3306,7 +3306,7 @@ void psync_pagecache_init(){
   if (psync_stat(cache_file, &st))
     psync_sql_statement("DELETE FROM pagecache");
   else{
-    res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>? AND type!="NTO_STR(PAGE_TYPE_FREE));
+    res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
     psync_sql_bind_uint(res, 1, psync_stat_size(&st)/PSYNC_FS_PAGE_SIZE);
     psync_sql_run_free(res);
   }
