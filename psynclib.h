@@ -919,6 +919,25 @@ psync_new_version_t *psync_check_new_version_download_str(const char *os, const 
 psync_new_version_t *psync_check_new_version_download(const char *os, unsigned long currentversion);
 void psync_run_new_version(psync_new_version_t *ver);
 
+/* The following functions provide simplified interface to file upload. While no actual limit is enforced, they are targeted for
+ * immediate upload of relatively small files (up to few tens of megabytes). These functions:
+ * - do not obey upload speed limits
+ * - do not obey stopped/paused state
+ * - do not increase/touch the number of "files to upload", therefore the status may be "in sync" while these functions actually upload data
+ * - just try to instantly upload the file regardless of number of files queued up by either/both sync or drive
+ * - do not support resume of failed uploads
+ * - overwrite already existing target files
+ * - functions that work with local files allocate memory equal to the file size (to deal with race conditions of changing files)
+ *
+ * All functions return 0 upon success, -1 upon network error, -2 if the local file can not be read or a positive API error code (see
+ * https://docs.pcloud.com/methods/file/uploadfile.html).
+ */
+
+int psync_upload_data(psync_folderid_t folderid, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid);
+int psync_upload_data_as(const char *remote_path, const void *data, size_t length, psync_fileid_t *fileid);
+int psync_upload_file(psync_folderid_t folderid, const char *remote_filename, const char *local_path, psync_fileid_t *fileid);
+int psync_upload_file_as(const char *remote_path, const char *local_path, psync_fileid_t *fileid);
+
 /* Filesystem functions.
  *
  * psync_fs_start() - starts the filesystem
