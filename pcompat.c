@@ -156,15 +156,15 @@ static wchar_t *utf8_to_wchar_path(const char *str){
   /* MAX_PATH seems not to be apporopriate here as it is defined as 260, and CreateDirectory() description says:
    * There is a default string size limit for paths of 248 characters. This limit is related to how the CreateDirectory function parses paths.
    */
-  if (len>=248){
+//  if (len>=248){
     ret=psync_new_cnt(wchar_t, len+4);
     memcpy(ret, L"\\\\?\\", 4*sizeof(wchar_t));
     MultiByteToWideChar(CP_UTF8, 0, str, -1, ret+4, len);
-  }
-  else{
-    ret=psync_new_cnt(wchar_t, len);
-    MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
-  }
+//  }
+//  else{
+//    ret=psync_new_cnt(wchar_t, len);
+//    MultiByteToWideChar(CP_UTF8, 0, str, -1, ret, len);
+//  }
   return ret;
 }
 
