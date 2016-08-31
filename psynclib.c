@@ -1575,8 +1575,8 @@ int psync_upload_data(psync_folderid_t folderid, const char *remote_filename, co
   return psync_upload_params(params, ARRAY_SIZE(params), data, length, fileid);
 }
 
-int psync_upload_data_as(const char *remote_path, const void *data, size_t length, psync_fileid_t *fileid){
-  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", remote_path), P_BOOL("nopartial", 1)};
+int psync_upload_data_as(const char *remote_path, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", remote_path), P_STR("filename", remote_filename), P_BOOL("nopartial", 1)};
   return psync_upload_params(params, ARRAY_SIZE(params), data, length, fileid);
 }
 
@@ -1630,13 +1630,13 @@ int psync_upload_file(psync_folderid_t folderid, const char *remote_filename, co
   return ret;
 }
 
-int psync_upload_file_as(const char *remote_path, const char *local_path, psync_fileid_t *fileid){
+int psync_upload_file_as(const char *remote_path, const char *remote_filename, const char *local_path, psync_fileid_t *fileid){
   char *data;
   size_t length;
   int ret;
   if (psync_load_file(local_path, &data, &length))
     return -2;
-  ret=psync_upload_data_as(remote_path, data, length, fileid);
+  ret=psync_upload_data_as(remote_path, remote_filename, data, length, fileid);
   psync_free(data);
   return ret;
 }

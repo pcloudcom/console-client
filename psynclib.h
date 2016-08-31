@@ -934,9 +934,9 @@ void psync_run_new_version(psync_new_version_t *ver);
  */
 
 int psync_upload_data(psync_folderid_t folderid, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid);
-int psync_upload_data_as(const char *remote_path, const void *data, size_t length, psync_fileid_t *fileid);
+int psync_upload_data_as(const char *remote_path, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid);
 int psync_upload_file(psync_folderid_t folderid, const char *remote_filename, const char *local_path, psync_fileid_t *fileid);
-int psync_upload_file_as(const char *remote_path, const char *local_path, psync_fileid_t *fileid);
+int psync_upload_file_as(const char *remote_path, const char *remote_filename, const char *local_path, psync_fileid_t *fileid);
 
 /* Filesystem functions.
  *
