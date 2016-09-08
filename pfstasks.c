@@ -864,6 +864,8 @@ int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){
     psync_tree_del(&folder->creats, &cr->tree);
     psync_free(cr);
     folder->taskscnt--;
+    if (folder->folderid>=0)
+      psync_path_status_drive_folder_changed(folder->folderid);
   }
   revoffileid=get_file_at_old_location(fileid);
   psync_sql_start_transaction();
@@ -977,6 +979,8 @@ int psync_fstask_rename_file(psync_fsfileid_t fileid, psync_fsfolderid_t parentf
     psync_tree_del(&folder->creats, &cr->tree);
     psync_free(cr);
     folder->taskscnt--;
+    if (folder->folderid>=0)
+      psync_path_status_drive_folder_changed(folder->folderid);
   }
   psync_fs_rename_openfile_locked(fileid, to_folderid, new_name);
   nlen++;

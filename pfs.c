@@ -2166,6 +2166,7 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
     debug(D_WARNING, "could not get free space of path %s", cachepath);
     return 1;
   }
+//  debug(D_NOTICE, "free space of %s is %lld minlocal %llu", cachepath, freespc, minlocal);
   if (freespc>=minlocal+size){
     psync_set_local_full(0);
     of->throttle=0;
@@ -2221,11 +2222,11 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
 }
 
 static int psync_fs_check_write_space(psync_openfile_t *of, size_t size, fuse_off_t offset){
-  if (!of->throttle && of->writeid%256==0)
+  if (!of->throttle && of->writeid%64!=0)
     return 1;
   if (of->currentsize>=offset+size){
-    if (of->newfile)
-      return 1;
+//    if (of->newfile)
+//      return 1;
     if (of->modified && psync_fs_check_modified_file_write_space(of, size, offset))
       return 1;
   }
