@@ -411,7 +411,7 @@ void psync_path_status_folder_deleted(psync_folderid_t folderid) {
 }
 
 static void sync_data_free(sync_data_t *sd) {
-  psync_tree_for_each_element_call(sd->folder_tasks, folder_tasks_t, tree, psync_free);
+  psync_tree_for_each_element_call_safe(sd->folder_tasks, folder_tasks_t, tree, psync_free);
   psync_free(sd);
 }
 
