@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -36,7 +36,7 @@
  * (it is log TIMER_ARRAY_SIZE(timer_seconds_after_now)). So servicing a timer is
  * generally constant time task with a maximum constant of TIMER_LEVELS and increasing
  * TIMER_ARRAY_SIZE will trade memory for less processing for each timer.
- * 
+ *
  * TIMER_ARRAY_SIZE should be a power of two.
  */
 
@@ -139,7 +139,7 @@ static void timer_thread(){
     pthread_mutex_unlock(&timer_mutex);
     if (unlikely(!psync_list_isempty(&timers)))
       timer_process_timers(&timers);
-    if (unlikely(psync_current_time-lt>=20))
+    if (unlikely(psync_current_time-lt>=25))
       timer_sleep_detected(lt);
     else if (unlikely_log(psync_current_time==lt)){
       if (!psync_do_run)
