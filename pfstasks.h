@@ -31,6 +31,7 @@
 #include "pfsfolder.h"
 #include "ptree.h"
 #include "psynclib.h"
+#include "plibs.h"
 #include <time.h>
 #include <stddef.h>
 #include <string.h>
@@ -156,5 +157,9 @@ int psync_fstask_rename_folder(psync_fsfolderid_t folderid, psync_fsfolderid_t p
 void psync_fstask_clean();
 
 void psync_fstask_add_banned_folders();
+
+#if IS_DEBUG
+void psync_fstask_dump_state();
+#endif
 
 #endif
