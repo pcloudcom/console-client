@@ -1174,6 +1174,10 @@ void psync_start_overlay_callbacks();
 
 int psync_setlanguage(const char *language, char **err);
 
+
+// Update crypto status information from userinfo.
+void psync_update_cryptostatus();
+
 #ifdef __cplusplus
 }
 #endif

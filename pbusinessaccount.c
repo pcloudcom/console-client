@@ -611,3 +611,65 @@ int api_error_result(binresult* res) {
   }
   return 0;
 }
+
+
+void psync_update_cryptostatus(){
+  binresult *res;
+  const binresult *cres;
+  psync_sql_res *q;
+  uint64_t u, crexp, crsub = 0, is_business = 0;
+  int crst = 0,crstat;
+  
+  binparam params[] = { P_STR("auth", psync_my_auth) };
+  res = psync_api_run_command("userinfo", params);
+  if (!res) {
+    debug(D_WARNING, "Send command returned invalid result.\n");
+    return;
+  }
+  
+  if (api_error_result(res))
+    return;
+  
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  
+  is_business=psync_find_result(res, "business", PARAM_BOOL)->num;
+  
+  u=psync_find_result(res, "cryptosetup", PARAM_BOOL)->num;
+  psync_sql_bind_string(q, 1, "cryptosetup");
+  psync_sql_bind_uint(q, 2, u);
+  psync_sql_run(q);
+  if (u)
+    crst = 1;
+  psync_sql_bind_string(q, 1, "cryptosubscription");
+  crsub =  psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num;
+  psync_sql_bind_uint(q, 2, crsub);
+  psync_sql_run(q);
+  
+  cres=psync_check_result(res, "cryptoexpires", PARAM_NUM);
+  crexp = cres?cres->num:0;
+  psync_sql_bind_string(q, 1, "cryptoexpires");
+  psync_sql_bind_uint(q, 2, crexp);
+  psync_sql_run(q);
+
+  if (is_business || crsub){
+    if (crst)
+      crstat = 5;
+    else  crstat = 4;
+  } else {
+    if (!crst)
+      crstat = 1;
+    else 
+    {
+      if (psync_time() > crexp)
+        crstat = 3;
+      else 
+        crstat = 2;
+    }
+  }
+  psync_sql_bind_string(q, 1, "cryptostatus");
+  psync_sql_bind_uint(q, 2, crstat);
+  psync_sql_run(q);
+  psync_sql_free_result(q);
+
+  
+}
