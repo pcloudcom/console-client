@@ -638,15 +638,16 @@ retry:
       psync_sql_bind_uint(res, 1, fl->syncid);
       psync_sql_bind_uint(res, 2, fl->localid);
       psync_sql_run_free(res);
-      return;
     }
-    psync_sql_commit_transaction();
-    if (tries==10)
-      psync_timer_notify_exception();
-    tries++;
-    psync_milisleep(20+tries*20);
-    psync_sql_start_transaction();
-    goto retry;
+    else{
+      psync_sql_commit_transaction();
+      if (tries==10)
+        psync_timer_notify_exception();
+      tries++;
+      psync_milisleep(20+tries*20);
+      psync_sql_start_transaction();
+      goto retry;
+    }
   }
   delete_local_folder_rec(fl->localid);
   if (folderid)
