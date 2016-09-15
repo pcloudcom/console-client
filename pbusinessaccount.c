@@ -28,6 +28,7 @@
 #include "papi.h"
 #include "plibs.h"
 #include "pnetlibs.h"
+#include "pfolder.h"
 
 #include <stdio.h>
 typedef struct _email_vis_params {
@@ -672,4 +673,50 @@ void psync_update_cryptostatus(){
   psync_sql_free_result(q);
 
   
+}
+
+static int check_write_permissions (psync_folderid_t folderid) {
+  psync_sql_res* res;
+  psync_uint_row row;
+  int  ret = 0;
+  
+  res=psync_sql_query_nolock("SELECT permissions, flags, name FROM folder WHERE id=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  row=psync_sql_fetch_rowint(res);
+  if (unlikely(!row))
+    debug(D_ERROR, "could not find folder of folderid %lu", (unsigned long)folderid);
+  else if (((row[1])&3)!=O_RDONLY && !((row[0])&(PSYNC_PERM_MODIFY|PSYNC_PERM_CREATE)))
+    ret = 1;
+    
+   psync_sql_free_result(res);
+   return ret;
+}
+
+psync_folderid_t psync_check_and_create_folder (const char * path) {
+  psync_folderid_t folderid=psync_get_folderid_by_path_or_create(path);
+  if (folderid==PSYNC_INVALID_FOLDERID || (!check_write_permissions(folderid))){
+    char *buff;
+    uint32_t bufflen;
+    int ind = 1;
+    char *err;
+    
+    while (ind < 100) {
+      folderid=PSYNC_INVALID_FOLDERID;
+      bufflen = strlen(path) + 1 /*zero char*/ + 3 /*parenthesis*/ + 3 /*up to 3 digit index*/;
+      buff = (char *) psync_malloc(bufflen);
+      snprintf(buff, bufflen - 1, "%s (%d)", path, ind);
+      if (psync_create_remote_folder_by_path(buff, &err)!= 0) {
+        folderid=psync_get_folderid_by_path_or_create(buff);
+        if ((folderid != PSYNC_INVALID_FOLDERID)&&check_write_permissions(folderid)) {
+          psync_free(buff);
+          break;
+        }
+      } else 
+        debug(D_NOTICE,"Unable to create folder %s error is %s.", buff, err);
+      ++ind;
+      psync_free(buff);
+    }
+  }
+
+  return folderid; 
 }
