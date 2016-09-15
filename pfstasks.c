@@ -40,8 +40,6 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define FOLDER_HASH 256
-
 typedef struct {
   psync_folderid_t folderid;
   char name[];
@@ -49,10 +47,6 @@ typedef struct {
 
 static psync_tree *folders=PSYNC_TREE_EMPTY;
 static uint64_t psync_local_taskid=UINT64_MAX;
-
-psync_uint_t folder_hash(psync_fsfolderid_t folderid){
-  return ((uint64_t)folderid)%FOLDER_HASH;
-}
 
 psync_fstask_folder_t *psync_fstask_get_or_create_folder_tasks(psync_fsfolderid_t folderid){
   psync_fstask_folder_t *folder;
@@ -880,10 +874,11 @@ int psync_fstask_unlink(psync_fsfolderid_t folderid, const char *name){
     psync_sql_run_free(res);
   }
   else{
-    res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, fileid, text1) VALUES ("NTO_STR(PSYNC_FS_TASK_UNLINK)", 0, ?, ?, ?)");
-    psync_sql_bind_int(res, 1, folderid);
-    psync_sql_bind_int(res, 2, fileid);
-    psync_sql_bind_lstring(res, 3, name, len);
+    res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, fileid, text1) VALUES ("NTO_STR(PSYNC_FS_TASK_UNLINK)", ?, ?, ?, ?)");
+    psync_sql_bind_int(res, 1, fileid<0?11:0);
+    psync_sql_bind_int(res, 2, folderid);
+    psync_sql_bind_int(res, 3, fileid);
+    psync_sql_bind_lstring(res, 4, name, len);
     psync_sql_run_free(res);
   }
   taskid=psync_sql_insertid();
@@ -1842,3 +1837,38 @@ void psync_fstask_init(){
   psync_sql_free_result(res);
   psync_fsupload_init();
 }
+
+#if IS_DEBUG
+
+void psync_fstask_dump_state(){
+  psync_fstask_folder_t *folder;
+  psync_fstask_mkdir_t *mk;
+  psync_fstask_rmdir_t *rm;
+  psync_fstask_creat_t *cr;
+  psync_fstask_unlink_t *un;
+  uint32_t cnt;
+  psync_tree_for_each_element(folder, folders, psync_fstask_folder_t, tree){
+    debug(D_NOTICE, "open folderid %ld taskcnt %u refcnt %u", (long)folder->folderid, (unsigned)folder->taskscnt, (unsigned)folder->refcnt);
+    cnt=0;
+    psync_tree_for_each_element(mk, folder->mkdirs, psync_fstask_mkdir_t, tree){
+      debug(D_NOTICE, "  mkdir %s folderid %ld taskid %lu", mk->name, (long)mk->folderid, (unsigned long)mk->taskid);
+      cnt++;
+    }
+    psync_tree_for_each_element(rm, folder->rmdirs, psync_fstask_rmdir_t, tree){
+      debug(D_NOTICE, "  mkdir %s folderid %ld taskid %lu", rm->name, (long)rm->folderid, (unsigned long)rm->taskid);
+      cnt++;
+    }
+    psync_tree_for_each_element(cr, folder->creats, psync_fstask_creat_t, tree){
+      debug(D_NOTICE, "  creat %s fileid %ld taskid %lu", cr->name, (long)cr->fileid, (unsigned long)cr->taskid);
+      cnt++;
+    }
+    psync_tree_for_each_element(un, folder->unlinks, psync_fstask_unlink_t, tree){
+      debug(D_NOTICE, "  unlink %s fileid %ld taskid %lu", un->name, (long)un->fileid, (unsigned long)un->taskid);
+      cnt++;
+    }
+    if (cnt!=folder->taskscnt)
+      debug(D_ERROR, "inconsistency found, counted taskcnt %u != taskcnt %u", (unsigned)cnt, (unsigned)folder->taskscnt);
+  }
+}
+
+#endif

@@ -3018,6 +3018,20 @@ char *psync_fs_get_path_by_folderid(psync_folderid_t folderid){
   return ret;
 }
 
+#if IS_DEBUG
+
+static void psync_fs_dump_internals() {
+  psync_openfile_t *of;
+  debug(D_NOTICE, "dumping internal state");
+  psync_sql_rdlock();
+  psync_tree_for_each_element(of, openfiles, psync_openfile_t, tree)
+    debug(D_NOTICE, "open file %s fileid %ld folderid %ld", of->currentname, (long)of->fileid, (long)of->currentfolder->folderid);
+  psync_fstask_dump_state();
+  psync_sql_rdunlock();
+}
+
+#endif
+
 static void psync_fs_do_stop(void){
   struct timespec ts;
   debug(D_NOTICE, "stopping");
@@ -3040,6 +3054,9 @@ static void psync_fs_do_stop(void){
       debug(D_NOTICE, "timeouted waiting for fuse to exit");
     else
       debug(D_NOTICE, "waited for fuse to exit");
+#if IS_DEBUG
+    psync_fs_dump_internals();
+#endif
   }
   pthread_mutex_unlock(&start_mutex);
 }
@@ -3051,10 +3068,17 @@ void psync_fs_stop(){
 #if defined(P_OS_POSIX)
 
 static void psync_signal_handler(int sig){
-  debug(D_NOTICE, "got signal %d\n", sig);
+  debug(D_NOTICE, "got signal %d", sig);
   psync_fs_do_stop();
   exit(1);
 }
+
+#if IS_DEBUG
+static void psync_usr1_handler(int sig){
+//  debug(D_NOTICE, "got signal %d", sig);
+  psync_run_thread("dump signal", psync_fs_dump_internals);
+}
+#endif
 
 static void psync_set_signal(int sig, void (*handler)(int)){
   struct sigaction sa;
@@ -3075,6 +3099,9 @@ static void psync_setup_signals(){
   psync_set_signal(SIGTERM, psync_signal_handler);
   psync_set_signal(SIGINT, psync_signal_handler);
   psync_set_signal(SIGHUP, psync_signal_handler);
+#if IS_DEBUG
+  psync_set_signal(SIGUSR1, psync_usr1_handler);
+#endif
 }
 
 #endif
@@ -3138,6 +3165,7 @@ static int psync_fs_do_start(){
 //  fuse_opt_add_arg(&args, "-ouse_ino");
   fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   fuse_opt_add_arg(&args, "-ononempty");
+  fuse_opt_add_arg(&args, "-ohard_remove");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
@@ -3147,6 +3175,7 @@ static int psync_fs_do_start(){
   if (psync_user_is_admin())
     fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-onolocalcaches");
+  fuse_opt_add_arg(&args, "-ohard_remove");
 #endif
 
   memset(&psync_oper, 0, sizeof(psync_oper));

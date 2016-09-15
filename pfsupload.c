@@ -1348,7 +1348,7 @@ static int psync_cancel_task_modify(fsupload_task_t *task){
 
 static int psync_cancel_task_unlink(fsupload_task_t *task){
   psync_sql_res *res;
-  if (unlikely_log(task->fileid>0)){
+  if (unlikely_log((psync_fsfileid_t)task->fileid>0)){
     res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=?");
     psync_sql_bind_uint(res, 1, task->id);
     upload_wakes++;

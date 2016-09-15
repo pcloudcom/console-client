@@ -1567,7 +1567,6 @@ static int psync_upload_params(binparam *params, size_t paramcnt, const void *da
   } while (++tries<=PSYNC_RETRY_REQUEST);
   psync_timer_notify_exception();
   return -1;
-
 }
 
 int psync_upload_data(psync_folderid_t folderid, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid){
