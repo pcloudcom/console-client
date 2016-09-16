@@ -84,6 +84,11 @@ typedef off_t fuse_off_t;
 
 #if defined(P_OS_MACOSX)
 #define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
+
+#if defined(_DARWIN_FEATURE_64_BIT_INODE)
+#define FUSE_STAT_HAS_BIRTHTIME
+#endif
+
 #endif
 
 #if defined(P_OS_LINUX)
@@ -427,7 +432,7 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
   stbuf->st_mtime=stbuf->st_ctime;
@@ -454,7 +459,7 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
   if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED)
     size=psync_fs_crypto_plain_size(size);
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
   stbuf->st_mtime=stbuf->st_ctime;
@@ -480,12 +485,12 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
     stbuf->st_ino=folderid_to_inode(mk->folderid);
   else
     stbuf->st_ino=taskid_to_inode(-mk->folderid);
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=mk->ctime;
   stbuf->st_ctime=mk->mtime;
   stbuf->st_mtime=mk->mtime;
 #else
-  stbuf->st_ctime=mk->ctime;
+  stbuf->st_ctime=mk->mtime;
   stbuf->st_mtime=mk->mtime;
 #endif
   stbuf->st_atime=stbuf->st_mtime;
@@ -517,7 +522,7 @@ static int psync_creat_stat_fake_file(struct FUSE_STAT *stbuf){
   time_t ctime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   ctime=psync_timer_time();
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=ctime;
 #endif
   stbuf->st_ctime=ctime;
@@ -611,14 +616,11 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   }*/
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=taskid_to_inode(fileid);
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
-  stbuf->st_birthtime=st.st_birthtime;
-  stbuf->st_ctime=st.st_ctime;
-  stbuf->st_mtime=st.st_mtime;
-#else
-  stbuf->st_ctime=psync_stat_ctime(&st);
-  stbuf->st_mtime=psync_stat_mtime(&st);
+#ifdef FUSE_STAT_HAS_BIRTHTIME
+  stbuf->st_birthtime=psync_stat_birthtime(&st);
 #endif
+  stbuf->st_mtime=psync_stat_mtime(&st);
+  stbuf->st_ctime=stbuf->st_mtime;
   stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
@@ -648,7 +650,7 @@ static int psync_creat_static_to_file_stat(psync_fstask_creat_t *cr, struct FUSE
   lc=psync_fstask_creat_get_local(cr);
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=cr->taskid;
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=lc->ctime;
   stbuf->st_ctime=lc->ctime;
   stbuf->st_mtime=lc->ctime;
