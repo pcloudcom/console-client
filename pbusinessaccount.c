@@ -685,7 +685,7 @@ static int check_write_permissions (psync_folderid_t folderid) {
   row=psync_sql_fetch_rowint(res);
   if (unlikely(!row))
     debug(D_ERROR, "could not find folder of folderid %lu", (unsigned long)folderid);
-  else if (((row[1])&3)!=O_RDONLY && !((row[0])&(PSYNC_PERM_MODIFY|PSYNC_PERM_CREATE)))
+  else if (((row[1])&3)!=P_O_RDONLY && !((row[0])&(PSYNC_PERM_MODIFY|PSYNC_PERM_CREATE)))
     ret = 1;
     
    psync_sql_free_result(res);
