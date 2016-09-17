@@ -695,7 +695,7 @@ static int check_write_permissions (psync_folderid_t folderid) {
 
 psync_folderid_t psync_check_and_create_folder (const char * path) {
   psync_folderid_t folderid=psync_get_folderid_by_path_or_create(path);
-  if (folderid==PSYNC_INVALID_FOLDERID || (!check_write_permissions(folderid))){
+  if (folderid!=PSYNC_INVALID_FOLDERID&&check_write_permissions(folderid)){
     char *buff=NULL;
     uint32_t bufflen;
     int ind = 1;
