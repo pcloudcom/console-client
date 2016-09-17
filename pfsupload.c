@@ -1680,15 +1680,20 @@ static void psync_fsupload_check_tasks(){
 }
 
 static void psync_fsupload_thread(){
+  int waited;
   clean_stuck_tasks();
+  waited=0;
   while (psync_do_run){
     psync_wait_statuses_array(requiredstatusesnooverquota, ARRAY_SIZE(requiredstatusesnooverquota));
     // it is better to sleep a bit to give a chance for events to accumulate
-    psync_milisleep(10);
+    if (waited)
+      psync_milisleep(100);
     psync_fsupload_check_tasks();
     pthread_mutex_lock(&upload_mutex);
-    while (!upload_wakes)
+    while (!upload_wakes){
       pthread_cond_wait(&upload_cond, &upload_mutex);
+      waited=1;
+    }
     upload_wakes=0;
     pthread_mutex_unlock(&upload_mutex);
   }
