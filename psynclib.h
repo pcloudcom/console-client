@@ -1178,6 +1178,9 @@ int psync_setlanguage(const char *language, char **err);
 // Update crypto status information from userinfo.
 void psync_update_cryptostatus();
 
+// Checks and creates new folder with write permissions on it and adds suffix to the name if necessary i.e. New Folder (1) etc..
+psync_folderid_t psync_check_and_create_folder (const char * path);
+
 #ifdef __cplusplus
 }
 #endif
