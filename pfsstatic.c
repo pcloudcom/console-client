@@ -298,7 +298,7 @@ void psync_fsstatic_add_files(){
 
 #elif defined(P_OS_WINDOWS)
 
-//* remove for now
+/* remove for now
 static const char *rootdirinf="[.ShellClassInfo]\r\nIconFile=pCloud.ico\r\nIconIndex=0\r\n";
 static const unsigned char pcloudicon[]={
   0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x80, 0x80, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x28, 0x4c, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00,
@@ -1119,7 +1119,7 @@ static const unsigned char pcloudicon[]={
 //*/
 
 void psync_fsstatic_add_files(){
-//* remove
+/* remove
   psync_fstask_add_local_creat_static(0, "Desctop.ini", rootdirinf, strlen(rootdirinf));
   psync_fstask_add_local_creat_static(0, "pCloud.ico", pcloudicon, ARRAY_SIZE(pcloudicon));
 //  */
