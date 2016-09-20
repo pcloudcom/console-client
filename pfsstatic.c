@@ -1120,7 +1120,7 @@ static const unsigned char pcloudicon[]={
 
 void psync_fsstatic_add_files(){
 /* remove
-  psync_fstask_add_local_creat_static(0, "Desctop.ini", rootdirinf, strlen(rootdirinf));
+  psync_fstask_add_local_creat_static(0, "Desktop.ini", rootdirinf, strlen(rootdirinf));
   psync_fstask_add_local_creat_static(0, "pCloud.ico", pcloudicon, ARRAY_SIZE(pcloudicon));
 //  */
 }
