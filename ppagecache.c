@@ -2940,7 +2940,7 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
       page->usecnt=1;
       page->crc=psync_crc32c(PSYNC_CRC_INITIAL, page->page, rd);
       page->type=PAGE_TYPE_READ;
-      debug(D_NOTICE, "new page %lu crc %lu size %lu", (unsigned long)pageid, (unsigned long)page->crc, (unsigned long)rd);
+//      debug(D_NOTICE, "new page %lu crc %lu size %lu", (unsigned long)pageid, (unsigned long)page->crc, (unsigned long)rd);
       psync_pagecache_add_page_if_not_exists(page, hash, pageid);
       if (pageid%64==0){
         psync_check_clean_running();
@@ -3008,7 +3008,7 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
       page->usecnt=1;
       page->crc=psync_crc32c(PSYNC_CRC_INITIAL, page->page, pdb);
       page->type=PAGE_TYPE_READ;
-      debug(D_NOTICE, "combined page %lu crc %lu size %lu", (unsigned long)pageid, (unsigned long)page->crc, (unsigned long)pdb);
+//      debug(D_NOTICE, "combined page %lu crc %lu size %lu", (unsigned long)pageid, (unsigned long)page->crc, (unsigned long)pdb);
       psync_pagecache_add_page_if_not_exists(page, hash, pageid);
       if (pageid%64==0){
         psync_check_clean_running();
