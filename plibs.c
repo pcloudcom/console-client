@@ -336,7 +336,7 @@ static void psync_sql_wal_checkpoint(){
   psync_sql_lock();
   psync_sql_unlock();
   if (pthread_mutex_trylock(&psync_db_checkpoint_mutex)){
-    debug(D_NOTICE, "skipping checkpoint");
+    debug(D_NOTICE, "checkpoint already in progress");
     return;
   }
   debug(D_NOTICE, "checkpointing database");
@@ -348,6 +348,8 @@ static void psync_sql_wal_checkpoint(){
   pthread_mutex_unlock(&psync_db_checkpoint_mutex);
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
+  else
+    debug(D_NOTICE, "checkpoint finished");
 }
 
 static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int numpages){
