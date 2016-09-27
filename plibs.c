@@ -371,7 +371,7 @@ int psync_sql_connect(const char *db){
   assert(!strcmp(sqlite3_libversion(), SQLITE_VERSION));
   debug(D_NOTICE, "Using sqlite version %s source %s", sqlite3_libversion(), sqlite3_sourceid());
   if (!sqlite3_threadsafe()){
-    debug(D_CRITICAL, "sqlite is compiled without thread support");
+    debug(D_CRITICAL, "sqlite is compiled without thread support, failing");
     return -1;
   }
   if (psync_stat(db, &st)!=0)
