@@ -2936,6 +2936,7 @@ char *psync_deviceid(){
   else{
     v=atoi(un.release);
     switch (v){
+      case 16: ver="macOS 10.12 Sierra"; break;
       case 15: ver="OS X 10.11 El Capitan"; break;
       case 14: ver="OS X 10.10 Yosemite"; break;
       case 13: ver="OS X 10.9 Mavericks"; break;
