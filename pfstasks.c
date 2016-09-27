@@ -506,10 +506,6 @@ int psync_fstask_rmdir(psync_fsfolderid_t folderid, uint32_t parentflags, const 
     debug(D_NOTICE, "returning ENOTEMPTY for folder name %s", name);
     return -ENOTEMPTY;
   }
-  if (mk) {
-    psync_tree_del(&folder->mkdirs, &mk->tree);
-    psync_free(mk);
-  }
   if (cfolderid>=0){
     res=psync_sql_query("SELECT name FROM file WHERE parentfolderid=?");
     psync_sql_bind_uint(res, 1, cfolderid);
@@ -535,6 +531,10 @@ int psync_fstask_rmdir(psync_fsfolderid_t folderid, uint32_t parentflags, const 
         return -ENOTEMPTY;
       }
     psync_sql_free_result(res);
+  }
+  if (mk) {
+    psync_tree_del(&folder->mkdirs, &mk->tree);
+    psync_free(mk);
   }
   if (cfolder)
     psync_fstask_release_folder_tasks_locked(cfolder);
