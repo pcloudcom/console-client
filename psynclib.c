@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "gitcommit.h"
 #include "plibs.h"
 #include "pcompat.h"
 #include "psynclib.h"
@@ -168,7 +169,10 @@ static void psync_stop_crypto_on_sleep(){
 
 int psync_init(){
   psync_thread_name="main app thread";
-  debug(D_NOTICE, "initializing");
+  debug(D_NOTICE, "initializing library version "PSYNC_LIB_VERSION);
+  debug(D_NOTICE, "last commit time "GIT_COMMIT_DATE);
+  debug(D_NOTICE, "previous commit time "GIT_PREV_COMMIT_DATE);
+  debug(D_NOTICE, "previous commit id "GIT_PREV_COMMIT_ID);
   if (IS_DEBUG){
     pthread_mutex_lock(&psync_libstate_mutex);
     if (psync_libstate!=0){
