@@ -146,9 +146,9 @@ void psync_path_status_init() {
     psync_list_add_tail(&parent_cache_lru, &parent_cache_entries[i].list_lru);
     psync_list_add_tail(&cache_free, &parent_cache_entries[i].list_hash);
   }
-  psync_tree_for_each_element_call(folder_tasks, folder_tasks_t, tree, psync_free);
+  psync_tree_for_each_element_call_safe(folder_tasks, folder_tasks_t, tree, psync_free);
   folder_tasks=PSYNC_TREE_EMPTY;
-  psync_tree_for_each_element_call(sync_data, sync_data_t, tree, sync_data_free);
+  psync_tree_for_each_element_call_safe(sync_data, sync_data_t, tree, sync_data_free);
   sync_data=PSYNC_TREE_EMPTY;
   psync_path_status_reload_syncs();
   psync_path_status_clear_path_cache();
@@ -411,7 +411,7 @@ void psync_path_status_folder_deleted(psync_folderid_t folderid) {
 }
 
 static void sync_data_free(sync_data_t *sd) {
-  psync_tree_for_each_element_call(sd->folder_tasks, folder_tasks_t, tree, psync_free);
+  psync_tree_for_each_element_call_safe(sd->folder_tasks, folder_tasks_t, tree, psync_free);
   psync_free(sd);
 }
 

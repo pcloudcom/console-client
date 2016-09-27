@@ -84,6 +84,11 @@ typedef off_t fuse_off_t;
 
 #if defined(P_OS_MACOSX)
 #define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
+
+#if defined(_DARWIN_FEATURE_64_BIT_INODE)
+#define FUSE_STAT_HAS_BIRTHTIME
+#endif
+
 #endif
 
 #if defined(P_OS_LINUX)
@@ -427,7 +432,7 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
   stbuf->st_mtime=stbuf->st_ctime;
@@ -454,7 +459,7 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
   if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED)
     size=psync_fs_crypto_plain_size(size);
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
   stbuf->st_ctime=psync_get_number(row[3]);
   stbuf->st_mtime=stbuf->st_ctime;
@@ -480,12 +485,12 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
     stbuf->st_ino=folderid_to_inode(mk->folderid);
   else
     stbuf->st_ino=taskid_to_inode(-mk->folderid);
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=mk->ctime;
   stbuf->st_ctime=mk->mtime;
   stbuf->st_mtime=mk->mtime;
 #else
-  stbuf->st_ctime=mk->ctime;
+  stbuf->st_ctime=mk->mtime;
   stbuf->st_mtime=mk->mtime;
 #endif
   stbuf->st_atime=stbuf->st_mtime;
@@ -517,7 +522,7 @@ static int psync_creat_stat_fake_file(struct FUSE_STAT *stbuf){
   time_t ctime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   ctime=psync_timer_time();
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=ctime;
 #endif
   stbuf->st_ctime=ctime;
@@ -611,14 +616,11 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   }*/
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=taskid_to_inode(fileid);
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
-  stbuf->st_birthtime=st.st_birthtime;
-  stbuf->st_ctime=st.st_ctime;
-  stbuf->st_mtime=st.st_mtime;
-#else
-  stbuf->st_ctime=psync_stat_ctime(&st);
-  stbuf->st_mtime=psync_stat_mtime(&st);
+#ifdef FUSE_STAT_HAS_BIRTHTIME
+  stbuf->st_birthtime=psync_stat_birthtime(&st);
 #endif
+  stbuf->st_mtime=psync_stat_mtime(&st);
+  stbuf->st_ctime=stbuf->st_mtime;
   stbuf->st_atime=stbuf->st_mtime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
@@ -648,7 +650,7 @@ static int psync_creat_static_to_file_stat(psync_fstask_creat_t *cr, struct FUSE
   lc=psync_fstask_creat_get_local(cr);
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   stbuf->st_ino=cr->taskid;
-#ifdef _DARWIN_FEATURE_64_BIT_INODE
+#ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=lc->ctime;
   stbuf->st_ctime=lc->ctime;
   stbuf->st_mtime=lc->ctime;
@@ -2166,6 +2168,7 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
     debug(D_WARNING, "could not get free space of path %s", cachepath);
     return 1;
   }
+//  debug(D_NOTICE, "free space of %s is %lld minlocal %llu", cachepath, freespc, minlocal);
   if (freespc>=minlocal+size){
     psync_set_local_full(0);
     of->throttle=0;
@@ -2221,11 +2224,11 @@ PSYNC_NOINLINE static int psync_fs_do_check_write_space(psync_openfile_t *of, si
 }
 
 static int psync_fs_check_write_space(psync_openfile_t *of, size_t size, fuse_off_t offset){
-  if (!of->throttle && of->writeid%256==0)
+  if (!of->throttle && of->writeid%64!=0)
     return 1;
   if (of->currentsize>=offset+size){
-    if (of->newfile)
-      return 1;
+//    if (of->newfile)
+//      return 1;
     if (of->modified && psync_fs_check_modified_file_write_space(of, size, offset))
       return 1;
   }
@@ -3017,6 +3020,20 @@ char *psync_fs_get_path_by_folderid(psync_folderid_t folderid){
   return ret;
 }
 
+#if IS_DEBUG
+
+static void psync_fs_dump_internals() {
+  psync_openfile_t *of;
+  debug(D_NOTICE, "dumping internal state");
+  psync_sql_rdlock();
+  psync_tree_for_each_element(of, openfiles, psync_openfile_t, tree)
+    debug(D_NOTICE, "open file %s fileid %ld folderid %ld", of->currentname, (long)of->fileid, (long)of->currentfolder->folderid);
+  psync_fstask_dump_state();
+  psync_sql_rdunlock();
+}
+
+#endif
+
 static void psync_fs_do_stop(void){
   struct timespec ts;
   debug(D_NOTICE, "stopping");
@@ -3039,6 +3056,9 @@ static void psync_fs_do_stop(void){
       debug(D_NOTICE, "timeouted waiting for fuse to exit");
     else
       debug(D_NOTICE, "waited for fuse to exit");
+#if IS_DEBUG
+    psync_fs_dump_internals();
+#endif
   }
   pthread_mutex_unlock(&start_mutex);
 }
@@ -3050,10 +3070,17 @@ void psync_fs_stop(){
 #if defined(P_OS_POSIX)
 
 static void psync_signal_handler(int sig){
-  debug(D_NOTICE, "got signal %d\n", sig);
+  debug(D_NOTICE, "got signal %d", sig);
   psync_fs_do_stop();
   exit(1);
 }
+
+#if IS_DEBUG
+static void psync_usr1_handler(int sig){
+//  debug(D_NOTICE, "got signal %d", sig);
+  psync_run_thread("dump signal", psync_fs_dump_internals);
+}
+#endif
 
 static void psync_set_signal(int sig, void (*handler)(int)){
   struct sigaction sa;
@@ -3074,6 +3101,9 @@ static void psync_setup_signals(){
   psync_set_signal(SIGTERM, psync_signal_handler);
   psync_set_signal(SIGINT, psync_signal_handler);
   psync_set_signal(SIGHUP, psync_signal_handler);
+#if IS_DEBUG
+  psync_set_signal(SIGUSR1, psync_usr1_handler);
+#endif
 }
 
 #endif
@@ -3137,6 +3167,7 @@ static int psync_fs_do_start(){
 //  fuse_opt_add_arg(&args, "-ouse_ino");
   fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   fuse_opt_add_arg(&args, "-ononempty");
+  fuse_opt_add_arg(&args, "-ohard_remove");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
@@ -3146,6 +3177,7 @@ static int psync_fs_do_start(){
   if (psync_user_is_admin())
     fuse_opt_add_arg(&args, "-oallow_root");
   fuse_opt_add_arg(&args, "-onolocalcaches");
+  fuse_opt_add_arg(&args, "-ohard_remove");
 #endif
 
   memset(&psync_oper, 0, sizeof(psync_oper));

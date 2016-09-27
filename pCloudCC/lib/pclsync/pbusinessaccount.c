@@ -28,8 +28,10 @@
 #include "papi.h"
 #include "plibs.h"
 #include "pnetlibs.h"
+#include "pfolder.h"
 
 #include <stdio.h>
+
 typedef struct _email_vis_params {
   char** email;
   size_t *length;
@@ -610,4 +612,113 @@ int api_error_result(binresult* res) {
     return 1;
   }
   return 0;
+}
+
+void psync_update_cryptostatus(){
+  binresult *res;
+  const binresult *cres;
+  psync_sql_res *q;
+  uint64_t u, crexp, crsub = 0, is_business = 0;
+  int crst = 0,crstat;
+  
+  binparam params[] = { P_STR("auth", psync_my_auth) };
+  res = psync_api_run_command("userinfo", params);
+  if (!res) {
+    debug(D_WARNING, "Send command returned invalid result.\n");
+    return;
+  }
+  
+  if (api_error_result(res))
+    return;
+  
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
+  
+  is_business=psync_find_result(res, "business", PARAM_BOOL)->num;
+  
+  u=psync_find_result(res, "cryptosetup", PARAM_BOOL)->num;
+  psync_sql_bind_string(q, 1, "cryptosetup");
+  psync_sql_bind_uint(q, 2, u);
+  psync_sql_run(q);
+  if (u)
+    crst = 1;
+  psync_sql_bind_string(q, 1, "cryptosubscription");
+  crsub =  psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num;
+  psync_sql_bind_uint(q, 2, crsub);
+  psync_sql_run(q);
+  
+  cres=psync_check_result(res, "cryptoexpires", PARAM_NUM);
+  crexp = cres?cres->num:0;
+  psync_sql_bind_string(q, 1, "cryptoexpires");
+  psync_sql_bind_uint(q, 2, crexp);
+  psync_sql_run(q);
+
+  if (is_business || crsub){
+    if (crst)
+      crstat = 5;
+    else  crstat = 4;
+  } else {
+    if (!crst)
+      crstat = 1;
+    else 
+    {
+      if (psync_time() > crexp)
+        crstat = 3;
+      else 
+        crstat = 2;
+    }
+  }
+  psync_sql_bind_string(q, 1, "cryptostatus");
+  psync_sql_bind_uint(q, 2, crstat);
+  psync_sql_run(q);
+  psync_sql_free_result(q);
+
+  
+}
+
+static int check_write_permissions (psync_folderid_t folderid) {
+  psync_sql_res* res;
+  psync_uint_row row;
+  int  ret = 0;
+  
+  res=psync_sql_query("SELECT permissions, flags, name FROM folder WHERE id=?");
+  psync_sql_bind_uint(res, 1, folderid);
+  row=psync_sql_fetch_rowint(res);
+  if (unlikely(!row))
+    debug(D_ERROR, "could not find folder of folderid %lu", (unsigned long)folderid);
+  else if (/*(((row[1]) & 3) != O_RDONLY) &&*/ ((row[0]&PSYNC_PERM_MODIFY)&&(row[0]&PSYNC_PERM_CREATE)))
+    ret = 1;
+    
+   psync_sql_free_result(res);
+   return ret;
+}
+
+psync_folderid_t psync_check_and_create_folder (const char * path) {
+  psync_folderid_t folderid=psync_get_folderid_by_path_or_create(path);
+  if (folderid==PSYNC_INVALID_FOLDERID || (!check_write_permissions(folderid))){
+    char *buff=NULL;
+    uint32_t bufflen;
+    int ind = 1;
+    char *err=NULL;
+    
+    while (ind < 100) {
+      folderid=PSYNC_INVALID_FOLDERID;
+      bufflen = strlen(path) + 1 /*zero char*/ + 3 /*parenthesis*/ + 3 /*up to 3 digit index*/;
+      buff = (char *) psync_malloc(bufflen);
+      snprintf(buff, bufflen - 1, "%s (%d)", path, ind);
+      if (psync_create_remote_folder_by_path(buff, &err)!=0)
+        debug(D_NOTICE, "Unable to create folder %s error is %s.", buff, err);
+      folderid=psync_get_folderid_by_path_or_create(buff);
+      if ((folderid!=PSYNC_INVALID_FOLDERID)&&check_write_permissions(folderid)) {
+        psync_free(buff);
+        break;
+      }
+      ++ind;
+
+      if (err)
+        psync_free(err);
+      psync_free(buff);
+    }
+  }
+
+  return folderid; 
 }

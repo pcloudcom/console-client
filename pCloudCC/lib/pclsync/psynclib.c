@@ -1528,6 +1528,119 @@ void psync_run_new_version(psync_new_version_t *ver){
   exit(0);
 }
 
+static int psync_upload_result(binresult *res, psync_fileid_t *fileid){
+  uint64_t result;
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (likely(!result)){
+    const binresult *meta=psync_find_result(res, "metadata", PARAM_ARRAY)->array[0];
+    *fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
+    psync_free(res);
+    return 0;
+  }
+  else{
+    debug(D_WARNING, "uploadfile returned error %u: %s", (unsigned)result, psync_find_result(res, "error", PARAM_STR)->str);
+    psync_free(res);
+    psync_process_api_error(result);
+    return result;
+  }
+}
+
+static int psync_upload_params(binparam *params, size_t paramcnt, const void *data, size_t length, psync_fileid_t *fileid){
+  psync_socket *api;
+  binresult *res;
+  int tries;
+  tries=0;
+  do {
+    api=psync_apipool_get();
+    if (unlikely(!api))
+      break;
+    if (likely(do_send_command(api, "uploadfile", strlen("uploadfile"), params, paramcnt, length, 0))){
+      if (psync_socket_writeall(api, data, length)==length){
+        res=get_result(api);
+        if (likely(res)){
+          psync_apipool_release(api);
+          return psync_upload_result(res, fileid);
+        }
+      }
+    }
+    psync_apipool_release_bad(api);
+  } while (++tries<=PSYNC_RETRY_REQUEST);
+  psync_timer_notify_exception();
+  return -1;
+}
+
+int psync_upload_data(psync_folderid_t folderid, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", remote_filename), P_BOOL("nopartial", 1)};
+  return psync_upload_params(params, ARRAY_SIZE(params), data, length, fileid);
+}
+
+int psync_upload_data_as(const char *remote_path, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid){
+  binparam params[]={P_STR("auth", psync_my_auth), P_STR("path", remote_path), P_STR("filename", remote_filename), P_BOOL("nopartial", 1)};
+  return psync_upload_params(params, ARRAY_SIZE(params), data, length, fileid);
+}
+
+static int psync_load_file(const char *local_path, char **data, size_t *length){
+  psync_file_t fd;
+  psync_stat_t st1, st2;
+  char *buff;
+  size_t len, off;
+  ssize_t rd;
+  int tries;
+  for (tries=0; tries<15; tries++){
+    fd=psync_file_open(local_path, P_O_RDONLY, 0);
+    if (fd==INVALID_HANDLE_VALUE)
+      goto err0;
+    if (psync_fstat(fd, &st1))
+      goto err1;
+    len=psync_stat_size(&st1);
+    buff=psync_malloc(len);
+    if (!buff)
+      goto err1;
+    off=0;
+    while (off<len){
+      rd=psync_file_pread(fd, buff+off, len-off, off);
+      if (rd<0)
+        break;
+      off+=rd;
+    }
+    psync_file_close(fd);
+    if (off==len && !psync_stat(local_path, &st2) && psync_stat_size(&st2)==len && psync_stat_mtime_native(&st1)==psync_stat_mtime_native(&st2)){
+      *data=buff;
+      *length=len;
+      return 0;
+    }
+    psync_free(buff);
+  }
+  return -1;
+err1:
+  psync_file_close(fd);
+err0:
+  return -1;
+}
+
+int psync_upload_file(psync_folderid_t folderid, const char *remote_filename, const char *local_path, psync_fileid_t *fileid){
+  char *data;
+  size_t length;
+  int ret;
+  if (psync_load_file(local_path, &data, &length))
+    return -2;
+  ret=psync_upload_data(folderid, remote_filename, data, length, fileid);
+  psync_free(data);
+  return ret;
+}
+
+int psync_upload_file_as(const char *remote_path, const char *remote_filename, const char *local_path, psync_fileid_t *fileid){
+  char *data;
+  size_t length;
+  int ret;
+  if (psync_load_file(local_path, &data, &length))
+    return -2;
+  ret=psync_upload_data_as(remote_path, remote_filename, data, length, fileid);
+  psync_free(data);
+  return ret;
+}
+
+
 int psync_password_quality(const char *password){
   uint64_t score=psync_password_score(password);
   if (score<(uint64_t)1<<30)

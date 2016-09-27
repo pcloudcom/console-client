@@ -145,10 +145,11 @@ typedef unsigned long psync_uint_t;
 #define psync_stat_isfolder(s) S_ISDIR((s)->st_mode)
 #define psync_stat_size(s) ((s)->st_size)
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
-#define psync_stat_ctime(s) ((s)->st_birthtime)
+#define psync_stat_birthtime(s) ((s)->st_birthtime)
 #else
-#define psync_stat_ctime(s) ((s)->st_ctime)
+#define psync_stat_birthtime(s) ((s)->st_mtime)
 #endif
+#define psync_stat_ctime(s) ((s)->st_ctime)
 #define psync_stat_mtime(s) ((s)->st_mtime)
 
 #if defined(st_mtime)
@@ -266,6 +267,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_stat_size(s) psync_32to64((s)->nFileSizeHigh, (s)->nFileSizeLow)
 #define psync_stat_ctime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
 #define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
+#define psync_stat_birthtime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
 #define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
 #define psync_mtime_native_to_mtime(n) psync_filetime64_to_timet(n)
 #define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)

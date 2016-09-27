@@ -3306,17 +3306,18 @@ void psync_pagecache_init(){
   if (psync_stat(cache_file, &st))
     psync_sql_statement("DELETE FROM pagecache");
   else{
-    res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>? AND type!="NTO_STR(PAGE_TYPE_FREE));
+    res=psync_sql_prep_statement("DELETE FROM pagecache WHERE id>?");
     psync_sql_bind_uint(res, 1, psync_stat_size(&st)/PSYNC_FS_PAGE_SIZE);
     psync_sql_run_free(res);
   }
   db_cache_in_pages=psync_setting_get_uint(_PS(fscachesize))/PSYNC_FS_PAGE_SIZE;
   db_cache_max_page=psync_sql_cellint("SELECT MAX(id) FROM pagecache", 0);
-  if (db_cache_max_page<db_cache_in_pages){
+  free_db_pages=psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0);
+  if (db_cache_max_page<db_cache_in_pages && free_db_pages<CACHE_PAGES*2){
     i=0;
     psync_sql_start_transaction();
     res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
-    while (db_cache_max_page+i<db_cache_in_pages && i<CACHE_PAGES*4){
+    while (db_cache_max_page+i<db_cache_in_pages && i<CACHE_PAGES*2){
       psync_sql_run(res);
       i++;
     }
@@ -3329,9 +3330,10 @@ void psync_pagecache_init(){
   }
   readcache=psync_file_open(cache_file, P_O_RDWR, P_O_CREAT);
   psync_free(cache_file);
+  if (likely_log(psync_file_seek(readcache, db_cache_max_page*PSYNC_FS_PAGE_SIZE, P_SEEK_SET)!=-1))
+    assertw(psync_file_truncate(readcache)==0);
   if (db_cache_max_page>db_cache_in_pages)
     psync_pagecache_resize_cache();
-  free_db_pages=psync_sql_cellint("SELECT COUNT(*) FROM pagecache WHERE type="NTO_STR(PAGE_TYPE_FREE), 0);
   pthread_mutex_lock(&flush_cache_mutex);
   check_disk_full();
   pthread_mutex_unlock(&flush_cache_mutex);
