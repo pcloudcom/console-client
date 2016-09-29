@@ -147,6 +147,8 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t lfolderid, dbfolderid;
+  const char *ptr;
+  char *vname;
   debug(D_NOTICE, "creating local folder in db as %lu/%s for folderid %lu", (unsigned long)localparentfolderid, name, (unsigned long)folderid);
   res=psync_sql_query("SELECT id FROM localfolder WHERE syncid=? AND folderid=?");
   psync_sql_bind_uint(res, 1, syncid);
@@ -159,6 +161,16 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
   psync_sql_free_result(res);
   if (lfolderid)
     return lfolderid;
+  vname=NULL;
+  if (name)
+    for (ptr=name; *ptr; ptr++)
+      if (psync_invalid_filename_chars[(unsigned char)*ptr]){
+        if (!vname)
+          vname=psync_strdup(name);
+        vname[ptr-name]='_';
+      }
+  if (vname)
+    name=vname;
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, folderid, syncid, flags, taskcnt, name) VALUES (?, ?, ?, 0, 1, ?)");
   psync_sql_bind_uint(res, 1, localparentfolderid);
   psync_sql_bind_uint(res, 2, folderid);
@@ -168,6 +180,7 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
   if (psync_sql_affected_rows()>0){
     lfolderid=psync_sql_insertid();
     psync_sql_free_result(res);
+    psync_free(vname);
     return lfolderid;
   }
   psync_sql_free_result(res);
@@ -193,6 +206,7 @@ psync_folderid_t psync_create_local_folder_in_db(psync_syncid_t syncid, psync_fo
     psync_sql_run_free(res);
   }
   psync_increase_local_folder_taskcnt(lfolderid);
+  psync_free(vname);
   return lfolderid;
 }
 

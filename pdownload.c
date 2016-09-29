@@ -1249,17 +1249,18 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
 }
 
 static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
-                                        psync_syncid_t newsyncid){
+                         psync_syncid_t newsyncid){
   int res;
   const char *ptr;
   char *vname;
   vname=NULL;
-  for (ptr=name; *ptr; ptr++)
-    if (psync_invalid_filename_chars[(unsigned char)*ptr]){
-      if (!vname)
-        vname=psync_strdup(name);
-      vname[ptr-name]='_';
-    }
+  if (name)
+    for (ptr=name; *ptr; ptr++)
+      if (psync_invalid_filename_chars[(unsigned char)*ptr]){
+        if (!vname)
+          vname=psync_strdup(name);
+        vname[ptr-name]='_';
+      }
   if (vname)
     name=vname;
   switch (type) {
