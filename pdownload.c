@@ -1251,6 +1251,17 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
 static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, uint64_t itemid, uint64_t localitemid, uint64_t newitemid, const char *name,
                                         psync_syncid_t newsyncid){
   int res;
+  const char *ptr;
+  char *vname;
+  vname=NULL;
+  for (ptr=name; *ptr; ptr++)
+    if (psync_invalid_filename_chars[(unsigned char)*ptr]){
+      if (!vname)
+        vname=psync_strdup(name);
+      vname[ptr-name]='_';
+    }
+  if (vname)
+    name=vname;
   switch (type) {
     case PSYNC_CREATE_LOCAL_FOLDER:
       res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_CREATED, task_mkdir, 1, "local folder created");
@@ -1284,6 +1295,7 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
   }
   if (res && type!=PSYNC_DOWNLOAD_FILE)
     debug(D_WARNING, "task of type %u, syncid %u, id %lu localid %lu failed", (unsigned)type, (unsigned)syncid, (unsigned long)itemid, (unsigned long)localitemid);
+  psync_free(vname);
   return res;
 }
 

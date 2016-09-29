@@ -404,6 +404,8 @@ typedef void (*psync_thread_start1)(void *);
 
 extern PSYNC_THREAD const char *psync_thread_name;
 
+extern const unsigned char psync_invalid_filename_chars[];
+
 void psync_compat_init();
 int psync_user_is_admin();
 int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits) PSYNC_PURE;
