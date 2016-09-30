@@ -147,6 +147,8 @@
 
 #define PSYNC_APPEND_PARTIAL_FILES ".part"
 
+#define PSYNC_REPLACE_INV_CH_IN_FILENAMES '_'
+
 /* in milliseconds */
 #define PSYNC_SLEEP_BEFORE_RECONNECT   5000
 #define PSYNC_SLEEP_ON_DISK_FULL       10000

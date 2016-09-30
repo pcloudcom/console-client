@@ -1667,13 +1667,6 @@ void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of){
     psync_fs_free_openfile(of);
 }
 
-static int psync_fs_release(const char *path, struct fuse_file_info *fi){
-  psync_fs_set_thread_name();
-  debug(D_NOTICE, "release %s", path);
-  psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
-  return 0;
-}
-
 typedef struct {
   psync_openfile_t *of;
   uint64_t writeid;
@@ -1792,6 +1785,14 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
     return 0;
   }
   pthread_mutex_unlock(&of->mutex);
+  return 0;
+}
+
+static int psync_fs_release(const char *path, struct fuse_file_info *fi){
+  psync_fs_set_thread_name();
+  debug(D_NOTICE, "release %s", path);
+  psync_fs_flush(path, fi);
+  psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
   return 0;
 }
 
