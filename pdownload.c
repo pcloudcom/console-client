@@ -1259,10 +1259,12 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
       if (psync_invalid_filename_chars[(unsigned char)*ptr]){
         if (!vname)
           vname=psync_strdup(name);
-        vname[ptr-name]='_';
+        vname[ptr-name]=PSYNC_REPLACE_INV_CH_IN_FILENAMES;
       }
-  if (vname)
+  if (vname){
+    debug(D_NOTICE, "downloading %s as %s", name, vname);
     name=vname;
+  }
   switch (type) {
     case PSYNC_CREATE_LOCAL_FOLDER:
       res=call_func_for_folder(localitemid, itemid, syncid, PEVENT_LOCAL_FOLDER_CREATED, task_mkdir, 1, "local folder created");
