@@ -248,7 +248,7 @@ typedef int psync_file_t;
 
 #define psync_def_var_arr(name, type, size) type *name=(type *)alloca(sizeof(type)*(size))
 #define atoll _atoi64
-#if _MSC_VER &lt; 1900 
+#if _MSC_VER < 1900 
 #define snprintf _snprintf
 #endif
 //#define snprintf _snprintf
