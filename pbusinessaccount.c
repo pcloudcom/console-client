@@ -622,7 +622,7 @@ void psync_update_cryptostatus(){
   uint64_t u, crexp, crsub = 0, is_business = 0;
   int crst = 0,crstat;
   
-  binparam params[] = { P_STR("auth", psync_my_auth) };
+  binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat","timestamp") };
   res = psync_api_run_command("userinfo", params);
   if (!res) {
     debug(D_WARNING, "Send command returned invalid result.\n");
