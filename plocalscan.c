@@ -228,6 +228,10 @@ static void add_new_element(const sync_folderlist *e, psync_folderid_t folderid,
   sync_folderlist *c;
   if (psync_is_name_to_ignore(e->name))
     return;
+  if (!psync_is_valid_utf8(e->name)){
+    debug(D_WARNING, "ignoring %s with invalid UTF8 name %s", e->isfolder?"folder":"file", e->name);
+    return;
+  }
   debug(D_NOTICE, "found new %s %s", e->isfolder?"folder":"file", e->name);
   c=copy_folderlist_element(e, folderid, localfolderid, syncid, synctype);
   if (e->isfolder)
