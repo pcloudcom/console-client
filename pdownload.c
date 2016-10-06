@@ -960,6 +960,7 @@ static void rename_create_thread(void *ptr){
   }
   else{
     delete_task(ard->dt->taskid);
+    psync_path_status_sync_folder_task_completed(ard->dt->dwllist.syncid, ard->dt->localfolderid);
     free_download_task(ard->dt);
     psync_free(ard);
     psync_status_recalc_to_download_async();
@@ -995,6 +996,7 @@ static void finish_async_download(void *ptr, psync_async_result_t *res){
       psync_timer_register(free_task_timer, 1, dt);
     else{
       delete_task(dt->taskid);
+      psync_path_status_sync_folder_task_completed(dt->dwllist.syncid, dt->localfolderid);
       free_download_task(dt);
       psync_status_recalc_to_download_async();
     }
@@ -1011,6 +1013,7 @@ static void finish_async_download_existing_not_mod(download_task_t *dt, psync_as
   }
   else{
     delete_task(dt->taskid);
+    psync_path_status_sync_folder_task_completed(dt->dwllist.syncid, dt->localfolderid);
     free_download_task(dt);
     psync_status_recalc_to_download_async();
   }
