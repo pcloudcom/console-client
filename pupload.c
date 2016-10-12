@@ -173,7 +173,6 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t parentfolderid, folderid;
-  psync_socket *api;
   binresult *bres;
   uint64_t result;
   int ret;
@@ -190,23 +189,19 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
     return 0;
   else{
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
-    api=psync_apipool_get();
-    if (unlikely(!api))
-      return -1;
     psync_diff_lock();
-    bres=send_command(api, "createfolderifnotexists", params);
-    if (likely(bres))
-      psync_apipool_release(api);
-    else{
+    bres=psync_api_run_command("createfolderifnotexists", params);
+    if (unlikely(!bres)){
       psync_diff_unlock();
-      psync_apipool_release_bad(api);
       return -1;
     }
     result=psync_find_result(bres, "result", PARAM_NUM)->num;
     if (unlikely(result)){
       psync_diff_unlock();
-      debug(D_WARNING, "command createfolderifnotexists returned code %u", (unsigned)result);
+      debug(D_WARNING, "command createfolderifnotexists returned code %u: %s for creating folder in %lu with name %s",
+            (unsigned)result, psync_find_result(bres, "error", PARAM_STR)->str, (unsigned long)parentfolderid, name);
       psync_process_api_error(result);
+      psync_free(bres);
       if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
         return -1;
       else
@@ -910,16 +905,8 @@ errp:
 
 static void delete_uploadid(psync_uploadid_t uploadid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid)};
-  psync_socket *api;
   binresult *res;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    return;
-  res=send_command(api, "upload_delete", params);
-  if (res)
-    psync_apipool_release(api);
-  else
-    psync_apipool_release_bad(api);
+  res=psync_api_run_command("upload_delete", params);
   psync_free(res);
 }
 
