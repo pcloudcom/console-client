@@ -84,14 +84,15 @@ static const uint32_t requiredstatusesnooverquota[]={
 static int psync_send_task_mkdir(psync_socket *api, fsupload_task_t *task){
   if (task->text2){
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp"),
-                       P_BOOL("encrypted", 1), P_STR("key", task->text2)};
+                       P_BOOL("encrypted", 1), P_STR("key", task->text2), P_NUM("ctime", task->int1)};
     if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
       return 0;
     else
       return -1;
   }
   else{
-    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp")};
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp"),
+                       P_NUM("ctime", task->int1)};
     if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
       return 0;
     else
