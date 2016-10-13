@@ -79,6 +79,7 @@ static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 static paccount_cache_callback_t psync_cache_callback=NULL;
 static uint32_t psync_is_business=0;
+static unsigned char adapter_hash[PSYNC_FAST_HASH256_LEN];
 
 void do_register_account_events_callback(paccount_cache_callback_t callback){
   psync_cache_callback=callback;
@@ -2273,8 +2274,8 @@ static int psync_diff_check_quota(psync_socket *sock){
   return 0;
 }
 
-static void psync_cache_contacts() {
-  if (psync_is_business) {
+static void psync_cache_contacts(){
+  if (psync_is_business){
     cache_account_emails();
     cache_account_teams();
     cache_ba_my_teams();
@@ -2283,6 +2284,26 @@ static void psync_cache_contacts() {
   cache_contacts();
   cache_shares();
   psync_notify_cache_change(PACCOUNT_CHANGE_ALL);
+}
+
+static void psync_diff_adapter_hash(void *out){
+  psync_fast_hash256_ctx ctx;
+  psync_interface_list_t *list;
+  list=psync_list_ip_adapters();
+  psync_fast_hash256_init(&ctx);
+  psync_fast_hash256_update(&ctx, list->interfaces, list->interfacecnt*sizeof(psync_interface_t));
+  psync_fast_hash256_final(out, &ctx);
+  psync_free(list);
+}
+
+static void psync_diff_adapter_timer(psync_timer_t timer, void *ptr){
+  unsigned char hash[PSYNC_FAST_HASH256_LEN];
+  psync_diff_adapter_hash(hash);
+  if (memcmp(adapter_hash, hash, PSYNC_FAST_HASH256_LEN)){
+    memcpy(adapter_hash, hash, PSYNC_FAST_HASH256_LEN);
+    debug(D_NOTICE, "network adapter list changed, sending exception");
+    psync_pipe_write(exceptionsockwrite, "e", 1);
+  }
 }
 
 void psync_diff_wake(){
@@ -2360,6 +2381,8 @@ restart:
   }
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
+  psync_diff_adapter_hash(adapter_hash);
+  psync_timer_register(psync_diff_adapter_timer, PSYNC_DIFF_CHECK_ADAPTER_CHANGE_SEC, NULL);
   send_diff_command(sock, ids);
   psync_milisleep(50);
   last_event=0;
