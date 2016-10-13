@@ -325,11 +325,9 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   psync_list_for_each_element_call(&dblist, sync_folderlist, list, psync_free);
   if (localsleepperfolder){
     psync_milisleep(localsleepperfolder);
-    if (psync_current_time-starttime>=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*2 && localsleepperfolder>=2)
-      localsleepperfolder/=2;
+    if (psync_current_time-starttime>=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*3/2)
+      localsleepperfolder=0;
   }
-  else
-    psync_yield_cpu();
   psync_list_for_each_element(l, &disklist, sync_folderlist, list)
     if (l->isfolder && l->localid){
       subpath=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, l->name, NULL);
