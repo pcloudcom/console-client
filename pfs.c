@@ -431,14 +431,22 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 #define taskid_to_inode(taskid) ((taskid)*3+2)
 
 static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
+  psync_folderid_t folderid;
+  uint64_t mtime;
+  psync_fstask_folder_t *folder;
+  folderid=psync_get_number(row[0]);
+  mtime=psync_get_number(row[3]);
+  folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
+  if (folder && folder->mtime)
+    mtime=folder->mtime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
-  stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
+  stbuf->st_ino=folderid_to_inode(folderid);
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
 #endif
-  stbuf->st_ctime=psync_get_number(row[3]);
-  stbuf->st_mtime=stbuf->st_ctime;
-  stbuf->st_atime=stbuf->st_ctime;
+  stbuf->st_ctime=mtime;
+  stbuf->st_mtime=mtime;
+  stbuf->st_atime=mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=psync_get_number(row[4])+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -475,6 +483,13 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
 }
 
 static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STAT *stbuf){
+  uint64_t mtime;
+  psync_fstask_folder_t *folder;
+  folder=psync_fstask_get_folder_tasks_rdlocked(mk->folderid);
+  if (folder && folder->mtime)
+    mtime=folder->mtime;
+  else
+    mtime=mk->mtime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   if (mk->folderid>=0)
     stbuf->st_ino=folderid_to_inode(mk->folderid);
@@ -483,9 +498,9 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=mk->ctime;
 #endif
-  stbuf->st_ctime=mk->mtime;
-  stbuf->st_mtime=mk->mtime;
-  stbuf->st_atime=mk->mtime;
+  stbuf->st_ctime=mtime;
+  stbuf->st_mtime=mtime;
+  stbuf->st_atime=mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=mk->subdircnt+2;
   stbuf->st_size=FS_BLOCK_SIZE;

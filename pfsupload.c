@@ -41,6 +41,7 @@
 #include "pfscrypto.h"
 #include "pcache.h"
 #include "ppathstatus.h"
+#include "pdiff.h"
 #include <string.h>
 
 typedef struct {
@@ -434,6 +435,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   }
   ret=save_meta(psync_find_result(res, "metadata", PARAM_HASH), folderid, name, taskid, writeid, newfile, oldhash, key);
   psync_free(res);
+  psync_diff_wake();
   return ret;
 }
 
@@ -507,10 +509,12 @@ static int copy_file_if_exists(psync_socket *api, const unsigned char *hashhex, 
   }
   meta=metas->array[0];
   ret=copy_file(api, psync_find_result(meta, "fileid", PARAM_NUM)->num, psync_find_result(meta, "hash", PARAM_NUM)->num, folderid, name, taskid, writeid);
-  if (ret==1)
+  if (ret==1){
     debug(D_NOTICE, "file %lu/%s copied to %lu/%s instead of uploading due to matching checksum",
           (long unsigned)psync_find_result(meta, "parentfolderid", PARAM_NUM)->num, psync_find_result(meta, "name", PARAM_STR)->str,
           (long unsigned)folderid, name);
+    psync_diff_wake();
+  }
   psync_free(res);
   return ret;
 }
@@ -1508,6 +1512,8 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
   }
   else if (cancels || dels)
     psync_status_recalc_to_upload_async();
+  if (dels)
+    psync_diff_wake();
 }
 
 static void psync_fsupload_run_tasks(psync_list *tasks){

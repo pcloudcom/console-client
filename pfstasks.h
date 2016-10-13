@@ -92,6 +92,7 @@ typedef struct {
   psync_tree *rmdirs;
   psync_tree *creats;
   psync_tree *unlinks;
+  time_t mtime;
   uint32_t taskscnt;
   uint32_t refcnt;
 } psync_fstask_folder_t;
