@@ -2253,6 +2253,87 @@ void psync_pqsort(void *base, size_t cnt, size_t sort_first, size_t size, int (*
   }
 }
 
+void psync_qpartition(void *base, size_t cnt, size_t sort_first, size_t size, int (*compar)(const void *, const void *)) {
+  unsigned char *lo, *hi, *mid, *l, *r, *sf;
+  size_t n, u32size;
+  sf=(unsigned char *)base+sort_first*size;
+  if (size%sizeof(uint32_t)==0 && (uintptr_t)base%sizeof(uint32_t)==0)
+    u32size=size/sizeof(uint32_t);
+  else
+    u32size=0;
+  if (cnt<=1) // otherwise cnt-1 will underflow
+    return;
+  lo=(unsigned char *)base;
+  hi=lo+(cnt-1)*size;
+  while (1) {
+    n=(hi-lo)/size;
+    if (n<=QSORT_MTR) {
+      mid=lo+(n>>1)*size;
+      if (compar(mid, lo)<0)
+        pqsswap(mid, lo, size);
+      if (compar(hi, mid)<0) {
+        pqsswap(mid, hi, size);
+        if (compar(mid, lo)<0)
+          pqsswap(mid, lo, size);
+      }
+      // we already sure *hi and *lo are good, so they will be skipped without checking
+      if (n<=2) // when n is 2, we have 3 elements
+        return;
+      l=lo;
+      r=hi;
+    } else {
+      mid=pq_choose_part(lo, n, size, compar);
+      l=lo-size;
+      r=hi+size;
+    }
+    if (u32size) {
+      do {
+        do {
+          l+=size;
+        } while (compar(l, mid)<0);
+        do {
+          r-=size;
+        } while (compar(mid, r)<0);
+        if (l>=r)
+          break;
+        pqsswap32(l, r, u32size);
+        if (mid==l) {
+          mid=r;
+          r+=size;
+        } else if (mid==r) {
+          mid=l;
+          l-=size;
+        }
+      } while (1);
+    } else {
+      do {
+        do {
+          l+=size;
+        } while (compar(l, mid)<0);
+        do {
+          r-=size;
+        } while (compar(mid, r)<0);
+        if (l>=r)
+          break;
+        pqsswap(l, r, size);
+        if (mid==l) {
+          mid=r;
+          r+=size;
+        } else if (mid==r) {
+          mid=l;
+          l-=size;
+        }
+      } while (1);
+    }
+    if (mid<sf)
+      lo=mid+size;
+    else if (mid>sf)
+      hi=mid-size;
+    else
+      return;
+  }
+}
+
 void psync_try_free_memory(){
   sqlite3_db_release_memory(psync_db);
   psync_cache_clean_all();

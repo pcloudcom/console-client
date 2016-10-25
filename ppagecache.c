@@ -993,44 +993,44 @@ static void clean_cache(){
   debug(D_NOTICE, "read %lu entries", (unsigned long)cnt);
 
   rcnt=PSYNC_FS_CACHE_LRU_FIRST_PAGES_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_first_pages);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_first_pages);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted first pages, reserved %lu pages, continuing with %lu entries", (unsigned long)rcnt, (unsigned long)cnt);
 
   rcnt=PSYNC_FS_CACHE_LRU_XFIRST_PAGES_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_xfirst_pages);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_xfirst_pages);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted extended first pages, reserved %lu pages, continuing with %lu entries", (unsigned long)rcnt, (unsigned long)cnt);
 
   ocnt=cnt;
   rcnt=PSYNC_FS_CACHE_LRU_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_lastuse);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_lastuse);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted entries by lastuse, reserved %lu pages, continuing with %lu oldest entries", (unsigned long)rcnt, (unsigned long)cnt);
 
   rcnt=PSYNC_FS_CACHE_LRU2_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse2);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse2);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted entries by more than 2 uses and lastuse, reserved %lu pages, continuing with %lu entries", (unsigned long)rcnt, (unsigned long)cnt);
 
   rcnt=PSYNC_FS_CACHE_LRU4_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse4);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse4);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted entries by more than 4 uses and lastuse, reserved %lu pages, continuing with %lu entries", (unsigned long)rcnt, (unsigned long)cnt);
 
   rcnt=PSYNC_FS_CACHE_LRU8_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse8);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse8);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted entries by more than 8 uses and lastuse, reserved %lu pages, continuing with %lu entries", (unsigned long)rcnt, (unsigned long)cnt);
 
   rcnt=PSYNC_FS_CACHE_LRU16_PERCENT*ocnt/100;
-  psync_pqsort(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse16);
+  psync_qpartition(entries, cnt, rcnt, sizeof(pagecache_entry), pagecache_entry_cmp_usecnt_lastuse16);
   cnt-=rcnt;
   entries+=rcnt;
   debug(D_NOTICE, "sorted entries by more than 16 uses and lastuse, reserved %lu pages, deleting %lu entries", (unsigned long)rcnt, (unsigned long)cnt);
