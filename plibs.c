@@ -624,7 +624,7 @@ void psync_sql_do_lock(const char *file, unsigned line){
     unsigned long msec;
     psync_nanotime(&start);
     memcpy(&end, &start, sizeof(end));
-    end.tv_sec+=30;
+    end.tv_sec+=PSYNC_DEBUG_LOCK_TIMEOUT;
     if (psync_rwlock_timedwrlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql write lock timed out called from %s:%u", file, line);
       psync_sql_dump_locks();
@@ -677,7 +677,7 @@ void psync_sql_do_rdlock(const char *file, unsigned line){
     unsigned long msec;
     psync_nanotime(&start);
     memcpy(&end, &start, sizeof(end));
-    end.tv_sec+=30;
+    end.tv_sec+=PSYNC_DEBUG_LOCK_TIMEOUT;
     if (psync_rwlock_timedrdlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql read lock timed out, called from %s:%u", file, line);
       psync_sql_dump_locks();
@@ -850,7 +850,7 @@ int psync_sql_commit_transaction(){
     }
   }
   else
-    debug(D_NOTICE, "rolling back transaction as some statements failed");
+    debug(D_ERROR, "rolling back transaction as some statements failed");
   psync_sql_rollback_transaction();
   return -1;
 }
