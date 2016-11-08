@@ -215,7 +215,7 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
   psync_variant_row row;
   const char *name;
   psync_folderid_t cfolderid, clfolderid;
-  res=psync_sql_prep_statement("INSERT INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, ?, ?)");
+  res=psync_sql_prep_statement("REPLACE INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, ?, ?)");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_bind_uint(res, 2, folderid);
   psync_sql_bind_uint(res, 3, lfoiderid);
@@ -266,12 +266,9 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   psync_sql_free_result(res);
   if (synctype&PSYNC_DOWNLOAD_ONLY){
     psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0);
-    psync_wake_download();
-    psync_status_recalc_to_download();
-    psync_send_status_update();
   }
   else {
-    res=psync_sql_prep_statement("INSERT INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, 0, ?)");
+    res=psync_sql_prep_statement("REPLACE INTO syncedfolder (syncid, folderid, localfolderid, synctype) VALUES (?, ?, 0, ?)");
     psync_sql_bind_uint(res, 1, syncid);
     psync_sql_bind_uint(res, 2, folderid);
     psync_sql_bind_uint(res, 3, synctype);
@@ -284,7 +281,12 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
     psync_sql_commit_transaction();
     if (synctype&PSYNC_UPLOAD_ONLY)
       psync_wake_localscan();
-      psync_localnotify_add_sync(syncid);
+    if (synctype&PSYNC_DOWNLOAD_ONLY){
+      psync_status_recalc_to_download();
+      psync_send_status_update();
+      psync_wake_download();
+    }
+    psync_localnotify_add_sync(syncid);
   }
   else
     psync_sql_rollback_transaction();
