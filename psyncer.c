@@ -278,15 +278,16 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
   if (likely_log(psync_sql_affected_rows())){
-    psync_sql_commit_transaction();
-    if (synctype&PSYNC_UPLOAD_ONLY)
-      psync_wake_localscan();
-    if (synctype&PSYNC_DOWNLOAD_ONLY){
-      psync_status_recalc_to_download();
-      psync_send_status_update();
-      psync_wake_download();
+    if (!psync_sql_commit_transaction()){
+      if (synctype&PSYNC_UPLOAD_ONLY)
+        psync_wake_localscan();
+      if (synctype&PSYNC_DOWNLOAD_ONLY){
+        psync_status_recalc_to_download();
+        psync_send_status_update();
+        psync_wake_download();
+      }
+      psync_localnotify_add_sync(syncid);
     }
-    psync_localnotify_add_sync(syncid);
   }
   else
     psync_sql_rollback_transaction();
