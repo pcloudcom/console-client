@@ -325,11 +325,9 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   psync_list_for_each_element_call(&dblist, sync_folderlist, list, psync_free);
   if (localsleepperfolder){
     psync_milisleep(localsleepperfolder);
-    if (psync_current_time-starttime>=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*2 && localsleepperfolder>=2)
-      localsleepperfolder/=2;
+    if (psync_current_time-starttime>=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*3/2)
+      localsleepperfolder=0;
   }
-  else
-    psync_yield_cpu();
   psync_list_for_each_element(l, &disklist, sync_folderlist, list)
     if (l->isfolder && l->localid){
       subpath=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, l->name, NULL);
@@ -486,8 +484,8 @@ static void scan_delete_file(sync_folderlist *fl){
 
 static void scan_create_folder(sync_folderlist *fl){
   psync_sql_res *res;
+  psync_uint_row row;
   psync_folderid_t localfolderid;
-  debug(D_NOTICE, "folder created %s", fl->name);
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, deviceid, mtime, mtimenative, flags, name) "
                                "VALUES (?, ?, ?, ?, ?, ?, 0, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);
@@ -500,6 +498,18 @@ static void scan_create_folder(sync_folderlist *fl){
   psync_sql_run_free(res);
   /* it is OK to use affected rows after run_free as we are in transaction */
   if (!psync_sql_affected_rows()){
+    localfolderid=0;
+    res=psync_sql_query("SELECT id FROM localfolder WHERE syncid=? AND localparentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fl->syncid);
+    psync_sql_bind_uint(res, 2, fl->localparentfolderid);
+    psync_sql_bind_string(res, 3, fl->name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      localfolderid=row[0];
+      debug(D_NOTICE, "folder created %s, exists in localfolder,  localid %lu", fl->name, (unsigned long)localfolderid);
+    }
+    else
+      debug(D_NOTICE, "folder created %s, exists in localfolder", fl->name);
+    psync_sql_free_result(res);
     res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, deviceid=?, mtime=?, mtimenative=?, flags=0 WHERE syncid=? AND localparentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fl->inode);
     psync_sql_bind_uint(res, 2, fl->deviceid);
@@ -512,6 +522,7 @@ static void scan_create_folder(sync_folderlist *fl){
     goto hasfolder;
   }
   localfolderid=psync_sql_insertid();
+  debug(D_NOTICE, "folder created %s localid %lu", fl->name, (unsigned long)localfolderid);
   fl->localid=localfolderid;
   res=psync_sql_prep_statement("REPLACE INTO syncedfolder (syncid, localfolderid, synctype) VALUES (?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->syncid);

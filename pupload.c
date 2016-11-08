@@ -173,8 +173,8 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   psync_sql_res *res;
   psync_uint_row row;
   psync_folderid_t parentfolderid, folderid;
-  psync_socket *api;
   binresult *bres;
+  const binresult *meta;
   uint64_t result;
   int ret;
   res=psync_sql_query_rdlock("SELECT s.folderid FROM localfolder l, syncedfolder s WHERE l.id=? AND l.syncid=? AND l.localparentfolderid=s.localfolderid AND s.syncid=?");
@@ -189,33 +189,30 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
   if (unlikely(parentfolderid==PSYNC_INVALID_FOLDERID))
     return 0;
   else{
-    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name)};
-    api=psync_apipool_get();
-    if (unlikely(!api))
-      return -1;
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", parentfolderid), P_STR("name", name), P_STR("timeformat", "timestamp")};
     psync_diff_lock();
-    bres=send_command(api, "createfolderifnotexists", params);
-    if (likely(bres))
-      psync_apipool_release(api);
-    else{
+    bres=psync_api_run_command("createfolderifnotexists", params);
+    if (unlikely(!bres)){
       psync_diff_unlock();
-      psync_apipool_release_bad(api);
       return -1;
     }
     result=psync_find_result(bres, "result", PARAM_NUM)->num;
     if (unlikely(result)){
       psync_diff_unlock();
-      debug(D_WARNING, "command createfolderifnotexists returned code %u", (unsigned)result);
+      debug(D_WARNING, "command createfolderifnotexists returned code %u: %s for creating folder in %lu with name %s",
+            (unsigned)result, psync_find_result(bres, "error", PARAM_STR)->str, (unsigned long)parentfolderid, name);
       psync_process_api_error(result);
+      psync_free(bres);
       if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
         return -1;
       else
         return 0;
     }
-    folderid=psync_find_result(psync_find_result(bres, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
-    psync_free(bres);
+    meta=psync_find_result(bres, "metadata", PARAM_HASH);
+    folderid=psync_find_result(meta, "folderid", PARAM_NUM)->num;
     debug(D_NOTICE, "remote folder %lu %lu/%s created", (long unsigned)folderid, (long unsigned)parentfolderid, name);
     psync_sql_start_transaction();
+    psync_ops_create_folder_in_db(meta);
     res=psync_sql_prep_statement("UPDATE localfolder SET folderid=? WHERE id=? AND syncid=?");
     psync_sql_bind_uint(res, 1, folderid);
     psync_sql_bind_uint(res, 2, localfolderid);
@@ -228,16 +225,21 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
     psync_sql_run_free(res);
     ret=psync_sql_commit_transaction();
     psync_diff_unlock();
+    psync_free(bres);
+    psync_diff_wake();
     return ret;
   }
 }
 
 static int task_renameremotefile(psync_fileid_t fileid, psync_folderid_t newparentfolderid, const char *newname){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname),
+                     P_STR("timeformat", "timestamp")};
   int ret;
   ret=run_command("renamefile", params);
-  if (likely(!ret))
+  if (likely(!ret)){
     debug(D_NOTICE, "remote fileid %lu moved/renamed to (%lu)/%s", (long unsigned)fileid, (long unsigned)newparentfolderid, newname);
+    psync_diff_wake();
+  }
   return ret;
 }
 
@@ -270,7 +272,8 @@ static int task_renamefile(uint64_t taskid, psync_syncid_t syncid, psync_fileid_
 }
 
 static int task_renameremotefolder(psync_folderid_t folderid, psync_folderid_t newparentfolderid, const char *newname){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname),
+                     P_STR("timeformat", "timestamp")};
   binresult *res;
   uint64_t result;
   int ret;
@@ -285,6 +288,7 @@ static int task_renameremotefolder(psync_folderid_t folderid, psync_folderid_t n
       psync_ops_update_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
       psync_sql_commit_transaction();
     }
+    psync_diff_wake();
   }
   else{
     ret=-1;
@@ -357,7 +361,8 @@ static void set_local_file_conflicted(psync_fileid_t localfileid, psync_fileid_t
 }
 
 static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("hash", hash), P_NUM("tofolderid", folderid), P_STR("toname", name)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("hash", hash), P_NUM("tofolderid", folderid), P_STR("toname", name),
+                     P_STR("timeformat", "timestamp")};
   binresult *res;
   const binresult *meta;
   uint64_t result;
@@ -379,6 +384,7 @@ static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t fold
   set_local_file_remote_id(localfileid, psync_find_result(meta, "fileid", PARAM_NUM)->num, psync_find_result(meta, "hash", PARAM_NUM)->num);
   psync_diff_unlock();
   psync_free(res);
+  psync_diff_wake();
   return 1;
 }
 
@@ -416,7 +422,7 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
 }
 
 static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("size", fsize), P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN)};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("size", fsize), P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN), P_STR("timeformat", "timestamp")};
   binresult *res;
   const binresult *metas, *meta;
   uint64_t result;
@@ -462,7 +468,7 @@ static void add_bytes_uploaded(uint64_t bytes){
 
 static int upload_file(const char *localpath, const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name,
                        psync_fileid_t localfileid, psync_syncid_t syncid, upload_list_t *upload, binparam pr){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name), P_BOOL("nopartial", 1),
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name), P_BOOL("nopartial", 1), P_STR("timeformat", "timestamp"),
                      {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   psync_socket *api;
   void *buff;
@@ -559,6 +565,7 @@ static int upload_file(const char *localpath, const unsigned char *hashhex, uint
     return -1;
   }
   psync_free(res);
+  psync_diff_wake();
   debug(D_NOTICE, "file %s uploaded to %lu/%s", localpath, (long unsigned)folderid, name);
   return 0;
 err2:
@@ -645,7 +652,7 @@ static int upload_get_checksum(psync_socket *api, psync_uploadid_t uploadid, uin
 
 static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char *localpath, const unsigned char *hashhex, uint64_t size,
                        psync_uploadid_t uploadid, psync_folderid_t folderid, const char *name, uint64_t taskid, binparam pr){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid), P_STR("timeformat", "timestamp"),
                      {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   psync_sql_res *sres;
   binresult *res;
@@ -681,6 +688,7 @@ static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char
         psync_sql_commit_transaction();
       }
       ret=PSYNC_NET_OK;
+      psync_diff_wake();
     }
     psync_free(res);
   }
@@ -910,16 +918,8 @@ errp:
 
 static void delete_uploadid(psync_uploadid_t uploadid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("uploadid", uploadid)};
-  psync_socket *api;
   binresult *res;
-  api=psync_apipool_get();
-  if (unlikely(!api))
-    return;
-  res=send_command(api, "upload_delete", params);
-  if (res)
-    psync_apipool_release(api);
-  else
-    psync_apipool_release_bad(api);
+  res=psync_api_run_command("upload_delete", params);
   psync_free(res);
 }
 
@@ -1252,8 +1252,10 @@ static int task_deletefile(uint64_t taskid, psync_fileid_t fileid){
   if (task_wait_no_uploads(taskid))
     return -1;
   ret=run_command("deletefile", params);
-  if (likely(!ret))
+  if (likely(!ret)){
     debug(D_NOTICE, "remote fileid %lu deleted", (long unsigned)fileid);
+    psync_diff_wake();
+  }
   return ret;
 }
 
@@ -1263,8 +1265,10 @@ static int task_deletefolderrec(uint64_t taskid, psync_folderid_t folderid){
   if (task_wait_no_uploads(taskid))
     return -1;
   ret=run_command("deletefolderrecursive", params);
-  if (likely(!ret))
+  if (likely(!ret)){
     debug(D_NOTICE, "remote folder %lu deleted", (long unsigned)folderid);
+    psync_diff_wake();
+  }
   return ret;
 }
 

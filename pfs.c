@@ -84,6 +84,7 @@ typedef off_t fuse_off_t;
 
 #if defined(P_OS_MACOSX)
 #define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
+#define FUSE_HAS_SETCRTIME 1
 
 #if defined(_DARWIN_FEATURE_64_BIT_INODE)
 #define FUSE_STAT_HAS_BIRTHTIME
@@ -430,17 +431,22 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 #define taskid_to_inode(taskid) ((taskid)*3+2)
 
 static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
+  psync_folderid_t folderid;
+  uint64_t mtime;
+  psync_fstask_folder_t *folder;
+  folderid=psync_get_number(row[0]);
+  mtime=psync_get_number(row[3]);
+  folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
+  if (folder && folder->mtime)
+    mtime=folder->mtime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
-  stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
+  stbuf->st_ino=folderid_to_inode(folderid);
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
-  stbuf->st_ctime=psync_get_number(row[3]);
-  stbuf->st_mtime=stbuf->st_ctime;
-#else
-  stbuf->st_ctime=psync_get_number(row[2]);
-  stbuf->st_mtime=psync_get_number(row[3]);
 #endif
-  stbuf->st_atime=stbuf->st_mtime;
+  stbuf->st_ctime=mtime;
+  stbuf->st_mtime=mtime;
+  stbuf->st_atime=mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=psync_get_number(row[4])+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -461,13 +467,10 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
+#endif
   stbuf->st_ctime=psync_get_number(row[3]);
   stbuf->st_mtime=stbuf->st_ctime;
-#else
-  stbuf->st_ctime=psync_get_number(row[2]);
-  stbuf->st_mtime=psync_get_number(row[3]);
-#endif
-  stbuf->st_atime=stbuf->st_mtime;
+  stbuf->st_atime=stbuf->st_ctime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   stbuf->st_size=size;
@@ -480,6 +483,13 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
 }
 
 static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STAT *stbuf){
+  uint64_t mtime;
+  psync_fstask_folder_t *folder;
+  folder=psync_fstask_get_folder_tasks_rdlocked(mk->folderid);
+  if (folder && folder->mtime)
+    mtime=folder->mtime;
+  else
+    mtime=mk->mtime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   if (mk->folderid>=0)
     stbuf->st_ino=folderid_to_inode(mk->folderid);
@@ -487,13 +497,10 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
     stbuf->st_ino=taskid_to_inode(-mk->folderid);
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=mk->ctime;
-  stbuf->st_ctime=mk->mtime;
-  stbuf->st_mtime=mk->mtime;
-#else
-  stbuf->st_ctime=mk->mtime;
-  stbuf->st_mtime=mk->mtime;
 #endif
-  stbuf->st_atime=stbuf->st_mtime;
+  stbuf->st_ctime=mtime;
+  stbuf->st_mtime=mtime;
+  stbuf->st_atime=mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=mk->subdircnt+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -652,12 +659,9 @@ static int psync_creat_static_to_file_stat(psync_fstask_creat_t *cr, struct FUSE
   stbuf->st_ino=cr->taskid;
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=lc->ctime;
-  stbuf->st_ctime=lc->ctime;
-  stbuf->st_mtime=lc->ctime;
-#else
-  stbuf->st_ctime=lc->ctime;
-  stbuf->st_mtime=lc->ctime;
 #endif
+  stbuf->st_ctime=lc->ctime;
+  stbuf->st_mtime=lc->ctime;
   stbuf->st_atime=lc->ctime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
@@ -730,7 +734,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   int crr;
   psync_fs_set_thread_name();
 //  debug(D_NOTICE, "getattr %s", path);
-  if (path[0]=='/' && path[1]==0)
+  if (path[1]==0 && path[0]=='/')
     return psync_fs_getrootattr(stbuf);
   psync_sql_rdlock();
   CHECK_LOGIN_RDLOCKED();
@@ -2746,9 +2750,17 @@ int psync_fs_chown(const char *path, uid_t uid, gid_t gid){
   return 0;
 }
 
+#if defined(FUSE_HAS_SETCRTIME)
+static int psync_fs_setcrtime(const char *path, const struct timespec *tv){
+  psync_fs_set_thread_name();
+  debug(D_NOTICE, "setcrtime %s %lu", path, tv->tv_sec);
+  return 0;
+}
+#endif
+
 static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
   psync_fs_set_thread_name();
-  debug(D_NOTICE, "utimens %s", path);
+  debug(D_NOTICE, "utimens %s %lu", path, tv[1].tv_sec);
   return 0;
 }
 
@@ -3160,7 +3172,7 @@ static int psync_fs_do_start(){
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
 
 // it seems that fuse option parser ignores the first argument
-// it is ignored as it's like the exec(), argv[0] is the program
+// it is ignored as it's like in the exec() parameters, argv[0] is the program
 
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
@@ -3213,6 +3225,10 @@ static int psync_fs_do_start(){
 #if defined(FUSE_HAS_CAN_UNLINK)
   psync_oper.can_unlink=psync_fs_can_unlink;
   psync_oper.can_rmdir=psync_fs_can_rmdir;
+#endif
+
+#if defined(FUSE_HAS_SETCRTIME)
+  psync_oper.setcrtime=psync_fs_setcrtime;
 #endif
 
 #if defined(P_OS_POSIX)

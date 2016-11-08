@@ -2002,6 +2002,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     addr=addr->ifa_next;
   }
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
+  memset(ret, 0, offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
   ret->interfacecnt=cnt;
   addr=addrs;
   cnt=0;
@@ -2058,7 +2059,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     adapter=adapter->Next;
   }
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
-  memset(&ret->interfaces, 0, sizeof(psync_interface_t)*cnt);
+  memset(ret, 0, offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
   ret->interfacecnt=cnt;
   adapter=adapters;
   cnt=0;

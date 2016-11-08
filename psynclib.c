@@ -954,6 +954,7 @@ int psync_create_remote_folder_by_path(const char *path, char **err){
     return ret;
   psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
   psync_free(res);
+  psync_diff_wake();
   return 0;
 }
 
@@ -966,6 +967,7 @@ int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name
     return ret;
   psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
   psync_free(res);
+  psync_diff_wake();
   return 0;
 }
 
@@ -1539,6 +1541,7 @@ static int psync_upload_result(binresult *res, psync_fileid_t *fileid){
     const binresult *meta=psync_find_result(res, "metadata", PARAM_ARRAY)->array[0];
     *fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
     psync_free(res);
+    psync_diff_wake();
     return 0;
   }
   else{

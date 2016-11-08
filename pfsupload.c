@@ -41,6 +41,7 @@
 #include "pfscrypto.h"
 #include "pcache.h"
 #include "ppathstatus.h"
+#include "pdiff.h"
 #include <string.h>
 
 typedef struct {
@@ -84,14 +85,15 @@ static const uint32_t requiredstatusesnooverquota[]={
 static int psync_send_task_mkdir(psync_socket *api, fsupload_task_t *task){
   if (task->text2){
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp"),
-                       P_BOOL("encrypted", 1), P_STR("key", task->text2)};
+                       P_BOOL("encrypted", 1), P_STR("key", task->text2), P_NUM("ctime", task->int1)};
     if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
       return 0;
     else
       return -1;
   }
   else{
-    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp")};
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("name", task->text1), P_STR("timeformat", "timestamp"),
+                       P_NUM("ctime", task->int1)};
     if (likely_log(send_command_no_res(api, "createfolderifnotexists", params)==PTR_OK))
       return 0;
     else
@@ -433,6 +435,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   }
   ret=save_meta(psync_find_result(res, "metadata", PARAM_HASH), folderid, name, taskid, writeid, newfile, oldhash, key);
   psync_free(res);
+  psync_diff_wake();
   return ret;
 }
 
@@ -506,10 +509,12 @@ static int copy_file_if_exists(psync_socket *api, const unsigned char *hashhex, 
   }
   meta=metas->array[0];
   ret=copy_file(api, psync_find_result(meta, "fileid", PARAM_NUM)->num, psync_find_result(meta, "hash", PARAM_NUM)->num, folderid, name, taskid, writeid);
-  if (ret==1)
+  if (ret==1){
     debug(D_NOTICE, "file %lu/%s copied to %lu/%s instead of uploading due to matching checksum",
           (long unsigned)psync_find_result(meta, "parentfolderid", PARAM_NUM)->num, psync_find_result(meta, "name", PARAM_STR)->str,
           (long unsigned)folderid, name);
+    psync_diff_wake();
+  }
   psync_free(res);
   return ret;
 }
@@ -1507,6 +1512,8 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
   }
   else if (cancels || dels)
     psync_status_recalc_to_upload_async();
+  if (dels)
+    psync_diff_wake();
 }
 
 static void psync_fsupload_run_tasks(psync_list *tasks){
