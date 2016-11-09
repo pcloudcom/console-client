@@ -1418,6 +1418,8 @@ int psync_sql_run(psync_sql_res *res){
   if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
     transaction_failed=1;
+    if (in_transaction)
+      debug(D_BUG, "transaction query failed, this may lead to restarting transaction over and over");
     return -1;
   }
   code=sqlite3_reset(res->stmt);
@@ -1432,6 +1434,8 @@ int psync_sql_run_free_nocache(psync_sql_res *res){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
     code=-1;
     transaction_failed=1;
+    if (in_transaction)
+      debug(D_BUG, "transaction query failed, this may lead to restarting transaction over and over");
   }
   else
     code=0;
@@ -1447,6 +1451,8 @@ int psync_sql_run_free(psync_sql_res *res){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
     sqlite3_finalize(res->stmt);
     transaction_failed=1;
+    if (in_transaction)
+      debug(D_BUG, "transaction query failed, this may lead to restarting transaction over and over");
     psync_sql_res_unlock(res);
     psync_free(res);
     return -1;
