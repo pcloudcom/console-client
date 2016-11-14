@@ -2273,10 +2273,19 @@ err1:
     }
   }
   do {
-    if (st.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
+    if (st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
       continue;
-    if (st.dwFileAttributes & (FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_TEMPORARY|FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_HIDDEN))
+    if (st.dwFileAttributes&(FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_TEMPORARY|FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_HIDDEN)){
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_SYSTEM)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_SYSTEM attribute", st.cFileName);
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_TEMPORARY)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_TEMPORARY attribute", st.cFileName);
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_DEVICE)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_DEVICE attribute", st.cFileName);
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_HIDDEN)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_HIDDEN attribute", st.cFileName);
       continue;
+    }
     name=wchar_to_utf8(st.cFileName);
     spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
     pst.name=name;
