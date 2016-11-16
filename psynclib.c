@@ -724,14 +724,15 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=? AND syncid=?");
-  psync_sql_bind_uint(res, 1, localfolderid);
-  psync_sql_bind_uint(res, 2, syncid);
-  psync_sql_run_free(res);
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
+  if (psync_sql_affected_rows()){
+    res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    psync_sql_run_free(res);
+  }
 }
 
 int psync_delete_sync(psync_syncid_t syncid){

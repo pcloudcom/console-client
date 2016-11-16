@@ -288,6 +288,9 @@ static void delete_local_folder_from_db(psync_folderid_t localfolderid, psync_sy
     res=psync_sql_prep_statement("DELETE FROM localfile WHERE localparentfolderid=?");
     psync_sql_bind_uint(res, 1, localfolderid);
     psync_sql_run_free(res);
+    res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    psync_sql_run_free(res);
     res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=?");
     psync_sql_bind_uint(res, 1, localfolderid);
     psync_sql_run_free(res);
@@ -1221,10 +1224,11 @@ static void task_del_folder_rec_do(const char *localpath, psync_folderid_t local
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=? AND syncid=?");
-  psync_sql_bind_uint(res, 1, localfolderid);
-  psync_sql_bind_uint(res, 2, syncid);
-  psync_sql_run_free(res);
+  if (psync_sql_affected_rows()){
+    res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    psync_sql_run_free(res);
+  }
   psync_path_status_sync_folder_deleted(syncid, localfolderid);
 }
 
@@ -1245,6 +1249,11 @@ static int task_del_folder_rec(psync_folderid_t localfolderid, psync_folderid_t 
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
+  if (psync_sql_affected_rows()){
+    res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    psync_sql_run_free(res);
+  }
   psync_sql_commit_transaction();
   psync_rmdir_with_trashes(localpath);
   psync_resume_localscan();
@@ -1257,7 +1266,7 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
   const char *ptr;
   char *vname;
   vname=NULL;
-  if (name)
+  if (name && type!=PSYNC_DELETE_LOCAL_FILE && type!=PSYNC_DELETE_LOCAL_FOLDER)
     for (ptr=name; *ptr; ptr++)
       if (psync_invalid_filename_chars[(unsigned char)*ptr]){
         if (!vname)
@@ -1265,7 +1274,7 @@ static int download_task(uint64_t taskid, uint32_t type, psync_syncid_t syncid, 
         vname[ptr-name]=PSYNC_REPLACE_INV_CH_IN_FILENAMES;
       }
   if (vname){
-    debug(D_NOTICE, "downloading %s as %s", name, vname);
+    debug(D_NOTICE, "%u %s as %s", (unsigned)type, name, vname);
     name=vname;
   }
   switch (type) {

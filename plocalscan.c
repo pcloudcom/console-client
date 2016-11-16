@@ -560,6 +560,24 @@ static void scan_created_folder(sync_folderlist *fl){
   }
 }
 
+static void update_syncid_rec(psync_folderid_t localfolderid, psync_syncid_t syncid) {
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_prep_statement("UPDATE localfolder SET syncid=? WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_bind_uint(res, 2, localfolderid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=? WHERE localfolderid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_bind_uint(res, 2, localfolderid);
+  psync_sql_run_free(res);
+  res=psync_sql_query_nolock("SELECT id FROM localfolder WHERE localparentfolderid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    update_syncid_rec(row[0], syncid);
+  psync_sql_free_result(res);
+}
+
 static void scan_rename_folder(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_sql_res *res;
   psync_uint_row row;
@@ -583,12 +601,15 @@ static void scan_rename_folder(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_sql_bind_string(res, 3, rnto->name);
   psync_sql_bind_uint(res, 4, rnfr->localid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE localfolderid=? AND syncid=?");
+  res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE localfolderid=?");
   psync_sql_bind_uint(res, 1, rnto->syncid);
   psync_sql_bind_uint(res, 2, rnto->synctype);
   psync_sql_bind_uint(res, 3, rnfr->localid);
-  psync_sql_bind_uint(res, 4, rnfr->syncid);
   psync_sql_run_free(res);
+  if (unlikely(rnfr->syncid!=rnto->syncid)){
+    debug(D_NOTICE, "folder %s moved from syncid %u to syncid %u", rnfr->name, (unsigned)rnfr->syncid, (unsigned)rnto->syncid);
+    update_syncid_rec(rnfr->localid, rnto->syncid);
+  }
   psync_task_rename_remote_folder(rnfr->syncid, rnto->syncid, rnfr->localid, rnto->localparentfolderid, rnto->name);
 /* remove the scan from here and restart the full scan once we finished with current update makes more sense when we found moved folders
  *
