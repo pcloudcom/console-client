@@ -248,7 +248,7 @@ typedef int psync_file_t;
 
 #define psync_def_var_arr(name, type, size) type *name=(type *)alloca(sizeof(type)*(size))
 #define atoll _atoi64
-#if _MSC_VER < 1900 
+#if _MSC_VER < 1900
 #define snprintf _snprintf
 #endif
 //#define snprintf _snprintf
@@ -436,8 +436,8 @@ void psync_socket_set_write_buffered(psync_socket *sock);
 void psync_socket_set_write_buffered_thread(psync_socket *sock);
 void psync_socket_clear_write_buffered(psync_socket *sock);
 void psync_socket_clear_write_buffered_thread(psync_socket *sock);
-int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
-int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize);
+int psync_socket_set_recvbuf(psync_socket *sock, int bufsize);
+int psync_socket_set_sendbuf(psync_socket *sock, int bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);

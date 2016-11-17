@@ -1001,10 +1001,24 @@ static psync_socket_t connect_res(struct addrinfo *res){
     if (likely_log(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
-      unsigned long mode=1;
-      int bufsize=PSYNC_SOCK_WIN_SNDBUF;
+      static const unsigned long mode=1;
+      static int need_snd_buf=0;
       ioctlsocket(sock, FIONBIO, &mode);
-      setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(bufsize));
+      if (need_snd_buf==0){
+        unsigned ver=LOBYTE(LOWORD(GetVersion()));
+        if (ver<=7){
+          need_snd_buf=1;
+          debug(D_NOTICE, "detected windows %u, setting socket buffers", ver);
+        }
+        else{
+          need_snd_buf=-1;
+          debug(D_NOTICE, "detected windows %u, not setting socket buffers", ver);
+        }
+      }
+      if (need_snd_buf==1){
+        int bufsize=PSYNC_SOCK_WIN_SNDBUF;
+        setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(bufsize));
+      }
 #elif defined(P_OS_POSIX)
       fcntl(sock, F_SETFD, FD_CLOEXEC);
       fcntl(sock, F_SETFL, fcntl(sock, F_GETFL)|O_NONBLOCK);
@@ -1380,7 +1394,7 @@ void psync_socket_clear_write_buffered_thread(psync_socket *sock){
   pthread_mutex_unlock(&socket_mutex);
 }
 
-int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
+int psync_socket_set_recvbuf(psync_socket *sock, int bufsize){
 #if defined(SO_RCVBUF) && defined(SOL_SOCKET)
   return setsockopt(sock->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&bufsize, sizeof(bufsize));
 #else
@@ -1388,7 +1402,7 @@ int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
 #endif
 }
 
-int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize){
+int psync_socket_set_sendbuf(psync_socket *sock, int bufsize){
 #if defined(SO_SNDBUF) && defined(SOL_SOCKET)
   return setsockopt(sock->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&bufsize, sizeof(bufsize));
 #else
