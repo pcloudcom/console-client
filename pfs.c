@@ -1381,7 +1381,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       encsymkey=NULL;
       encsymkeylen=0;
     }
-    cr=psync_fstask_add_creat(folder, fpath->name, encsymkey, encsymkeylen);
+    cr=psync_fstask_add_creat(folder, fpath->name, 0, encsymkey, encsymkeylen);
     psync_free(encsymkey);
     if (unlikely_log(!cr)){
       ret=-EIO;
@@ -1455,6 +1455,7 @@ static int psync_fs_creat_fake_locked(psync_fspath_t *fpath, struct fuse_file_in
   len=strlen(fpath->name)+1;
   cr=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
   cr->fileid=fileid;
+  cr->rfileid=0;
   cr->taskid=fileid;
   memcpy(cr->name, fpath->name, len);
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
@@ -1541,7 +1542,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     encsymkey=NULL;
     encsymkeylen=0;
   }
-  cr=psync_fstask_add_creat(folder, fpath->name, encsymkey, encsymkeylen);
+  cr=psync_fstask_add_creat(folder, fpath->name, 0, encsymkey, encsymkeylen);
   if (encsymkey)
     psync_free(encsymkey);
   if (unlikely_log(!cr)){
@@ -2004,7 +2005,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   if (size==0 || (size<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE &&
         psync_pagecache_have_all_pages_in_cache(of->hash, size) && !psync_pagecache_lock_pages_in_cache())){
     debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
-    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, encsymkey, encsymkeylen);
+    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, of->fileid, encsymkey, encsymkeylen);
     if (unlikely_log(!cr)){
       psync_sql_unlock();
       psync_pagecache_unlock_pages_from_cache();
@@ -2076,7 +2077,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_static_file_for_writing(psync_openfile
   }
   taskid=UINT64_MAX-(INT64_MAX-of->fileid);
   debug(D_NOTICE, "reopening static file %s for writing size %lu, taskid %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)taskid);
-  cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
+  cr=psync_fstask_add_creat(of->currentfolder, of->currentname, 0, NULL, 0);
   if (unlikely_log(!cr)){
     psync_sql_unlock();
     return -EIO;
@@ -2454,6 +2455,7 @@ static int psync_fs_rename_static_file(psync_fstask_folder_t *srcfolder, psync_f
   addlen=psync_fstask_creat_local_offset(len-1);
   cr=(psync_fstask_creat_t *)psync_malloc(addlen+sizeof(psync_fstask_local_creat_t));
   cr->fileid=0;
+  cr->rfileid=0;
   cr->taskid=srccr->taskid;
   memcpy(cr->name, new_name, len);
   memcpy(((char *)cr)+addlen, psync_fstask_creat_get_local(srccr), sizeof(psync_fstask_local_creat_t));

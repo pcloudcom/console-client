@@ -68,6 +68,7 @@ typedef struct {
 typedef struct {
   psync_tree tree;
   psync_fsfileid_t fileid;
+  psync_fileid_t rfileid; // fileid of an uploaded file, reopened for writing, 0 if this is a new file
   uint64_t taskid;
   char name[];
 } psync_fstask_creat_t;
@@ -140,7 +141,7 @@ psync_fstask_creat_t *psync_fstask_find_creat_by_fileid(psync_fstask_folder_t *f
 int psync_fstask_mkdir(psync_fsfolderid_t folderid, const char *name, uint32_t folderflags);
 int psync_fstask_can_rmdir(psync_fsfolderid_t folderid, uint32_t parentflags, const char *name);
 int psync_fstask_rmdir(psync_fsfolderid_t folderid, uint32_t parentflags, const char *name);
-psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name, const char *encsymkey, size_t encsymkeylen);
+psync_fstask_creat_t *psync_fstask_add_creat(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid, const char *encsymkey, size_t encsymkeylen);
 void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat_t *cr);
 void psync_fstask_inject_unlink(psync_fstask_folder_t *folder, psync_fstask_unlink_t *un);
 psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid,

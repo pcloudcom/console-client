@@ -1133,7 +1133,8 @@ static int psync_send_task_unlink(psync_socket *api, fsupload_task_t *task){
 }
 
 static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *task){
-  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->int1), P_NUM("revisionoffileid", task->fileid), P_STR("timeformat", "timestamp")};
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->int1>0?task->int1:task->int2),
+                     P_NUM("revisionoffileid", task->fileid), P_STR("timeformat", "timestamp")};
   if (!api){
     debug(D_NOTICE, "cancelling task %lu", (unsigned long)task->id);
     return 0;
@@ -1353,8 +1354,17 @@ static int psync_cancel_task_modify(fsupload_task_t *task){
 
 static int psync_cancel_task_unlink(fsupload_task_t *task){
   psync_sql_res *res;
+//  psync_uint_row row;
   if (unlikely_log((psync_fsfileid_t)task->fileid>0)){
     res=psync_sql_prep_statement("UPDATE fstask SET status=0 WHERE id=?");
+    psync_sql_bind_uint(res, 1, task->id);
+    upload_wakes++;
+    psync_sql_run_free(res);
+    return -1;
+  }
+  if (task->int2){
+    debug(D_NOTICE, "requested cancel of delete of a modified file, deleting fileid %ld instead for file %s", (long)task->int2, task->text1);
+    res=psync_sql_prep_statement("UPDATE fstask SET status=0, fileid=int2 WHERE id=?");
     psync_sql_bind_uint(res, 1, task->id);
     upload_wakes++;
     psync_sql_run_free(res);
@@ -1366,12 +1376,16 @@ static int psync_cancel_task_unlink(fsupload_task_t *task){
 
 static int psync_cancel_task_unlink_set_rev(fsupload_task_t *task){
   psync_sql_res *res;
-  debug(D_NOTICE, "converting cancelled unlink_set_rev task %lu to a normal unlink task for file %s", (unsigned long)task->id, task->text1);
-  res=psync_sql_prep_statement("UPDATE fstask SET fileid=int1, status=0, type="NTO_STR(PSYNC_FS_TASK_UNLINK)" WHERE id=?");
-  psync_sql_bind_uint(res, 1, task->id);
-  upload_wakes++;
-  psync_sql_run_free(res);
-  return -1;
+  if (task->int2){
+    debug(D_NOTICE, "converting cancelled unlink_set_rev task %lu to a normal unlink task for file %s", (unsigned long)task->id, task->text1);
+    res=psync_sql_prep_statement("UPDATE fstask SET fileid=int2, status=0, type="NTO_STR(PSYNC_FS_TASK_UNLINK)" WHERE id=?");
+    psync_sql_bind_uint(res, 1, task->id);
+    upload_wakes++;
+    psync_sql_run_free(res);
+    return -1;
+  }
+  psync_fstask_file_deleted(task->folderid, task->id, task->text1);
+  return 0;
 }
 
 typedef int (*psync_send_task_ptr)(psync_socket *, fsupload_task_t *);
