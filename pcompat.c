@@ -2290,7 +2290,7 @@ err1:
   do {
     if (st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
       continue;
-    if (st.dwFileAttributes&(FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_TEMPORARY|FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_HIDDEN)){
+    if (st.dwFileAttributes&(FILE_ATTRIBUTE_SYSTEM|/*FILE_ATTRIBUTE_TEMPORARY|*/FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_HIDDEN)){
       if (st.dwFileAttributes&FILE_ATTRIBUTE_SYSTEM)
         debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_SYSTEM attribute", st.cFileName);
       if (st.dwFileAttributes&FILE_ATTRIBUTE_TEMPORARY)
