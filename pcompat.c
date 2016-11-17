@@ -1005,8 +1005,9 @@ static psync_socket_t connect_res(struct addrinfo *res){
       static int need_snd_buf=0;
       ioctlsocket(sock, FIONBIO, &mode);
       if (need_snd_buf==0){
-        unsigned ver=LOBYTE(LOWORD(GetVersion()));
-        if (ver<=7){
+        unsigned ver=GetVersion();
+        ver=LOBYTE(LOWORD(ver))*10+HIBYTE(LOWORD(ver));
+        if (ver<=61){
           need_snd_buf=1;
           debug(D_NOTICE, "detected windows %u, setting socket buffers", ver);
         }
