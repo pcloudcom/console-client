@@ -853,7 +853,7 @@ static int task_rename_file(psync_syncid_t oldsyncid, psync_syncid_t newsyncid, 
   }
   else{
     if (likely_log(!psync_stat(newpath, &st))){
-      res=psync_sql_prep_statement("UPDATE localfile SET localparentfolderid=?, syncid=?, name=?, inode=?, mtime=?, mtimenative=? WHERE id=?");
+      res=psync_sql_prep_statement("UPDATE OR REPLACE localfile SET localparentfolderid=?, syncid=?, name=?, inode=?, mtime=?, mtimenative=? WHERE id=?");
       psync_sql_bind_uint(res, 1, newlocalfolderid);
       psync_sql_bind_uint(res, 2, newsyncid);
       psync_sql_bind_string(res, 3, newname);
