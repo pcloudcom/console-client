@@ -266,7 +266,7 @@ static psync_socket *get_connected_socket(){
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
-    psync_is_business = psync_find_result(res, "business", PARAM_BOOL)->num;
+    psync_is_business=psync_find_result(res, "business", PARAM_BOOL)->num;
     psync_sql_start_transaction();
     psync_strlcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str, sizeof(psync_my_auth));
     if (luserid){
@@ -334,6 +334,7 @@ static psync_socket *get_connected_socket(){
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }
+    debug(D_NOTICE, "userid %lu", (unsigned long)userid);
     cres=psync_check_result(res, "account", PARAM_HASH);
     q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
     if (cres){

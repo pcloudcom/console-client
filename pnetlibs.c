@@ -28,6 +28,7 @@
 #define __STDC_FORMAT_MACROS
 #include <stdio.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <semaphore.h>
 #include "pnetlibs.h"
 #include "pssl.h"
@@ -38,6 +39,7 @@
 #include "papi.h"
 #include "pcache.h"
 #include "ptree.h"
+#include "gitcommit.h"
 
 struct time_bytes {
   time_t tm;
@@ -2391,6 +2393,64 @@ void psync_process_api_error(uint64_t result){
 static void psync_netlibs_timer(psync_timer_t timer, void *ptr){
   psync_account_downloaded_bytes(0);
   account_uploaded_bytes(0);
+}
+
+static void psync_send_debug_thread(void *ptr){
+  static pthread_mutex_t m=PTHREAD_MUTEX_INITIALIZER;
+  static char *last=NULL;
+  char *str=(char *)ptr;
+  pthread_mutex_lock(&m);
+  if (!last || strcmp(last, str)){
+    binparam params[]={P_STR("report", str), P_NUM("userid", psync_my_userid)};
+    binresult *res;
+    debug(D_NOTICE, "sending debug %s", str);
+    res=psync_api_run_command("senddebug", params);
+    if (res){
+      psync_free(res);
+      psync_free(last);
+      last=str;
+    }
+    else
+      psync_free(str);
+  }
+  else
+    free(str);
+  pthread_mutex_unlock(&m);
+}
+
+int psync_send_debug(int thread, const char *file, const char *function, int unsigned line, const char *fmt, ...){
+  char format[1024];
+  va_list ap;
+  char *ret;
+  int sz, l;
+#if defined(P_OS_WINDOWS)
+  const char *lsl;
+  lsl=strrchr(file, '\\');
+  if (lsl)
+    file=lsl+1;
+#endif
+  ret=psync_deviceid();
+  snprintf(format, sizeof(format), "%s %s %s: %s:%u (function %s): %s\n", ret, GIT_COMMIT_DATE, psync_thread_name, file, line, function, fmt);
+  psync_free(ret);
+  format[sizeof(format)-1]=0;
+  ret=NULL;
+  l=511;
+  do {
+    sz=l+1;
+    ret=(char *)realloc(ret, sz);
+    va_start(ap, fmt);
+    l=vsnprintf(ret, sz, format, ap);
+    va_end(ap);
+  } while (l>=sz);
+  if (l>0){
+    if (thread)
+      psync_run_thread1("send debug", psync_send_debug_thread, ret);
+    else
+      psync_send_debug_thread(ret);
+  }
+  else
+    free(ret);
+  return 1;
 }
 
 void psync_netlibs_init(){
