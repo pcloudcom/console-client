@@ -1334,7 +1334,7 @@ psync_path_status_t psync_path_status_get(const char *path) {
   if (!sn) {
     psync_sql_rdlock();
     sn=syncs;
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     if (!sn)
       goto slower_check;
   }
