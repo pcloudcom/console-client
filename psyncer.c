@@ -348,6 +348,7 @@ void psync_syncer_check_delayed_syncs(){
   psync_stat_t st;
   psync_sql_res *res, *res2, *stmt;
   psync_variant_row row;
+  psync_uint_row urow;
   psync_str_row srow;
   const char *localpath, *remotepath;
   uint64_t id, synctype;
@@ -396,6 +397,15 @@ void psync_syncer_check_delayed_syncs(){
       continue;
     }
     psync_sql_start_transaction();
+    delete_delayed_sync(id);
+    stmt=psync_sql_query_rdlock("SELECT id FROM folder WHERE id=?");
+    psync_sql_bind_uint(stmt, 1, folderid);
+    urow=psync_sql_fetch_rowint(stmt);
+    psync_sql_free_result(stmt);
+    if (!urow){
+      psync_sql_commit_transaction();
+      continue;
+    }
     stmt=psync_sql_prep_statement("INSERT OR IGNORE INTO syncfolder (folderid, localpath, synctype, flags, inode, deviceid) VALUES (?, ?, ?, 0, ?, ?)");
     psync_sql_bind_uint(stmt, 1, folderid);
     psync_sql_bind_string(stmt, 2, localpath);
@@ -408,7 +418,6 @@ void psync_syncer_check_delayed_syncs(){
     else
       syncid=-1;
     psync_sql_free_result(stmt);
-    delete_delayed_sync(id);
     if (!psync_sql_commit_transaction() && syncid!=-1) {
       psync_path_status_reload_syncs();
       psync_syncer_new(syncid);
