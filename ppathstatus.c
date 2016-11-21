@@ -1124,7 +1124,7 @@ restart:
         poff=off+1;
       } else {
         if (psync_is_lname_to_ignore(path+poff, off-poff))
-          rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC|PSYNC_PATH_STATUS_IS_IGNORED);
+          return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC|PSYNC_PATH_STATUS_IS_IGNORED);
         comp_hash(path+poff, off-poff, hash, folderid, sync_hash_seed);
         h=(hash[0]+hash[2])%PATH_HASH_SIZE;
         found=0;
@@ -1176,7 +1176,7 @@ restart:
   if (poff==path_len)
     return psync_path_status_sync_folder_locked(syncid, extract_localfolderid(folderid));
   if (psync_is_lname_to_ignore(path+poff, path_len-poff))
-    rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC|PSYNC_PATH_STATUS_IS_IGNORED);
+    return rdunlock_return(PSYNC_PATH_STATUS_IN_SYNC|PSYNC_PATH_STATUS_IS_IGNORED);
   comp_hash(path+poff, path_len-poff, hash, folderid, sync_hash_seed);
   h=(hash[0]+hash[2])%PATH_HASH_SIZE;
   found=0;
