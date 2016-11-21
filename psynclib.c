@@ -490,6 +490,7 @@ void psync_unlink(){
   psync_fs_pause_until_login();
   psync_fs_clean_tasks();
   psync_path_status_init();
+  psync_clear_downloadlist();
   psync_sql_unlock();
   psync_sql_checkpoint_unlock();
   psync_settings_reset();

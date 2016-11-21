@@ -111,6 +111,13 @@ void psync_del_folder_from_downloadlist(psync_folderid_t folderid){
   pthread_mutex_unlock(&sync_down_mutex);
 }
 
+void psync_clear_downloadlist() {
+  pthread_mutex_lock(&sync_down_mutex);
+  psync_tree_for_each_element_call_safe(synced_down_folders, synced_down_folder, tree, psync_free);
+  synced_down_folders=PSYNC_TREE_EMPTY;
+  pthread_mutex_unlock(&sync_down_mutex);
+}
+
 int psync_is_folder_in_downloadlist(psync_folderid_t folderid){
   synced_down_folder *f;
   pthread_mutex_lock(&sync_down_mutex);
