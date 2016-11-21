@@ -738,10 +738,21 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     }
     uploadid=psync_find_result(res, "uploadid", PARAM_NUM)->num;
     psync_free(res);
+    psync_sql_start_transaction();
+    sql=psync_sql_query_nolock("SELECT id FROM localfile WHERE id=?");
+    psync_sql_bind_uint(sql, 1, localfileid);
+    row=psync_sql_fetch_rowint(sql);
+    psync_sql_free_result(sql);
+    if (!row){
+      psync_sql_rollback_transaction();
+      debug(D_NOTICE, "local file %s (%lu) disappeard from localfile while creating upload, failing task", localpath, (unsigned long)localfileid);
+      return -1;
+    }
     sql=psync_sql_prep_statement("INSERT INTO localfileupload (localfileid, uploadid) VALUES (?, ?)");
     psync_sql_bind_uint(sql, 1, localfileid);
     psync_sql_bind_uint(sql, 2, uploadid);
     psync_sql_run_free(sql);
+    psync_sql_commit_transaction();
   }
   psync_list_init(&rlist);
   if (likely(uploadoffset<fsize)){
