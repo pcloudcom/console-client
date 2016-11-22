@@ -49,7 +49,8 @@ typedef struct {
   psync_list list;
   psync_fileid_t fileid;
   psync_syncid_t syncid;
-  int stop;
+  uint16_t stop;
+  uint16_t started; // if set, means that real download is in progress (after P2P checks, checksum checks and so on)
   unsigned char schecksum[PSYNC_HASH_DIGEST_HEXLEN];
 } download_list_t;
 
@@ -613,6 +614,8 @@ static int task_download_file(download_task_t *dt){
       return 0;
     }
   }
+
+  dt->dwllist.started=1;
 
   oldcnt=0;
   if (serversize>=PSYNC_MIN_SIZE_FOR_CHECKSUMS){
@@ -1435,7 +1438,7 @@ downloading_files_hashes *psync_get_downloading_hashes(){
   ret=(downloading_files_hashes *)psync_malloc(offsetof(downloading_files_hashes, hashes)+sizeof(psync_hex_hash)*cnt);
   cnt=0;
   psync_list_for_each_element(dwl, &downloads, download_list_t, list)
-    if (dwl->schecksum[0]){
+    if (dwl->schecksum[0] && dwl->started){
       memcpy(ret->hashes[cnt], dwl->schecksum, PSYNC_HASH_DIGEST_HEXLEN);
       cnt++;
     }
