@@ -750,6 +750,10 @@ static int task_download_file(download_task_t *dt){
   psync_binhex(localhashhex, localhashbin, PSYNC_HASH_DIGEST_LEN);
   if (unlikely_log(memcmp(localhashhex, serverhashhex, PSYNC_HASH_DIGEST_HEXLEN))){
     debug(D_WARNING, "got wrong file checksum for file %s", dt->filename);
+    if (dt->dwllist.stop==2){
+      debug(D_NOTICE, "deleting file %s as stop is detected", dt->tmpname);
+      psync_file_delete(dt->tmpname);
+    }
     goto err0;
   }
   if (dt->dwllist.stop==2){
