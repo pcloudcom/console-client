@@ -347,26 +347,42 @@ static void set_key_for_fileid(psync_fileid_t fileid, uint64_t hash, const char 
 static int save_meta(const binresult *meta, psync_folderid_t folderid, const char *name, uint64_t taskid, uint64_t writeid, int newfile,
                      uint64_t oldhash, const char *key){
   psync_sql_res *sql;
+  psync_uint_row row;
   uint64_t hash, size;
   psync_fileid_t fileid;
+  int deleted;
   fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
   hash=psync_find_result(meta, "hash", PARAM_NUM)->num;
   size=psync_find_result(meta, "size", PARAM_NUM)->num;
+  deleted=0;
   psync_sql_start_transaction();
   if (psync_fs_update_openfile(taskid, writeid, fileid, hash, size, psync_find_result(meta, "created", PARAM_NUM)->num)){
-    psync_sql_rollback_transaction();
-    debug(D_NOTICE, "upload of %s cancelled due to writeid mismatch", name);
-    return -1;
+    sql=psync_sql_query_nolock("SELECT status FROM fstask WHERE id=?");
+    psync_sql_bind_uint(sql, 1, taskid);
+    row=psync_sql_fetch_rowint(sql);
+    if (row && row[0]==11){
+      psync_sql_free_result(sql);
+      deleted=1;
+      debug(D_NOTICE, "detected cancel of upload of %s too late, processing normally, delete will come", name);
+    }
+    else{
+      psync_sql_free_result(sql);
+      psync_sql_rollback_transaction();
+      debug(D_NOTICE, "upload of %s task %lu cancelled due to writeid mismatch", name, (unsigned long)taskid);
+      return -1;
+    }
   }
   if (newfile){
     psync_ops_create_file_in_db(meta);
-    psync_pagecache_creat_to_pagecache(taskid, hash, 0);
+    if (!deleted)
+      psync_pagecache_creat_to_pagecache(taskid, hash, 0);
     psync_fstask_file_created(folderid, taskid, name, fileid);
     psync_fs_task_to_file(taskid, fileid);
   }
   else{
     psync_ops_update_file_in_db(meta);
-    psync_pagecache_modify_to_pagecache(taskid, hash, oldhash);
+    if (!deleted)
+      psync_pagecache_modify_to_pagecache(taskid, hash, oldhash);
     psync_fstask_file_modified(folderid, taskid, name, fileid);
   }
   if (key)
@@ -383,10 +399,18 @@ static int save_meta(const binresult *meta, psync_folderid_t folderid, const cha
   psync_sql_bind_uint(sql, 1, fileid);
   psync_sql_bind_int(sql, 2, -(psync_fsfileid_t)taskid);
   psync_sql_run_free(sql);
-  sql=psync_sql_prep_statement("UPDATE fstask SET status=3 WHERE id=? AND int1=?");
-  psync_sql_bind_uint(sql, 1, taskid);
-  psync_sql_bind_uint(sql, 2, writeid);
-  psync_sql_run_free(sql);
+  if (deleted){
+    sql=psync_sql_prep_statement("DELETE FROM fstask WHERE id=? AND int1=?");
+    psync_sql_bind_uint(sql, 1, taskid);
+    psync_sql_bind_uint(sql, 2, writeid);
+    psync_sql_run_free(sql);
+  }
+  else{
+    sql=psync_sql_prep_statement("UPDATE fstask SET status=3 WHERE id=? AND int1=?");
+    psync_sql_bind_uint(sql, 1, taskid);
+    psync_sql_bind_uint(sql, 2, writeid);
+    psync_sql_run_free(sql);
+  }
   if (!psync_sql_affected_rows()){
     debug(D_BUG, "upload of %s cancelled due to writeid mismatch, writeid %lu, psync_fs_update_openfile should have catched that", name, (long unsigned)writeid);
     psync_sql_rollback_transaction();
@@ -637,18 +661,26 @@ static int large_upload_creat(uint64_t taskid, psync_folderid_t folderid, const 
   if (result){
     debug(D_WARNING, "upload_write returned error %lu", (long unsigned)result);
     psync_process_api_error(result);
-    if (result==2068){
-      if (clean_uploads_for_task(api, taskid))
-        psync_apipool_release_bad(api);
-      else
-        psync_apipool_release(api);
-    }
+    if (result==2068 && clean_uploads_for_task(api, taskid))
+      psync_apipool_release_bad(api);
+    else
+      psync_apipool_release(api);
     psync_process_api_error(result);
+    goto errs;
+  }
+  if (unlikely(stop_current_upload)){
+    debug(D_NOTICE, "got stop for file %s", name);
+    psync_apipool_release(api);
     goto errs;
   }
   // large_upload_check_checksum releases api on failure
   if (large_upload_check_checksum(api, uploadid, filehash))
     goto errs;
+  if (unlikely(stop_current_upload)){
+    debug(D_NOTICE, "got stop for file %s", name);
+    psync_apipool_release(api);
+    goto errs;
+  }
   if (psync_fs_get_file_writeid(taskid)!=writeid){
     debug(D_NOTICE, "%s changed while uploading as %lu/%s", filename, (unsigned long)folderid, name);
     psync_apipool_release(api);
@@ -1656,6 +1688,8 @@ static void psync_fsupload_check_tasks(){
                         ", "NTO_STR(PSYNC_FS_TASK_MODIFY)") ORDER BY id LIMIT "NTO_STR(PSYNC_FSUPLOAD_NUM_TASKS_PER_RUN));
   while ((row=psync_sql_fetch_row(res))){
     cnt++;
+    if (psync_get_number(row[0])==current_upload_taskid)
+      continue;
     size=sizeof(fsupload_task_t);
     if (row[4].type==PSYNC_TSTRING)
       size+=row[4].length+1;
@@ -1687,6 +1721,7 @@ static void psync_fsupload_check_tasks(){
     task->int2=psync_get_snumber_or_null(row[7]);
     task->ccreat=0;
     psync_list_add_tail(&tasks, &task->list);
+//    debug(D_NOTICE, "will process taskid %lu", (unsigned long)task->id);
   }
   current_upload_batch=&tasks;
   psync_sql_free_result(res);

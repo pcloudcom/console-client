@@ -419,13 +419,34 @@ static int stat_and_create_local(psync_syncid_t syncid, psync_fileid_t fileid, p
     return -1;
   localfileid=0;
   psync_sql_start_transaction();
-  sql=psync_sql_query("SELECT id FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
+  sql=psync_sql_query_nolock("SELECT id FROM localfile WHERE syncid=? AND localparentfolderid=? AND name=?");
   psync_sql_bind_uint(sql, 1, syncid);
   psync_sql_bind_uint(sql, 2, localfolderid);
   psync_sql_bind_string(sql, 3, filename);
   if ((row=psync_sql_fetch_rowint(sql)))
     localfileid=row[0];
   psync_sql_free_result(sql);
+
+  sql=psync_sql_query_nolock("SELECT parentfolderid FROM file WHERE id=?");
+  psync_sql_bind_uint(sql, 1, fileid);
+  row=psync_sql_fetch_rowint(sql);
+  if (!row || !psync_is_folder_in_downloadlist(row[0])){
+    psync_sql_free_result(sql);
+    if (localfileid){
+      sql=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
+      psync_sql_bind_uint(sql, 1, localfileid);
+      psync_sql_run_free(sql);
+    }
+    psync_sql_commit_transaction(sql);
+    psync_file_delete(name);
+    if (row)
+      debug(D_NOTICE, "fileid %lu (%s) got moved out of download folder while finishing download, deleting %s", (unsigned long)fileid, filename, name);
+    else
+      debug(D_NOTICE, "fileid %lu (%s) got deleted while finishing download, deleting %s", (unsigned long)fileid, filename, name);
+    return 0;
+  }
+  psync_sql_free_result(sql);
+
   if (localfileid){
     sql=psync_sql_prep_statement("UPDATE localfile SET localparentfolderid=?, fileid=?, hash=?, syncid=?, size=?, inode=?, mtime=?, mtimenative=?, "
                                                        "name=?, checksum=? WHERE id=?");
