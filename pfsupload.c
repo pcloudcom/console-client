@@ -1016,8 +1016,20 @@ static void large_upload(){
       psync_status_recalc_to_upload_async();
     }
     psync_upload_dec_uploads();
-    if (ret)
+    if (ret){
+      res=psync_sql_query_rdlock("SELECT type FROM fstask WHERE id=?");
+      psync_sql_bind_uint(res, 1, taskid);
+      if ((urow=psync_sql_fetch_rowint(res)))
+        uploadid=urow[0];
+      else
+        uploadid=2;
+      if (uploadid!=2)
+        current_upload_taskid=0;
+      psync_sql_free_result(res);
+      if (uploadid!=2)
+        psync_fsupload_wake();
       psync_milisleep(PSYNC_SLEEP_ON_FAILED_UPLOAD);
+    }
     psync_free(indexname);
     psync_free(filename);
     psync_free(name);
