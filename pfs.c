@@ -2841,7 +2841,7 @@ static void *psync_fs_init(struct fuse_conn_info *conn){
 #if defined(FUSE_CAP_BIG_WRITES)
   conn->want|=FUSE_CAP_BIG_WRITES;
 #endif
-  conn->max_readahead=0;
+  conn->max_readahead=1024*1024;
   conn->max_write=FS_MAX_WRITE;
   if (psync_start_callback)
     psync_timer_register(psync_fs_start_callback_timer, 1, NULL);
@@ -3183,6 +3183,7 @@ static int psync_fs_do_start(){
   fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   fuse_opt_add_arg(&args, "-ononempty");
   fuse_opt_add_arg(&args, "-ohard_remove");
+//  fuse_opt_add_arg(&args, "-d");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
