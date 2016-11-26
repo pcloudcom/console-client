@@ -571,7 +571,7 @@ psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t
     return PSYNC_INVALID_ENC_SYM_KEY;
   }
   ret->datalen=rsa->len;
-  debug(D_NOTICE, "datalen=%lu", ret->datalen);
+  debug(D_NOTICE, "datalen=%lu", (unsigned long)ret->datalen);
   return ret;
 }
 
