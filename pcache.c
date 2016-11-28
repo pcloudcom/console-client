@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -49,13 +49,11 @@ typedef struct {
   psync_cache_free_callback free;
   psync_timer_t timer;
   uint32_t hash;
-  uint32_t opts;
   char key[];
 } hash_element;
 
 static psync_list cache_hash[CACHE_HASH_SIZE];
 static pthread_mutex_t cache_mutexes[CACHE_LOCKS];
-static pthread_cond_t cache_cond=PTHREAD_COND_INITIALIZER;
 static uint32_t hash_seed;
 
 void psync_cache_init(){
@@ -110,15 +108,11 @@ void *psync_cache_get(const char *key){
 //  debug(D_NOTICE, "get %s %lu", key, h);
   lst=&cache_hash[hash_to_bucket(h)];
   pthread_mutex_lock(&cache_mutexes[hash_to_lock(h)]);
-  psync_list_for_each_element (he, lst, hash_element, list)
+  psync_list_for_each_element(he, lst, hash_element, list)
     if (he->hash==h && !strcmp(key, he->key)){
+      if (psync_timer_stop(he->timer))
+        continue;
       psync_list_del(&he->list);
-      if (psync_timer_stop(he->timer)){
-        he->opts|=CACHE_WAIT_FOR_TIMER;
-        do {
-          pthread_cond_wait(&cache_cond, &cache_mutexes[hash_to_lock(h)]);
-        } while (!(he->opts&CACHE_TIMER_CALLED));
-      }
       pthread_mutex_unlock(&cache_mutexes[hash_to_lock(h)]);
       val=he->value;
       psync_free(he);
@@ -137,7 +131,7 @@ int psync_cache_has(const char *key){
   ret=0;
   lst=&cache_hash[hash_to_bucket(h)];
   pthread_mutex_lock(&cache_mutexes[hash_to_lock(h)]);
-  psync_list_for_each_element (he, lst, hash_element, list)
+  psync_list_for_each_element(he, lst, hash_element, list)
     if (he->hash==h && !strcmp(key, he->key)){
       ret=1;
       break;
@@ -149,18 +143,11 @@ int psync_cache_has(const char *key){
 static void cache_timer(psync_timer_t timer, void *ptr){
   hash_element *he=(hash_element *)ptr;
   pthread_mutex_lock(&cache_mutexes[hash_to_lock(he->hash)]);
-  if (unlikely(he->opts&CACHE_WAIT_FOR_TIMER)){
-    he->opts|=CACHE_TIMER_CALLED;
-    pthread_cond_broadcast(&cache_cond);
-    pthread_mutex_unlock(&cache_mutexes[hash_to_lock(he->hash)]);
-  }
-  else{
-    psync_list_del(&he->list);
-    pthread_mutex_unlock(&cache_mutexes[hash_to_lock(he->hash)]);
-    he->free(he->value);
-    psync_free(he);
-    psync_timer_stop(timer);
-  }
+  psync_list_del(&he->list);
+  pthread_mutex_unlock(&cache_mutexes[hash_to_lock(he->hash)]);
+  he->free(he->value);
+  psync_free(he);
+  psync_timer_stop(timer);
 }
 
 void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_free_callback freefunc, uint32_t maxkeys){
@@ -174,7 +161,6 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
   he->value=ptr;
   he->free=freefunc;
   he->hash=h;
-  he->opts=0;
   memcpy(he->key, key, l);
   lst=&cache_hash[hash_to_bucket(h)];
   pthread_mutex_lock(&cache_mutexes[hash_to_lock(h)]);
@@ -185,7 +171,7 @@ void psync_cache_add(const char *key, void *ptr, time_t freeafter, psync_cache_f
         pthread_mutex_unlock(&cache_mutexes[hash_to_lock(h)]);
         psync_free(he);
         freefunc(ptr);
-        debug(D_NOTICE, "not adding key %s to cache as there already %u elements present", key, (unsigned int)maxkeys);
+//        debug(D_NOTICE, "not adding key %s to cache as there already %u elements present", key, (unsigned int)maxkeys);
         return;
       }
   }
@@ -217,13 +203,9 @@ restart:
   pthread_mutex_lock(&cache_mutexes[hash_to_lock(h)]);
   psync_list_for_each_element (he, lst, hash_element, list)
     if (he->hash==h && !strcmp(key, he->key)){
+      if (psync_timer_stop(he->timer))
+        continue;
       psync_list_del(&he->list);
-      if (psync_timer_stop(he->timer)){
-        he->opts|=CACHE_WAIT_FOR_TIMER;
-        do {
-          pthread_cond_wait(&cache_cond, &cache_mutexes[hash_to_lock(h)]);
-        } while (!(he->opts&CACHE_TIMER_CALLED));
-      }
       pthread_mutex_unlock(&cache_mutexes[hash_to_lock(h)]);
       he->free(he->value);
       psync_free(he);

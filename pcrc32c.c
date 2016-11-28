@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -336,7 +336,7 @@ static const uint64_t k2=0x9ae16a3b2f90404fULL;
         crc32c_table[1][((uint8_t *)(data))[6]]^\
         crc32c_table[0][((uint8_t *)(data))[7]];\
   } while (0);
-  
+
 #define CRC32C_64BIT_UINT(crc, uint) do{\
     crc^=(uint)&0xffffffffU;\
     crc=crc32c_table[7][crc&0xff]^\
@@ -348,7 +348,7 @@ static const uint64_t k2=0x9ae16a3b2f90404fULL;
         crc32c_table[1][((uint)>>48)&0xff]^\
         crc32c_table[0][((uint)>>56)&0xff];\
   } while (0);
-  
+
 #define CRC32C_8BIT(crc, data) do{\
     crc=crc32c_table[0][(((crc)^(*((uint8_t *)data)))&0xff)]^((crc)>>8);\
   } while (0);
@@ -406,7 +406,7 @@ uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
 PSYNC_NOINLINE static int psync_has_hw_crc(){
   uint32_t eax, ecx;
   eax=1;
-  __asm__("cpuid" 
+  __asm__("cpuid"
           : "=c"(ecx)
           : "a"(eax)
           : "%ebx", "%edx");
@@ -657,19 +657,19 @@ uint32_t psync_crc32c(uint32_t crc, const void *ptr, size_t len){
 #if defined(CRC32_GNUC) && defined(__SSE4_2__)
   return psync_crc32c_hw(crc, ptr, len);
 #else
-  if (unlikely(!crc_hashw))
-    return psync_crc32c_init(crc, ptr, len);
   if (likely(crc_hashw==2))
     return psync_crc32c_hw(crc, ptr, len);
-  else
+  else if (likely(crc_hashw==1))
     return psync_crc32c_sw(crc, ptr, len);
+  else
+    return psync_crc32c_init(crc, ptr, len);
 #endif
 }
 
 #endif
 
 /* psync_fast_hash256 has some similarities to CityHash256Crc, but works with state.
- * 
+ *
  * https://code.google.com/p/cityhash/
  */
 

@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -40,6 +40,7 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
 
 void psync_add_folder_to_downloadlist(psync_folderid_t folderid);
 void psync_del_folder_from_downloadlist(psync_folderid_t folderid);
+void psync_clear_downloadlist();
 int psync_is_folder_in_downloadlist(psync_folderid_t folderid);
 
 int psync_str_is_prefix(const char *str1, const char *str2);

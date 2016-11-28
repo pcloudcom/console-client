@@ -1,7 +1,7 @@
 /* Copyright (c) 2013 Anton Titov.
  * Copyright (c) 2013 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,6 +29,7 @@
 #include "psynclib.h"
 #include "plibs.h"
 #include "psettings.h"
+#include "ptimer.h"
 #include <string.h>
 #include <stddef.h>
 
@@ -101,11 +102,23 @@ static const binresult NUM_SMALL[VSMALL_NUMBER_NUM]={
 
 static uint32_t connfailures=0;
 
-psync_socket *psync_api_connect(int usessl){
-  if (connfailures%5==4)
-    return psync_socket_connect(PSYNC_API_AHOST, usessl?PSYNC_API_APORT_SSL:PSYNC_API_APORT, usessl);
-  else
-    return psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+psync_socket *psync_api_connect(const char *hostname, int usessl){
+  static time_t notuntil=0;
+  psync_socket *ret;
+  if (psync_timer_time()>notuntil){
+    ret=psync_socket_connect(hostname, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+    if (ret)
+      return ret;
+    if (!strcmp(hostname, PSYNC_API_HOST))
+      return NULL;
+    ret=psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+    if (ret) {
+      debug(D_NOTICE, "failed to connect to %s, but was able to connect to %s", hostname, PSYNC_API_HOST);
+      notuntil=psync_timer_time()+1800;
+    }
+    return ret;
+  }
+  return psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
 }
 
 void psync_api_conn_fail_inc(){
@@ -526,7 +539,7 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
     if (D_CRITICAL<=DEBUG_LEVEL){
       const char *nm="NULL";
       if (res)
-        nm=type_names[res->type];    
+        nm=type_names[res->type];
       psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
     }
     return empty_types[type];
@@ -579,7 +592,7 @@ const binresult *psync_do_check_result(const binresult *res, const char *name, u
     if (D_CRITICAL<=DEBUG_LEVEL){
       const char *nm="NULL";
       if (res)
-        nm=type_names[res->type]; 
+        nm=type_names[res->type];
       psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
     }
     return NULL;

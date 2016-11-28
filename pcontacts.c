@@ -35,18 +35,21 @@
 int do_call_contactlist(result_visitor vis, void *param) {
   psync_socket *sock;
   binresult *bres;
-  char *ids = NULL;
   int i;
   const binresult *contacts;
-  
+
   if(psync_my_auth[0]) {
     binparam params[] = {P_STR("auth", psync_my_auth)};
     sock = psync_apipool_get();
-    bres = send_command(sock, "contactlist", params);
-  } else if (psync_my_user) {
+    if (sock)
+      bres = send_command(sock, "contactlist", params);
+    else return -2;
+  } else if (psync_my_user && psync_my_pass) {
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass)};
     sock = psync_apipool_get();
-    bres = send_command(sock, "contactlist", params);
+    if (sock)
+      bres = send_command(sock, "contactlist", params);
+    else return -2;
   } else return -1;
   if (likely(bres))
     psync_apipool_release(sock);
@@ -55,22 +58,23 @@ int do_call_contactlist(result_visitor vis, void *param) {
     debug(D_WARNING, "Send command returned invalid result.\n");
     return -1;
   }
-  
-  
+
+
   contacts = psync_find_result(bres, "contacts", PARAM_ARRAY);
-  
+
   if (!contacts->length){
     psync_free(bres);
-    psync_free(ids);
     debug(D_WARNING, "Account_users returned empty result!\n");
     return -2;
   } else {
+    psync_sql_start_transaction();
+    psync_sql_statement("DELETE FROM contacts");
     for (i = 0; i < contacts->length; ++i)
        vis(i, contacts->array[i], param);
+    psync_sql_commit_transaction();
   }
-  
+
   psync_free(bres);
-  psync_free(ids);
   return 0;
 }
 
@@ -78,7 +82,7 @@ static void insert_cache_contact(int i, const binresult *user, void *_this) {
   const char *char_field = 0;
   uint64_t id = 0;
   psync_sql_res *q;
-  
+
   char_field = psync_find_result(user, "name", PARAM_STR)->str;
   id = psync_find_result(user, "source", PARAM_NUM)->num;
   if ((id == 1) || (id == 3)) {
@@ -90,15 +94,7 @@ static void insert_cache_contact(int i, const binresult *user, void *_this) {
 }
 
 void cache_contacts() {
-  void *params = 0;
-  psync_sql_res *q;
-  
-  psync_sql_lock();
-  q=psync_sql_prep_statement("DELETE FROM contacts ");
-  psync_sql_run_free(q);
-  
-  do_call_contactlist(&insert_cache_contact, params);
-  psync_sql_unlock();
+  do_call_contactlist(&insert_cache_contact, NULL);
 }
 
 
@@ -112,7 +108,7 @@ static int create_contact(psync_list_builder_t *builder, void *element, psync_va
   psync_list_add_lstring_offset(builder, offsetof(contact_info_t, mail), len);
   if (row[1].type != PSYNC_TNULL)
     str=psync_get_lstring(row[1], &len);
-  else 
+  else
     str = "";
   contact->name=str;
   psync_list_add_lstring_offset(builder, offsetof(contact_info_t, name), len);
@@ -133,7 +129,7 @@ pcontacts_list_t *do_psync_list_contacts() {
                              "ORDER BY name "
   );
   psync_list_bulder_add_sql(builder, res, create_contact);
-  
+
   return (pcontacts_list_t *)psync_list_builder_finalize(builder);
 }
 
@@ -145,7 +141,7 @@ pcontacts_list_t *do_psync_list_myteams() {
                              "ORDER BY name "
   );
   psync_list_bulder_add_sql(builder, res, create_contact);
-  
+
   return (pcontacts_list_t *)psync_list_builder_finalize(builder);
 }
 
@@ -155,18 +151,18 @@ static void process_shares_out(const binresult *shares_out, int shcnt) {
   psync_sql_res *q;
   int i, isincomming =  0;
   uint64_t folderowneruserid, owneruserid;
- 
-  
+
+
   for (i = 0; i < shcnt; ++i) {
     share = shares_out->array[i];
-    
+
     folderowneruserid =  psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
 	psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
 
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, folderid, ctime, permissions, userid, mail, name, isincoming) "
                                                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+    //debug(D_NOTICE, "INSERT NORMAL SHARE OUT id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -187,13 +183,13 @@ static void process_shares_in(const binresult *shares_in, int shcnt) {
   const binresult *br;
   psync_sql_res *q;
   int i;
-  
+
   for (i = 0; i < shcnt; ++i) {
     share = shares_in->array[i];
 
     q=psync_sql_prep_statement("REPLACE INTO sharedfolder (id, isincoming, folderid, ctime, permissions, userid, mail, name) "
                                                   "VALUES (?, 1, ?, ?, ?, ?, ?, ?)");
-    debug(D_WARNING, "INSERT NORMAL SHARE IN id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
+    //debug(D_WARNING, "INSERT NORMAL SHARE IN id: %lld", (long long) psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 1, psync_find_result(share, "shareid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 2, psync_find_result(share, "folderid", PARAM_NUM)->num);
     psync_sql_bind_uint(q, 3, psync_find_result(share, "created", PARAM_NUM)->num);
@@ -214,11 +210,11 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
   psync_sql_res *q;
   int i, isincomming =  0;
   uint64_t folderowneruserid, owneruserid;
- 
-  
+
+
   for (i = 0; i < shcnt; ++i) {
     share = shares_out->array[i];
-    
+
     folderowneruserid =  psync_find_result(share, "folderowneruserid", PARAM_NUM)->num;
     psync_get_current_userid(&owneruserid);
     isincomming = (folderowneruserid == owneruserid) ? 0 : 1;
@@ -242,7 +238,7 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
     else
       psync_sql_bind_null(q, 9);
     psync_sql_bind_uint(q, 10, isincomming);
-	psync_sql_bind_uint(q, 11, isincomming);
+    psync_sql_bind_uint(q, 11, isincomming);
     psync_sql_run_free(q);
   }
 }
@@ -250,10 +246,10 @@ static void process_shares_req_out(const binresult *shares_out, int shcnt) {
 static void process_shares_req_in(const binresult *shares_in, int shcnt) {
   const binresult *share;
   const binresult *br;
-  psync_sql_res *q; 
+  psync_sql_res *q;
   int i, isincomming = 1;
   uint64_t folderowneruserid, owneruserid;
-  
+
   for (i = 0; i < shcnt; ++i) {
     share = shares_in->array[i];
   br = psync_check_result(share, "folderowneruserid", PARAM_NUM);
@@ -281,8 +277,8 @@ static void process_shares_req_in(const binresult *shares_in, int shcnt) {
       psync_sql_bind_lstring(q, 9, br->str, br->length);
     else
       psync_sql_bind_null(q, 9);
-	psync_sql_bind_uint(q, 10, isincomming);
-	psync_sql_bind_uint(q, 11, !isincomming);
+    psync_sql_bind_uint(q, 10, isincomming);
+    psync_sql_bind_uint(q, 11, !isincomming);
     psync_sql_run_free(q);
   }
 }
@@ -296,28 +292,20 @@ void cache_shares() {
   const binresult *array, *shares;
   int shcnt;
   psync_sql_res *q;
-  
-  psync_sql_lock();
-  
-  q=psync_sql_prep_statement("DELETE FROM sharerequest ");
-  psync_sql_run_free(q);
-  
-  q=psync_sql_prep_statement("DELETE FROM sharedfolder ");
-  psync_sql_run_free(q);
-  
+
   if(psync_my_auth[0]) {
     binparam params[] = {P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp")};
     api = psync_apipool_get();
     if (unlikely(!api)) {
-      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      debug(D_WARNING, "Can't get api from the pool. No pool ?\n");
       return;
     }
     bres = send_command(api, "listshares", params);
-  } else if (psync_my_user) {
+  } else if (psync_my_user && psync_my_pass) {
     binparam params[] = {P_STR("username", psync_my_user), P_STR("password", psync_my_pass), P_STR("timeformat", "timestamp")};
     api = psync_apipool_get();
     if (unlikely(!api)) {
-      debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+      debug(D_WARNING, "Can't get api from the pool. No pool ?\n");
       return;
     }
     bres = send_command(api, "listshares", params);
@@ -334,41 +322,52 @@ void cache_shares() {
     errorret = psync_find_result(bres, "error", PARAM_STR)->str;
     debug(D_WARNING, "command listshares returned error code %u message %s", (unsigned)result, errorret);
     psync_process_api_error(result);
+    psync_free(bres);
     return;
   }
-  
-  
+
+
   shares = psync_find_result(bres, "shares", PARAM_HASH);
+
+  psync_sql_start_transaction();
+
+  q=psync_sql_prep_statement("DELETE FROM sharerequest ");
+  psync_sql_run_free(q);
+
+  q=psync_sql_prep_statement("DELETE FROM sharedfolder ");
+  psync_sql_run_free(q);
+
   array=psync_find_result(shares, "outgoing", PARAM_ARRAY);
-  
+
   shcnt = array->length;
   if (shcnt){
     process_shares_out(array, shcnt);
   }
-  
+
   array=psync_find_result(shares, "incoming", PARAM_ARRAY);
-  
+
   shcnt = array->length;
   if (shcnt){
     process_shares_in(array, shcnt);
   }
-  
+
   shares = psync_find_result(bres, "requests", PARAM_HASH);
   array=psync_find_result(shares, "outgoing", PARAM_ARRAY);
-  
+
   shcnt = array->length;
   if (shcnt){
     process_shares_req_out(array, shcnt);
   }
-  
+
   array=psync_find_result(shares, "incoming", PARAM_ARRAY);
-  
+
   shcnt = array->length;
   if (shcnt){
     process_shares_req_in(array, shcnt);
   }
 
+  psync_sql_commit_transaction();
+
   psync_free(bres);
-  
-  psync_sql_unlock();
+
 }

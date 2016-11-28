@@ -171,7 +171,12 @@ static void psync_set_ssl_error(ssl_connection_t *conn, int err){
   else{
     psync_ssl_errno=PSYNC_SSL_ERR_UNKNOWN;
     conn->isbroken=1;
-    debug(D_NOTICE, "got error %d ", err);
+    if (err==POLARSSL_ERR_NET_RECV_FAILED)
+      debug(D_NOTICE, "got POLARSSL_ERR_NET_RECV_FAILED");
+    else if (err==POLARSSL_ERR_NET_SEND_FAILED)
+      debug(D_NOTICE, "got POLARSSL_ERR_NET_SEND_FAILED");
+    else
+      debug(D_NOTICE, "got error %d", err);
   }
 }
 
@@ -203,7 +208,7 @@ static int psync_mbed_write(void *ptr, const unsigned char *buf, size_t len){
     if (err==P_WOULDBLOCK || err==P_AGAIN || err==P_INTR)
       return POLARSSL_ERR_NET_WANT_WRITE;
     else
-      return POLARSSL_ERR_NET_RECV_FAILED;
+      return POLARSSL_ERR_NET_SEND_FAILED;
   }
   else
     return (int)ret;
@@ -566,7 +571,7 @@ psync_encrypted_symmetric_key_t psync_ssl_rsa_encrypt_data(psync_rsa_publickey_t
     return PSYNC_INVALID_ENC_SYM_KEY;
   }
   ret->datalen=rsa->len;
-  debug(D_NOTICE, "datalen=%lu", ret->datalen);
+  debug(D_NOTICE, "datalen=%lu", (unsigned long)ret->datalen);
   return ret;
 }
 
@@ -743,7 +748,7 @@ SSE2FUNC void psync_aes256_decode_4blocks_consec_xor_hw(psync_aes256_decoder enc
       "xorps %%xmm0, %%xmm3\n"
       "movdqa 48(%1), %%xmm5\n"
       "pxor %%xmm0, %%xmm4\n"
-      "movdqa 16(%0), %%xmm1\n"
+      "movdqu 16(%0), %%xmm1\n"
       "pxor %%xmm0, %%xmm5\n"
       "1:\n"
       "lea 32(%0), %0\n"

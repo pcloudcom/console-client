@@ -25,169 +25,193 @@
 */
 #include "pcompat.h"
 #include "plibs.h"
-#include "pexternalstatus.h"
+#include "poverlay.h"
+#include "ppathstatus.h"
+#include "pcache.h"
 
+int overlays_running = 1;
+int callbacks_running = 1;
 
 #if defined(P_OS_WINDOWS)
 
-#include <windows.h>
-#include <stdio.h>
-#include <tchar.h>
-#include <strsafe.h>
+#include "poverlay_win.c"
 
-#define POVERLAY_BUFSIZE 512
+#elif defined(P_OS_LINUX)
+
+#include "poverlay_lin.c"
+
+#elif defined(P_OS_MACOSX)
+
+#include "poverlay_mac.c"
+
+#else
+
+void overlay_main_loop(VOID){}
+void instance_thread(LPVOID){}
+
+#endif //defined(P_OS_WINDOWS)
+
+poverlay_callback * callbacks;
+static int callbacks_size = 15;
+static const int calbacks_lower_band = 20;
+
+/* disable cache, psync_path_status_get() has many layers of caching internally
+
+#define CACHE_PREF "P_OVERLA_CACHE_PREFIX"
+#define CACHE_PREF_LEN 21
 
 
-#include "poverlay.h"
+typedef struct overlay_cache_{
+  external_status stat;
+  uint64_t timestamp;
+} overlay_cache_t;
 
-LPCWSTR PORT = TEXT("\\\\.\\pipe\\pStatusPipe");
+static int get_item_from_cache(const char* key, external_status* stat){
+  int ketlen = strlen(key);
+  char* reckey =  psync_malloc(ketlen + CACHE_PREF_LEN + 1);
+  overlay_cache_t * rec = NULL;
+  uint64_t now = 0;
 
-void overlay_main_loop(VOID)
-{
-  BOOL   fConnected = FALSE;
-  HANDLE hPipe = INVALID_HANDLE_VALUE;
+  memcpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
+  memcpy(reckey + CACHE_PREF_LEN , key, ketlen + 1);
 
-  // The main loop creates an instance of the named pipe and
-  // then waits for a client to connect to it. When the client
-  // connects, a thread is created to handle communications
-  // with that client, and this loop is free to wait for the
-  // next client connect request. It is an infinite loop.
-
-  for (;;)
-  {
-    debug(D_NOTICE, "\nPipe Server: Main thread awaiting client connection on %s\n", PORT);
-    hPipe = CreateNamedPipe(
-      PORT,                     // pipe name
-      PIPE_ACCESS_DUPLEX,       // read/write access
-      PIPE_TYPE_MESSAGE |       // message type pipe
-      PIPE_READMODE_MESSAGE |   // message-read mode
-      PIPE_WAIT,                // blocking mode
-      PIPE_UNLIMITED_INSTANCES, // max. instances
-      POVERLAY_BUFSIZE,         // output buffer size
-      POVERLAY_BUFSIZE,         // input buffer size
-      0,                        // client time-out
-      NULL);                    // default security attribute
-
-    if (hPipe == INVALID_HANDLE_VALUE)
-    {
-      debug(D_NOTICE, "CreateNamedPipe failed, GLE=%d.\n", GetLastError());
-      return;
+  if ((rec = (overlay_cache_t *) psync_cache_get(reckey))) {
+    now = psync_millitime();
+    if ((now - rec->timestamp) < 100) {
+      *stat = rec->stat;
+      psync_cache_add(reckey, rec, 1, psync_free, 1);
+      psync_free(reckey);
+      return 1;
+    } else {
+      psync_free(rec);
     }
-
-    fConnected = ConnectNamedPipe(hPipe, NULL) ?
-    TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
-
-    if (fConnected)
-    {
-      debug(D_NOTICE, "Client connected, creating a processing thread.\n");
-
-      // Create a thread for this client.
-      psync_run_thread1(
-        "Pipe request handle routine",
-        instance_thread,    // thread proc
-        (LPVOID)hPipe     // thread parameter
-        );
-    }
-    else
-      CloseHandle(hPipe);
   }
-
-  return;
+  psync_free(reckey);
+  return 0;
 }
 
-void instance_thread(LPVOID lpvParam)
+static void add_item_to_cache(const char* key, external_status* stat){
+  int ketlen = strlen(key);
+  char* reckey =  psync_malloc(ketlen + CACHE_PREF_LEN + 1);
+  overlay_cache_t * rec = psync_malloc(sizeof(overlay_cache_t));
+
+  strncpy(reckey, CACHE_PREF, CACHE_PREF_LEN);
+  strncpy(reckey + CACHE_PREF_LEN , key, ketlen);
+
+  rec->stat = *stat;
+  rec->timestamp = psync_millitime();
+  psync_cache_add(reckey, rec, 1, psync_free, 1);
+  psync_free(reckey);
+}
+
+*/
+
+int psync_add_overlay_callback(int id, poverlay_callback callback)
 {
-  DWORD cbBytesRead = 0, cbWritten = 0;
-  BOOL fSuccess = FALSE;
-  HANDLE hPipe = NULL;
-  char  chBuf[POVERLAY_BUFSIZE];
-
-  message* request = NULL; //(message*)psync_malloc(POVERLAY_BUFSIZE);
-  message* reply = (message*)psync_malloc(POVERLAY_BUFSIZE);
- // memset(request,0,sizeof(request));
-  memset(reply, 0, sizeof(reply));
-  if (lpvParam == NULL)
-  {
-    debug(D_ERROR, "InstanceThread got an unexpected NULL value in lpvParam.\n");
-    return;
+  poverlay_callback * callbacks_old = callbacks;
+  int callbacks_size_old = callbacks_size;
+  if (id < calbacks_lower_band)
+    return -1;
+  if (id > (calbacks_lower_band + callbacks_size)) {
+     callbacks_size = id - calbacks_lower_band + 1;
+     init_overlay_callbacks();
+     memcpy(callbacks,callbacks_old, callbacks_size_old*sizeof(poverlay_callback));
+     psync_free(callbacks_old);
   }
+  callbacks[id - calbacks_lower_band] = callback;
+  return 0;
+}
 
-  // debug(D_NOTICE, "InstanceThread created, receiving and processing messages.\n");
-  hPipe = (HANDLE)lpvParam;
-  while (1)
-  {
-    do
-    {
-      fSuccess = ReadFile(
-        hPipe,    // pipe handle 
-        chBuf,    // buffer to receive reply 
-        POVERLAY_BUFSIZE,  // size of buffer 
-        &cbBytesRead,  // number of bytes read 
-        NULL);    // not overlapped 
+void init_overlay_callbacks() {
+  callbacks = (poverlay_callback *) psync_malloc(sizeof(poverlay_callback)*callbacks_size);
+  memset(callbacks, 0, sizeof(poverlay_callback)*callbacks_size);
+}
 
-      if (!fSuccess && GetLastError() != ERROR_MORE_DATA)
-        break;
-    } while (!fSuccess);  // repeat loop if ERROR_MORE_DATA 
+void psync_stop_overlays(){
+  overlays_running = 0;
+}
+void psync_start_overlays(){
+  overlays_running = 1;
+}
 
-    if (!fSuccess || cbBytesRead == 0)
-    {
-      if (GetLastError() == ERROR_BROKEN_PIPE)
-        debug(D_NOTICE, "InstanceThread: client disconnected.\n");
-      else
-
-        debug(D_NOTICE, "InstanceThread ReadFile failed, GLE=%d.\n", GetLastError());
-      break;
-    }
-    message *request = (message *)chBuf;
-
-    debug(D_NOTICE, "bytes received  %d buffer[%s]\n", cbBytesRead, chBuf);
-    get_answer_to_request(request, reply);
-    fSuccess = WriteFile(
-      hPipe,        // handle to pipe
-      reply,     // buffer to write from
-      reply->length, // number of bytes to write
-      &cbWritten,   // number of bytes written
-      NULL);        // not overlapped I/O
-
-    if (!fSuccess || reply->length != cbWritten)
-    {
-      debug(D_NOTICE, "InstanceThread WriteFile failed, GLE=%d.\n", GetLastError());
-      break;
-    }
-  }
-  FlushFileBuffers(hPipe);
-  DisconnectNamedPipe(hPipe);
-  CloseHandle(hPipe);
-  psync_free(request);
-  psync_free(reply);
-
-  debug(D_NOTICE, "InstanceThread exitting.\n");
-  return;
+void psync_stop_overlay_callbacks(){
+  callbacks_running = 0;
+}
+void psync_start_overlay_callbacks(){
+  callbacks_running = 1;
 }
 
 void get_answer_to_request(message *request, message *replay)
 {
-  char msg[4] = "Ok.";
-  msg[3] = '\0';
+  psync_path_status_t stat=PSYNC_PATH_STATUS_NOT_OURS;
+  memcpy(replay->value, "Ok.", 4);
+  replay->length=sizeof(message)+4;
+  //debug(D_NOTICE, "Client Request type [%u] len [%lu] string: [%s]", request->type, request->length, request->value);
+  if (request->type < 20 ) {
 
-  debug(D_NOTICE, "Client Request type [%u] len [%llu] string: [%s]", request->type, request->length, request->value);
-  external_status stat = do_psync_external_status(request->value);
-  if (stat == INSYNC) {
-    replay->type = 10;
-  }
-  else if (stat == NOSYNC) {
-    replay->type = 11;
-  }
-  else if (stat == INPROG) {
+/*    if (overlays_running && !get_item_from_cache(request->value, &stat)) {
+     stat = do_psync_external_status(request->value);
+    }
 
-    replay->type = 12;
-  }
-  else {
-    replay->type = 13;
-    strncpy(msg,"No.\0",4);
-  }
-  replay->length = sizeof(message)+4;
-  strncpy(replay->value, msg, 4);
+    if (stat == INSYNC) {
+      replay->type = 10;
+    }
+    else if (stat == NOSYNC) {
+      replay->type = 11;
+    }
+    else if (stat == INPROG) {
+
+      replay->type = 12;
+    }
+    else {
+      replay->type = 13;
+      memcpy(msg, "No.", 4);
+    }
+    replay->length = sizeof(message)+4;
+    strncpy(replay->value, msg, 4);
+    add_item_to_cache(request->value, &stat);
+    */
+    if (overlays_running)
+      stat=psync_path_status_get(request->value);
+    switch (psync_path_status_get_status(stat)) {
+      case PSYNC_PATH_STATUS_IN_SYNC:
+        replay->type=10;
+        break;
+      case PSYNC_PATH_STATUS_IN_PROG:
+        replay->type=12;
+        break;
+      case PSYNC_PATH_STATUS_PAUSED:
+      case PSYNC_PATH_STATUS_REMOTE_FULL:
+      case PSYNC_PATH_STATUS_LOCAL_FULL:
+        replay->type=11;
+        break;
+      default:
+        replay->type=13;
+        memcpy(replay->value, "No.", 4);
+    }
+  } else if ((callbacks_running)&&(request->type < 36)) {
+    int ind = request->type - 20;
+    int ret = 0;
+    if (callbacks[ind]) {
+      if ((ret = callbacks[ind](request->value)) == 0) {
+        replay->type = 0;
+      } else {
+        replay->type = ret;
+        memcpy(replay->value, "No.", 4);
+      }
+    } else {
+      replay->type = 13;
+      memcpy(replay->value, "No callback with this id registered.", 37);
+      replay->length = sizeof(message)+37;
+    }
+  } else {
+      replay->type = 13;
+      memcpy(replay->value, "Invalid type.", 14);
+      replay->length = sizeof(message)+14;
+    }
 
 }
-#endif //defined(P_OS_WINDOWS)
+
+
+int psync_overlays_running(){return overlays_running;}
+int psync_ovr_callbacks_running(){return callbacks_running;}

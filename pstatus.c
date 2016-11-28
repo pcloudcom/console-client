@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -36,9 +36,9 @@
 #include <stdarg.h>
 
 static uint32_t statuses[PSTATUS_NUM_STATUSES]={
-  PSTATUS_INVALID, 
-  PSTATUS_ONLINE_OFFLINE, 
-  PSTATUS_INVALID, 
+  PSTATUS_INVALID,
+  PSTATUS_ONLINE_OFFLINE,
+  PSTATUS_INVALID,
   PSTATUS_ACCFULL_QUOTAOK,
   PSTATUS_DISKFULL_OK,
   PSTATUS_LOCALSCAN_SCANNING
@@ -58,6 +58,8 @@ static uint32_t psync_calc_status(){
       return PSTATUS_BAD_LOGIN_DATA;
     else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_BADTOKEN)
       return PSTATUS_BAD_LOGIN_TOKEN;
+    else if (statuses[PSTATUS_TYPE_AUTH]==PSTATUS_AUTH_EXPIRED)
+      return PSTATUS_ACCOUT_EXPIRED;
     else {
       debug(D_BUG, "invalid PSTATUS_TYPE_AUTH %d", statuses[PSTATUS_TYPE_AUTH]);
       return -1;
@@ -109,7 +111,7 @@ static uint32_t psync_calc_status(){
       return -1;
     }
   }
-  
+
   if ((psync_status.filesdownloading || psync_status.filestodownload) && (psync_status.filesuploading || psync_status.filestoupload))
     return PSTATUS_DOWNLOADINGANDUPLOADING;
   else if (psync_status.filesdownloading || psync_status.filestodownload)
@@ -194,6 +196,15 @@ void psync_status_recalc_to_upload(){
   psync_status.status=psync_calc_status();
 }
 
+static void psync_status_recalc_to_download_async_thread(){
+  psync_status_recalc_to_download();
+  psync_send_status_update();
+}
+
+void psync_status_recalc_to_download_async(){
+  psync_run_ratelimited("recalc download", psync_status_recalc_to_download_async_thread, PSYNC_MIN_INTERVAL_RECALC_DOWNLOAD, 1);
+}
+
 static void psync_status_recalc_to_upload_async_thread(){
   psync_status_recalc_to_upload();
   psync_send_status_update();
@@ -216,9 +227,9 @@ void psync_set_status(uint32_t statusid, uint32_t status){
   statuses[statusid]=status;
   if (status_waiters)
     pthread_cond_broadcast(&statuscond);
-  pthread_mutex_unlock(&statusmutex);
   psync_status.remoteisfull=(statuses[PSTATUS_TYPE_ACCFULL]==PSTATUS_ACCFULL_OVERQUOTA);
-  psync_status.localisfull=(statuses[PSTATUS_TYPE_DISKFULL]==PSTATUS_DISK_FULL);
+  psync_status.localisfull=(statuses[PSTATUS_TYPE_DISKFULL]==PSTATUS_DISKFULL_FULL);
+  pthread_mutex_unlock(&statusmutex);
   status=psync_calc_status();
   if (psync_status.status!=status){
     psync_status.status=status;

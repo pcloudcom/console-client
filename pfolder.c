@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -34,6 +34,7 @@
 #include "pnetlibs.h"
 #include "papi.h"
 #include "pcloudcrypto.h"
+#include "pdiff.h"
 
 #define INITIAL_NAME_BUFF 2000
 #define INITIAL_ENTRY_CNT 128
@@ -97,11 +98,28 @@ psync_folderid_t psync_get_folderid_by_path(const char *path){
       goto err;
     cfolderid=row[0];
     path+=len;
-  }  
+  }
 err:
   if (res)
     psync_sql_free_result(res);
   psync_error=PERROR_REMOTE_FOLDER_NOT_FOUND;
+  return PSYNC_INVALID_FOLDERID;
+}
+
+static psync_folderid_t wait_folder_id_in_db(psync_folderid_t folderid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  int tries;
+  tries=0;
+  while (++tries<=20){
+    res=psync_sql_query_rdlock("SELECT id FROM folder WHERE id=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    row=psync_sql_fetch_rowint(res);
+    psync_sql_free_result(res);
+    if (row)
+      return folderid;
+    psync_milisleep(50);
+  }
   return PSYNC_INVALID_FOLDERID;
 }
 
@@ -121,7 +139,7 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
     if (*path==0){
       if (res)
         psync_sql_free_result(res);
-      return cfolderid;
+      return wait_folder_id_in_db(cfolderid);
     }
     sl=strchr(path, '/');
     if (sl)
@@ -160,6 +178,8 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
       result=psync_find_result(bres, "result", PARAM_NUM)->num;
       if (result==0){
         cfolderid=psync_find_result(psync_find_result(bres, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
+        if (psync_find_result(bres, "created", PARAM_BOOL)->num)
+          psync_diff_wake();
         psync_free(bres);
       }
       else{
@@ -172,7 +192,7 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
       }
     }
     path+=len;
-  }  
+  }
 err:
   if (res)
     psync_sql_free_result(res);
@@ -248,10 +268,11 @@ static string_list *str_list_decode(psync_folderid_t folderid, string_list *e){
 }
 
 static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folderid){
-  string_list *e;
+  string_list *e, *c;
   psync_sql_res *res;
   psync_variant_row row;
   const char *str;
+  psync_folderid_t cfolderid;
   size_t len;
   uint32_t flags;
   e=NULL;
@@ -270,21 +291,24 @@ static int psync_add_path_to_list_decode(psync_list *lst, psync_folderid_t folde
     row=psync_sql_fetch_row(res);
     if (unlikely_log(!row))
       break;
+    cfolderid=folderid;
     flags=psync_get_number(row[2]);
+    folderid=psync_get_number(row[0]);
+    str=psync_get_lstring(row[1], &len);
+    c=str_to_list_element(str, len);
+    psync_sql_free_result(res);
     if (e){
       if (flags&PSYNC_FOLDER_FLAG_ENCRYPTED){
-        e=str_list_decode(folderid, e);
+        e=str_list_decode(cfolderid, e);
         if (unlikely_log(!e))
-          break;
+          goto err;
       }
       psync_list_add_head(lst, &e->list);
     }
-    folderid=psync_get_number(row[0]);
-    str=psync_get_lstring(row[1], &len);
-    e=str_to_list_element(str, len);
-    psync_sql_free_result(res);
+    e=c;
   }
   psync_sql_free_result(res);
+err:
   debug(D_ERROR, "folder %lu not found in database", (unsigned long)folderid);
   return -1;
 }
@@ -343,9 +367,7 @@ char *psync_get_path_by_folderid_sep(psync_folderid_t folderid, const char *sep,
   char *ret;
   int res;
   psync_list_init(&folderlist);
-  psync_sql_rdlock();
   res=psync_add_path_to_list_decode(&folderlist, folderid);
-  psync_sql_rdunlock();
   if (unlikely_log(res)){
     psync_free_string_list(&folderlist);
     return PSYNC_INVALID_PATH;
@@ -377,7 +399,7 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen){
   row=psync_sql_fetch_row(res);
   if (unlikely_log(!row)){
     psync_sql_free_result(res);
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     return PSYNC_INVALID_PATH;
   }
   folderid=psync_get_number(row[0]);
@@ -386,7 +408,7 @@ char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen){
   psync_list_add_head(&folderlist, &e->list);
   psync_sql_free_result(res);
   if (unlikely_log(psync_add_path_to_list(&folderlist, folderid))){
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     psync_free_string_list(&folderlist);
     return PSYNC_INVALID_PATH;
   }
@@ -652,7 +674,7 @@ static pfolder_list_t *folder_list_finalize(folder_list *list){
   pfolder_list_t *ret;
   char *name;
   uint32_t i;
-  debug(D_NOTICE, "allocating %u bytes for folder list, %u of which for names", 
+  debug(D_NOTICE, "allocating %u bytes for folder list, %u of which for names",
         (unsigned)(offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt+list->nameoff), (unsigned)list->nameoff);
   ret=(pfolder_list_t *)psync_malloc(offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt+list->nameoff);
   name=((char *)ret)+offsetof(pfolder_list_t, entries)+sizeof(pentry_t)*list->entriescnt;
@@ -691,7 +713,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
       folder_list_add(list, &entry);
     }
     psync_sql_free_result(res);
-  }  
+  }
   if (listtype&PLIST_FILES){
     res=psync_sql_query_rdlock("SELECT id, size, name FROM file WHERE parentfolderid=? ORDER BY name");
     psync_sql_bind_uint(res, 1, folderid);
@@ -704,7 +726,7 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
       folder_list_add(list, &entry);
     }
     psync_sql_free_result(res);
-  }  
+  }
   return folder_list_finalize(list);
 }
 

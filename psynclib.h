@@ -104,8 +104,9 @@ typedef struct {
 #define PSTATUS_CONNECTING             12
 #define PSTATUS_SCANNING               13
 #define PSTATUS_USER_MISMATCH          14
+#define PSTATUS_ACCOUT_EXPIRED         15
 
-typedef struct {
+typedef struct pstatus_struct_ {
   const char *downloadstr; /* formatted string with the status of uploads */
   const char *uploadstr;   /* formatted string with the status of downloads */
   uint64_t bytestoupload; /* sum of the sizes of files that need to be uploaded to sync state */
@@ -261,12 +262,18 @@ typedef struct {
 #define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -7
 #define PSYNC_CRYPTO_INTERNAL_ERROR        -8
 
+#define PSYNC_CRYPTO_STATUS_NEW 1
+#define PSYNC_CRYPTO_STATUS_TRIAL 2
+#define PSYNC_CRYPTO_STATUS_EXPIRED 3
+#define PSYNC_CRYPTO_STATUS_ACTIVE 4
+#define PSYNC_CRYPTO_STATUS_SETUP 5
+
 #define PSYNC_CRYPTO_INVALID_FOLDERID      ((psync_folderid_t)-1)
 
 #ifndef DEFAULT_FUSE_VOLUME_NAME
 #define DEFAULT_FUSE_VOLUME_NAME "pCloud Drive"
 #endif
-  
+
 #ifndef DEFAULT_FUSE_MOUNT_POINT
 #define DEFAULT_FUSE_MOUNT_POINT "pCloud"
 #endif
@@ -410,8 +417,8 @@ typedef struct {
   const char *code;
   const char *comment;
   uint64_t traffic;
-  uint64_t maxspace; 
-  uint64_t downloads; 
+  uint64_t maxspace;
+  uint64_t downloads;
   uint64_t created;
   uint64_t modified;
   uint64_t itemid;
@@ -476,7 +483,6 @@ void psync_free(void *ptr);
 
 typedef void (*pstatus_change_callback_t)(pstatus_t *status);
 
-
 /* Event callback is called every time a download/upload is started/finished,
  * quota is changed, folder is shared or similar. Look at the PEVENT_ constants
  * for a list of possible events.
@@ -514,6 +520,7 @@ typedef void (*pevent_callback_t)(psync_eventtype_t event, psync_eventdata_t dat
  */
 
 typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newnotificationcnt);
+
 
 /* psync_init inits the sync library. No network or local scan operations are initiated
  * by this call, call psync_start_sync to start those. However listing remote folders,
@@ -599,7 +606,7 @@ void psync_logout();
 void psync_unlink();
 
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,
- * on success syncid is returned, on error -1. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
+ * on success syncid is returned, on error PSYNC_INVALID_SYNCID. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
  * PSYNC_UPLOAD_ONLY or PSYNC_FULL.
  *
  * psync_add_sync_by_path_delayed generally works in a way similar to psync_add_sync_by_path, but with few
@@ -654,6 +661,7 @@ pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_lis
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
 pentry_t *psync_stat_path(const char *remotepath);
+int psync_is_lname_to_ignore(const char *name, size_t namelen);
 int psync_is_name_to_ignore(const char *name);
 
 /* Returns the code of the last error that occured when calling psync_* functions
@@ -911,6 +919,25 @@ psync_new_version_t *psync_check_new_version_download_str(const char *os, const 
 psync_new_version_t *psync_check_new_version_download(const char *os, unsigned long currentversion);
 void psync_run_new_version(psync_new_version_t *ver);
 
+/* The following functions provide simplified interface to file upload. While no actual limit is enforced, they are targeted for
+ * immediate upload of relatively small files (up to few tens of megabytes). These functions:
+ * - do not obey upload speed limits
+ * - do not obey stopped/paused state
+ * - do not increase/touch the number of "files to upload", therefore the status may be "in sync" while these functions actually upload data
+ * - just try to instantly upload the file regardless of number of files queued up by either/both sync or drive
+ * - do not support resume of failed uploads
+ * - overwrite already existing target files
+ * - functions that work with local files allocate memory equal to the file size (to deal with race conditions of changing files)
+ *
+ * All functions return 0 upon success, -1 upon network error, -2 if the local file can not be read or a positive API error code (see
+ * https://docs.pcloud.com/methods/file/uploadfile.html).
+ */
+
+int psync_upload_data(psync_folderid_t folderid, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid);
+int psync_upload_data_as(const char *remote_path, const char *remote_filename, const void *data, size_t length, psync_fileid_t *fileid);
+int psync_upload_file(psync_folderid_t folderid, const char *remote_filename, const char *local_path, psync_fileid_t *fileid);
+int psync_upload_file_as(const char *remote_path, const char *remote_filename, const char *local_path, psync_fileid_t *fileid);
+
 /* Filesystem functions.
  *
  * psync_fs_start() - starts the filesystem
@@ -1009,14 +1036,14 @@ psync_folderid_t psync_crypto_folderid();
 psync_folderid_t *psync_crypto_folderids();
 
 /*
- * Status functions. 
- * 
- * All status functions take path and return corresponding file or folder status. Possible statuses are  INSYNC means everything is OK, 
- * INPROG - synchronization in progress, NOSYNC - file or folder not synced.  
- * 
+ * Status functions.
+ *
+ * All status functions take path and return corresponding file or folder status. Possible statuses are  INSYNC means everything is OK,
+ * INPROG - synchronization in progress, NOSYNC - file or folder not synced.
+ *
  * psync_status_file() returns the status of a file in pCloud drive. Path is given from the mount point of the drive.
  * psync_status_folder() returns the status of a folder in pCloud drive. Path is given from the mount point of the drive.
- * psync_filesystem_status() returns the status of a folder or a folder in pCloud drive of file system. Path is the absolute path including mount point 
+ * psync_filesystem_status() returns the status of a folder or a folder in pCloud drive of file system. Path is the absolute path including mount point
  * of the drive and/or drive letter. Can be used for synced folders. For files and folders not in drive or sync folder INSYNC is returned.
  */
 
@@ -1025,53 +1052,53 @@ external_status psync_status_file(const char *path);
 external_status psync_status_folder(const char *path);
 
 /*
- * Publik links API functions. 
- * 
- * psync_file_public_link() creates public link for a file. Returns link id or negative error number. 
- *  The path parameter is pcloud drive path. 
+ * Publik links API functions.
+ *
+ * psync_file_public_link() creates public link for a file. Returns link id or negative error number.
+ *  The path parameter is pcloud drive path.
  *  The code is pointer where generated code is returned.
- *  The err is parameter where printable text of api error if any is returned. 
- *  
+ *  The err is parameter where printable text of api error if any is returned.
+ *
  *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
- * 
- * 
- * psync_folder_public_link() creates public link for a folder. Returns link id or negative error number. 
- *  The path parameter is pcloud drive path. 
+ *
+ *
+ * psync_folder_public_link() creates public link for a folder. Returns link id or negative error number.
+ *  The path parameter is pcloud drive path.
  *  The code is pointer where generated code is returned.
- *  The err is parameter where printable text of api error if any is returned. 
- *  
+ *  The err is parameter where printable text of api error if any is returned.
+ *
  *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
- * 
- * psync_tree_public_link() creates public link for a tree. Tree is define by root folder and arrays of folders and file paths. Each entry in the arrays 
- *  describes a path to file or folder. Number of entries in the arrays is passed separately. The API constructs a virtual folder of this files and folders 
+ *
+ * psync_tree_public_link() creates public link for a tree. Tree is define by root folder and arrays of folders and file paths. Each entry in the arrays
+ *  describes a path to file or folder. Number of entries in the arrays is passed separately. The API constructs a virtual folder of this files and folders
  *  and if root is passed it will serve as root folder for this virtual folder so name is mandatory. you can omit any of the other parameters.
- *  Returns link id or negative error number. 
+ *  Returns link id or negative error number.
  *  The code is pointer where generated code is returned.
- *  The err is parameter where printable text of api error if any is returned. 
- *  
+ *  The err is parameter where printable text of api error if any is returned.
+ *
  *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
- * 
+ *
  * psync_delete_link() Deletes a public link by linkid or returns negative number and upon API failure a string representation of the error.
- * 
+ *
  * psync_list_links() Lists all public links in the account or returns negative number and upon API failure a string representation of the error.
  *   Same structure used for listing public and upload links only comment and maxspace are set to 0 in public links list.
- * 
- * psync_upload_link() Creates upload link to given folder. Comment is mandatory parameter as it's the only information the user sees.  
+ *
+ * psync_upload_link() Creates upload link to given folder. Comment is mandatory parameter as it's the only information the user sees.
  *
  * psync_delete_upload_link(uploadlinkid) Deletes a upload link by uploadlinkid or returns negative number and upon API failure a string representation of the error.
  *
  * psync_list_upload_links() Lists all public links in the account or returns negative number and upon API failure a string representation of the error.
  *   Same structure used for listing public and upload links only comment and maxspace are set to 0 in public links list. Space parameter is filled in traffic and
  *   files in downloads.
- * 
+ *
  * psync_sow_link() Lists link contents. Returns list of contents for folders and virtial folders or empty pointer and err is filled with string representation of the error.
- * 
+ *
  * psync_delete_all_links_folder() Deletes all link for given folderid. Stops on first error and returns error msg.
  * psync_delete_all_links_file() Deletes all link for given fileid.  Stops on first error and returns error msg.
- * 
- * REMINDER. You have to free the out parameters passed as pointers to the library as it reserves memory for them but does not cleans it. You will have to iterate 
+ *
+ * REMINDER. You have to free the out parameters passed as pointers to the library as it reserves memory for them but does not cleans it. You will have to iterate
  * though entire entires[] array and free all codes and names and comments if not empty before feeing entire info with separate call.
- * 
+ *
  */
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
@@ -1084,14 +1111,14 @@ int psync_delete_link(int64_t linkid, char **err /*OUT*/);
 int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
-int psync_delete_all_links_folder(psync_folderid_t folderid, char**err); 
+int psync_delete_all_links_folder(psync_folderid_t folderid, char**err);
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
 
 /*
- * Publik contacts API functions. 
- * 
+ * Publik contacts API functions.
+ *
  * psync_list_contacts() Lists cached contacts emails from the buissiness account and team names.
- * 
+ *
  * psync_list_myteams() Lists cached teams that you are member of. Returns same structure like psync_list_contacts
  * only type 3 records filled.
  * */
@@ -1118,7 +1145,7 @@ int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_t
 
 
 
-/* psync_register_account_events_callback Registers a callback to be notified upon invalidation of the account cache information. 
+/* psync_register_account_events_callback Registers a callback to be notified upon invalidation of the account cache information.
  * Different notifications are:
  * Links, team, team users emails, contacts or all.
  */
@@ -1126,6 +1153,33 @@ void psync_register_account_events_callback(paccount_cache_callback_t callback);
 
 void psync_get_current_userid(psync_userid_t* /*OUT*/ ret);
 void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t* /*OUT*/ ret);
+
+/* Callback to be registered to be called from file manager extension.
+ */
+
+typedef int (*poverlay_callback)(const char* path);
+
+/* Registers file manager extension callback that will be called when packet with id equals to the give one had arrived from extension.
+ * The id must be over or equal to 20 or -1 will be returned. There is a hard coded maximum of menu items on some OS-s so maximum of 15 ids are available.
+ * Value of -2 is returned when id grater then 35 and 0 returned on success.
+ *
+ * WARNING this functions are not thread-safe. Use them in single thread or synchronize.
+ */
+
+int psync_add_overlay_callback(int id, poverlay_callback callback);
+void psync_stop_overlays();
+void psync_start_overlays();
+void psync_stop_overlay_callbacks();
+void psync_start_overlay_callbacks();
+
+int psync_setlanguage(const char *language, char **err);
+
+
+// Update crypto status information from userinfo.
+void psync_update_cryptostatus();
+
+// Checks and creates new folder with write permissions on it and adds suffix to the name if necessary i.e. New Folder (1) etc..
+psync_folderid_t psync_check_and_create_folder (const char * path);
 
 #ifdef __cplusplus
 }
