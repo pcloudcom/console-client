@@ -49,7 +49,7 @@ extern "C" {
 
   void padd_monitor_callback(device_event_callback callback);
 
-  int pinit_device_monitor();
+  void pinit_device_monitor();
 
 #ifdef __cplusplus
 }

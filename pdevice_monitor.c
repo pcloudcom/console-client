@@ -4,6 +4,8 @@
 #include "psynclib.h"
 #include "pdevice_monitor.h"
 
+#define P_DEVICE_VERBOSE
+
 #ifdef P_OS_WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT   0x0601
@@ -319,8 +321,7 @@ static void device_change(void *param) {
 
 }
 
-#define P_DEVICE_VERBOSE
-int pinit_device_monitor() {
+void pinit_device_monitor() {
 	HWND hWnd = NULL;
 	WNDCLASSEXA wx;
 #ifdef P_DEVICE_VERBOSE
@@ -384,5 +385,6 @@ int pinit_device_monitor() {
 #else
 void padd_monitor_callback(device_event_callback callback) {}
 
-int pinit_device_monitor() {}
+void pinit_device_monitor() {return;}
+
 #endif //P_OS_WINDOWS
