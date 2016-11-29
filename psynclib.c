@@ -61,6 +61,7 @@
 #include "poverlay.h"
 #include "pasyncnet.h"
 #include "ppathstatus.h"
+#include "pdevice_monitor.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -217,6 +218,7 @@ int psync_init(){
 
   psync_run_thread("Overlay main thread", overlay_main_loop);
   init_overlay_callbacks();
+  psync_run_thread("Device monitor main thread", pinit_device_monitor);
 
   return 0;
 }
