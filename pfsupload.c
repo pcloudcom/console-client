@@ -43,6 +43,7 @@
 #include "ppathstatus.h"
 #include "pdiff.h"
 #include <string.h>
+#include <ctype.h>
 
 typedef struct {
   psync_list list;
@@ -1306,6 +1307,34 @@ static int psync_process_task_rename_file(fsupload_task_t *task){
   return 0;
 }
 
+static void change_folder_name(fsupload_task_t *task) {
+  psync_sql_res *res;
+  const char *et;
+  char *nn;
+  et=task->text1;
+  et+=strlen(et);
+  nn=NULL;
+  if (et>task->text1+2 && et[-1]==')' && isdigit(et[-2])) {
+    et-=3;
+    while (et>task->text1+2 && isdigit(et[0]))
+      et--;
+    if (et>task->text1 && et[0]=='(' && atol(et+1)<20) {
+      nn=psync_new_cnt(char, et-task->text1+7);
+      memcpy(nn, task->text1, et-task->text1);
+      psync_slprintf(nn+(et-task->text1), 7, " (%d)", atoi(et+1)+1);
+    }
+  }
+  if (!nn) {
+    nn=psync_strcat(task->text1, "(1)", NULL);
+  }
+  res=psync_sql_prep_statement("UPDATE fstask SET text1=? WHERE id=?");
+  psync_sql_bind_string(res, 1, nn);
+  psync_sql_bind_uint(res, 2, task->id);
+  psync_sql_run_free(res);
+  debug(D_NOTICE, "changed target name of task %lu from %s to %s", (unsigned long)task->id, task->text1, nn);
+  psync_free(nn);
+}
+
 static int handle_rename_folder_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "renamefolder returned error %u parentfolderid=%lu name=%s", (unsigned)result, (unsigned long)task->folderid, task->text1);
   psync_process_api_error(result);
@@ -1319,6 +1348,10 @@ static int handle_rename_folder_api_error(uint64_t result, fsupload_task_t *task
     case 2043: /* into itself or child  */
       psync_fstask_folder_renamed(task->folderid, task->id, task->text1, task->int1);
       return 0;
+    case 2004: /* destination folder already exists */
+      change_folder_name(task);
+      upload_wakes++;
+      return -1;
   }
   return -1;
 }
