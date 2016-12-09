@@ -46,6 +46,8 @@
 #define PSYNC_FS_TASK_RENFOLDER_TO   8
 #define PSYNC_FS_TASK_MODIFY         9
 #define PSYNC_FS_TASK_UN_SET_REV    10
+#define PSYNC_FS_TASK_SET_FILE_MOD  11
+#define PSYNC_FS_TASK_SET_FILE_CR   12
 
 typedef struct {
   psync_tree tree;
@@ -146,6 +148,7 @@ void psync_fstask_inject_creat(psync_fstask_folder_t *folder, psync_fstask_creat
 void psync_fstask_inject_unlink(psync_fstask_folder_t *folder, psync_fstask_unlink_t *un);
 psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *folder, const char *name, psync_fsfileid_t fileid,
                                                      uint64_t hash, const char *encsymkey, size_t encsymkeylen);
+int psync_fstask_set_mtime(psync_fileid_t fileid, uint64_t oldtm, uint64_t newtm, int is_ctime);
 
 int psync_fstask_add_local_creat_static(psync_fsfolderid_t folderid, const char *name, const void *data, size_t datalen);
 

@@ -43,6 +43,7 @@
 
 #if defined(P_OS_MACOSX)
 #include <sys/sysctl.h>
+#include <sys/attr.h>
 #endif
 
 #if defined(P_OS_POSIX)
@@ -57,6 +58,7 @@
 #include <sys/mman.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
+#include <utime.h>
 #include <limits.h>
 #include <unistd.h>
 #include <ifaddrs.h>
@@ -2735,6 +2737,91 @@ int psync_file_set_creation(psync_file_t fd, time_t ctime){
   fctime.dwLowDateTime=(DWORD)lctime;
   fctime.dwHighDateTime=lctime>>32;
   return psync_bool_to_zero(SetFileTime(fd, &fctime, NULL, NULL));
+#elseif defined(P_OS_MACOSX)
+  struct attrlist attr;
+  struct timespec crtime;
+  memset(&attr, 0, sizeof(attr));
+  attr.bitmapcount=ATTR_BIT_MAP_COUNT;
+  attr.commonattr=ATTR_CMN_CRTIME;
+  crtime.tv_sec=ctime;
+  crtime.tv_nsec=0;
+  return fsetattrlist(fd, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW);
+#else
+  return -1;
+#endif
+}
+
+int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime){
+#if defined(P_OS_WINDOWS)
+  wchar_t *wpath;
+  FILETIME fctime, fmtime, *pfctime, *pfmtime;
+  uint64_t tm64;
+  HANDLE fd;
+  int ret;
+  wpath=utf8_to_wchar_path(path);
+  fd=CreateFileW(wpath, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                 FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_POSIX_SEMANTICS, NULL);
+  psync_free(wpath);
+  if (fd==INVALID_HANDLE_VALUE){
+    debug(D_NOTICE, "could not open file/folder %s", path);
+    return -1;
+  }
+  if (crtime){
+    tm64=Int32x32To64(crtime, 10000000)+116444736000000000;
+    fctime.dwLowDateTime=(DWORD)tm64;
+    fctime.dwHighDateTime=tm64>>32;
+    pfctime=&fctime;
+  }
+  else
+    pfctime=NULL;
+  if (mtime){
+    tm64=Int32x32To64(mtime, 10000000)+116444736000000000;
+    fmtime.dwLowDateTime=(DWORD)tm64;
+    fmtime.dwHighDateTime=tm64>>32;
+    pfmtime=&fmtime;
+  }
+  else
+    pfmtime=NULL;
+  ret=psync_bool_to_zero(SetFileTime(fd, pfctime, NULL, pfmtime));
+  CloseHandle(fd);
+  return ret;
+#elif defined(P_OS_MACOSX)
+  if (crtime){
+    struct attrlist attr;
+    struct timespec crtime;
+    memset(&attr, 0, sizeof(attr));
+    attr.bitmapcount=ATTR_BIT_MAP_COUNT;
+    attr.commonattr=ATTR_CMN_CRTIME;
+    crtime.tv_sec=ctime;
+    crtime.tv_nsec=0;
+    if (setattrlist(path, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW))
+      return -1;
+  }
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    return utimes(path, tm);
+  }
+  return 0;
+#elif defined(P_OS_POSIX)
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    if (unlikely(utimes(path, tm))){
+      debug(D_NOTICE, "got errno %d while setting modification time of %s to %lu: %s", errno, path, (unsigned long)mtime, strerror(errno));
+      return -1;
+    }
+    else
+      return 0;
+  }
+  else
+    return 0;
 #else
   return -1;
 #endif

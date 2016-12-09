@@ -146,6 +146,7 @@ typedef unsigned long psync_uint_t;
 #define psync_stat_size(s) ((s)->st_size)
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
 #define psync_stat_birthtime(s) ((s)->st_birthtime)
+#define PSYNC_HAS_BIRTHTIME
 #else
 #define psync_stat_birthtime(s) ((s)->st_mtime)
 #endif
@@ -271,6 +272,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_stat_ctime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
 #define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
 #define psync_stat_birthtime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
+#define PSYNC_HAS_BIRTHTIME
 #define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
 #define psync_mtime_native_to_mtime(n) psync_filetime64_to_timet(n)
 #define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)
@@ -489,6 +491,7 @@ int psync_file_schedulesync(psync_file_t fd);
 int psync_folder_sync(const char *path);
 psync_file_t psync_file_dup(psync_file_t fd);
 int psync_file_set_creation(psync_file_t fd, time_t ctime);
+int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime);
 int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count);
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);

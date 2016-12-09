@@ -1,5 +1,5 @@
-/* Copyright (c) 2013-2014 Anton Titov.
- * Copyright (c) 2013-2014 pCloud Ltd.
+/* Copyright (c) 2013-2016 Anton Titov.
+ * Copyright (c) 2013-2016 pCloud Ltd.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -2752,18 +2752,131 @@ int psync_fs_chown(const char *path, uid_t uid, gid_t gid){
   return 0;
 }
 
+static int psync_fs_set_filetime_locked(psync_fsfileid_t fileid, const struct timespec *tv, int crtime, uint64_t current){
+  if (fileid>0)
+    return psync_fstask_set_mtime(fileid, current, tv->tv_sec, crtime);
+  else{
+    char fileidhex[sizeof(psync_fsfileid_t)*2+2], *filename;
+    const char *cachepath;
+    int ret;
+    fileid=-fileid;
+    psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    cachepath=psync_setting_get_string(_PS(fscachepath));
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    if (crtime)
+      ret=psync_set_crtime_mtime(filename, tv->tv_sec, 0);
+    else
+      ret=psync_set_crtime_mtime(filename, 0, tv->tv_sec);
+    debug(D_NOTICE, "setting %s time of %s to %lu=%d", crtime?"creation":"modification", filename, (unsigned long)tv->tv_sec, ret);
+    psync_free(filename);
+    return ret?-EACCES:0;
+  }
+}
+
+static int psync_fs_set_foldertime_locked(psync_fsfolderid_t folderid, const struct timespec *tv, int crtime, uint64_t current){
+  debug(D_NOTICE, "request to set time of folderid %ld ignored", (long)folderid);
+  return 0;
+}
+
+static int psync_fs_set_time_locked(psync_fsfolderid_t folderid, const char *name, const struct timespec *tv, int crtime){
+  psync_fstask_folder_t *folder;
+  psync_fstask_creat_t *creat;
+  psync_fstask_mkdir_t *mkdir;
+  psync_fstask_unlink_t *un;
+  psync_fstask_rmdir_t *rm;
+  psync_sql_res *res;
+  psync_uint_row row;
+  folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
+  if (folder){
+    if ((creat=psync_fstask_find_creat(folder, name, 0))){
+      if (creat->fileid>0){
+        res=psync_sql_query_nolock("SELECT mtime, ctime FROM file WHERE id=?");
+        psync_sql_bind_uint(res, 1, creat->fileid);
+        if ((row=psync_sql_fetch_rowint(res))){
+          uint64_t ctm=row[crtime];
+          psync_sql_free_result(res);
+          return psync_fs_set_filetime_locked(creat->fileid, tv, crtime, ctm);
+        }
+        else{
+          psync_sql_free_result(res);
+          debug(D_WARNING, "found creat in folderid %lu for %s with fileid %lu not present in the database",
+                (unsigned long)folderid, name, (unsigned long)creat->fileid);
+          return -ENOENT;
+        }
+      }
+      else
+        return psync_fs_set_filetime_locked(creat->fileid, tv, crtime, 0);
+    }
+    if ((mkdir=psync_fstask_find_mkdir(folder, name, 0)))
+      return psync_fs_set_foldertime_locked(mkdir->folderid, tv, crtime, 0);
+    un=psync_fstask_find_unlink(folder, name, 0);
+    rm=psync_fstask_find_rmdir(folder, name, 0);
+  }
+  else{
+    un=NULL;
+    rm=NULL;
+  }
+  if (!un && folderid>=0){
+    res=psync_sql_query_nolock("SELECT id, mtime, ctime FROM file WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_string(res, 2, name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      uint64_t fileid=row[0];
+      uint64_t ctm=row[1+crtime];
+      psync_sql_free_result(res);
+      return psync_fs_set_filetime_locked(fileid, tv, crtime, ctm);
+    }
+    psync_sql_free_result(res);
+  }
+  if (!rm && folderid>=0){
+    res=psync_sql_query_nolock("SELECT id, permissions, mtime, ctime FROM folder WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_string(res, 2, name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      uint64_t folderid=row[0];
+      uint64_t permissions=row[1];
+      uint64_t ctm=row[2+crtime];
+      psync_sql_free_result(res);
+      if (!(permissions&PSYNC_PERM_MODIFY))
+        return -EACCES;
+      return psync_fs_set_foldertime_locked(folderid, tv, crtime, ctm);
+    }
+    psync_sql_free_result(res);
+  }
+  return -ENOENT;
+}
+
+static int psync_fs_set_time(const char *path, const struct timespec *tv, int crtime){
+  psync_fspath_t *fpath;
+  int ret;
+  psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
+  fpath=psync_fsfolder_resolve_path(path);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_MODIFY))
+    ret=-EACCES;
+  else
+    ret=psync_fs_set_time_locked(fpath->folderid, fpath->name, tv, crtime);
+  psync_sql_unlock();
+  psync_free(fpath);
+  return ret;
+}
+
 #if defined(FUSE_HAS_SETCRTIME)
 static int psync_fs_setcrtime(const char *path, const struct timespec *tv){
   psync_fs_set_thread_name();
   debug(D_NOTICE, "setcrtime %s %lu", path, tv->tv_sec);
-  return 0;
+  return psync_fs_set_time(path, tv, 1);
 }
 #endif
 
 static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
   psync_fs_set_thread_name();
   debug(D_NOTICE, "utimens %s %lu", path, tv[1].tv_sec);
-  return 0;
+  return psync_fs_set_time(path, &tv[1], 0);
 }
 
 static int psync_fs_ftruncate_of_locked(psync_openfile_t *of, fuse_off_t size){

@@ -679,6 +679,29 @@ psync_fstask_creat_t *psync_fstask_add_modified_file(psync_fstask_folder_t *fold
   return task;
 }
 
+int psync_fstask_set_mtime(psync_fileid_t fileid, uint64_t oldtm, uint64_t newtm, int is_ctime){
+  psync_sql_res *res;
+  psync_sql_start_transaction();
+  if (is_ctime)
+    res=psync_sql_prep_statement("UPDATE file SET ctime=? WHERE id=?");
+  else
+    res=psync_sql_prep_statement("UPDATE file SET mtime=? WHERE id=?");
+  psync_sql_bind_uint(res, 1, newtm);
+  psync_sql_bind_uint(res, 2, fileid);
+  psync_sql_run_free(res);
+  // folderid is ignored for these tasks
+  res=psync_sql_prep_statement("INSERT INTO fstask (type, status, folderid, fileid, int1, int2) VALUES (?, 0, 0, ?, ?, ?)");
+  psync_sql_bind_int(res, 1, is_ctime?PSYNC_FS_TASK_SET_FILE_CR:PSYNC_FS_TASK_SET_FILE_MOD);
+  psync_sql_bind_int(res, 2, fileid);
+  psync_sql_bind_int(res, 3, oldtm);
+  psync_sql_bind_int(res, 4, newtm);
+  psync_sql_run_free(res);
+  if (unlikely_log(psync_sql_commit_transaction()))
+    return -EIO;
+  psync_fsupload_wake();
+  return 0;
+}
+
 int psync_fstask_add_local_creat_static(psync_fsfolderid_t folderid, const char *name, const void *data, size_t datalen){
   psync_fstask_folder_t *folder;
   psync_fstask_creat_t *cr;

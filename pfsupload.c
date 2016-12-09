@@ -198,14 +198,25 @@ static int psync_send_task_creat_upload_small(psync_socket *api, fsupload_task_t
   size_t len;
   size=psync_stat_size(st);
   if (task->text2){
+#if defined(PSYNC_HAS_BIRTHTIME)
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("filename", task->text1),
-                       P_BOOL("nopartial", 1), /*P_STR("ifhash", "new"), */P_STR("timeformat", "timestamp"),
+                       P_BOOL("nopartial", 1), P_STR("timeformat", "timestamp"), P_NUM("ctime", psync_stat_birthtime(st)),
                        P_NUM("mtime", psync_stat_mtime(st)), P_BOOL("encrypted", 1), P_STR("key", task->text2)};
+#else
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("filename", task->text1),
+                       P_BOOL("nopartial", 1), P_STR("timeformat", "timestamp"),
+                       P_NUM("mtime", psync_stat_mtime(st)), P_BOOL("encrypted", 1), P_STR("key", task->text2)};
+#endif
     data=prepare_command_data_alloc("uploadfile", params, size, size, &len);
   }
   else{
+#if defined(PSYNC_HAS_BIRTHTIME)
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("filename", task->text1),
-                       P_BOOL("nopartial", 1), /*P_STR("ifhash", "new"), */P_STR("timeformat", "timestamp"), P_NUM("mtime", psync_stat_mtime(st))};
+                       P_BOOL("nopartial", 1), P_STR("timeformat", "timestamp"), P_NUM("ctime", psync_stat_birthtime(st)), P_NUM("mtime", psync_stat_mtime(st))};
+#else
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", task->folderid), P_STR("filename", task->text1),
+                       P_BOOL("nopartial", 1), P_STR("timeformat", "timestamp"), P_NUM("mtime", psync_stat_mtime(st))};
+#endif
     data=prepare_command_data_alloc("uploadfile", params, size, size, &len);
   }
   if (unlikely_log(psync_file_read(fd, data+len, size)!=size) || unlikely_log(psync_fs_get_file_writeid(task->id)!=task->int1)){
@@ -437,13 +448,24 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
     return -1;
   }
   if (key){
+#if defined(PSYNC_HAS_BIRTHTIME)
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
-                      P_STR("timeformat", "timestamp"), P_NUM("mtime", psync_stat_mtime(&st)), P_BOOL("encrypted", 1), P_STR("key", key)};
+                       P_STR("timeformat", "timestamp"), P_NUM("ctime", psync_stat_birthtime(&st), P_NUM("mtime", psync_stat_mtime(&st)),
+                       P_BOOL("encrypted", 1), P_STR("key", key)};
+#else
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
+                       P_STR("timeformat", "timestamp"), P_NUM("mtime", psync_stat_mtime(&st)), P_BOOL("encrypted", 1), P_STR("key", key)};
+#endif
     res=send_command(api, "upload_save", params);
   }
   else{
+#if defined(PSYNC_HAS_BIRTHTIME)
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
-                      /*P_STR("ifhash", "new"), */P_STR("timeformat", "timestamp"),  P_NUM("mtime", psync_stat_mtime(&st))};
+                       P_STR("timeformat", "timestamp"),  P_NUM("ctime", psync_stat_birthtime(&st),  P_NUM("mtime", psync_stat_mtime(&st))};
+#else
+    binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
+                       P_STR("timeformat", "timestamp"),  P_NUM("mtime", psync_stat_mtime(&st))};
+#endif
     res=send_command(api, "upload_save", params);
   }
   if (unlikely_log(!res)){
@@ -1190,6 +1212,32 @@ static int psync_send_task_unlink_set_rev(psync_socket *api, fsupload_task_t *ta
     return -1;
 }
 
+static int psync_send_task_set_fl_mod(psync_socket *api, fsupload_task_t *task){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->fileid), P_STR("timeformat", "timestamp"),
+                     P_NUM("oldtm", task->int1), P_NUM("newtm", task->int2), P_BOOL("isctime", 0)};
+  if (!api){
+    debug(D_NOTICE, "cancelling task %lu", (unsigned long)task->id);
+    return 0;
+  }
+  if (likely_log(send_command_no_res(api, "setfilemtime", params)==PTR_OK))
+    return 0;
+  else
+    return -1;
+}
+
+static int psync_send_task_set_fl_cr(psync_socket *api, fsupload_task_t *task){
+  binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", task->fileid), P_STR("timeformat", "timestamp"),
+                     P_NUM("oldtm", task->int1), P_NUM("newtm", task->int2), P_BOOL("isctime", 1)};
+  if (!api){
+    debug(D_NOTICE, "cancelling task %lu", (unsigned long)task->id);
+    return 0;
+  }
+  if (likely_log(send_command_no_res(api, "setfilemtime", params)==PTR_OK))
+    return 0;
+  else
+    return -1;
+}
+
 static int handle_unlink_api_error(uint64_t result, fsupload_task_t *task){
   debug(D_ERROR, "deletefile returned error %u for fileid %lu", (unsigned)result, (unsigned long)task->fileid);
   psync_process_api_error(result);
@@ -1214,6 +1262,22 @@ static int psync_process_task_unlink(fsupload_task_t *task){
   psync_ops_delete_file_from_db(psync_find_result(task->res, "metadata", PARAM_HASH));
   psync_fstask_file_deleted(task->folderid, task->id, task->text1);
   debug(D_NOTICE, "file %lu/%s deleted", (unsigned long)task->folderid, task->text1);
+  return 0;
+}
+
+static int psync_process_task_set_fl_mod(fsupload_task_t *task){
+  const binresult *meta;
+  psync_sql_res *res;
+  uint64_t result;
+  result=psync_find_result(task->res, "result", PARAM_NUM)->num;
+  if (result)
+    return 0;
+  meta=psync_find_result(task->res, "metadata", PARAM_HASH);
+  res=psync_sql_prep_statement("UPDATE file SET ctime=?, mtime=? WHERE id=?");
+  psync_sql_bind_uint(res, 1, psync_find_result(meta, "created", PARAM_NUM)->num);
+  psync_sql_bind_uint(res, 2, psync_find_result(meta, "modified", PARAM_NUM)->num);
+  psync_sql_bind_uint(res, 3, task->fileid);
+  psync_sql_run_free(res);
   return 0;
 }
 
@@ -1480,7 +1544,9 @@ static psync_send_task_ptr psync_send_task_func[]={
   NULL,
   psync_send_task_rename_folder,
   psync_send_task_modify,
-  psync_send_task_unlink_set_rev
+  psync_send_task_unlink_set_rev,
+  psync_send_task_set_fl_mod,
+  psync_send_task_set_fl_cr
 };
 
 static psync_process_task_ptr psync_process_task_func[]={
@@ -1494,7 +1560,9 @@ static psync_process_task_ptr psync_process_task_func[]={
   NULL,
   psync_process_task_rename_folder,
   NULL,
-  psync_process_task_unlink
+  psync_process_task_unlink,
+  psync_process_task_set_fl_mod,
+  psync_process_task_set_fl_mod
 };
 
 static psync_cancel_task_ptr psync_cancel_task_func[]={
@@ -1508,7 +1576,9 @@ static psync_cancel_task_ptr psync_cancel_task_func[]={
   NULL,
   NULL,
   psync_cancel_task_modify,
-  psync_cancel_task_unlink_set_rev
+  psync_cancel_task_unlink_set_rev,
+  NULL,
+  NULL
 };
 
 static void pr_del_dep(uint64_t taskid){
