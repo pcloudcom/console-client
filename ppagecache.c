@@ -3046,8 +3046,8 @@ static void psync_pagecache_modify_to_cache(uint64_t taskid, uint64_t hash, uint
       // we covered full new page and full old page cases, so this interval either ends or starts inside current page
       assert((interval->to>off && interval->to<=off+PSYNC_FS_PAGE_SIZE) || (interval->from>=off && interval->from<off+PSYNC_FS_PAGE_SIZE));
       page=psync_pagecache_get_free_page(1);
-//      pdb=check_page_in_memory_by_hash(oldhash, pageid, page->page, PSYNC_FS_PAGE_SIZE, 0);
-//      if (pdb==-1)
+      pdb=check_page_in_memory_by_hash(oldhash, pageid, page->page, PSYNC_FS_PAGE_SIZE, 0);
+      if (pdb==-1)
         pdb=check_page_in_database_by_hash(oldhash, pageid, page->page, PSYNC_FS_PAGE_SIZE, 0);
       if (pdb==-1){
         psync_pagecache_return_free_page(page);
