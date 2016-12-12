@@ -2737,7 +2737,7 @@ int psync_file_set_creation(psync_file_t fd, time_t ctime){
   fctime.dwLowDateTime=(DWORD)lctime;
   fctime.dwHighDateTime=lctime>>32;
   return psync_bool_to_zero(SetFileTime(fd, &fctime, NULL, NULL));
-#elseif defined(P_OS_MACOSX)
+#elif defined(P_OS_MACOSX)
   struct attrlist attr;
   struct timespec crtime;
   memset(&attr, 0, sizeof(attr));
