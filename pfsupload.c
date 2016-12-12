@@ -450,7 +450,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   if (key){
 #if defined(PSYNC_HAS_BIRTHTIME)
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
-                       P_STR("timeformat", "timestamp"), P_NUM("ctime", psync_stat_birthtime(&st), P_NUM("mtime", psync_stat_mtime(&st)),
+                       P_STR("timeformat", "timestamp"), P_NUM("ctime", psync_stat_birthtime(&st)), P_NUM("mtime", psync_stat_mtime(&st)),
                        P_BOOL("encrypted", 1), P_STR("key", key)};
 #else
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
@@ -461,7 +461,7 @@ static int large_upload_save(psync_socket *api, uint64_t uploadid, psync_folderi
   else{
 #if defined(PSYNC_HAS_BIRTHTIME)
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
-                       P_STR("timeformat", "timestamp"),  P_NUM("ctime", psync_stat_birthtime(&st),  P_NUM("mtime", psync_stat_mtime(&st))};
+                       P_STR("timeformat", "timestamp"),  P_NUM("ctime", psync_stat_birthtime(&st)),  P_NUM("mtime", psync_stat_mtime(&st))};
 #else
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid),
                        P_STR("timeformat", "timestamp"),  P_NUM("mtime", psync_stat_mtime(&st))};
