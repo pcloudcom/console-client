@@ -65,6 +65,8 @@ typedef struct {
   uint64_t downloadedsize;
   uint64_t localsize;
   uint64_t hash;
+  time_t crtime;
+  time_t mtime;
   psync_folderid_t localfolderid;
   unsigned char checksum[PSYNC_HASH_DIGEST_HEXLEN];
   char indwllist;
@@ -481,17 +483,22 @@ static int stat_and_create_local(psync_syncid_t syncid, psync_fileid_t fileid, p
   return psync_sql_commit_transaction();
 }
 
-static int rename_and_create_local(const char *src, const char *dst, psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid,
-                                   const char *filename, unsigned char *checksum, uint64_t serversize, uint64_t hash){
+// rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, serverhashhex, serversize, hash))
+//static int rename_and_create_local(const char *src, const char *dst, psync_syncid_t syncid, psync_fileid_t fileid, psync_folderid_t localfolderid,
+//                                   const char *filename, unsigned char *checksum, uint64_t serversize, uint64_t hash){
+
+
+static int rename_and_create_local(download_task_t *dt, unsigned char *checksum, uint64_t serversize, uint64_t hash){
   psync_stop_localscan();
-  if (rename_if_notex(src, dst, fileid, localfolderid, syncid, filename)){
+  psync_set_crtime_mtime(dt->tmpname, dt->crtime, dt->mtime);
+  if (rename_if_notex(dt->tmpname, dt->localname, dt->dwllist.fileid, dt->localfolderid, dt->dwllist.syncid, dt->filename)){
     psync_resume_localscan();
-    debug(D_WARNING, "failed to rename %s to %s", src, dst);
+    debug(D_WARNING, "failed to rename %s to %s", dt->tmpname, dt->localname);
     psync_milisleep(1000);
     return -1;
   }
-  if (stat_and_create_local(syncid, fileid, localfolderid, filename, dst, checksum, serversize, hash)){
-    debug(D_WARNING, "stat_and_create_local failed for file %s", dst);
+  if (stat_and_create_local(dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, dt->localname, checksum, serversize, hash)){
+    debug(D_WARNING, "stat_and_create_local failed for file %s", dt->localname);
     psync_resume_localscan();
     return -1;
   }
@@ -587,7 +594,7 @@ static int task_download_file(download_task_t *dt){
     sql=NULL;
     rt=psync_copy_local_file_if_checksum_matches(tmpold, dt->tmpname, serverhashhex, serversize);
     if (likely(rt==PSYNC_NET_OK)){
-      if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, serverhashhex, serversize, hash))
+      if (rename_and_create_local(dt, serverhashhex, serversize, hash))
         rt=PSYNC_NET_TEMPFAIL;
       else
         debug(D_NOTICE, "file %s copied from %s", dt->localname, tmpold);
@@ -611,7 +618,7 @@ static int task_download_file(download_task_t *dt){
   if (serversize>=PSYNC_MIN_SIZE_FOR_P2P){
     rt=psync_p2p_check_download(dt->dwllist.fileid, serverhashhex, serversize, dt->tmpname);
     if (rt==PSYNC_NET_OK){
-      if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, serverhashhex, serversize, hash))
+      if (rename_and_create_local(dt, serverhashhex, serversize, hash))
         return -1;
       else
         return 0;
@@ -761,7 +768,7 @@ static int task_download_file(download_task_t *dt){
     psync_file_delete(dt->tmpname);
     goto err0;
   }
-  if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, serverhashhex, serversize, hash))
+  if (rename_and_create_local(dt, serverhashhex, serversize, hash))
     goto err0;
 //  psync_send_event_by_id(PEVENT_FILE_DOWNLOAD_FINISHED, syncid, name, fileid);
   debug(D_NOTICE, "file downloaded %s", dt->localname);
@@ -981,8 +988,7 @@ typedef struct {
 static void rename_create_thread(void *ptr){
   async_res_dt_t *ard;
   ard=(async_res_dt_t *)ptr;
-  if (rename_and_create_local(ard->dt->tmpname, ard->dt->localname, ard->dt->dwllist.syncid, ard->dt->dwllist.fileid, ard->dt->localfolderid, ard->dt->filename,
-                              ard->res.file.sha1hex, ard->res.file.size, ard->res.file.hash)){
+  if (rename_and_create_local(ard->dt, ard->res.file.sha1hex, ard->res.file.size, ard->res.file.hash)){
     set_task_inprogress(ard->dt->taskid, 0);
     free_download_task(ard->dt);
     psync_free(ard);
@@ -1022,8 +1028,7 @@ static void finish_async_download(void *ptr, psync_async_result_t *res){
     ard->dt=dt;
     psync_timer_register(rename_create_timer, 2, ard);
 #else
-    if (rename_and_create_local(dt->tmpname, dt->localname, dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename,
-                                res->file.sha1hex, res->file.size, res->file.hash))
+    if (rename_and_create_local(dt, res->file.sha1hex, res->file.size, res->file.hash))
       psync_timer_register(free_task_timer, 1, dt);
     else{
       delete_task(dt->taskid);
@@ -1081,21 +1086,26 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   char *localpath, *localname, *tmpname;
   psync_file_lock_t *lock;
   uint64_t size, minfree, hash, csize;
+  time_t crtime, mtime;
   int64_t freespace;
   size_t len;
   unsigned char targetchecksum[PSYNC_HASH_DIGEST_HEXLEN];
   int hastargetchecksum, ret;
-  res=psync_sql_query_rdlock("SELECT size, hash FROM file WHERE id=?");
+  res=psync_sql_query_rdlock("SELECT size, hash, ctime, mtime FROM file WHERE id=?");
   psync_sql_bind_uint(res, 1, fileid);
   row=psync_sql_fetch_rowint(res);
   if (row){
     size=row[0];
     hash=row[1];
+    crtime=row[2];
+    mtime=row[3];
   }
   else{
     // make compiler happy :)
     size=0;
     hash=0;
+    crtime=0;
+    mtime=0;
   }
   psync_sql_free_result(res);
   if (!row){
@@ -1129,6 +1139,8 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   dt->tmpname=tmpname;
   dt->size=size;
   dt->hash=hash;
+  dt->crtime=crtime;
+  dt->mtime=mtime;
   dt->localfolderid=localfolderid;
   memcpy(dt->filename, filename, len+1);
   pthread_mutex_lock(&current_downloads_mutex);
@@ -1158,7 +1170,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   if (hastargetchecksum && psync_get_local_file_checksum(tmpname, dt->checksum, &csize)==PSYNC_NET_OK && csize==size &&
       !memcmp(dt->checksum, targetchecksum, PSYNC_HASH_DIGEST_HEXLEN)){
     debug(D_NOTICE, "found file %s, candidate for %s with the right size and checksum", tmpname, localname);
-    ret=rename_and_create_local(tmpname, localname, syncid, fileid, localfolderid, filename, targetchecksum, size, hash);
+    ret=rename_and_create_local(dt, targetchecksum, size, hash);
     free_download_task(dt);
     return ret;
   }
