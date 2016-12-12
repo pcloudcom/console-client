@@ -360,9 +360,12 @@ static void set_local_file_conflicted(psync_fileid_t localfileid, psync_fileid_t
   psync_free(newpath);
 }
 
-static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
+static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid, psync_stat_t *st){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("fileid", fileid), P_NUM("hash", hash), P_NUM("tofolderid", folderid), P_STR("toname", name),
-                     P_STR("timeformat", "timestamp")};
+#if defined(PSYNC_HAS_BIRTHTIME)
+                     P_NUM("ctime", psync_stat_birthtime(st)),
+#endif
+                     P_NUM("mtime", psync_stat_mtime(st)), P_STR("timeformat", "timestamp")};
   binresult *res;
   const binresult *meta;
   uint64_t result;
@@ -421,7 +424,8 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
   return 0;
 }
 
-static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
+static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid,
+                               psync_stat_t *st){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("size", fsize), P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN), P_STR("timeformat", "timestamp")};
   binresult *res;
   const binresult *metas, *meta;
@@ -443,7 +447,7 @@ static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psy
     return 0;
   }
   meta=metas->array[0];
-  ret=copy_file(psync_find_result(meta, "fileid", PARAM_NUM)->num, psync_find_result(meta, "hash", PARAM_NUM)->num, folderid, name, localfileid);
+  ret=copy_file(psync_find_result(meta, "fileid", PARAM_NUM)->num, psync_find_result(meta, "hash", PARAM_NUM)->num, folderid, name, localfileid, st);
   if (ret==1)
     debug(D_NOTICE, "file %lu/%s copied to %lu/%s instead of uploading due to matching checksum",
           (long unsigned)psync_find_result(meta, "parentfolderid", PARAM_NUM)->num, psync_find_result(meta, "name", PARAM_STR)->str,
@@ -467,9 +471,12 @@ static void add_bytes_uploaded(uint64_t bytes){
 }
 
 static int upload_file(const char *localpath, const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name,
-                       psync_fileid_t localfileid, psync_syncid_t syncid, upload_list_t *upload, binparam pr){
+                       psync_fileid_t localfileid, psync_syncid_t syncid, upload_list_t *upload, psync_stat_t *st, binparam pr){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("filename", name), P_BOOL("nopartial", 1), P_STR("timeformat", "timestamp"),
-                     {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
+#if defined(PSYNC_HAS_BIRTHTIME)
+                     P_NUM("ctime", psync_stat_birthtime(st)),
+#endif
+                     P_NUM("mtime", psync_stat_mtime(st)), {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   psync_socket *api;
   void *buff;
   binresult *res;
@@ -651,9 +658,12 @@ static int upload_get_checksum(psync_socket *api, psync_uploadid_t uploadid, uin
 }
 
 static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char *localpath, const unsigned char *hashhex, uint64_t size,
-                       psync_uploadid_t uploadid, psync_folderid_t folderid, const char *name, uint64_t taskid, binparam pr){
+                       psync_uploadid_t uploadid, psync_folderid_t folderid, const char *name, uint64_t taskid, psync_stat_t *st, binparam pr){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("uploadid", uploadid), P_STR("timeformat", "timestamp"),
-                     {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
+#if defined(PSYNC_HAS_BIRTHTIME)
+                     P_NUM("ctime", psync_stat_birthtime(st)),
+#endif
+                     P_NUM("mtime", psync_stat_mtime(st)), {pr.paramtype, pr.paramnamelen, pr.opts, pr.paramname, {pr.num}} /* specially for Visual Studio compiler */};
   psync_sql_res *sres;
   binresult *res;
   const binresult *meta;
@@ -699,7 +709,8 @@ static int upload_save(psync_socket *api, psync_fileid_t localfileid, const char
 }
 
 static int upload_big_file(const char *localpath, const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name,
-                       psync_fileid_t localfileid, psync_syncid_t syncid, upload_list_t *upload, psync_uploadid_t uploadid, uint64_t uploadoffset, binparam pr){
+                           psync_fileid_t localfileid, psync_syncid_t syncid, upload_list_t *upload, psync_uploadid_t uploadid, uint64_t uploadoffset,
+                           psync_stat_t *st, binparam pr){
   psync_socket *api;
   binresult *res;
   psync_sql_res *sql;
@@ -905,7 +916,7 @@ restart:
     ret=PSYNC_NET_OK;
   psync_file_close(fd);
   if (ret==PSYNC_NET_OK)
-    ret=upload_save(api, localfileid, localpath, hashhex, fsize, uploadid, folderid, name, upload->taskid, pr);
+    ret=upload_save(api, localfileid, localpath, hashhex, fsize, uploadid, folderid, name, upload->taskid, st, pr);
   if (ret==PSYNC_NET_TEMPFAIL){
     psync_apipool_release_bad(api);
     return -1;
@@ -1106,7 +1117,7 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
    * not to waste a roundtrip to the server. Few kilos should be fine
    */
   if (ret==0 && fsize>=PSYNC_MIN_SIZE_FOR_EXISTS_CHECK)
-    ret=copy_file_if_exists(hashhex, fsize, folderid, name, localfileid);
+    ret=copy_file_if_exists(hashhex, fsize, folderid, name, localfileid, &st);
   if (ret==1 || ret==-1){
     psync_unlock_file(lock);
     psync_free(nname);
@@ -1132,15 +1143,15 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
   psync_sql_free_result(res);
   debug(D_NOTICE, "uploading file %s", localpath);
   if (fsize<=PSYNC_MIN_SIZE_FOR_CHECKSUMS)
-    ret=upload_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid, upload, pr);
+    ret=upload_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid, upload, &st, pr);
   else{
     if (uploadid && !memcmp(phashhex, uhashhex, PSYNC_HASH_DIGEST_HEXLEN))
-      ret=upload_big_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid, upload, uploadid, ufsize, pr);
+      ret=upload_big_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid, upload, uploadid, ufsize, &st, pr);
     else{
       if (uploadid && memcmp(phashhex, uhashhex, PSYNC_HASH_DIGEST_HEXLEN))
         debug(D_WARNING, "restarting upload due to checksum mismatch up to offset %lu, expected: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)
                           "s, got: %."NTO_STR(PSYNC_HASH_DIGEST_HEXLEN)"s", (unsigned long)ufsize, phashhex, uhashhex);
-      ret=upload_big_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid, upload, 0, 0, pr);
+      ret=upload_big_file(localpath, hashhex, fsize, folderid, name, localfileid, syncid, upload, 0, 0, &st, pr);
     }
   }
   psync_unlock_file(lock);
