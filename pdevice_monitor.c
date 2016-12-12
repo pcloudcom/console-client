@@ -27,23 +27,27 @@
 
 
 #define MAX_LOADSTRING 100
-device_event_callback *callbacks;
+static device_event_callback *callbacks;
 static int clbsize = 10;
 static int clbnum = 0;
 
 
 void padd_monitor_callback(device_event_callback callback) {
-  if (clbnum == 0)
-    callbacks = (device_event_callback *)psync_malloc(sizeof(callbacks)*clbsize);
-  else {
-    while (clbnum > clbsize) {
-      device_event_callback *callbacks_old = callbacks;
-      clbsize = clbsize * 2;
-      callbacks = (device_event_callback *)psync_malloc(sizeof(callbacks)*clbsize);
-      psync_free(callbacks_old);
-    }
-  }
-  callbacks[clbnum++] = callback;
+	if (callback) {
+		if (clbnum == 0)
+			callbacks = (device_event_callback *)psync_malloc(sizeof(device_event_callback)*clbsize);
+		else {
+			while (clbnum > clbsize) {
+				device_event_callback *callbacks_old = callbacks;
+				callbacks = (device_event_callback *)psync_malloc(sizeof(device_event_callback)*clbsize*2);
+				memccpy(callbacks, callbacks_old, 0,sizeof(device_event_callback)*clbsize);
+				clbsize = clbsize * 2;
+				psync_free(callbacks_old);
+			}
+		}
+		callbacks[clbnum] = callback;
+		clbnum++;
+	}
 }
 
 static pdevice_info * new_dev_info( char *szPath, pdevice_types type, device_event evt) {
