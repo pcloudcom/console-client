@@ -2758,17 +2758,42 @@ static int psync_fs_set_filetime_locked(psync_fsfileid_t fileid, const struct ti
   else{
     char fileidhex[sizeof(psync_fsfileid_t)*2+2], *filename;
     const char *cachepath;
+    psync_tree *tr;
+    psync_openfile_t *fl;
+    int64_t d;
     int ret;
+    tr=openfiles;
+    fl=NULL;
+    while (tr){
+      d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+      if (d<0)
+        tr=tr->left;
+      else if (d>0)
+        tr=tr->right;
+      else{
+        fl=psync_tree_element(tr, psync_openfile_t, tree);
+        break;
+      }
+    }
     fileid=-fileid;
     psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
     fileidhex[sizeof(psync_fsfileid_t)]='d';
     fileidhex[sizeof(psync_fsfileid_t)+1]=0;
     cachepath=psync_setting_get_string(_PS(fscachepath));
     filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-    if (crtime)
-      ret=psync_set_crtime_mtime(filename, tv->tv_sec, 0);
-    else
-      ret=psync_set_crtime_mtime(filename, 0, tv->tv_sec);
+    if (fl && fl->datafile!=INVALID_HANDLE_VALUE){
+      debug(D_NOTICE, "found open file for file id %ld", (long)fl->fileid);
+      if (crtime)
+        ret=psync_set_crtime_mtime_by_fd(fl->datafile, filename, tv->tv_sec, 0);
+      else
+        ret=psync_set_crtime_mtime_by_fd(fl->datafile, filename, 0, tv->tv_sec);
+    }
+    else{
+      if (crtime)
+        ret=psync_set_crtime_mtime(filename, tv->tv_sec, 0);
+      else
+        ret=psync_set_crtime_mtime(filename, 0, tv->tv_sec);
+    }
     debug(D_NOTICE, "setting %s time of %s to %lu=%d", crtime?"creation":"modification", filename, (unsigned long)tv->tv_sec, ret);
     psync_free(filename);
     return ret?-EACCES:0;

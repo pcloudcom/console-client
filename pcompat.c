@@ -2827,6 +2827,71 @@ int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime){
 #endif
 }
 
+int psync_set_crtime_mtime_by_fd(psync_file_t fd, const char *path, time_t crtime, time_t mtime){
+#if defined(P_OS_WINDOWS)
+  FILETIME fctime, fmtime, *pfctime, *pfmtime;
+  uint64_t tm64;
+  int ret;
+  if (crtime){
+    tm64=Int32x32To64(crtime, 10000000)+116444736000000000;
+    fctime.dwLowDateTime=(DWORD)tm64;
+    fctime.dwHighDateTime=tm64>>32;
+    pfctime=&fctime;
+  }
+  else
+    pfctime=NULL;
+  if (mtime){
+    tm64=Int32x32To64(mtime, 10000000)+116444736000000000;
+    fmtime.dwLowDateTime=(DWORD)tm64;
+    fmtime.dwHighDateTime=tm64>>32;
+    pfmtime=&fmtime;
+  }
+  else
+    pfmtime=NULL;
+  ret=psync_bool_to_zero(SetFileTime(fd, pfctime, NULL, pfmtime));
+  return ret;
+#elif defined(P_OS_MACOSX)
+  if (crtime){
+    struct attrlist attr;
+    struct timespec crtime;
+    memset(&attr, 0, sizeof(attr));
+    attr.bitmapcount=ATTR_BIT_MAP_COUNT;
+    attr.commonattr=ATTR_CMN_CRTIME;
+    crtime.tv_sec=ctime;
+    crtime.tv_nsec=0;
+    if (fsetattrlist(fd, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW))
+      return -1;
+  }
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    return futimes(fd, tm);
+  }
+  return 0;
+#elif defined(_BSD_SOURCE) || defined(P_OS_BSD)
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    if (unlikely(futimes(fd, tm))){
+      debug(D_NOTICE, "got errno %d while setting modification time of %s to %lu: %s", errno, path, (unsigned long)mtime, strerror(errno));
+      return -1;
+    }
+    else
+      return 0;
+  }
+  else
+    return 0;
+#else
+  return psync_set_crtime_mtime(path, crtime, mtime);
+#endif
+}
+
 typedef struct {
   uint64_t offset;
   size_t count;

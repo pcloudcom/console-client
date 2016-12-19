@@ -225,8 +225,9 @@ static int task_createfolder(psync_syncid_t syncid, psync_folderid_t localfolder
     psync_sql_run_free(res);
     ret=psync_sql_commit_transaction();
     psync_diff_unlock();
+    if (psync_find_result(bres, "created", PARAM_BOOL)->num)
+      psync_diff_wake();
     psync_free(bres);
-    psync_diff_wake();
     return ret;
   }
 }

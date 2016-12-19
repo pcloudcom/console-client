@@ -492,6 +492,7 @@ int psync_folder_sync(const char *path);
 psync_file_t psync_file_dup(psync_file_t fd);
 int psync_file_set_creation(psync_file_t fd, time_t ctime);
 int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime);
+int psync_set_crtime_mtime_by_fd(psync_file_t fd, const char *path, time_t crtime, time_t mtime);
 int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count);
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);
