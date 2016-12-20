@@ -2101,6 +2101,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     }
     adapter=adapter->Next;
   }
+  psync_free(adapters);
   return ret;
   }
 #endif
