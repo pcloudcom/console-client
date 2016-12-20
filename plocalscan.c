@@ -156,6 +156,25 @@ static int scanner_local_folder_to_list(const char *localpath, psync_list *lst){
   return psync_list_dir(localpath, scanner_local_entry_to_list, lst);
 }
 
+static void delete_local_folder_rec(psync_folderid_t localfolderid);
+
+static void try_delete_localfolder(psync_folderid_t localfolderid){
+  if (psync_sql_tryupgradelock())
+    return;
+  psync_sql_start_transaction();
+  delete_local_folder_rec(localfolderid);
+  psync_sql_commit_transaction();
+}
+
+static void try_delete_localfile(psync_fileid_t localfileid){
+  psync_sql_res *res;
+  if (psync_sql_tryupgradelock())
+    return;
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
+  psync_sql_bind_uint(res, 1, localfileid);
+  psync_sql_run_free(res);
+}
+
 static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t localfolderid, psync_list *lst){
   psync_sql_res *res;
   psync_variant_row row;
@@ -168,6 +187,11 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
     name=psync_get_lstring(row[5], &namelen);
+    if (unlikely(psync_is_lname_to_ignore(name, namelen))){
+      debug(D_NOTICE, "found a name %s matching ignore pattern in localfolder, will try to delete", name);
+      try_delete_localfolder(psync_get_number(row[0]));
+      continue;
+    }
     namelen++;
     e=(sync_folderlist *)psync_malloc(offsetof(sync_folderlist, name)+namelen);
     e->localid=psync_get_number(row[0]);
@@ -186,6 +210,11 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
     name=psync_get_lstring(row[5], &namelen);
+    if (unlikely(psync_is_lname_to_ignore(name, namelen))){
+      debug(D_NOTICE, "found a name %s matching ignore pattern in localfile, will try to delete", name);
+      try_delete_localfile(psync_get_number(row[0]));
+      continue;
+    }
     namelen++;
     e=(sync_folderlist *)psync_malloc(offsetof(sync_folderlist, name)+namelen);
     e->localid=psync_get_number(row[0]);
