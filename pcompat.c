@@ -1209,7 +1209,6 @@ static void gfree_ptr(HGLOBAL ptr){
 static int try_set_proxy(LPWSTR pstr){
   char *str, *c;
   size_t hl, pl;
-  proxy_type=PROXY_NONE;
   if (!pstr)
     return 0;
   str=wchar_to_utf8(pstr);
@@ -1258,6 +1257,7 @@ static void detect_proxy(){
   HINTERNET hi;
   if (recent_detect())
     return;
+  proxy_type=PROXY_NONE;
   hi=NULL;
   pinfo.lpszProxy=NULL;
   pinfo.lpszProxyBypass=NULL;
