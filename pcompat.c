@@ -1209,6 +1209,7 @@ static void gfree_ptr(HGLOBAL ptr){
 static int try_set_proxy(LPWSTR pstr){
   char *str, *c;
   size_t hl, pl;
+  proxy_type=PROXY_NONE;
   if (!pstr)
     return 0;
   str=wchar_to_utf8(pstr);
