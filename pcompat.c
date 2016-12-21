@@ -1268,7 +1268,7 @@ static void detect_proxy(){
       debug(D_NOTICE, "WinHttpOpen failed");
       goto manual;
     }
-    memset(aopt, 0, sizeof(aopt));
+    memset(&aopt, 0, sizeof(aopt));
     aopt.dwFlags=WINHTTP_AUTOPROXY_AUTO_DETECT;
     aopt.dwAutoDetectFlags=WINHTTP_AUTO_DETECT_TYPE_DHCP|WINHTTP_AUTO_DETECT_TYPE_DNS_A;
     if (ieconf.lpszAutoConfigUrl){
