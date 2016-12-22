@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
       std::cout << "Username option is required!!!"  << "\n";
       return 1;
     }
-    console_client::clibrary::pclsync_lib::get_lib().username_ = username;
+    console_client::clibrary::pclsync_lib::get_lib().set_username(username);
     
     if (passwordsw) {
       console_client::clibrary::pclsync_lib::get_lib().get_pass_from_console();
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     if (crypto) {
       console_client::clibrary::pclsync_lib::get_lib().setup_crypto_ = true;
       if (vm.count("passascrypto"))
-        console_client::clibrary::pclsync_lib::get_lib().crypto_pass_ = password;
+        console_client::clibrary::pclsync_lib::get_lib().set_crypto_pass(password) ;
       else {
         std::cout << "Enter crypto password."  << "\n";
         console_client::clibrary::pclsync_lib::get_lib().get_cryptopass_from_console();
@@ -80,11 +80,11 @@ int main(int argc, char **argv) {
        console_client::clibrary::pclsync_lib::get_lib().setup_crypto_ = false;
     
     if (vm.count("mountpoint"))
-        console_client::clibrary::pclsync_lib::get_lib().mount_ = vm["mountpoint"].as<std::string>();
+        console_client::clibrary::pclsync_lib::get_lib().set_mount( vm["mountpoint"].as<std::string>());
     
     console_client::clibrary::pclsync_lib::get_lib().newuser_ = newuser;
-    console_client::clibrary::pclsync_lib::get_lib().save_pass_ = save_pass;
-    console_client::clibrary::pclsync_lib::get_lib().daemon_ = daemon;
+    console_client::clibrary::pclsync_lib::get_lib().set_savepass(save_pass);
+    console_client::clibrary::pclsync_lib::get_lib().set_daemon(daemon);
   }
   catch(std::exception& e) {
     std::cerr << "error: " << e.what() << "\n";
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     else {
       if (commands)
         std::cout << "Option commnads/o  ignored."  << "\n";
-      if (!console_client::clibrary::pclsync_lib::init())
+      if (!console_client::clibrary::pclsync_lib::get_lib().init())
         sleep(360000);
     }
   

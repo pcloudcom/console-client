@@ -1865,3 +1865,10 @@ int psync_setlanguage(const char *language, char **err){
   binparam params[]={P_STR("language", language)};
   return run_command("setlanguage", params, err);
 }
+
+char * psync_get_token()
+{
+  if (psync_my_auth[0])
+    return psync_strdup(psync_my_auth);
+  else return NULL;
+}

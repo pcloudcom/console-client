@@ -104,7 +104,7 @@ int daemonize(bool do_commands) {
   close(STDOUT_FILENO);
   close(STDERR_FILENO);
   
-  if (console_client::clibrary::pclsync_lib::init())
+  if (console_client::clibrary::pclsync_lib::get_lib().init())
      exit(EXIT_FAILURE);
   while (1) {
     sleep(10);

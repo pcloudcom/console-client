@@ -116,7 +116,7 @@ void instance_thread(void* lpvParam)
   request = (message *)chbuf;
   if (request) {
   get_answer_to_request(request, reply);
-    if (reply ) {
+    if (reply) {
       rc = write(*cl,reply,reply->length);
       if (rc != reply->length)
         debug(D_ERROR,"Unix socket reply not sent.");
@@ -126,6 +126,7 @@ void instance_thread(void* lpvParam)
   if (cl) {
     close(*cl);
   }
+  psync_free(reply);
   //debug(D_NOTICE, "InstanceThread exitting.\n");
   return;
 };

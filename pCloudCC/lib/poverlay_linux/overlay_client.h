@@ -27,7 +27,8 @@
 #ifndef OVERLAY_CLIENT_H
 #define OVERLAY_CLIENT_H
 
-#define P_OS_MACOS
+//#define P_OS_MACOS
+#define PCLOUD_TESTING
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,7 +43,7 @@ typedef enum _pCloud_FileState
 
 int QueryState(pCloud_FileState *state /*OUT*/, char* path /*IN*/);
 
-int SendCall(int id /*IN*/, const char* path /*IN*/, int* ret /*OUT*/, char** errm /*OUT*/);
+int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , void * out /*OUT*/ );
 #ifdef __cplusplus
 }
 #endif

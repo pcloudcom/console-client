@@ -43,7 +43,17 @@ uint64_t length;
 char value[];
 } message;
 
-
+static void read_x_bytes(int socket, unsigned int x, void * buffer){
+  int bytesRead = 0;
+  int result;
+  while (bytesRead < x) {
+    result = read(socket, buffer + bytesRead, x - bytesRead);
+    if (result < 1 ) {
+      return;
+    }
+    bytesRead += result;
+  }
+}
 
 #if defined(P_OS_MACOS)
 uint32_t clport = 8989 ;
@@ -71,7 +81,7 @@ int QueryState( pCloud_FileState *state, char * path) {
   free (errm);
 return 0 ;
 }
-int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , char ** errm /*OUT*/ ) {
+int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , void * out /*OUT*/ ) {
   #if defined(P_OS_MACOS)
   struct sockaddr_in addr;
   #else
@@ -83,7 +93,8 @@ int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , char
   int mess_size = sizeof ( message )+path_size + 1 ;
   int bytes_writen = 0 ;
   char *curbuf = NULL ;
-  char buf[ POVERLAY_BUFSIZE ];
+  char *buf = NULL;
+  uint32_t bufflen=0;
   char sendbuf[mess_size];
   int bytes_read = 0 ;
   message *rep = NULL ;
@@ -111,8 +122,8 @@ int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , char
   }
   #else
   if ( (fd = socket(AF_UNIX, SOCK_STREAM, 0 )) == - 1 ) {
-    if (errm)
-      *errm = strndup( "Unable to create UNIX socket" , 27 );
+    if (out)
+      out = (void *)strndup( "Unable to create UNIX socket" , 27 );
     *ret = - 3 ;
     return - 3 ;
    }
@@ -121,8 +132,8 @@ int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , char
   strncpy(addr.sun_path, clsoc, sizeof (addr.sun_path)- 1 );
 
   if (connect(fd, ( struct sockaddr*)&addr,SUN_LEN(&addr)) == - 1 ) {
-    if (errm)
-     *errm = strndup( "Unable to connect to UNIX socket" , 32 );
+    if (out)
+     out = (void *)strndup( "Unable to connect to UNIX socket" , 32 );
     *ret = - 4 ;
     return - 4 ;
   }
@@ -140,28 +151,31 @@ int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , char
   }
   debug ( D_NOTICE , "QueryState bytes send[%d]\n" , bytes_writen);
   if (bytes_writen != mes-> length ) {
-    if (errm)
-      *errm = strndup ( "Communication error" , 19 );
+    if (out)
+      out = strndup ( "Communication error" , 19 );
     close(fd);
     *ret = - 5 ;
     return - 5 ;
   }
-
-  curbuf = buf;
-  while ( (rc= read (fd,curbuf,( POVERLAY_BUFSIZE - bytes_read))) > 0 ) {
-    bytes_read += rc;
-    curbuf = curbuf + rc;
-    if (bytes_read > 12 ){
-      rep = ( message *)buf;
-      if (rep-> length == bytes_read)
-        break ;
-    }
+  
+  
+  
+  read_x_bytes(fd, 4, &bufflen);
+  if (bufflen <= 0)
+  {
+    debug ( D_NOTICE , "Message size could not be read![%d]\n" , bufflen);
+    return -6;
   }
+  buf = (char *)malloc(bufflen);
   rep = ( message *)buf;
+  rep->length = bufflen;
+
+  read_x_bytes(fd, bufflen - 4, buf + 4);
+  
 
   *ret = rep-> type ;
-  if (errm)
-    *errm = strndup (rep-> value , rep-> length - sizeof ( message ));
+  if (out)
+    out = strndup (rep-> value , rep-> length - sizeof ( message ));
 
   close(fd);
 
@@ -191,6 +205,9 @@ int main ( int arc, char **argv ){
     SendCall( 21 , argv[i], &j, &errm);
     printf( "Call 21 returned %d msg %s \n" , j, errm);
     SendCall( 22 , argv[i], &j, &errm);
+    printf( "Call 22 returned %d msg %s \n" , j, errm);
+    
+    SendCall( 23 , argv[i], &j, &errm);
     printf( "Call 22 returned %d msg %s \n" , j, errm);
   }
   return 0 ;

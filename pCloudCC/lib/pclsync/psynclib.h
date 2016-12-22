@@ -1157,7 +1157,7 @@ void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t* /*OUT*/
 /* Callback to be registered to be called from file manager extension.
  */
 
-typedef int (*poverlay_callback)(const char* path);
+typedef int (*poverlay_callback)(const char* path, void *rep);
 
 /* Registers file manager extension callback that will be called when packet with id equals to the give one had arrived from extension.
  * The id must be over or equal to 20 or -1 will be returned. There is a hard coded maximum of menu items on some OS-s so maximum of 15 ids are available.
@@ -1180,6 +1180,8 @@ void psync_update_cryptostatus();
 
 // Checks and creates new folder with write permissions on it and adds suffix to the name if necessary i.e. New Folder (1) etc..
 psync_folderid_t psync_check_and_create_folder (const char * path);
+
+char * psync_get_token();
 
 #ifdef __cplusplus
 }

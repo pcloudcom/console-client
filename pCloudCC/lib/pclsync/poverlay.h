@@ -33,6 +33,5 @@ int psync_ovr_callbacks_running();
 void init_overlay_callbacks();
 int psync_add_overlay_callback(int id, poverlay_callback callback);
 
-
 #endif // POVERLAY_H
 
