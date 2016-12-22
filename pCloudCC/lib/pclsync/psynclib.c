@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "gitcommit.h"
 #include "plibs.h"
 #include "pcompat.h"
 #include "psynclib.h"
@@ -60,6 +61,7 @@
 #include "poverlay.h"
 #include "pasyncnet.h"
 #include "ppathstatus.h"
+#include "pdevice_monitor.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -168,7 +170,10 @@ static void psync_stop_crypto_on_sleep(){
 
 int psync_init(){
   psync_thread_name="main app thread";
-  debug(D_NOTICE, "initializing");
+  debug(D_NOTICE, "initializing library version "PSYNC_LIB_VERSION);
+  debug(D_NOTICE, "last commit time "GIT_COMMIT_DATE);
+  debug(D_NOTICE, "previous commit time "GIT_PREV_COMMIT_DATE);
+  debug(D_NOTICE, "previous commit id "GIT_PREV_COMMIT_ID);
   if (IS_DEBUG){
     pthread_mutex_lock(&psync_libstate_mutex);
     if (psync_libstate!=0){
@@ -213,6 +218,7 @@ int psync_init(){
 
   psync_run_thread("Overlay main thread", overlay_main_loop);
   init_overlay_callbacks();
+  psync_run_thread("Device monitor main thread", pinit_device_monitor);
 
   return 0;
 }
@@ -486,6 +492,7 @@ void psync_unlink(){
   psync_fs_pause_until_login();
   psync_fs_clean_tasks();
   psync_path_status_init();
+  psync_clear_downloadlist();
   psync_sql_unlock();
   psync_sql_checkpoint_unlock();
   psync_settings_reset();
@@ -720,14 +727,15 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=? AND syncid=?");
-  psync_sql_bind_uint(res, 1, localfolderid);
-  psync_sql_bind_uint(res, 2, syncid);
-  psync_sql_run_free(res);
   res=psync_sql_prep_statement("DELETE FROM localfolder WHERE id=? AND syncid=?");
   psync_sql_bind_uint(res, 1, localfolderid);
   psync_sql_bind_uint(res, 2, syncid);
   psync_sql_run_free(res);
+  if (psync_sql_affected_rows()){
+    res=psync_sql_prep_statement("DELETE FROM syncedfolder WHERE localfolderid=?");
+    psync_sql_bind_uint(res, 1, localfolderid);
+    psync_sql_run_free(res);
+  }
 }
 
 int psync_delete_sync(psync_syncid_t syncid){
@@ -950,6 +958,7 @@ int psync_create_remote_folder_by_path(const char *path, char **err){
     return ret;
   psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
   psync_free(res);
+  psync_diff_wake();
   return 0;
 }
 
@@ -962,6 +971,7 @@ int psync_create_remote_folder(psync_folderid_t parentfolderid, const char *name
     return ret;
   psync_ops_create_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
   psync_free(res);
+  psync_diff_wake();
   return 0;
 }
 
@@ -1535,6 +1545,7 @@ static int psync_upload_result(binresult *res, psync_fileid_t *fileid){
     const binresult *meta=psync_find_result(res, "metadata", PARAM_ARRAY)->array[0];
     *fileid=psync_find_result(meta, "fileid", PARAM_NUM)->num;
     psync_free(res);
+    psync_diff_wake();
     return 0;
   }
   else{

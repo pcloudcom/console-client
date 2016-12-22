@@ -43,6 +43,7 @@
 
 #if defined(P_OS_MACOSX)
 #include <sys/sysctl.h>
+#include <sys/attr.h>
 #endif
 
 #if defined(P_OS_POSIX)
@@ -57,12 +58,14 @@
 #include <sys/mman.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
+#include <utime.h>
 #include <limits.h>
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <ctype.h>
 #include <pwd.h>
 #include <grp.h>
 
@@ -78,13 +81,19 @@ extern char **environ;
 
 #include <process.h>
 #include <windows.h>
+#include <winhttp.h>
 #include <ws2tcpip.h>
 #include <wincrypt.h>
 #include <tlhelp32.h>
 #include <iphlpapi.h>
 #include <shlobj.h>
 
+#pragma comment(lib, "winhttp.lib")
+
 #endif
+
+#define PROXY_NONE    0
+#define PROXY_CONNECT 1
 
 typedef struct {
   psync_thread_start0 run;
@@ -104,12 +113,89 @@ static gid_t *psync_gids;
 static int psync_gids_cnt;
 #endif
 
+static int proxy_type=PROXY_NONE;
+static int proxy_detected=0;
+static char proxy_host[256];
+static char proxy_port[8];
+
 static int psync_page_size;
 
 static const char *psync_software_name="pCloudSync library "PSYNC_LIB_VERSION;
 
 PSYNC_THREAD const char *psync_thread_name="no name";
 static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
+
+const unsigned char psync_invalid_filename_chars[256]={
+#if defined(P_OS_WINDOWS)
+  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+#elif defined(P_OS_LINUX)
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+#elif defined(P_OS_MACOSX)
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+#else
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+#endif
+};
 
 int psync_user_is_admin(){
 #if defined(P_OS_MACOSX)
@@ -220,9 +306,13 @@ void psync_compat_init(){
   if (setrlimit(RLIMIT_NOFILE, &limit))
     debug(D_ERROR, "setrlimit failed errno=%d", errno);
 #if IS_DEBUG
-  limit.rlim_cur=limit.rlim_max=RLIM_INFINITY;
-  if (setrlimit(RLIMIT_CORE, &limit))
-    debug(D_ERROR, "setrlimit failed errno=%d", errno);
+  if (getrlimit(RLIMIT_CORE, &limit))
+    debug(D_ERROR, "getrlimit failed errno=%d", errno);
+  else{
+    limit.rlim_cur=limit.rlim_max;
+    if (setrlimit(RLIMIT_CORE, &limit))
+      debug(D_ERROR, "setrlimit failed errno=%d", errno);
+  }
 #endif
   signal(SIGPIPE, SIG_IGN);
   psync_uid=getuid();
@@ -925,10 +1015,25 @@ static psync_socket_t connect_res(struct addrinfo *res){
     if (likely_log(sock!=INVALID_SOCKET)){
 #if defined(PSOCK_NEED_NOBLOCK)
 #if defined(P_OS_WINDOWS)
-      unsigned long mode=1;
-      int bufsize=PSYNC_SOCK_WIN_SNDBUF;
+      static const unsigned long mode=1;
+      static int need_snd_buf=0;
       ioctlsocket(sock, FIONBIO, &mode);
-      setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(bufsize));
+      if (need_snd_buf==0){
+        unsigned ver=GetVersion();
+        ver=LOBYTE(LOWORD(ver))*10+HIBYTE(LOWORD(ver));
+        if (ver<=61){
+          need_snd_buf=1;
+          debug(D_NOTICE, "detected windows %u, setting socket buffers", ver);
+        }
+        else{
+          need_snd_buf=-1;
+          debug(D_NOTICE, "detected windows %u, not setting socket buffers", ver);
+        }
+      }
+      if (need_snd_buf==1){
+        int bufsize=PSYNC_SOCK_WIN_SNDBUF;
+        setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(bufsize));
+      }
 #elif defined(P_OS_POSIX)
       fcntl(sock, F_SETFD, FD_CLOEXEC);
       fcntl(sock, F_SETFL, fcntl(sock, F_GETFL)|O_NONBLOCK);
@@ -1095,7 +1200,101 @@ static void resolve_callback(void *h, void *ptr){
   psync_task_complete(h, res);
 }
 
-static psync_socket_t connect_socket(const char *host, const char *port){
+#if defined(P_OS_WINDOWS)
+static void gfree_ptr(HGLOBAL ptr){
+  if (ptr!=NULL)
+    GlobalFree(ptr);
+}
+
+static int try_set_proxy(LPWSTR pstr){
+  char *str, *c;
+  size_t hl, pl;
+  if (!pstr)
+    return 0;
+  str=wchar_to_utf8(pstr);
+  c=strchr(str, ':');
+  if (!c)
+    goto err;
+  hl=c-str;
+  c++;
+  pl=strlen(c);
+  if (pl && hl && hl<sizeof(proxy_host) && pl<sizeof(proxy_port)) {
+    proxy_host[hl]=0;
+    memcpy(proxy_host, str, hl);
+    proxy_port[pl]=0;
+    memcpy(proxy_port, c, pl);
+    psync_free(str);
+    proxy_type=PROXY_CONNECT;
+    debug(D_NOTICE, "auto detected proxy %s:%s", proxy_host, proxy_port);
+    return 1;
+  }
+err:
+  psync_free(str);
+  return 0;
+}
+
+#define PSYNC_HAS_PROXY_CODE
+
+#endif
+
+#if defined(PSYNC_HAS_PROXY_CODE)
+static int recent_detect(){
+  static time_t lastdetect=0;
+  if (psync_timer_time()<lastdetect+60)
+    return 1;
+  else{
+    lastdetect=psync_timer_time();
+    return 0;
+  }
+}
+#endif
+
+static void detect_proxy(){
+#if defined(P_OS_WINDOWS)
+  WINHTTP_CURRENT_USER_IE_PROXY_CONFIG ieconf;
+  WINHTTP_AUTOPROXY_OPTIONS aopt;
+  WINHTTP_PROXY_INFO pinfo;
+  HINTERNET hi;
+  if (recent_detect())
+    return;
+  proxy_type=PROXY_NONE;
+  hi=NULL;
+  pinfo.lpszProxy=NULL;
+  pinfo.lpszProxyBypass=NULL;
+  if (!WinHttpGetIEProxyConfigForCurrentUser(&ieconf))
+    return;
+  if (ieconf.fAutoDetect){
+    hi=WinHttpOpen(L"pCloud", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hi){
+      debug(D_NOTICE, "WinHttpOpen failed");
+      goto manual;
+    }
+    memset(&aopt, 0, sizeof(aopt));
+    aopt.dwFlags=WINHTTP_AUTOPROXY_AUTO_DETECT;
+    aopt.dwAutoDetectFlags=WINHTTP_AUTO_DETECT_TYPE_DHCP|WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+    if (ieconf.lpszAutoConfigUrl){
+      aopt.dwFlags|=WINHTTP_AUTOPROXY_CONFIG_URL;
+      aopt.lpszAutoConfigUrl=ieconf.lpszAutoConfigUrl;
+    }
+    aopt.fAutoLogonIfChallenged=TRUE;
+    if (WinHttpGetProxyForUrl(hi, L"https://api.pcloud.com/", &aopt, &pinfo)  && pinfo.dwAccessType==WINHTTP_ACCESS_TYPE_NAMED_PROXY &&
+        try_set_proxy(pinfo.lpszProxy))
+      goto ex;
+  }
+manual:
+  try_set_proxy(pinfo.lpszProxy);
+ex:
+  if (hi)
+    WinHttpCloseHandle(hi);
+  gfree_ptr(pinfo.lpszProxy);
+  gfree_ptr(pinfo.lpszProxyBypass);
+  gfree_ptr(ieconf.lpszProxy);
+  gfree_ptr(ieconf.lpszProxyBypass);
+  gfree_ptr(ieconf.lpszAutoConfigUrl);
+#endif
+}
+
+static psync_socket_t connect_socket_direct(const char *host, const char *port){
   struct addrinfo *res, *dbres;
   struct addrinfo hints;
   psync_socket_t sock;
@@ -1117,6 +1316,7 @@ static psync_socket_t connect_socket(const char *host, const char *port){
     res=(struct addrinfo *)psync_task_get_result(tasks, 1);
     if (unlikely(!res)){
       psync_task_free(tasks);
+      detect_proxy();
       debug(D_WARNING, "failed to resolve %s", host);
       return INVALID_SOCKET;
     }
@@ -1148,6 +1348,7 @@ static psync_socket_t connect_socket(const char *host, const char *port){
 #endif
     if (unlikely(rc!=0)){
       debug(D_WARNING, "failed to resolve %s", host);
+      detect_proxy();
       return INVALID_SOCKET;
     }
     addr_save_to_db(host, port, res);
@@ -1181,9 +1382,109 @@ static psync_socket_t connect_socket(const char *host, const char *port){
 #endif
 #endif
   }
-  else
+  else{
+    detect_proxy();
     debug(D_WARNING, "failed to connect to %s:%s", host, port);
+  }
   return sock;
+}
+
+static int check_http_resp(char *str) {
+  if (memcmp(str, "HTTP", 4)){
+    debug(D_WARNING, "bad proxy response %s", str);
+    return 0;
+  }
+  while (*str && !isspace(*str))
+    str++;
+  while (*str && isspace(*str))
+    str++;
+  if (!isdigit(*str)){
+    debug(D_WARNING, "bad proxy response %s", str);
+    return 0;
+  }
+  if (atoi(str)!=200) {
+    debug(D_NOTICE, "proxy returned HTTP code %d", atoi(str));
+    return 0;
+  }
+  return 1;
+}
+
+static psync_socket_t connect_socket_connect_proxy(const char *host, const char *port){
+  char buff[2048], *str;
+  psync_socket_t sock;
+  int ln, wr, r, rc;
+  sock=connect_socket_direct(proxy_host, proxy_port);
+  if (unlikely(sock==INVALID_SOCKET)){
+    debug(D_NOTICE, "connection to proxy %s:%s failed", proxy_host, proxy_port);
+    goto err0;
+  }
+  ln=psync_slprintf(buff, sizeof(buff), "CONNECT %s:%s HTTP/1.0\015\012User-Agent: %s\015\012\015\012", host, port, psync_software_name);
+  wr=0;
+  while (wr<ln){
+    r=psync_write_socket(sock, buff+wr, ln-wr);
+    if (unlikely(r==SOCKET_ERROR)){
+      if (likely_log((psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN || psync_sock_err()==P_INTR) && !psync_wait_socket_write_timeout(sock)))
+        continue;
+      else
+        goto err1;
+    }
+    wr+=r;
+  }
+  wr=0;
+  rc=0;
+  while (1){
+    if (unlikely(psync_wait_socket_read_timeout(sock))){
+      debug(D_WARNING, "connection to %s:%s via %s:%s timeouted", host, port, proxy_host, proxy_port);
+      goto err1;
+    }
+    r=psync_read_socket(sock, buff+wr, sizeof(buff)-1-wr);
+    if (unlikely(r==0 || r==SOCKET_ERROR)){
+      if (r==0){
+        debug(D_NOTICE, "proxy server %s:%s closed connection", proxy_host, proxy_port);
+        goto err1;
+      }
+      if (likely_log(psync_sock_err()==P_WOULDBLOCK || psync_sock_err()==P_AGAIN || psync_sock_err()==P_INTR))
+        continue;
+      else
+        goto err1;
+    }
+    wr+=r;
+    buff[wr]=0;
+    str=strstr(buff, "\015\012\015\012");
+    if (str){
+      if (rc || check_http_resp(buff)){
+        debug(D_NOTICE, "connected to %s:%s via %s:%s", host, port, proxy_host, proxy_port);
+        return sock;
+      }else
+        goto err1;
+    }
+    if (wr==sizeof(buff)-1){
+      rc=check_http_resp(buff);
+      if (!rc)
+        goto err1;
+      memcpy(buff, buff+sizeof(buff)-8, 8);
+      wr=7; // yes, 7
+    }
+  }
+err1:
+  psync_close_socket(sock);
+err0:
+  detect_proxy();
+  if (proxy_type!=PROXY_CONNECT)
+    return connect_socket_direct(host, port);
+  else
+    return INVALID_SOCKET;
+}
+
+static psync_socket_t connect_socket(const char *host, const char *port){
+  if (unlikely(!proxy_detected)){
+    proxy_detected=1;
+    detect_proxy();
+  }
+  if (likely(proxy_type!=PROXY_CONNECT))
+    return connect_socket_direct(host, port);
+  else
+    return connect_socket_connect_proxy(host, port);
 }
 
 static int wait_sock_ready_for_ssl(psync_socket_t sock){
@@ -1304,7 +1605,7 @@ void psync_socket_clear_write_buffered_thread(psync_socket *sock){
   pthread_mutex_unlock(&socket_mutex);
 }
 
-int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
+int psync_socket_set_recvbuf(psync_socket *sock, int bufsize){
 #if defined(SO_RCVBUF) && defined(SOL_SOCKET)
   return setsockopt(sock->sock, SOL_SOCKET, SO_RCVBUF, (const char*)&bufsize, sizeof(bufsize));
 #else
@@ -1312,7 +1613,7 @@ int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize){
 #endif
 }
 
-int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize){
+int psync_socket_set_sendbuf(psync_socket *sock, int bufsize){
 #if defined(SO_SNDBUF) && defined(SOL_SOCKET)
   return setsockopt(sock->sock, SOL_SOCKET, SO_SNDBUF, (const char*)&bufsize, sizeof(bufsize));
 #else
@@ -1926,6 +2227,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     addr=addr->ifa_next;
   }
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
+  memset(ret, 0, offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
   ret->interfacecnt=cnt;
   addr=addrs;
   cnt=0;
@@ -1982,7 +2284,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     adapter=adapter->Next;
   }
   ret=psync_malloc(offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
-  memset(&ret->interfaces, 0, sizeof(psync_interface_t)*cnt);
+  memset(ret, 0, offsetof(psync_interface_list_t, interfaces)+sizeof(psync_interface_t)*cnt);
   ret->interfacecnt=cnt;
   adapter=adapters;
   cnt=0;
@@ -2007,6 +2309,7 @@ psync_interface_list_t *psync_list_ip_adapters(){
     }
     adapter=adapter->Next;
   }
+  psync_free(adapters);
   return ret;
   }
 #endif
@@ -2196,10 +2499,19 @@ err1:
     }
   }
   do {
-    if (st.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
+    if (st.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY && (!wcscmp(st.cFileName, L".") || !wcscmp(st.cFileName, L"..")))
       continue;
-    if (st.dwFileAttributes & (FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_TEMPORARY|FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_HIDDEN))
+    if (st.dwFileAttributes&(FILE_ATTRIBUTE_SYSTEM|/*FILE_ATTRIBUTE_TEMPORARY|*/FILE_ATTRIBUTE_DEVICE|FILE_ATTRIBUTE_HIDDEN)){
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_SYSTEM)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_SYSTEM attribute", st.cFileName);
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_TEMPORARY)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_TEMPORARY attribute", st.cFileName);
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_DEVICE)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_DEVICE attribute", st.cFileName);
+      if (st.dwFileAttributes&FILE_ATTRIBUTE_HIDDEN)
+        debug(D_NOTICE, "Ignoring file %ls with FILE_ATTRIBUTE_HIDDEN attribute", st.cFileName);
       continue;
+    }
     name=wchar_to_utf8(st.cFileName);
     spath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, name, NULL);
     pst.name=name;
@@ -2634,8 +2946,158 @@ int psync_file_set_creation(psync_file_t fd, time_t ctime){
   fctime.dwLowDateTime=(DWORD)lctime;
   fctime.dwHighDateTime=lctime>>32;
   return psync_bool_to_zero(SetFileTime(fd, &fctime, NULL, NULL));
+#elif defined(P_OS_MACOSX)
+  struct attrlist attr;
+  struct timespec crtime;
+  memset(&attr, 0, sizeof(attr));
+  attr.bitmapcount=ATTR_BIT_MAP_COUNT;
+  attr.commonattr=ATTR_CMN_CRTIME;
+  crtime.tv_sec=ctime;
+  crtime.tv_nsec=0;
+  return fsetattrlist(fd, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW);
 #else
   return -1;
+#endif
+}
+
+int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime){
+#if defined(P_OS_WINDOWS)
+  wchar_t *wpath;
+  FILETIME fctime, fmtime, *pfctime, *pfmtime;
+  uint64_t tm64;
+  HANDLE fd;
+  int ret;
+  wpath=utf8_to_wchar_path(path);
+  fd=CreateFileW(wpath, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                 FILE_FLAG_BACKUP_SEMANTICS|FILE_FLAG_POSIX_SEMANTICS, NULL);
+  psync_free(wpath);
+  if (fd==INVALID_HANDLE_VALUE){
+    debug(D_NOTICE, "could not open file/folder %s", path);
+    return -1;
+  }
+  if (crtime){
+    tm64=Int32x32To64(crtime, 10000000)+116444736000000000;
+    fctime.dwLowDateTime=(DWORD)tm64;
+    fctime.dwHighDateTime=tm64>>32;
+    pfctime=&fctime;
+  }
+  else
+    pfctime=NULL;
+  if (mtime){
+    tm64=Int32x32To64(mtime, 10000000)+116444736000000000;
+    fmtime.dwLowDateTime=(DWORD)tm64;
+    fmtime.dwHighDateTime=tm64>>32;
+    pfmtime=&fmtime;
+  }
+  else
+    pfmtime=NULL;
+  ret=psync_bool_to_zero(SetFileTime(fd, pfctime, NULL, pfmtime));
+  CloseHandle(fd);
+  return ret;
+#elif defined(P_OS_MACOSX)
+  if (crtime){
+    struct attrlist attr;
+    struct timespec crtime;
+    memset(&attr, 0, sizeof(attr));
+    attr.bitmapcount=ATTR_BIT_MAP_COUNT;
+    attr.commonattr=ATTR_CMN_CRTIME;
+    crtime.tv_sec=ctime;
+    crtime.tv_nsec=0;
+    if (setattrlist(path, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW))
+      return -1;
+  }
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    return utimes(path, tm);
+  }
+  return 0;
+#elif defined(P_OS_POSIX)
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    if (unlikely(utimes(path, tm))){
+      debug(D_NOTICE, "got errno %d while setting modification time of %s to %lu: %s", errno, path, (unsigned long)mtime, strerror(errno));
+      return -1;
+    }
+    else
+      return 0;
+  }
+  else
+    return 0;
+#else
+  return -1;
+#endif
+}
+
+int psync_set_crtime_mtime_by_fd(psync_file_t fd, const char *path, time_t crtime, time_t mtime){
+#if defined(P_OS_WINDOWS)
+  FILETIME fctime, fmtime, *pfctime, *pfmtime;
+  uint64_t tm64;
+  int ret;
+  if (crtime){
+    tm64=Int32x32To64(crtime, 10000000)+116444736000000000;
+    fctime.dwLowDateTime=(DWORD)tm64;
+    fctime.dwHighDateTime=tm64>>32;
+    pfctime=&fctime;
+  }
+  else
+    pfctime=NULL;
+  if (mtime){
+    tm64=Int32x32To64(mtime, 10000000)+116444736000000000;
+    fmtime.dwLowDateTime=(DWORD)tm64;
+    fmtime.dwHighDateTime=tm64>>32;
+    pfmtime=&fmtime;
+  }
+  else
+    pfmtime=NULL;
+  ret=psync_bool_to_zero(SetFileTime(fd, pfctime, NULL, pfmtime));
+  return ret;
+#elif defined(P_OS_MACOSX)
+  if (crtime){
+    struct attrlist attr;
+    struct timespec crtime;
+    memset(&attr, 0, sizeof(attr));
+    attr.bitmapcount=ATTR_BIT_MAP_COUNT;
+    attr.commonattr=ATTR_CMN_CRTIME;
+    crtime.tv_sec=ctime;
+    crtime.tv_nsec=0;
+    if (fsetattrlist(fd, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW))
+      return -1;
+  }
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    return futimes(fd, tm);
+  }
+  return 0;
+#elif defined(_BSD_SOURCE) || defined(P_OS_BSD)
+  if (mtime){
+    struct timeval tm[2];
+    tm[0].tv_sec=mtime;
+    tm[0].tv_usec=0;
+    tm[1].tv_sec=mtime;
+    tm[1].tv_usec=0;
+    if (unlikely(futimes(fd, tm))){
+      debug(D_NOTICE, "got errno %d while setting modification time of %s to %lu: %s", errno, path, (unsigned long)mtime, strerror(errno));
+      return -1;
+    }
+    else
+      return 0;
+  }
+  else
+    return 0;
+#else
+  return psync_set_crtime_mtime(path, crtime, mtime);
 #endif
 }
 
@@ -2936,6 +3398,7 @@ char *psync_deviceid(){
   else{
     v=atoi(un.release);
     switch (v){
+      case 16: ver="macOS 10.12 Sierra"; break;
       case 15: ver="OS X 10.11 El Capitan"; break;
       case 14: ver="OS X 10.10 Yosemite"; break;
       case 13: ver="OS X 10.9 Mavericks"; break;

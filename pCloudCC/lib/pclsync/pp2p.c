@@ -773,7 +773,10 @@ int psync_p2p_check_download(psync_fileid_t fileid, const unsigned char *filehas
   if (bresp==P2P_RESP_NOPE)
     goto err_perm2;
   else if (bresp==P2P_RESP_WAIT){
-    psync_milisleep(PSYNC_P2P_SLEEP_WAIT_DOWNLOAD);
+    uint32_t rnd;
+    psync_ssl_rand_weak((unsigned char *)&rnd, sizeof(rnd));
+    rnd&=0x7ff;
+    psync_milisleep(PSYNC_P2P_SLEEP_WAIT_DOWNLOAD+rnd);
     goto err_temp2;
   }
   if (psync_p2p_check_rsa())

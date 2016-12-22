@@ -32,6 +32,7 @@
 #include "ptree.h"
 #include "pdatabase.h"
 #include "plocks.h"
+#include "pnetlibs.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -327,6 +328,39 @@ unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size
   return result;
 }
 
+int psync_is_valid_utf8(const char *str){
+  static const int8_t trailing[]={
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    3, 3, 3, 3, 3, 3, 3, 3, -1, -1, -1, -1, -1, -1, -1, -1
+  };
+  int8_t t;
+  while (*str) {
+    t=trailing[(unsigned char)*str++];
+    if (unlikely(t)){
+      if (t<0)
+        return 0;
+      while (t--)
+        if ((((unsigned char)*str++)&0xc0)!=0x80)
+          return 0;
+    }
+  }
+  return 1;
+}
+
 void psync_sql_err_callback(void *ptr, int code, const char *msg){
   debug(D_WARNING, "database warning %d: %s", code, msg);
 }
@@ -336,7 +370,7 @@ static void psync_sql_wal_checkpoint(){
   psync_sql_lock();
   psync_sql_unlock();
   if (pthread_mutex_trylock(&psync_db_checkpoint_mutex)){
-    debug(D_NOTICE, "skipping checkpoint");
+    debug(D_NOTICE, "checkpoint already in progress");
     return;
   }
   debug(D_NOTICE, "checkpointing database");
@@ -348,6 +382,8 @@ static void psync_sql_wal_checkpoint(){
   pthread_mutex_unlock(&psync_db_checkpoint_mutex);
   if (unlikely(code!=SQLITE_OK))
     debug(D_CRITICAL, "sqlite3_wal_checkpoint returned error %d", code);
+  else
+    debug(D_NOTICE, "checkpoint finished");
 }
 
 static int psync_sql_wal_hook(void *ptr, sqlite3 *db, const char *name, int numpages){
@@ -404,7 +440,7 @@ int psync_sql_connect(const char *db){
       debug(D_NOTICE, "database version %d detected, upgrading to %d", (int)dbver, (int)PSYNC_DATABASE_VERSION);
       for (i=dbver; i<PSYNC_DATABASE_VERSION; i++)
         if (psync_sql_statement(psync_db_upgrade[i])){
-          debug(D_ERROR, "error running statement %s", psync_db_upgrade[i]);
+          debug(D_ERROR, "error running statement %s on sqlite %s", psync_db_upgrade[i], sqlite3_libversion());
           if (IS_DEBUG)
             return_error(PERROR_DATABASE_OPEN);
         }
@@ -507,8 +543,10 @@ static pthread_mutex_t rdmutex=PTHREAD_MUTEX_INITIALIZER;
 static void record_wrlock(const char *file, unsigned line){
   if (unlikely(rdlock)){
     debug(D_BUG, "trying to get write lock at %s:%u, but read lock is already taken at %s:%u, aborting", file, line, rdlock->file, rdlock->line);
+    senddebug("trying to get write lock at %s:%u, but read lock is already taken at %s:%u, aborting", file, line, rdlock->file, rdlock->line);
     abort();
   }
+  sendassert(!wrlocked);
   assert(!wrlocked);
   wrlockfile=file;
   wrlockline=line;
@@ -518,6 +556,8 @@ static void record_wrlock(const char *file, unsigned line){
 }
 
 static void record_wrunlock(){
+  sendassert(pthread_equal(pthread_self(), wrlocker));
+  sendassert(wrlocked);
   assert(pthread_equal(pthread_self(), wrlocker));
   assert(wrlocked);
   wrlocked=0;
@@ -555,11 +595,13 @@ void psync_sql_dump_locks(){
   if (wrlocked){
     time_format(sqllockstart.tv_sec, sqllockstart.tv_nsec, dttime);
     debug(D_ERROR, "write lock taken by thread %s from %s:%u at %s", wrlockthread, wrlockfile, wrlockline, dttime);
+    senddebug("write lock taken by thread %s from %s:%u at %s", wrlockthread, wrlockfile, wrlockline, dttime);
   }
   pthread_mutex_lock(&rdmutex);
   psync_list_for_each_element(lock, &rdlocks, rd_lock_data, list){
     time_format(lock->tm.tv_sec, lock->tm.tv_nsec, dttime);
     debug(D_ERROR, "read lock taken by thread %s from %s:%u at %s", lock->thread, lock->file, lock->line, dttime);
+    senddebug("read lock taken by thread %s from %s:%u at %s", lock->thread, lock->file, lock->line, dttime);
   }
   pthread_mutex_unlock(&rdmutex);
 }
@@ -589,9 +631,10 @@ void psync_sql_do_lock(const char *file, unsigned line){
     unsigned long msec;
     psync_nanotime(&start);
     memcpy(&end, &start, sizeof(end));
-    end.tv_sec+=30;
+    end.tv_sec+=PSYNC_DEBUG_LOCK_TIMEOUT;
     if (psync_rwlock_timedwrlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql write lock timed out called from %s:%u", file, line);
+      senddebug("sql write lock timed out called from %s:%u", file, line);
       psync_sql_dump_locks();
       abort();
     }
@@ -642,9 +685,10 @@ void psync_sql_do_rdlock(const char *file, unsigned line){
     unsigned long msec;
     psync_nanotime(&start);
     memcpy(&end, &start, sizeof(end));
-    end.tv_sec+=30;
+    end.tv_sec+=PSYNC_DEBUG_LOCK_TIMEOUT;
     if (psync_rwlock_timedrdlock(&psync_db_lock, &end)){
       debug(D_BUG, "sql read lock timed out, called from %s:%u", file, line);
+      senddebug("sql read lock timed out, called from %s:%u", file, line);
       psync_sql_dump_locks();
       abort();
     }
@@ -815,7 +859,7 @@ int psync_sql_commit_transaction(){
     }
   }
   else
-    debug(D_NOTICE, "rolling back transaction as some statements failed");
+    debug(D_ERROR, "rolling back transaction as some statements failed");
   psync_sql_rollback_transaction();
   return -1;
 }
@@ -929,6 +973,7 @@ char *psync_sql_cellstr(const char *sql){
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_rdunlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    sendtdebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   code=sqlite3_step(stmt);
@@ -944,8 +989,10 @@ char *psync_sql_cellstr(const char *sql){
   else {
     sqlite3_finalize(stmt);
     psync_sql_rdunlock();
-    if (unlikely(code!=SQLITE_DONE))
+    if (unlikely(code!=SQLITE_DONE)){
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+      sendtdebug("sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+    }
     return NULL;
   }
 }
@@ -956,14 +1003,18 @@ int64_t psync_sql_cellint(const char *sql, int64_t dflt){
   psync_sql_check_query_plan(sql);
   psync_sql_rdlock();
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
-  if (unlikely(code!=SQLITE_OK))
+  if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    sendtdebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+  }
   else{
     code=sqlite3_step(stmt);
     if (code==SQLITE_ROW)
       dflt=sqlite3_column_int64(stmt, 0);
-    else if (unlikely(code!=SQLITE_DONE))
+    else if (unlikely(code!=SQLITE_DONE)){
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+      sendtdebug("sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+    }
     sqlite3_finalize(stmt);
   }
   psync_sql_rdunlock();
@@ -979,6 +1030,7 @@ char **psync_sql_rowstr(const char *sql){
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_rdunlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    sendtdebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -1016,8 +1068,10 @@ char **psync_sql_rowstr(const char *sql){
   else {
     sqlite3_finalize(stmt);
     psync_sql_rdunlock();
-    if (unlikely(code!=SQLITE_DONE))
+    if (unlikely(code!=SQLITE_DONE)){
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+      sendtdebug("sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+    }
     return NULL;
   }
 }
@@ -1031,6 +1085,7 @@ psync_variant *psync_sql_row(const char *sql){
   if (unlikely(code!=SQLITE_OK)){
     psync_sql_rdunlock();
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    sendtdebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -1084,8 +1139,10 @@ psync_variant *psync_sql_row(const char *sql){
   else {
     sqlite3_finalize(stmt);
     psync_sql_rdunlock();
-    if (unlikely(code!=SQLITE_DONE))
+    if (unlikely(code!=SQLITE_DONE)){
       debug(D_ERROR, "sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+      sendtdebug("sqlite3_step returned error: %s: %s", sql, sqlite3_errmsg(psync_db));
+    }
     return NULL;
   }
 }
@@ -1109,8 +1166,10 @@ psync_sql_res *psync_sql_query_nocache(const char *sql){
     psync_sql_unlock();
 #if IS_DEBUG
     debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+    senddebug("error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
 #else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    senddebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
 #endif
     return NULL;
   }
@@ -1167,8 +1226,10 @@ psync_sql_res *psync_sql_query_rdlock_nocache(const char *sql){
     psync_sql_rdunlock();
 #if IS_DEBUG
     debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+    senddebug("error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
 #else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    senddebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
 #endif
     return NULL;
   }
@@ -1217,6 +1278,7 @@ psync_sql_res *psync_sql_query_nolock_nocache(const char *sql){
 #if IS_DEBUG
   if (!psync_sql_islocked()){
     debug(D_BUG, "illegal use of psync_sql_query_nolock, can only be used while holding lock, invoked from %s:%u, sql: %s", file, line, sql);
+    senddebug("illegal use of psync_sql_query_nolock, can only be used while holding lock, invoked from %s:%u, sql: %s", file, line, sql);
     abort();
   }
 #endif
@@ -1224,6 +1286,7 @@ psync_sql_res *psync_sql_query_nolock_nocache(const char *sql){
   code=sqlite3_prepare_v2(psync_db, sql, -1, &stmt, NULL);
   if (unlikely(code!=SQLITE_OK)){
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    senddebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
     return NULL;
   }
   cnt=sqlite3_column_count(stmt);
@@ -1244,6 +1307,7 @@ psync_sql_res *psync_sql_query_nolock(const char *sql){
 #if IS_DEBUG
   if (!psync_sql_islocked()){
     debug(D_BUG, "illegal use of psync_sql_query_nolock, can only be used while holding lock, invoked from %s:%u, sql: %s", file, line, sql);
+    senddebug("illegal use of psync_sql_query_nolock, can only be used while holding lock, invoked from %s:%u, sql: %s", file, line, sql);
     abort();
   }
 #endif
@@ -1328,8 +1392,10 @@ psync_sql_res *psync_sql_prep_statement_nocache(const char *sql){
     psync_sql_unlock();
 #if IS_DEBUG
     debug(D_ERROR, "error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
+    senddebug("error running sql statement: %s: %s called from %s:%u", sql, sqlite3_errmsg(psync_db), file, line);
 #else
     debug(D_ERROR, "error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
+    senddebug("error running sql statement: %s: %s", sql, sqlite3_errmsg(psync_db));
 #endif
     return NULL;
   }
@@ -1382,7 +1448,10 @@ int psync_sql_run(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    sendtdebug("sqlite3_step returned error (in_transaction=%d): %s: %s", in_transaction, sqlite3_errmsg(psync_db), res->sql);
     transaction_failed=1;
+    if (in_transaction)
+      debug(D_BUG, "transaction query failed, this may lead to restarting transaction over and over");
     return -1;
   }
   code=sqlite3_reset(res->stmt);
@@ -1395,8 +1464,11 @@ int psync_sql_run_free_nocache(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    sendtdebug("sqlite3_step returned error (in_transaction=%d): %s: %s", in_transaction, sqlite3_errmsg(psync_db), res->sql);
     code=-1;
     transaction_failed=1;
+    if (in_transaction)
+      debug(D_BUG, "transaction query failed, this may lead to restarting transaction over and over");
   }
   else
     code=0;
@@ -1410,8 +1482,11 @@ int psync_sql_run_free(psync_sql_res *res){
   int code=sqlite3_step(res->stmt);
   if (unlikely(code!=SQLITE_DONE || (code=sqlite3_reset(res->stmt))!=SQLITE_OK)){
     debug(D_ERROR, "sqlite3_step returned error: %s: %s", sqlite3_errmsg(psync_db), res->sql);
+    sendtdebug("sqlite3_step returned error (in_transaction=%d): %s: %s", in_transaction, sqlite3_errmsg(psync_db), res->sql);
     sqlite3_finalize(res->stmt);
     transaction_failed=1;
+    if (in_transaction)
+      debug(D_BUG, "transaction query failed, this may lead to restarting transaction over and over");
     psync_sql_res_unlock(res);
     psync_free(res);
     return -1;
@@ -2038,18 +2113,48 @@ static uint32_t pq_rnd() {
 #define QSORT_MTR   64
 #define QSORT_REC_M (16*1024)
 
-static inline unsigned char *med3(unsigned char *a, unsigned char *b, unsigned char *c, int (*compar)(const void *, const void *)) {
-  return compar(a, b)<0?
-            (compar(b, c)<0?b:compar(a, c)<0?c:a):
-            (compar(b, c)>0?b:compar(a, c)>0?c:a);
+static inline void sw2(unsigned char **a, unsigned char **b) {
+  unsigned char *tmp=*a;
+  *a=*b;
+  *b=tmp;
+}
+
+static unsigned char *med5(unsigned char *a, unsigned char *b, unsigned char *c, unsigned char *d, unsigned char *e,
+                           int (*compar)(const void *, const void *)) {
+  if (compar(b, a)<0)
+    sw2(&a, &b);
+  if (compar(d, c)<0)
+    sw2(&c, &d);
+  if (compar(a, c)<0) {
+    a=e;
+    if (compar(b, a)<0)
+      sw2(&a, &b);
+  } else {
+    c=e;
+    if (compar(d, c)<0)
+      sw2(&c, &d);
+  }
+  if (compar(a, c)<0)
+    a=b;
+  else
+    c=d;
+  if (compar(a, c)<0)
+    return a;
+  else
+    return c;
 }
 
 unsigned char *pq_choose_part(unsigned char *base, size_t cnt, size_t size, int (*compar)(const void *, const void *)) {
   if (cnt>=QSORT_REC_M) {
-    cnt/=3;
-    return med3(pq_choose_part(base, cnt, size, compar), pq_choose_part(base+cnt*size, cnt, size, compar), pq_choose_part(base+cnt*size*2, cnt, size, compar), compar);
+    cnt/=5;
+    return med5(pq_choose_part(base, cnt, size, compar),
+                pq_choose_part(base+cnt*size, cnt, size, compar),
+                pq_choose_part(base+cnt*size*2, cnt, size, compar),
+                pq_choose_part(base+cnt*size*3, cnt, size, compar),
+                pq_choose_part(base+cnt*size*4, cnt, size, compar),
+                compar);
   } else {
-    return med3(base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, compar);
+    return med5(base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, base+(pq_rnd()%cnt)*size, compar);
   }
 }
 
@@ -2215,6 +2320,87 @@ void psync_pqsort(void *base, size_t cnt, size_t sort_first, size_t size, int (*
         }
       }
     }
+  }
+}
+
+void psync_qpartition(void *base, size_t cnt, size_t sort_first, size_t size, int (*compar)(const void *, const void *)) {
+  unsigned char *lo, *hi, *mid, *l, *r, *sf;
+  size_t n, u32size;
+  sf=(unsigned char *)base+sort_first*size;
+  if (size%sizeof(uint32_t)==0 && (uintptr_t)base%sizeof(uint32_t)==0)
+    u32size=size/sizeof(uint32_t);
+  else
+    u32size=0;
+  if (cnt<=1) // otherwise cnt-1 will underflow
+    return;
+  lo=(unsigned char *)base;
+  hi=lo+(cnt-1)*size;
+  while (1) {
+    n=(hi-lo)/size;
+    if (n<=QSORT_MTR) {
+      mid=lo+(n>>1)*size;
+      if (compar(mid, lo)<0)
+        pqsswap(mid, lo, size);
+      if (compar(hi, mid)<0) {
+        pqsswap(mid, hi, size);
+        if (compar(mid, lo)<0)
+          pqsswap(mid, lo, size);
+      }
+      // we already sure *hi and *lo are good, so they will be skipped without checking
+      if (n<=2) // when n is 2, we have 3 elements
+        return;
+      l=lo;
+      r=hi;
+    } else {
+      mid=pq_choose_part(lo, n, size, compar);
+      l=lo-size;
+      r=hi+size;
+    }
+    if (u32size) {
+      do {
+        do {
+          l+=size;
+        } while (compar(l, mid)<0);
+        do {
+          r-=size;
+        } while (compar(mid, r)<0);
+        if (l>=r)
+          break;
+        pqsswap32(l, r, u32size);
+        if (mid==l) {
+          mid=r;
+          r+=size;
+        } else if (mid==r) {
+          mid=l;
+          l-=size;
+        }
+      } while (1);
+    } else {
+      do {
+        do {
+          l+=size;
+        } while (compar(l, mid)<0);
+        do {
+          r-=size;
+        } while (compar(mid, r)<0);
+        if (l>=r)
+          break;
+        pqsswap(l, r, size);
+        if (mid==l) {
+          mid=r;
+          r+=size;
+        } else if (mid==r) {
+          mid=l;
+          l-=size;
+        }
+      } while (1);
+    }
+    if (mid<sf)
+      lo=mid+size;
+    else if (mid>sf)
+      hi=mid-size;
+    else
+      return;
   }
 }
 

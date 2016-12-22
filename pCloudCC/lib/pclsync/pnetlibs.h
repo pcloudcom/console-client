@@ -33,6 +33,11 @@
 #include "plist.h"
 #include "papi.h"
 
+#define senddebug(str, ...) do {psync_send_debug(0, __FILE__, __FUNCTION__, __LINE__, str, __VA_ARGS__);} while (0)
+#define sendtdebug(str, ...) do {psync_send_debug(1, __FILE__, __FUNCTION__, __LINE__, str, __VA_ARGS__);} while (0)
+#define sendassert(cond) do {if (unlikely(!(cond))) { senddebug("assertion %s failed", TO_STR(cond));}} while (0)
+#define sendtassert(cond) do {if (unlikely(!(cond))) { sendtdebug("assertion %s failed", TO_STR(cond));}} while (0)
+
 #define psync_api_run_command(cmd, params) psync_do_api_run_command(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam))
 
 #define PSYNC_NET_OK        0
@@ -144,5 +149,9 @@ void psync_unlock_file(psync_file_lock_t *lock);
 int psync_get_upload_checksum(psync_uploadid_t uploadid, unsigned char *uhash, uint64_t *usize);
 
 void psync_process_api_error(uint64_t result);
+
+int psync_send_debug(int thread, const char *file, const char *function, int unsigned line, const char *fmt, ...)
+    PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
+
 
 #endif

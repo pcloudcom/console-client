@@ -72,12 +72,14 @@ typedef struct {
 } subscribed_ids;
 
 static uint64_t used_quota=0, current_quota=0;
+static time_t last_event=0;
 static psync_uint_t needdownload=0;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
 static pthread_mutex_t diff_mutex=PTHREAD_MUTEX_INITIALIZER;
 static int initialdownload=0;
 static paccount_cache_callback_t psync_cache_callback=NULL;
 static uint32_t psync_is_business=0;
+static unsigned char adapter_hash[PSYNC_FAST_HASH256_LEN];
 
 void do_register_account_events_callback(paccount_cache_callback_t callback){
   psync_cache_callback=callback;
@@ -264,7 +266,7 @@ static psync_socket *get_connected_socket(){
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
-    psync_is_business = psync_find_result(res, "business", PARAM_BOOL)->num;
+    psync_is_business=psync_find_result(res, "business", PARAM_BOOL)->num;
     psync_sql_start_transaction();
     psync_strlcpy(psync_my_auth, psync_find_result(res, "auth", PARAM_STR)->str, sizeof(psync_my_auth));
     if (luserid){
@@ -332,6 +334,7 @@ static psync_socket *get_connected_socket(){
       psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       continue;
     }
+    debug(D_NOTICE, "userid %lu", (unsigned long)userid);
     cres=psync_check_result(res, "account", PARAM_HASH);
     q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES (?, ?)");
     if (cres){
@@ -1211,7 +1214,7 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_res *q;
   uint64_t u, crexp, crsub = 0;
   int crst = 0,crstat;
-  
+
   if (!entry)
     return;
   res=psync_find_result(entry, "userinfo", PARAM_HASH);
@@ -1249,7 +1252,7 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_run(q);
   if (!u)
     psync_run_thread("stop crypto moduserinfo", stop_crypto_thread);
-  else 
+  else
     crst = 1;
   psync_sql_bind_string(q, 1, "cryptosubscription");
   crsub =  psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num;
@@ -1260,8 +1263,8 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_string(q, 1, "cryptoexpires");
   psync_sql_bind_uint(q, 2, crexp);
   psync_sql_run(q);
-  debug(D_WARNING, "Tracing crypto cryptosubscription [%lld] cripto_status [%d] psync_is_business[%ld]",(long long)crsub, crst, (long)psync_is_business);
-  debug(D_WARNING, "Tracing crypto time - cryptoexpires [%lld] psync_millitime [%lld]",(long long)crexp, (long long)psync_millitime());
+ // debug(D_NOTICE, "Tracing crypto cryptosubscription [%lld] cripto_status [%d] psync_is_business[%ld]",(long long)crsub, crst, (long)psync_is_business);
+ // debug(D_NOTICE, "Tracing crypto time - cryptoexpires [%lld] psync_millitime [%lld]",(long long)crexp, (long long)psync_time());
   if (psync_is_business || crsub){
     if (crst)
       crstat = 5;
@@ -1269,11 +1272,11 @@ static void process_modifyuserinfo(const binresult *entry){
   } else {
     if (!crst)
       crstat = 1;
-    else 
+    else
     {
       if (psync_time() > crexp)
         crstat = 3;
-      else 
+      else
         crstat = 2;
     }
   }
@@ -1282,8 +1285,8 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_run(q);
   psync_sql_free_result(q);
   psync_send_eventid(PEVENT_USERINFO_CHANGED);
-  
-  
+
+
 }
 
 #define fill_str(f, s, sl)\
@@ -2060,6 +2063,24 @@ static int send_diff_command(psync_socket *sock, subscribed_ids ids){
 }
 
 static void handle_exception(psync_socket **sock, subscribed_ids *ids, char ex){
+  if (ex=='c'){
+    if (last_event>=psync_timer_time()-1)
+      return;
+    if (psync_select_in(&(*sock)->sock, 1, 1000)!=0){
+      debug(D_NOTICE, "got a psync_diff_wake() but no diff events in one second, closing socket");
+      psync_socket_close(*sock);
+      if (psync_status_get(PSTATUS_TYPE_AUTH)!=PSTATUS_AUTH_PROVIDED)
+        ids->notificationid=0;
+      debug(D_NOTICE, "waiting for new socket");
+      *sock=get_connected_socket();
+      debug(D_NOTICE, "got new socket");
+      psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_ONLINE);
+      psync_syncer_check_delayed_syncs();
+      ids->diffid=psync_sql_cellint("SELECT value FROM setting WHERE id='diffid'", 0);
+      send_diff_command(*sock, *ids);
+    }
+    return;
+  }
   debug(D_NOTICE, "exception handler %c", ex);
   if (ex=='r' ||
       psync_status_get(PSTATUS_TYPE_RUN)==PSTATUS_RUN_STOP ||
@@ -2254,8 +2275,8 @@ static int psync_diff_check_quota(psync_socket *sock){
   return 0;
 }
 
-static void psync_cache_contacts() {
-  if (psync_is_business) {
+static void psync_cache_contacts(){
+  if (psync_is_business){
     cache_account_emails();
     cache_account_teams();
     cache_ba_my_teams();
@@ -2264,6 +2285,32 @@ static void psync_cache_contacts() {
   cache_contacts();
   cache_shares();
   psync_notify_cache_change(PACCOUNT_CHANGE_ALL);
+}
+
+static void psync_diff_adapter_hash(void *out){
+  psync_fast_hash256_ctx ctx;
+  psync_interface_list_t *list;
+  list=psync_list_ip_adapters();
+  psync_fast_hash256_init(&ctx);
+  psync_fast_hash256_update(&ctx, list->interfaces, list->interfacecnt*sizeof(psync_interface_t));
+  psync_fast_hash256_final(out, &ctx);
+  psync_free(list);
+}
+
+static void psync_diff_adapter_timer(psync_timer_t timer, void *ptr){
+  unsigned char hash[PSYNC_FAST_HASH256_LEN];
+  psync_diff_adapter_hash(hash);
+  if (memcmp(adapter_hash, hash, PSYNC_FAST_HASH256_LEN)){
+    memcpy(adapter_hash, hash, PSYNC_FAST_HASH256_LEN);
+    debug(D_NOTICE, "network adapter list changed, sending exception");
+    psync_pipe_write(exceptionsockwrite, "e", 1);
+  }
+}
+
+void psync_diff_wake(){
+  if (last_event>=psync_timer_time()-1)
+    return;
+  psync_pipe_write(exceptionsockwrite, "c", 1);
 }
 
 static void psync_diff_thread(){
@@ -2335,8 +2382,11 @@ restart:
   }
   socks[0]=exceptionsock;
   socks[1]=sock->sock;
+  psync_diff_adapter_hash(adapter_hash);
+  psync_timer_register(psync_diff_adapter_timer, PSYNC_DIFF_CHECK_ADAPTER_CHANGE_SEC, NULL);
   send_diff_command(sock, ids);
   psync_milisleep(50);
+  last_event=0;
   while (psync_do_run){
     if(psync_recache_contacts) {
       psync_cache_contacts();
@@ -2362,8 +2412,10 @@ restart:
         psync_timer_notify_exception();
         handle_exception(&sock, &ids, 'r');
         socks[1]=sock->sock;
+        last_event=0;
         continue;
       }
+      last_event=psync_timer_time();
       result=psync_find_result(res, "result", PARAM_NUM)->num;
       if (unlikely(result)){
         if (result==6003 || result==6002){ // timeout or cancel

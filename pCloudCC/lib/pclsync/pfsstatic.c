@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -299,7 +299,7 @@ void psync_fsstatic_add_files(){
 #elif defined(P_OS_WINDOWS)
 
 /* remove for now
-static const char *rootdirinf="[autorun]\r\nicon=pCloud.ico\r\n";
+static const char *rootdirinf="[.ShellClassInfo]\r\nIconFile=pCloud.ico\r\nIconIndex=0\r\n";
 static const unsigned char pcloudicon[]={
   0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x80, 0x80, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x28, 0x4c, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00,
   0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x12, 0x0b,
@@ -1116,13 +1116,13 @@ static const unsigned char pcloudicon[]={
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
-*/
+//*/
 
 void psync_fsstatic_add_files(){
 /* remove
-  psync_fstask_add_local_creat_static(0, "AutoRun.inf", rootdirinf, strlen(rootdirinf));
+  psync_fstask_add_local_creat_static(0, "Desktop.ini", rootdirinf, strlen(rootdirinf));
   psync_fstask_add_local_creat_static(0, "pCloud.ico", pcloudicon, ARRAY_SIZE(pcloudicon));
-  */
+//  */
 }
 
 #elif defined(P_OS_MACOSX)

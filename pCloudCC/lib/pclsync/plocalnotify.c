@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -229,7 +229,7 @@ static void process_notification(localnotify_dir *dir){
         }
         else{
           pwch=&wch->next;
-          wch=wch->next;      
+          wch=wch->next;
         }
       }
     }
@@ -336,7 +336,8 @@ static void add_syncid(psync_syncid_t syncid){
     debug(D_ERROR, "could not find syncfolder with id %u", (unsigned int)syncid);
     return;
   }
-  h=FindFirstChangeNotificationW(path, TRUE, FILE_NOTIFY_CHANGE_FILE_NAME|FILE_NOTIFY_CHANGE_DIR_NAME|FILE_NOTIFY_CHANGE_SIZE|FILE_NOTIFY_CHANGE_LAST_WRITE);
+  h=FindFirstChangeNotificationW(path, TRUE, FILE_NOTIFY_CHANGE_FILE_NAME|FILE_NOTIFY_CHANGE_DIR_NAME|
+                                             FILE_NOTIFY_CHANGE_SIZE|FILE_NOTIFY_CHANGE_LAST_WRITE|FILE_NOTIFY_CHANGE_ATTRIBUTES);
   psync_free(path);
   if (unlikely(h==INVALID_HANDLE_VALUE)){
     debug(D_ERROR, "FindFirstChangeNotificationW failed");
@@ -397,7 +398,7 @@ static void psync_localnotify_thread(){
 
 int psync_localnotify_init(){
   DWORD state = PIPE_NOWAIT;
-   
+
   if (!CreatePipe(&pipe_read, &pipe_write, NULL, 0))
     return -1;
 
@@ -529,7 +530,7 @@ void psync_localnotify_del_sync(psync_syncid_t syncid){
 
 #elif defined(P_OS_BSD)
 
-/* this implementation only monitors folder changes - it does not catch 
+/* this implementation only monitors folder changes - it does not catch
  * file changes (however it does catch deleted and created files).
  */
 

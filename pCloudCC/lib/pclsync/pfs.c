@@ -1,5 +1,5 @@
-/* Copyright (c) 2013-2014 Anton Titov.
- * Copyright (c) 2013-2014 pCloud Ltd.
+/* Copyright (c) 2013-2016 Anton Titov.
+ * Copyright (c) 2013-2016 pCloud Ltd.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,6 +84,7 @@ typedef off_t fuse_off_t;
 
 #if defined(P_OS_MACOSX)
 #define FS_MAX_ACCEPTABLE_FILENAME_LEN 255
+#define FUSE_HAS_SETCRTIME 1
 
 #if defined(_DARWIN_FEATURE_64_BIT_INODE)
 #define FUSE_STAT_HAS_BIRTHTIME
@@ -430,17 +431,22 @@ void psync_fs_update_openfile_fileid_locked(psync_openfile_t *of, psync_fsfileid
 #define taskid_to_inode(taskid) ((taskid)*3+2)
 
 static void psync_row_to_folder_stat(psync_variant_row row, struct FUSE_STAT *stbuf){
+  psync_folderid_t folderid;
+  uint64_t mtime;
+  psync_fstask_folder_t *folder;
+  folderid=psync_get_number(row[0]);
+  mtime=psync_get_number(row[3]);
+  folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
+  if (folder && folder->mtime)
+    mtime=folder->mtime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
-  stbuf->st_ino=folderid_to_inode(psync_get_number(row[0]));
+  stbuf->st_ino=folderid_to_inode(folderid);
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
-  stbuf->st_ctime=psync_get_number(row[3]);
-  stbuf->st_mtime=stbuf->st_ctime;
-#else
-  stbuf->st_ctime=psync_get_number(row[2]);
-  stbuf->st_mtime=psync_get_number(row[3]);
 #endif
-  stbuf->st_atime=stbuf->st_mtime;
+  stbuf->st_ctime=mtime;
+  stbuf->st_mtime=mtime;
+  stbuf->st_atime=mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=psync_get_number(row[4])+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -461,13 +467,10 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=psync_get_number(row[2]);
+#endif
   stbuf->st_ctime=psync_get_number(row[3]);
   stbuf->st_mtime=stbuf->st_ctime;
-#else
-  stbuf->st_ctime=psync_get_number(row[2]);
-  stbuf->st_mtime=psync_get_number(row[3]);
-#endif
-  stbuf->st_atime=stbuf->st_mtime;
+  stbuf->st_atime=stbuf->st_ctime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
   stbuf->st_size=size;
@@ -480,6 +483,13 @@ static void psync_row_to_file_stat(psync_variant_row row, struct FUSE_STAT *stbu
 }
 
 static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STAT *stbuf){
+  uint64_t mtime;
+  psync_fstask_folder_t *folder;
+  folder=psync_fstask_get_folder_tasks_rdlocked(mk->folderid);
+  if (folder && folder->mtime)
+    mtime=folder->mtime;
+  else
+    mtime=mk->mtime;
   memset(stbuf, 0, sizeof(struct FUSE_STAT));
   if (mk->folderid>=0)
     stbuf->st_ino=folderid_to_inode(mk->folderid);
@@ -487,13 +497,10 @@ static void psync_mkdir_to_folder_stat(psync_fstask_mkdir_t *mk, struct FUSE_STA
     stbuf->st_ino=taskid_to_inode(-mk->folderid);
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=mk->ctime;
-  stbuf->st_ctime=mk->mtime;
-  stbuf->st_mtime=mk->mtime;
-#else
-  stbuf->st_ctime=mk->mtime;
-  stbuf->st_mtime=mk->mtime;
 #endif
-  stbuf->st_atime=stbuf->st_mtime;
+  stbuf->st_ctime=mtime;
+  stbuf->st_mtime=mtime;
+  stbuf->st_atime=mtime;
   stbuf->st_mode=S_IFDIR | 0755;
   stbuf->st_nlink=mk->subdircnt+2;
   stbuf->st_size=FS_BLOCK_SIZE;
@@ -652,12 +659,9 @@ static int psync_creat_static_to_file_stat(psync_fstask_creat_t *cr, struct FUSE
   stbuf->st_ino=cr->taskid;
 #ifdef FUSE_STAT_HAS_BIRTHTIME
   stbuf->st_birthtime=lc->ctime;
-  stbuf->st_ctime=lc->ctime;
-  stbuf->st_mtime=lc->ctime;
-#else
-  stbuf->st_ctime=lc->ctime;
-  stbuf->st_mtime=lc->ctime;
 #endif
+  stbuf->st_ctime=lc->ctime;
+  stbuf->st_mtime=lc->ctime;
   stbuf->st_atime=lc->ctime;
   stbuf->st_mode=S_IFREG | 0644;
   stbuf->st_nlink=1;
@@ -730,7 +734,7 @@ static int psync_fs_getattr(const char *path, struct FUSE_STAT *stbuf){
   int crr;
   psync_fs_set_thread_name();
 //  debug(D_NOTICE, "getattr %s", path);
-  if (path[0]=='/' && path[1]==0)
+  if (path[1]==0 && path[0]=='/')
     return psync_fs_getrootattr(stbuf);
   psync_sql_rdlock();
   CHECK_LOGIN_RDLOCKED();
@@ -1377,7 +1381,7 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
       encsymkey=NULL;
       encsymkeylen=0;
     }
-    cr=psync_fstask_add_creat(folder, fpath->name, encsymkey, encsymkeylen);
+    cr=psync_fstask_add_creat(folder, fpath->name, 0, encsymkey, encsymkeylen);
     psync_free(encsymkey);
     if (unlikely_log(!cr)){
       ret=-EIO;
@@ -1451,6 +1455,7 @@ static int psync_fs_creat_fake_locked(psync_fspath_t *fpath, struct fuse_file_in
   len=strlen(fpath->name)+1;
   cr=(psync_fstask_creat_t *)psync_malloc(offsetof(psync_fstask_creat_t, name)+len);
   cr->fileid=fileid;
+  cr->rfileid=0;
   cr->taskid=fileid;
   memcpy(cr->name, fpath->name, len);
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
@@ -1537,7 +1542,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
     encsymkey=NULL;
     encsymkeylen=0;
   }
-  cr=psync_fstask_add_creat(folder, fpath->name, encsymkey, encsymkeylen);
+  cr=psync_fstask_add_creat(folder, fpath->name, 0, encsymkey, encsymkeylen);
   if (encsymkey)
     psync_free(encsymkey);
   if (unlikely_log(!cr)){
@@ -1667,13 +1672,6 @@ void psync_fs_dec_of_refcnt_and_readers(psync_openfile_t *of){
     psync_fs_free_openfile(of);
 }
 
-static int psync_fs_release(const char *path, struct fuse_file_info *fi){
-  psync_fs_set_thread_name();
-  debug(D_NOTICE, "release %s", path);
-  psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
-  return 0;
-}
-
 typedef struct {
   psync_openfile_t *of;
   uint64_t writeid;
@@ -1792,6 +1790,14 @@ static int psync_fs_flush(const char *path, struct fuse_file_info *fi){
     return 0;
   }
   pthread_mutex_unlock(&of->mutex);
+  return 0;
+}
+
+static int psync_fs_release(const char *path, struct fuse_file_info *fi){
+  psync_fs_set_thread_name();
+  debug(D_NOTICE, "release %s", path);
+  psync_fs_flush(path, fi);
+  psync_fs_dec_of_refcnt(fh_to_openfile(fi->fh));
   return 0;
 }
 
@@ -1999,7 +2005,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_file_for_writing(psync_openfile_t *of)
   if (size==0 || (size<=PSYNC_FS_MAX_SIZE_CONVERT_NEWFILE &&
         psync_pagecache_have_all_pages_in_cache(of->hash, size) && !psync_pagecache_lock_pages_in_cache())){
     debug(D_NOTICE, "we have all pages of file %s, convert it to new file as they are cheaper to work with", of->currentname);
-    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, encsymkey, encsymkeylen);
+    cr=psync_fstask_add_creat(of->currentfolder, of->currentname, of->fileid, encsymkey, encsymkeylen);
     if (unlikely_log(!cr)){
       psync_sql_unlock();
       psync_pagecache_unlock_pages_from_cache();
@@ -2071,7 +2077,7 @@ PSYNC_NOINLINE static int psync_fs_reopen_static_file_for_writing(psync_openfile
   }
   taskid=UINT64_MAX-(INT64_MAX-of->fileid);
   debug(D_NOTICE, "reopening static file %s for writing size %lu, taskid %lu", of->currentname, (unsigned long)of->currentsize, (unsigned long)taskid);
-  cr=psync_fstask_add_creat(of->currentfolder, of->currentname, NULL, 0);
+  cr=psync_fstask_add_creat(of->currentfolder, of->currentname, 0, NULL, 0);
   if (unlikely_log(!cr)){
     psync_sql_unlock();
     return -EIO;
@@ -2449,6 +2455,7 @@ static int psync_fs_rename_static_file(psync_fstask_folder_t *srcfolder, psync_f
   addlen=psync_fstask_creat_local_offset(len-1);
   cr=(psync_fstask_creat_t *)psync_malloc(addlen+sizeof(psync_fstask_local_creat_t));
   cr->fileid=0;
+  cr->rfileid=0;
   cr->taskid=srccr->taskid;
   memcpy(cr->name, new_name, len);
   memcpy(((char *)cr)+addlen, psync_fstask_creat_get_local(srccr), sizeof(psync_fstask_local_creat_t));
@@ -2745,10 +2752,156 @@ int psync_fs_chown(const char *path, uid_t uid, gid_t gid){
   return 0;
 }
 
+static int psync_fs_set_filetime_locked(psync_fsfileid_t fileid, const struct timespec *tv, int crtime, uint64_t current){
+  if (fileid>0)
+    return psync_fstask_set_mtime(fileid, current, tv->tv_sec, crtime);
+  else{
+    char fileidhex[sizeof(psync_fsfileid_t)*2+2], *filename;
+    const char *cachepath;
+    psync_tree *tr;
+    psync_openfile_t *fl;
+    int64_t d;
+    int ret;
+    tr=openfiles;
+    fl=NULL;
+    while (tr){
+      d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+      if (d<0)
+        tr=tr->left;
+      else if (d>0)
+        tr=tr->right;
+      else{
+        fl=psync_tree_element(tr, psync_openfile_t, tree);
+        break;
+      }
+    }
+    fileid=-fileid;
+    psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    cachepath=psync_setting_get_string(_PS(fscachepath));
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
+    if (fl && fl->datafile!=INVALID_HANDLE_VALUE){
+      debug(D_NOTICE, "found open file for file id %ld", (long)fl->fileid);
+      if (crtime)
+        ret=psync_set_crtime_mtime_by_fd(fl->datafile, filename, tv->tv_sec, 0);
+      else
+        ret=psync_set_crtime_mtime_by_fd(fl->datafile, filename, 0, tv->tv_sec);
+    }
+    else{
+      if (crtime)
+        ret=psync_set_crtime_mtime(filename, tv->tv_sec, 0);
+      else
+        ret=psync_set_crtime_mtime(filename, 0, tv->tv_sec);
+    }
+    debug(D_NOTICE, "setting %s time of %s to %lu=%d", crtime?"creation":"modification", filename, (unsigned long)tv->tv_sec, ret);
+    psync_free(filename);
+    return ret?-EACCES:0;
+  }
+}
+
+static int psync_fs_set_foldertime_locked(psync_fsfolderid_t folderid, const struct timespec *tv, int crtime, uint64_t current){
+  debug(D_NOTICE, "request to set time of folderid %ld ignored", (long)folderid);
+  return 0;
+}
+
+static int psync_fs_set_time_locked(psync_fsfolderid_t folderid, const char *name, const struct timespec *tv, int crtime){
+  psync_fstask_folder_t *folder;
+  psync_fstask_creat_t *creat;
+  psync_fstask_mkdir_t *mkdir;
+  psync_fstask_unlink_t *un;
+  psync_fstask_rmdir_t *rm;
+  psync_sql_res *res;
+  psync_uint_row row;
+  folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
+  if (folder){
+    if ((creat=psync_fstask_find_creat(folder, name, 0))){
+      if (creat->fileid>0){
+        res=psync_sql_query_nolock("SELECT mtime, ctime FROM file WHERE id=?");
+        psync_sql_bind_uint(res, 1, creat->fileid);
+        if ((row=psync_sql_fetch_rowint(res))){
+          uint64_t ctm=row[crtime];
+          psync_sql_free_result(res);
+          return psync_fs_set_filetime_locked(creat->fileid, tv, crtime, ctm);
+        }
+        else{
+          psync_sql_free_result(res);
+          debug(D_WARNING, "found creat in folderid %lu for %s with fileid %lu not present in the database",
+                (unsigned long)folderid, name, (unsigned long)creat->fileid);
+          return -ENOENT;
+        }
+      }
+      else
+        return psync_fs_set_filetime_locked(creat->fileid, tv, crtime, 0);
+    }
+    if ((mkdir=psync_fstask_find_mkdir(folder, name, 0)))
+      return psync_fs_set_foldertime_locked(mkdir->folderid, tv, crtime, 0);
+    un=psync_fstask_find_unlink(folder, name, 0);
+    rm=psync_fstask_find_rmdir(folder, name, 0);
+  }
+  else{
+    un=NULL;
+    rm=NULL;
+  }
+  if (!un && folderid>=0){
+    res=psync_sql_query_nolock("SELECT id, mtime, ctime FROM file WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_string(res, 2, name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      uint64_t fileid=row[0];
+      uint64_t ctm=row[1+crtime];
+      psync_sql_free_result(res);
+      return psync_fs_set_filetime_locked(fileid, tv, crtime, ctm);
+    }
+    psync_sql_free_result(res);
+  }
+  if (!rm && folderid>=0){
+    res=psync_sql_query_nolock("SELECT id, permissions, mtime, ctime FROM folder WHERE parentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    psync_sql_bind_string(res, 2, name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      uint64_t folderid=row[0];
+      uint64_t permissions=row[1];
+      uint64_t ctm=row[2+crtime];
+      psync_sql_free_result(res);
+      if (!(permissions&PSYNC_PERM_MODIFY))
+        return -EACCES;
+      return psync_fs_set_foldertime_locked(folderid, tv, crtime, ctm);
+    }
+    psync_sql_free_result(res);
+  }
+  return -ENOENT;
+}
+
+static int psync_fs_set_time(const char *path, const struct timespec *tv, int crtime){
+  psync_fspath_t *fpath;
+  int ret;
+  psync_sql_lock();
+  CHECK_LOGIN_LOCKED();
+  fpath=psync_fsfolder_resolve_path(path);
+  if (!fpath)
+    ret=-ENOENT;
+  else if (!(fpath->permissions&PSYNC_PERM_MODIFY))
+    ret=-EACCES;
+  else
+    ret=psync_fs_set_time_locked(fpath->folderid, fpath->name, tv, crtime);
+  psync_sql_unlock();
+  psync_free(fpath);
+  return ret;
+}
+
+#if defined(FUSE_HAS_SETCRTIME)
+static int psync_fs_setcrtime(const char *path, const struct timespec *tv){
+  psync_fs_set_thread_name();
+  debug(D_NOTICE, "setcrtime %s %lu", path, tv->tv_sec);
+  return psync_fs_set_time(path, tv, 1);
+}
+#endif
+
 static int psync_fs_utimens(const char *path, const struct timespec tv[2]){
   psync_fs_set_thread_name();
-  debug(D_NOTICE, "utimens %s", path);
-  return 0;
+  debug(D_NOTICE, "utimens %s %lu", path, tv[1].tv_sec);
+  return psync_fs_set_time(path, &tv[1], 0);
 }
 
 static int psync_fs_ftruncate_of_locked(psync_openfile_t *of, fuse_off_t size){
@@ -2826,7 +2979,7 @@ static void *psync_fs_init(struct fuse_conn_info *conn){
 #if defined(FUSE_CAP_BIG_WRITES)
   conn->want|=FUSE_CAP_BIG_WRITES;
 #endif
-  conn->max_readahead=0;
+  conn->max_readahead=1024*1024;
   conn->max_write=FS_MAX_WRITE;
   if (psync_start_callback)
     psync_timer_register(psync_fs_start_callback_timer, 1, NULL);
@@ -3159,7 +3312,7 @@ static int psync_fs_do_start(){
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
 
 // it seems that fuse option parser ignores the first argument
-// it is ignored as it's like the exec(), argv[0] is the program
+// it is ignored as it's like in the exec() parameters, argv[0] is the program
 
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
@@ -3168,6 +3321,7 @@ static int psync_fs_do_start(){
   fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   fuse_opt_add_arg(&args, "-ononempty");
   fuse_opt_add_arg(&args, "-ohard_remove");
+//  fuse_opt_add_arg(&args, "-d");
 #endif
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
@@ -3212,6 +3366,10 @@ static int psync_fs_do_start(){
 #if defined(FUSE_HAS_CAN_UNLINK)
   psync_oper.can_unlink=psync_fs_can_unlink;
   psync_oper.can_rmdir=psync_fs_can_rmdir;
+#endif
+
+#if defined(FUSE_HAS_SETCRTIME)
+  psync_oper.setcrtime=psync_fs_setcrtime;
 #endif
 
 #if defined(P_OS_POSIX)

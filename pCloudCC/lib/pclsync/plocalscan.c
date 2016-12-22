@@ -156,6 +156,25 @@ static int scanner_local_folder_to_list(const char *localpath, psync_list *lst){
   return psync_list_dir(localpath, scanner_local_entry_to_list, lst);
 }
 
+static void delete_local_folder_rec(psync_folderid_t localfolderid);
+
+static void try_delete_localfolder(psync_folderid_t localfolderid){
+  if (psync_sql_tryupgradelock())
+    return;
+  psync_sql_start_transaction();
+  delete_local_folder_rec(localfolderid);
+  psync_sql_commit_transaction();
+}
+
+static void try_delete_localfile(psync_fileid_t localfileid){
+  psync_sql_res *res;
+  if (psync_sql_tryupgradelock())
+    return;
+  res=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
+  psync_sql_bind_uint(res, 1, localfileid);
+  psync_sql_run_free(res);
+}
+
 static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t localfolderid, psync_list *lst){
   psync_sql_res *res;
   psync_variant_row row;
@@ -168,6 +187,11 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
     name=psync_get_lstring(row[5], &namelen);
+    if (unlikely(psync_is_lname_to_ignore(name, namelen))){
+      debug(D_NOTICE, "found a name %s matching ignore pattern in localfolder, will try to delete", name);
+      try_delete_localfolder(psync_get_number(row[0]));
+      continue;
+    }
     namelen++;
     e=(sync_folderlist *)psync_malloc(offsetof(sync_folderlist, name)+namelen);
     e->localid=psync_get_number(row[0]);
@@ -186,6 +210,11 @@ static void scanner_db_folder_to_list(psync_syncid_t syncid, psync_folderid_t lo
   psync_sql_bind_uint(res, 2, syncid);
   while ((row=psync_sql_fetch_row(res))){
     name=psync_get_lstring(row[5], &namelen);
+    if (unlikely(psync_is_lname_to_ignore(name, namelen))){
+      debug(D_NOTICE, "found a name %s matching ignore pattern in localfile, will try to delete", name);
+      try_delete_localfile(psync_get_number(row[0]));
+      continue;
+    }
     namelen++;
     e=(sync_folderlist *)psync_malloc(offsetof(sync_folderlist, name)+namelen);
     e->localid=psync_get_number(row[0]);
@@ -228,6 +257,10 @@ static void add_new_element(const sync_folderlist *e, psync_folderid_t folderid,
   sync_folderlist *c;
   if (psync_is_name_to_ignore(e->name))
     return;
+  if (!psync_is_valid_utf8(e->name)){
+    debug(D_WARNING, "ignoring %s with invalid UTF8 name %s", e->isfolder?"folder":"file", e->name);
+    return;
+  }
   debug(D_NOTICE, "found new %s %s", e->isfolder?"folder":"file", e->name);
   c=copy_folderlist_element(e, folderid, localfolderid, syncid, synctype);
   if (e->isfolder)
@@ -321,11 +354,9 @@ static void scanner_scan_folder(const char *localpath, psync_folderid_t folderid
   psync_list_for_each_element_call(&dblist, sync_folderlist, list, psync_free);
   if (localsleepperfolder){
     psync_milisleep(localsleepperfolder);
-    if (psync_current_time-starttime>=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*2 && localsleepperfolder>=2)
-      localsleepperfolder/=2;
+    if (psync_current_time-starttime>=PSYNC_LOCALSCAN_SLEEPSEC_PER_SCAN*3/2)
+      localsleepperfolder=0;
   }
-  else
-    psync_yield_cpu();
   psync_list_for_each_element(l, &disklist, sync_folderlist, list)
     if (l->isfolder && l->localid){
       subpath=psync_strcat(localpath, PSYNC_DIRECTORY_SEPARATOR, l->name, NULL);
@@ -482,8 +513,8 @@ static void scan_delete_file(sync_folderlist *fl){
 
 static void scan_create_folder(sync_folderlist *fl){
   psync_sql_res *res;
+  psync_uint_row row;
   psync_folderid_t localfolderid;
-  debug(D_NOTICE, "folder created %s", fl->name);
   res=psync_sql_prep_statement("INSERT OR IGNORE INTO localfolder (localparentfolderid, syncid, inode, deviceid, mtime, mtimenative, flags, name) "
                                "VALUES (?, ?, ?, ?, ?, ?, 0, ?)");
   psync_sql_bind_uint(res, 1, fl->localparentfolderid);
@@ -496,6 +527,18 @@ static void scan_create_folder(sync_folderlist *fl){
   psync_sql_run_free(res);
   /* it is OK to use affected rows after run_free as we are in transaction */
   if (!psync_sql_affected_rows()){
+    localfolderid=0;
+    res=psync_sql_query("SELECT id FROM localfolder WHERE syncid=? AND localparentfolderid=? AND name=?");
+    psync_sql_bind_uint(res, 1, fl->syncid);
+    psync_sql_bind_uint(res, 2, fl->localparentfolderid);
+    psync_sql_bind_string(res, 3, fl->name);
+    if ((row=psync_sql_fetch_rowint(res))){
+      localfolderid=row[0];
+      debug(D_NOTICE, "folder created %s, exists in localfolder,  localid %lu", fl->name, (unsigned long)localfolderid);
+    }
+    else
+      debug(D_NOTICE, "folder created %s, exists in localfolder", fl->name);
+    psync_sql_free_result(res);
     res=psync_sql_prep_statement("UPDATE localfolder SET inode=?, deviceid=?, mtime=?, mtimenative=?, flags=0 WHERE syncid=? AND localparentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fl->inode);
     psync_sql_bind_uint(res, 2, fl->deviceid);
@@ -508,6 +551,7 @@ static void scan_create_folder(sync_folderlist *fl){
     goto hasfolder;
   }
   localfolderid=psync_sql_insertid();
+  debug(D_NOTICE, "folder created %s localid %lu", fl->name, (unsigned long)localfolderid);
   fl->localid=localfolderid;
   res=psync_sql_prep_statement("REPLACE INTO syncedfolder (syncid, localfolderid, synctype) VALUES (?, ?, ?)");
   psync_sql_bind_uint(res, 1, fl->syncid);
@@ -545,6 +589,24 @@ static void scan_created_folder(sync_folderlist *fl){
   }
 }
 
+static void update_syncid_rec(psync_folderid_t localfolderid, psync_syncid_t syncid) {
+  psync_sql_res *res;
+  psync_uint_row row;
+  res=psync_sql_prep_statement("UPDATE localfolder SET syncid=? WHERE id=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_bind_uint(res, 2, localfolderid);
+  psync_sql_run_free(res);
+  res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=? WHERE localfolderid=?");
+  psync_sql_bind_uint(res, 1, syncid);
+  psync_sql_bind_uint(res, 2, localfolderid);
+  psync_sql_run_free(res);
+  res=psync_sql_query_nolock("SELECT id FROM localfolder WHERE localparentfolderid=?");
+  psync_sql_bind_uint(res, 1, localfolderid);
+  while ((row=psync_sql_fetch_rowint(res)))
+    update_syncid_rec(row[0], syncid);
+  psync_sql_free_result(res);
+}
+
 static void scan_rename_folder(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_sql_res *res;
   psync_uint_row row;
@@ -568,12 +630,15 @@ static void scan_rename_folder(sync_folderlist *rnfr, sync_folderlist *rnto){
   psync_sql_bind_string(res, 3, rnto->name);
   psync_sql_bind_uint(res, 4, rnfr->localid);
   psync_sql_run_free(res);
-  res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE localfolderid=? AND syncid=?");
+  res=psync_sql_prep_statement("UPDATE syncedfolder SET syncid=?, synctype=? WHERE localfolderid=?");
   psync_sql_bind_uint(res, 1, rnto->syncid);
   psync_sql_bind_uint(res, 2, rnto->synctype);
   psync_sql_bind_uint(res, 3, rnfr->localid);
-  psync_sql_bind_uint(res, 4, rnfr->syncid);
   psync_sql_run_free(res);
+  if (unlikely(rnfr->syncid!=rnto->syncid)){
+    debug(D_NOTICE, "folder %s moved from syncid %u to syncid %u", rnfr->name, (unsigned)rnfr->syncid, (unsigned)rnto->syncid);
+    update_syncid_rec(rnfr->localid, rnto->syncid);
+  }
   psync_task_rename_remote_folder(rnfr->syncid, rnto->syncid, rnfr->localid, rnto->localparentfolderid, rnto->name);
 /* remove the scan from here and restart the full scan once we finished with current update makes more sense when we found moved folders
  *

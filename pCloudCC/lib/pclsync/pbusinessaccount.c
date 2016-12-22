@@ -621,7 +621,7 @@ void psync_update_cryptostatus(){
   uint64_t u, crexp, crsub = 0, is_business = 0;
   int crst = 0,crstat;
   
-  binparam params[] = { P_STR("auth", psync_my_auth) };
+  binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat","timestamp") };
   res = psync_api_run_command("userinfo", params);
   if (!res) {
     debug(D_WARNING, "Send command returned invalid result.\n");
@@ -691,34 +691,44 @@ static int check_write_permissions (psync_folderid_t folderid) {
    psync_sql_free_result(res);
    return ret;
 }
-
-psync_folderid_t psync_check_and_create_folder (const char * path) {
-  psync_folderid_t folderid=psync_get_folderid_by_path_or_create(path);
-  if (folderid==PSYNC_INVALID_FOLDERID || (!check_write_permissions(folderid))){
-    char *buff=NULL;
-    uint32_t bufflen;
-    int ind = 1;
-    char *err=NULL;
+static psync_folderid_t create_index_folder(const char * path) {
+  char *buff=NULL;
+  uint32_t bufflen;
+  int ind = 1;
+  char * err;
+  psync_folderid_t folderid;
     
-    while (ind < 100) {
-      folderid=PSYNC_INVALID_FOLDERID;
-      bufflen = strlen(path) + 1 /*zero char*/ + 3 /*parenthesis*/ + 3 /*up to 3 digit index*/;
-      buff = (char *) psync_malloc(bufflen);
-      snprintf(buff, bufflen - 1, "%s (%d)", path, ind);
-      if (psync_create_remote_folder_by_path(buff, &err)!=0)
-        debug(D_NOTICE, "Unable to create folder %s error is %s.", buff, err);
-      folderid=psync_get_folderid_by_path_or_create(buff);
-      if ((folderid!=PSYNC_INVALID_FOLDERID)&&check_write_permissions(folderid)) {
-        psync_free(buff);
-        break;
-      }
-      ++ind;
-
-      if (err)
-        psync_free(err);
+  while (ind < 100) {
+    folderid=PSYNC_INVALID_FOLDERID;
+    bufflen = strlen(path) + 1 /*zero char*/ + 3 /*parenthesis*/ + 3 /*up to 3 digit index*/;
+    buff = (char *) psync_malloc(bufflen);
+    snprintf(buff, bufflen - 1, "%s (%d)", path, ind);
+    if (psync_create_remote_folder_by_path(buff, &err)!=0)
+      debug(D_NOTICE, "Unable to create folder %s error is %s.", buff, err);
+    folderid=psync_get_folderid_by_path(buff);
+    if ((folderid!=PSYNC_INVALID_FOLDERID)&&check_write_permissions(folderid)) {
       psync_free(buff);
+      break;
     }
+    ++ind;
+    if (err)
+      psync_free(err);
+    psync_free(buff);
   }
+  return folderid;
+}
+psync_folderid_t psync_check_and_create_folder (const char * path) {
+  psync_folderid_t folderid=psync_get_folderid_by_path(path);
+  char *err;
+  
+  if (folderid==PSYNC_INVALID_FOLDERID) {
+    if(psync_create_remote_folder_by_path(path, &err)!=0) {
+      debug(D_NOTICE, "Unable to create folder %s error is %s.", path, err);
+      psync_free(err);
+      folderid = create_index_folder(path);
+    }
+  } else if (!check_write_permissions(folderid))
+   folderid = create_index_folder(path);
 
   return folderid; 
 }

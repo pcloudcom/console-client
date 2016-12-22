@@ -206,6 +206,8 @@ unsigned char *psync_base32_decode(const unsigned char *str, size_t length, size
 unsigned char *psync_base64_encode(const unsigned char *str, size_t length, size_t *ret_length);
 unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size_t *ret_length);
 
+int psync_is_valid_utf8(const char *str);
+
 int psync_sql_connect(const char *db) PSYNC_NONNULL(1);
 int psync_sql_close();
 int psync_sql_reopen(const char *path);
@@ -327,6 +329,7 @@ void psync_task_free(psync_task_manager_t tm);
 int psync_task_complete(void *h, void *data);
 
 void psync_pqsort(void *base, size_t cnt, size_t sort_first, size_t size, int (*compar)(const void *, const void *));
+void psync_qpartition(void *base, size_t cnt, size_t sort_first, size_t size, int (*compar)(const void *, const void *));
 
 void psync_try_free_memory();
 

@@ -34,6 +34,7 @@
 #include "pnetlibs.h"
 #include "papi.h"
 #include "pcloudcrypto.h"
+#include "pdiff.h"
 
 #define INITIAL_NAME_BUFF 2000
 #define INITIAL_ENTRY_CNT 128
@@ -105,6 +106,23 @@ err:
   return PSYNC_INVALID_FOLDERID;
 }
 
+static psync_folderid_t wait_folder_id_in_db(psync_folderid_t folderid){
+  psync_sql_res *res;
+  psync_uint_row row;
+  int tries;
+  tries=0;
+  while (++tries<=20){
+    res=psync_sql_query_rdlock("SELECT id FROM folder WHERE id=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    row=psync_sql_fetch_rowint(res);
+    psync_sql_free_result(res);
+    if (row)
+      return folderid;
+    psync_milisleep(50);
+  }
+  return PSYNC_INVALID_FOLDERID;
+}
+
 psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
   psync_folderid_t cfolderid;
   const char *sl;
@@ -121,7 +139,7 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
     if (*path==0){
       if (res)
         psync_sql_free_result(res);
-      return cfolderid;
+      return wait_folder_id_in_db(cfolderid);
     }
     sl=strchr(path, '/');
     if (sl)
@@ -160,6 +178,8 @@ psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
       result=psync_find_result(bres, "result", PARAM_NUM)->num;
       if (result==0){
         cfolderid=psync_find_result(psync_find_result(bres, "metadata", PARAM_HASH), "folderid", PARAM_NUM)->num;
+        if (psync_find_result(bres, "created", PARAM_BOOL)->num)
+          psync_diff_wake();
         psync_free(bres);
       }
       else{

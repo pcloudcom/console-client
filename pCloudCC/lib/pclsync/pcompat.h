@@ -146,6 +146,7 @@ typedef unsigned long psync_uint_t;
 #define psync_stat_size(s) ((s)->st_size)
 #ifdef _DARWIN_FEATURE_64_BIT_INODE
 #define psync_stat_birthtime(s) ((s)->st_birthtime)
+#define PSYNC_HAS_BIRTHTIME
 #else
 #define psync_stat_birthtime(s) ((s)->st_mtime)
 #endif
@@ -248,7 +249,10 @@ typedef int psync_file_t;
 
 #define psync_def_var_arr(name, type, size) type *name=(type *)alloca(sizeof(type)*(size))
 #define atoll _atoi64
+#if _MSC_VER < 1900
 #define snprintf _snprintf
+#endif
+//#define snprintf _snprintf
 
 #endif
 
@@ -268,6 +272,7 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_stat_ctime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
 #define psync_stat_mtime(s) psync_filetime_to_timet(&(s)->ftLastWriteTime)
 #define psync_stat_birthtime(s) psync_filetime_to_timet(&(s)->ftCreationTime)
+#define PSYNC_HAS_BIRTHTIME
 #define psync_stat_mtime_native(s) psync_32to64((s)->ftLastWriteTime.dwHighDateTime, (s)->ftLastWriteTime.dwLowDateTime)
 #define psync_mtime_native_to_mtime(n) psync_filetime64_to_timet(n)
 #define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)
@@ -404,6 +409,8 @@ typedef void (*psync_thread_start1)(void *);
 
 extern PSYNC_THREAD const char *psync_thread_name;
 
+extern const unsigned char psync_invalid_filename_chars[];
+
 void psync_compat_init();
 int psync_user_is_admin();
 int psync_stat_mode_ok(psync_stat_t *buf, unsigned int bits) PSYNC_PURE;
@@ -431,8 +438,8 @@ void psync_socket_set_write_buffered(psync_socket *sock);
 void psync_socket_set_write_buffered_thread(psync_socket *sock);
 void psync_socket_clear_write_buffered(psync_socket *sock);
 void psync_socket_clear_write_buffered_thread(psync_socket *sock);
-int psync_socket_set_recvbuf(psync_socket *sock, uint32_t bufsize);
-int psync_socket_set_sendbuf(psync_socket *sock, uint32_t bufsize);
+int psync_socket_set_recvbuf(psync_socket *sock, int bufsize);
+int psync_socket_set_sendbuf(psync_socket *sock, int bufsize);
 int psync_socket_isssl(psync_socket *sock) PSYNC_PURE;
 int psync_socket_pendingdata(psync_socket *sock);
 int psync_socket_pendingdata_buf(psync_socket *sock);
@@ -484,6 +491,8 @@ int psync_file_schedulesync(psync_file_t fd);
 int psync_folder_sync(const char *path);
 psync_file_t psync_file_dup(psync_file_t fd);
 int psync_file_set_creation(psync_file_t fd, time_t ctime);
+int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime);
+int psync_set_crtime_mtime_by_fd(psync_file_t fd, const char *path, time_t crtime, time_t mtime);
 int psync_file_preread(psync_file_t fd, uint64_t offset, size_t count);
 int psync_file_readahead(psync_file_t fd, uint64_t offset, size_t count);
 ssize_t psync_file_read(psync_file_t fd, void *buf, size_t count);

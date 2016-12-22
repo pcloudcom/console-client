@@ -172,6 +172,13 @@ static char *fill_formatted_time(char *str, uint64_t totalsec){
   return str;
 }
 
+static uint64_t sub_no_underf(uint64_t a, uint64_t b){
+  if (likely(b<a))
+    return a-b;
+  else
+    return 0;
+}
+
 static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char *uploadstr){
   char *up, *dw;
   uint64_t remsec;
@@ -188,12 +195,12 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
         dw=cat_const(dw, "Stopped. ");
       else if (status->localisfull)
         dw=cat_const(dw, "Disk full. ");
-      dw=fill_remaining(dw, status->filestodownload, status->bytestodownload-status->bytesdownloaded);
+      dw=fill_remaining(dw, status->filestodownload, sub_no_underf(status->bytestodownload, status->bytesdownloaded));
     }
     else{
       dw=fill_formatted_bytes(dw, speed);
       dw=cat_const(dw, "/sec, ");
-      dw=fill_remaining(dw, status->filestodownload, status->bytestodownload-status->bytesdownloaded);
+      dw=fill_remaining(dw, status->filestodownload, sub_no_underf(status->bytestodownload, status->bytesdownloaded));
       remsec=(status->bytestodownload-status->bytesdownloaded)/speed;
       if (remsec<DONT_SHOW_TIME_IF_SEC_OVER || speed>=DONT_SHOW_TIME_IF_SPEED_BELOW){
         *dw++=' ';
@@ -213,12 +220,12 @@ static void status_fill_formatted_str(pstatus_t *status, char *downloadstr, char
         up=cat_const(up, "Stopped. ");
       else if (status->remoteisfull)
         up=cat_const(up, "Account full. ");
-      up=fill_remaining(up, status->filestoupload, status->bytestoupload-status->bytesuploaded);
+      up=fill_remaining(up, status->filestoupload, sub_no_underf(status->bytestoupload, status->bytesuploaded));
     }
     else{
       up=fill_formatted_bytes(up, speed);
       up=cat_const(up, "/sec, ");
-      up=fill_remaining(up, status->filestoupload, status->bytestoupload-status->bytesuploaded);
+      up=fill_remaining(up, status->filestoupload, sub_no_underf(status->bytestoupload, status->bytesuploaded));
       remsec=(status->bytestoupload-status->bytesuploaded)/speed;
       if (remsec<DONT_SHOW_TIME_IF_SEC_OVER || speed>=DONT_SHOW_TIME_IF_SPEED_BELOW){
         *up++=' ';

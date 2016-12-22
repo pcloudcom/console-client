@@ -285,6 +285,7 @@ int psync_rwlock_towrlock(psync_rwlock_t *rw){
   cnt=psync_rwlock_get_count(rw);
   if (cnt.cnt[1] && cnt.cnt[1]!=PSYNC_WR_RESERVED)
     return 0;
+  assert(cnt.cnt[0]);
   pthread_mutex_lock(&rw->mutex);
   assert(rw->rcount);
   assert(!rw->wcount);
