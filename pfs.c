@@ -567,6 +567,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   if (unlikely(psync_fs_need_per_folder_refresh_const() && cr->fileid<psync_fake_fileid))
     return psync_creat_stat_fake_file(stbuf);
   fl=NULL;
+  fileid=-cr->fileid;
   psync_sql_rdlock();
   tr=openfiles;
   while (tr){
@@ -586,14 +587,13 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
     stret=psync_fstat(fl->datafile, &st);
     pthread_mutex_unlock(&fl->mutex);
     if (stret)
-      debug(D_NOTICE, "could not stat open file %ld", (long)fileid);
+      debug(D_NOTICE, "could not stat open file %ld", (long)cr->fileid);
     else
-      debug(D_NOTICE, "got stat from open file %ld", (long)fileid);
+      debug(D_NOTICE, "got stat from open file %ld", (long)cr->fileid);
   }
   else{
     if (fl)
       pthread_mutex_unlock(&fl->mutex);
-    fileid=-cr->fileid;
     psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
     fileidhex[sizeof(psync_fsfileid_t)]='d';
     fileidhex[sizeof(psync_fsfileid_t)+1]=0;
