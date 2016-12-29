@@ -570,7 +570,7 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   psync_sql_rdlock();
   tr=openfiles;
   while (tr){
-    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    d=cr->fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
     if (d<0)
       tr=tr->left;
     else if (d>0)
