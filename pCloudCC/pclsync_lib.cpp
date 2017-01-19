@@ -124,18 +124,25 @@ void event_handler(psync_eventtype_t event, psync_eventdata_t eventdata){
     std::cout <<"event" << event << std::endl;
 }
 
-static void  lib_setup_cripto(){ 
-  if (psync_crypto_issetup())
-    std::cout << "crypto is setup, login result=" << psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str()) << std::endl;
-  else{
+static int lib_setup_cripto(){ 
+  int ret = 0;
+  ret = psync_crypto_issetup();
+  if (ret) {
+    ret = psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str());
+    std::cout << "crypto is setup, login result=" << ret << std::endl;
+  } else {
     std::cout << "crypto is not setup" << std::endl;
-    if (psync_crypto_setup(clib::pclsync_lib::get_lib().get_crypto_pass().c_str(), "no hint"))
+    ret = psync_crypto_setup(clib::pclsync_lib::get_lib().get_crypto_pass().c_str(), "no hint");
+    if (ret)
       std::cout << "crypto setup failed" << std::endl;
     else{
-      std::cout << "crypto setup successful, start=" << psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str()) << std::endl;
-      std::cout << "creating folder=" << psync_crypto_mkdir(0, "Crypto", NULL, NULL) << std::endl;
+      ret = psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str());
+      std::cout << "crypto setup successful, start=" << ret << std::endl;
+      ret =  psync_crypto_mkdir(0, "Crypto", NULL, NULL) ;
+      std::cout << "creating folder=" << ret << std::endl;
     }
   }
+  return ret;
   clib::pclsync_lib::get_lib().crypto_on_ = true;
 }
 
@@ -204,7 +211,7 @@ static void status_change(pstatus_t* status) {
 int clib::pclsync_lib::statrt_crypto (const char* pass, void * rep) {
   std::cout << "calling startcrypto pass: "<<pass << std::endl;
   get_lib().crypto_pass_ = pass;
-  lib_setup_cripto();
+  return lib_setup_cripto();
 }
 int clib::pclsync_lib::stop_crypto (const char* path, void * rep) {
   psync_crypto_stop();
@@ -227,18 +234,22 @@ int clib::pclsync_lib::init()//std::string& username, std::string& password, std
   psync_set_software_string(software_string.append(client_name).c_str());
   if (setup_crypto_ && crypto_pass_.empty() )
     return 3;
-  was_init_ = true;
+ 
   
   if (psync_init()){
     std::cout <<"init failed\n"; 
     return 1;
   }
   
+   was_init_ = true;
    if (!get_mount().empty())
     psync_set_string_setting("fsroot",get_mount().c_str());
   
 // _tunnel  = psync_ssl_tunnel_start("127.0.0.1", 9443, "62.210.116.50", 443);
+   
   
+  int isfsautostart = psync_get_bool_setting("autostartfs");
+
   psync_start_sync(status_change, event_handler);
   char * username_old = psync_get_username();
 
@@ -257,6 +268,27 @@ int clib::pclsync_lib::init()//std::string& username, std::string& password, std
   psync_add_overlay_callback(22,&clib::pclsync_lib::finalize);
   psync_add_overlay_callback(23,&clib::pclsync_lib::list_sync_folders);
   
+  return 0;
+}
+
+int clib::pclsync_lib::login(const char* user, const char* pass, int save) {
+  set_username(user);
+  set_password(pass);
+  set_savepass(bool(save));
+  psync_set_user_pass(user,pass, save);
+  return 0;
+}
+
+int clib::pclsync_lib::logout () {
+  set_password("");
+  psync_logout();
+  return 0;
+}
+
+int clib::pclsync_lib::unlink () {
+  set_username("");
+  set_password("");
+  psync_unlink();
   return 0;
 }
 

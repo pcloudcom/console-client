@@ -8,11 +8,10 @@ extern "C" {
 #endif
  namespace cc = console_client::clibrary;
  
-int init(const char* user, const char* pass, int save) {
-  cc::pclsync_lib::get_lib().set_username(user);
-  cc::pclsync_lib::get_lib().set_password(pass);
-  cc::pclsync_lib::get_lib().set_savepass((bool)save);
-  return cc::pclsync_lib::get_lib().init();
+int init() {
+  if (!cc::pclsync_lib::get_lib().was_init_)
+    return cc::pclsync_lib::get_lib().init();
+  else return 0;
 }
 
  int statrt_crypto (const char* pass) {
@@ -24,14 +23,28 @@ int init(const char* user, const char* pass, int save) {
  int finalize () { 
   cc::pclsync_lib::finalize(NULL, NULL);
 }
-void set_status_callback(status_callback_t c)
-{
+void set_status_callback(status_callback_t c) {
   cc::pclsync_lib::get_lib().set_status_callback(c);
 }
 
 char * get_token(){
   return cc::pclsync_lib::get_lib().get_token();
 }
+
+
+int login(const char* user, const char* pass, int save) {
+  return cc::pclsync_lib::get_lib().login(user, pass, save);
+}
+
+int logout() {
+  return cc::pclsync_lib::get_lib().logout();
+}
+
+int unlinklib() {
+  return cc::pclsync_lib::get_lib().unlink();
+}
+  
+
  #ifdef __cplusplus
 }
 #endif
