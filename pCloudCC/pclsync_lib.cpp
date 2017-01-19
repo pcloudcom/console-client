@@ -124,18 +124,25 @@ void event_handler(psync_eventtype_t event, psync_eventdata_t eventdata){
     std::cout <<"event" << event << std::endl;
 }
 
-static void  lib_setup_cripto(){ 
-  if (psync_crypto_issetup())
-    std::cout << "crypto is setup, login result=" << psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str()) << std::endl;
-  else{
+static int lib_setup_cripto(){ 
+  int ret = 0;
+  ret = psync_crypto_issetup();
+  if (ret) {
+    ret = psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str());
+    std::cout << "crypto is setup, login result=" << ret << std::endl;
+  } else {
     std::cout << "crypto is not setup" << std::endl;
-    if (psync_crypto_setup(clib::pclsync_lib::get_lib().get_crypto_pass().c_str(), "no hint"))
+    ret = psync_crypto_setup(clib::pclsync_lib::get_lib().get_crypto_pass().c_str(), "no hint");
+    if (ret)
       std::cout << "crypto setup failed" << std::endl;
     else{
-      std::cout << "crypto setup successful, start=" << psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str()) << std::endl;
-      std::cout << "creating folder=" << psync_crypto_mkdir(0, "Crypto", NULL, NULL) << std::endl;
+      ret = psync_crypto_start(clib::pclsync_lib::get_lib().get_crypto_pass().c_str());
+      std::cout << "crypto setup successful, start=" << ret << std::endl;
+      ret =  psync_crypto_mkdir(0, "Crypto", NULL, NULL) ;
+      std::cout << "creating folder=" << ret << std::endl;
     }
   }
+  return ret;
   clib::pclsync_lib::get_lib().crypto_on_ = true;
 }
 
@@ -204,7 +211,7 @@ static void status_change(pstatus_t* status) {
 int clib::pclsync_lib::statrt_crypto (const char* pass, void * rep) {
   std::cout << "calling startcrypto pass: "<<pass << std::endl;
   get_lib().crypto_pass_ = pass;
-  lib_setup_cripto();
+  return lib_setup_cripto();
 }
 int clib::pclsync_lib::stop_crypto (const char* path, void * rep) {
   psync_crypto_stop();
@@ -273,11 +280,8 @@ int clib::pclsync_lib::login(const char* user, const char* pass, int save) {
   set_username(user);
   set_password(pass);
   set_savepass(bool(save));
- // std::cout << "login user ["<<user <<"] password {"<< pass<<"} save ["<< save<<"]"<<std::endl;
   psync_set_user_pass(user,pass, save);
- //  std::cout << "step 2"<<std::endl;
- // psync_fs_start();
- //  std::cout << "step 3"<<std::endl;
+
   return 0;
 }
 
