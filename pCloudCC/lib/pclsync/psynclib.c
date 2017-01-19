@@ -312,6 +312,7 @@ void psync_set_user_pass(const char *username, const char *password, int save){
       psync_my_pass=psync_strdup(password);
     pthread_mutex_unlock(&psync_my_auth_mutex);
   }
+  debug(D_NOTICE, "set userpass called status set");
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
   psync_recache_contacts=1;
 }

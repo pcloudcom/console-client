@@ -70,6 +70,9 @@ namespace console_client {
       //Singelton
       static pclsync_lib& get_lib();
       char * get_token();
+      int logout();
+      int unlink();
+      int login(const char* user, const char* pass, int save);
       
       bool crypto_on_;
       bool save_pass_;
@@ -77,13 +80,14 @@ namespace console_client {
       pstatus_struct_* status_;
       bool newuser_;
       status_callback_t status_callback_;
+      bool was_init_;
 
     private:
       std::string username_;
       std::string password_;
       std::string crypto_pass_;
       std::string mount_;
-      bool was_init_; 
+       
       bool to_set_mount_;
       bool daemon_;
 
