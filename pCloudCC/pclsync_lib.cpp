@@ -205,7 +205,9 @@ static void status_change(pstatus_t* status) {
     psync_fs_start();
   }
   if (clib::pclsync_lib::get_lib().status_callback_)
-    clib::pclsync_lib::get_lib().status_callback_((int)status->status, status2string(status->status));
+    clib::pclsync_lib::get_lib().status_callback_((int)status->status, status2string(status->status),
+      status->downloadstr, status->uploadstr
+    );
 }
 
 int clib::pclsync_lib::statrt_crypto (const char* pass, void * rep) {

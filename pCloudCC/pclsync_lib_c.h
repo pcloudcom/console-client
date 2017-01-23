@@ -7,7 +7,9 @@ extern "C" {
   
   void psync_fs_pause_until_login();
   
-  typedef void (*status_callback_t)(int status,  const char * stat_string); 
+  typedef void (*status_callback_t)(int status,  const char * stat_string, 
+    const char * down_string, const char * up_string
+  ); 
   
   int init();
   int statrt_crypto (const char* pass);
