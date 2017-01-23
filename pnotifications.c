@@ -220,7 +220,7 @@ void psync_notifications_set_callback(pnotification_callback_t notification_call
   pthread_mutex_unlock(&ntf_mutex);
 }
 
-static void fill_actionid(const binresult *ntf, psync_notification_t *pntf){
+static void fill_actionid(const binresult *ntf, psync_notification_t *pntf, psync_list_builder_t *builder){
   const char *action;
   action=psync_find_result(ntf, "action", PARAM_STR)->str;
   if (!strcmp(action, "gotofolder")){
@@ -230,6 +230,11 @@ static void fill_actionid(const binresult *ntf, psync_notification_t *pntf){
   else if (!strcmp(action, "opensharerequest")){
     pntf->actionid=PNOTIFICATION_ACTION_SHARE_REQUEST;
     pntf->actiondata.sharerequestid=psync_find_result(ntf, "sharerequestid", PARAM_NUM)->num;
+  }
+  else if (!strcmp(action, "openurl")){
+    pntf->actionid=PNOTIFICATION_ACTION_GO_TO_URL;
+    pntf->actiondata.url=psync_find_result(ntf, "url", PARAM_STR)->str;
+    psync_list_add_string_offset(builder, offsetof(psync_notification_t, actiondata.url));
   }
   else
     pntf->actionid=PNOTIFICATION_ACTION_NONE;
@@ -351,7 +356,7 @@ psync_notification_list_t *psync_notifications_get(){
       if (pntf->isnew)
         cntnew++;
       pntf->iconid=psync_find_result(ntf, "iconid", PARAM_NUM)->num;
-      fill_actionid(ntf, pntf);
+      fill_actionid(ntf, pntf, builder);
     }
   }
   pthread_mutex_unlock(&ntf_mutex);
