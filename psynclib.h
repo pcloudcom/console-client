@@ -202,6 +202,10 @@ typedef struct pstatus_struct_ {
 #define PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING 13
 #define PERROR_LOCAL_IS_ON_PDRIVE      14
 
+#define PERROR_CACHE_MOVE_NOT_EMPTY       1
+#define PERROR_CACHE_MOVE_NO_WRITE_ACCESS 2
+#define PERROR_CACHE_MOVE_DRIVE_HAS_TASKS 3 // this error is also returned when the path is on pCloudDrive
+
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
 #define PLIST_ALL     3
@@ -949,9 +953,21 @@ int psync_upload_file_as(const char *remote_path, const char *remote_filename, c
  * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
  *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
  *                            pointer.
- *  psync_get_path_by_fileid() - returns path (without mountpoint) of a given fileid on the filesystem or
+ * psync_get_path_by_fileid() - returns path (without mountpoint) of a given fileid on the filesystem or
  *                            NULL if it is not mounted or parent folder could not be found. You are supposed to free the returned
  *                            pointer.
+ *
+ * psync_fs_clean_read_cache() - cleans the filesystem read cache. This function does not fail. The general expectation is that the function
+ *                            takes some moderate time to execute - maybe 0.5-2 seconds depending on the system and it's load. In the unlikely
+ *                            case of cache flush or cache garbage collection operations are in progress, it may take more time (~10 seconds maybe)
+ *                            to clean the read cache. During the cleaning almost all library functions and filesystem operations will hang and wait
+ *                            for the process to finish, so please design the UI accordingly.
+ *
+ * psync_fs_move_cache()      - cleans filesystem read cache and moves both read cache and write queue to specified directory. The function has the
+ *                            same overall complexity as psync_fs_clean_read_cache(). Returns 0 on success, PERROR_CACHE_MOVE_NOT_EMPTY if the target
+ *                            directory already has a read cache file in it, PERROR_CACHE_MOVE_NO_WRITE_ACCESS if request to open a file for writing in
+ *                            the provided directory fails or PERROR_CACHE_MOVE_DRIVE_HAS_TASKS if Drive's task queue is not empty. Putting the cache on a
+ *                            remote drive is generally not a good idea.
  *
  */
 
@@ -962,6 +978,9 @@ char *psync_fs_getmountpoint();
 void psync_fs_register_start_callback(psync_generic_callback_t callback);
 char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen);
+
+void psync_fs_clean_read_cache();
+int psync_fs_move_cache(const char *path);
 
 /* psync_password_quality estimates password quality, returns one of:
  *   0 - weak

@@ -1876,3 +1876,11 @@ int psync_setlanguage(const char *language, char **err){
   binparam params[]={P_STR("language", language)};
   return run_command("setlanguage", params, err);
 }
+
+void psync_fs_clean_read_cache(){
+  psync_pagecache_clean_read_cache();
+}
+
+int psync_fs_move_cache(const char *path){
+  return  psync_pagecache_move_cache(path)
+}
