@@ -282,6 +282,7 @@ int clib::pclsync_lib::login(const char* user, const char* pass, int save) {
   set_username(user);
   set_password(pass);
   set_savepass(bool(save));
+  std::cout << "Login user ["<<user<<"] pass [" << pass<< "]"<< std::endl;
   psync_set_user_pass(user,pass, save);
 
   return 0;
