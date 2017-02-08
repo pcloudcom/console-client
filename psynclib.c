@@ -1882,5 +1882,5 @@ void psync_fs_clean_read_cache(){
 }
 
 int psync_fs_move_cache(const char *path){
-  return  psync_pagecache_move_cache(path)
+  return  psync_pagecache_move_cache(path);
 }

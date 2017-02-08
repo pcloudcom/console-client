@@ -52,5 +52,6 @@ void psync_pagecache_resize_cache();
 uint64_t psync_pagecache_free_from_read_cache(uint64_t size);
 void psync_pagecache_clean_cache();
 void psync_pagecache_clean_read_cache();
+int psync_pagecache_move_cache(const char *path);
 
 #endif
