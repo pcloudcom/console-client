@@ -3516,6 +3516,15 @@ int psync_pagecache_move_cache(const char *path){
   psync_sql_start_transaction();
   debug(D_NOTICE, "aquired locks");
   if (psync_sql_cellint("SELECT COUNT(*) FROM fstask", 0)!=0){
+    if (IS_DEBUG){
+      psync_variant_row row;
+      debug(D_NOTICE, "the following tasks are preventing the cache move:");
+      res=psync_sql_query_nolock("SELECT id, type, status, folderid, text1 FROM fstask LIMIT 10");
+      while ((row=psync_sql_fetch_row(res)))
+        debug(D_NOTICE, "%u %u %u %u %s", (unsigned)psync_get_number(row[0]), (unsigned)psync_get_number(row[1]),
+                                          (unsigned)psync_get_number(row[2]), (unsigned)psync_get_number(row[3]), psync_get_string(row[4]));
+
+    }
     psync_sql_rollback_transaction();
     pthread_mutex_unlock(&flush_cache_mutex);
     pthread_mutex_unlock(&clean_cache_mutex);
