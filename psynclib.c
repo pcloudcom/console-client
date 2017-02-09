@@ -461,6 +461,7 @@ void psync_unlink(){
   psync_settings_reset();
   psync_cache_clean_all();
   psync_notifications_clean();
+  psync_pagecache_reopen_read_cache();
   psync_diff_unlock();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
