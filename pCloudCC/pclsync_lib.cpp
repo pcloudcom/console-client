@@ -232,8 +232,8 @@ int clib::pclsync_lib::list_sync_folders (const char* path, void * rep) {
 static const std::string client_name = " Electron Client v.2.1.0";
 int clib::pclsync_lib::init()//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto, int usesrypto_userpass)
 {
-  std::string software_string = exec("lsb_release -ds");
-  psync_set_software_string(software_string.append(client_name).c_str());
+  //std::string software_string = exec("lsb_release -ds");
+  //сpsync_set_software_string(software_string.append(client_name).c_str());
   if (setup_crypto_ && crypto_pass_.empty() )
     return 3;
  
