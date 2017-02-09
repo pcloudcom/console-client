@@ -3452,13 +3452,23 @@ void clean_cache_del(void *delcache, psync_pstat *st){
 void psync_pagecache_clean_cache(){
   const char *cache_dir;
   cache_dir=psync_setting_get_string(_PS(fscachepath));
-  if (readcache!=INVALID_HANDLE_VALUE){
-    psync_file_seek(readcache, 0, P_SEEK_SET);
-    psync_file_truncate(readcache);
-    psync_list_dir(cache_dir, clean_cache_del, NULL);
+  if (readcache!=INVALID_HANDLE_VALUE) {
+    psync_file_close(readcache);
+    readcache=INVALID_HANDLE_VALUE;
   }
-  else
-    psync_list_dir(cache_dir, clean_cache_del, (void *)1);
+  psync_list_dir(cache_dir, clean_cache_del, (void *)1);
+}
+
+void psync_pagecache_reopen_read_cache(){
+  char *cache_file;
+  const char *cache_dir;
+  psync_stat_t st;
+  cache_dir=psync_setting_get_string(_PS(fscachepath));
+  if (psync_stat(cache_dir, &st))
+    psync_mkdir(cache_dir);
+  cache_file=psync_strcat(cache_dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_READ_CACHE_FILE, NULL);
+  readcache=psync_file_open(cache_file, P_O_RDWR, P_O_CREAT);
+  psync_free(cache_file);
 }
 
 void psync_pagecache_clean_read_cache(){
