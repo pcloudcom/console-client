@@ -44,6 +44,8 @@
 #if defined(P_OS_MACOSX)
 #include <sys/sysctl.h>
 #include <sys/attr.h>
+#include <Foundation/Foundation.h>
+#include <SystemConfiguration/SystemConfiguration.h>
 #endif
 
 #if defined(P_OS_POSIX)
@@ -1237,6 +1239,21 @@ err:
 
 #endif
 
+#if defined(P_OS_MACOSX) && 0
+
+#define PSYNC_HAS_PROXY_CODE
+
+const void *get_value_cstr(CFDictionaryRef dict, const char *key) {
+  CFStringRef str;
+  const void *ret;
+  str=CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+  ret=CFDictionaryGetValue(dict, str);
+  CFRelease(str);
+  return ret;
+}
+
+#endif
+
 #if defined(PSYNC_HAS_PROXY_CODE)
 static int recent_detect(){
   static time_t lastdetect=0;
@@ -1291,6 +1308,25 @@ ex:
   gfree_ptr(ieconf.lpszProxy);
   gfree_ptr(ieconf.lpszProxyBypass);
   gfree_ptr(ieconf.lpszAutoConfigUrl);
+#elif defined(P_OS_MACOSX)
+/*  CFDictionaryRef proxies;
+  CFStringRef hostr, portr;
+  CFNumberRef enabledr;
+  UInt32 enabled;
+  if (recent_detect())
+    return;
+  proxies=SCDynamicStoreCopyProxies(NULL);
+  enabledr=(CFNumberRef)get_value_cstr(proxies, "HTTPSEnable");
+  if (enabledr!=NULL){
+    if (CFNumberGetValue(enabledr, kCFNumberIntType, &enabled) && enabled){
+      hostr=(CFStringRef)get_value_cstr(proxies, "HTTPSProxy");
+      portr=(CFStringRef)get_value_cstr(proxies, "HTTPSPort");
+      if (hostr!=NULL && portr!=NULL){
+
+      }
+    }
+  }
+  CFRelease(proxies);*/
 #endif
 }
 

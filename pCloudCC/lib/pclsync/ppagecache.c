@@ -3461,3 +3461,100 @@ void psync_pagecache_clean_cache(){
     psync_list_dir(cache_dir, clean_cache_del, (void *)1);
 }
 
+void psync_pagecache_clean_read_cache(){
+  uint32_t i, cnt;
+  psync_sql_res *res;
+  debug(D_NOTICE, "start");
+  pthread_mutex_lock(&clean_cache_mutex);
+  pthread_mutex_lock(&flush_cache_mutex);
+  psync_sql_start_transaction();
+  debug(D_NOTICE, "aquired locks");
+  db_cache_in_pages=psync_setting_get_uint(_PS(fscachesize))/PSYNC_FS_PAGE_SIZE;
+  if (db_cache_in_pages<2*CACHE_PAGES)
+    cnt=db_cache_in_pages;
+  else
+    cnt=2*CACHE_PAGES;
+  psync_file_seek(readcache, cnt*PSYNC_FS_PAGE_SIZE, P_SEEK_SET);
+  assertw(psync_file_truncate(readcache)==0);
+  debug(D_NOTICE, "truncated cache file");
+  res=psync_sql_prep_statement("DELETE FROM pagecache");
+  psync_sql_run_free(res);
+  debug(D_NOTICE, "deleted entries from pagecache");
+  res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
+  for (i=0; i<cnt; i++)
+    psync_sql_run(res);
+  psync_sql_free_result(res);
+  debug(D_NOTICE, "re-inserted some free pages into database, commiting transaction");
+  free_db_pages=cnt;
+  db_cache_max_page=cnt;
+  psync_sql_commit_transaction();
+  pthread_mutex_unlock(&flush_cache_mutex);
+  pthread_mutex_unlock(&clean_cache_mutex);
+  debug(D_NOTICE, "end");
+}
+
+int psync_pagecache_move_cache(const char *path){
+  psync_stat_t st;
+  psync_sql_res *res;
+  char *rdpath, *opath;
+  psync_file_t newrdcache, ordcache;
+  uint32_t i, cnt;
+  debug(D_NOTICE, "start");
+  rdpath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_READ_CACHE_FILE, NULL);
+  if (!psync_stat(rdpath, &st)){
+    psync_free(rdpath);
+    return PRINT_RETURN_CONST(PERROR_CACHE_MOVE_NOT_EMPTY);
+  }
+  newrdcache=psync_file_open(rdpath, P_O_RDWR, P_O_CREAT|P_O_EXCL);
+  if (newrdcache==INVALID_HANDLE_VALUE){
+    psync_free(rdpath);
+    return PRINT_RETURN_CONST(PERROR_CACHE_MOVE_NO_WRITE_ACCESS);
+  }
+  opath=psync_strdup(psync_setting_get_string(_PS(fscachepath)));
+  pthread_mutex_lock(&clean_cache_mutex);
+  pthread_mutex_lock(&flush_cache_mutex);
+  psync_sql_start_transaction();
+  debug(D_NOTICE, "aquired locks");
+  if (psync_sql_cellint("SELECT COUNT(*) FROM fstask", 0)!=0){
+    psync_sql_rollback_transaction();
+    pthread_mutex_unlock(&flush_cache_mutex);
+    pthread_mutex_unlock(&clean_cache_mutex);
+    psync_file_close(newrdcache);
+    psync_file_delete(rdpath);
+    psync_free(opath);
+    psync_free(rdpath);
+    return PRINT_RETURN_CONST(PERROR_CACHE_MOVE_DRIVE_HAS_TASKS);
+  }
+  ordcache=readcache;
+  readcache=newrdcache;
+  psync_setting_set_string(_PS(fscachepath), path);
+  db_cache_in_pages=psync_setting_get_uint(_PS(fscachesize))/PSYNC_FS_PAGE_SIZE;
+  if (db_cache_in_pages<2*CACHE_PAGES)
+    cnt=db_cache_in_pages;
+  else
+    cnt=2*CACHE_PAGES;
+  psync_file_seek(readcache, cnt*PSYNC_FS_PAGE_SIZE, P_SEEK_SET);
+  assertw(psync_file_truncate(readcache)==0);
+  debug(D_NOTICE, "truncated cache file");
+  res=psync_sql_prep_statement("DELETE FROM pagecache");
+  psync_sql_run_free(res);
+  debug(D_NOTICE, "deleted entries from pagecache");
+  res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
+  for (i=0; i<cnt; i++)
+    psync_sql_run(res);
+  psync_sql_free_result(res);
+  debug(D_NOTICE, "re-inserted some free pages into database, commiting transaction");
+  free_db_pages=cnt;
+  db_cache_max_page=cnt;
+  psync_sql_commit_transaction();
+  pthread_mutex_unlock(&flush_cache_mutex);
+  pthread_mutex_unlock(&clean_cache_mutex);
+  debug(D_NOTICE, "released locks");
+  psync_file_close(ordcache);
+  psync_list_dir(opath, clean_cache_del, (void *)1);
+  psync_free(opath);
+  psync_free(rdpath);
+  debug(D_NOTICE, "end");
+  return 0;
+}
+

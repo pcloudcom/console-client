@@ -339,52 +339,15 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
-#define run_command(cmd, params, err) do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
-
-static int do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
-  psync_socket *api;
-  binresult *res;
-  uint64_t result;
-  int tries;
-  tries=0;
-  while (1){
-    api=psync_apipool_get();
-    if (unlikely(!api))
-      goto neterr;
-    res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
-    if (likely(res)){
-      psync_apipool_release(api);
-      break;
-    }
-    else{
-      psync_apipool_release_bad(api);
-      if (++tries>=5)
-        goto neterr;
-    }
-  }
-  result=psync_find_result(res, "result", PARAM_NUM)->num;
-  if (result){
-    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
-    if (err)
-      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
-    psync_process_api_error(result);
-  }
-  psync_free(res);
-  return (int)result;
-neterr:
-  if (err)
-    *err=psync_strdup("Could not connect to the server.");
-  return -1;
-}
 
 int psync_mark_notificaitons_read(uint32_t notificationid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("notificationid", notificationid)};
-  return run_command("readnotifications", params, NULL)?-1:0;
+  return psync_run_command("readnotifications", params, NULL)?-1:0;
 }
 
 static void psync_invalidate_auth(const char *auth){
   binparam params[]={P_STR("auth", auth)};
-  run_command("logout", params, NULL);
+  psync_run_command("logout", params, NULL);
 }
 
 void psync_logout2(uint32_t auth_status, int doinvauth){
@@ -922,17 +885,17 @@ neterr:
 
 int psync_register(const char *email, const char *password, int termsaccepted, char **err){
   binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
-  return run_command("register", params, err);
+  return psync_run_command("register", params, err);
 }
 
 int psync_verify_email(char **err){
   binparam params[]={P_STR("auth", psync_my_auth)};
-  return run_command("sendverificationemail", params, err);
+  return psync_run_command("sendverificationemail", params, err);
 }
 
 int psync_lost_password(const char *email, char **err){
   binparam params[]={P_STR("mail", email)};
-  return run_command("lostpassword", params, err);
+  return psync_run_command("lostpassword", params, err);
 }
 
 int psync_change_password(const char *currentpass, const char *newpass, char **err){
@@ -1225,33 +1188,33 @@ static uint32_t convert_perms(uint32_t permissions){
 int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_STR("mail", mail),
                      P_STR("message", message), P_NUM("permissions", convert_perms(permissions))};
-  return run_command("sharefolder", params, err);
+  return psync_run_command("sharefolder", params, err);
 }
 
 int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("teamid", teamid),
                      P_STR("message", message), P_NUM("permissions", convert_perms(permissions))};
-  return run_command("account_teamshare", params, err);
+  return psync_run_command("account_teamshare", params, err);
 }
 
 int psync_cancel_share_request(psync_sharerequestid_t requestid, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid)};
-  return run_command("cancelsharerequest", params, err);
+  return psync_run_command("cancelsharerequest", params, err);
 }
 
 int psync_decline_share_request(psync_sharerequestid_t requestid, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid)};
-  return run_command("declineshare", params, err);
+  return psync_run_command("declineshare", params, err);
 }
 
 int psync_accept_share_request(psync_sharerequestid_t requestid, psync_folderid_t tofolderid, const char *name, char **err){
   if (name){
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid), P_NUM("folderid", tofolderid), P_STR("name", name)};
-    return run_command("acceptshare", params, err);
+    return psync_run_command("acceptshare", params, err);
   }
   else{
     binparam params[]={P_STR("auth", psync_my_auth), P_NUM("sharerequestid", requestid), P_NUM("folderid", tofolderid)};
-    return run_command("acceptshare", params, err);
+    return psync_run_command("acceptshare", params, err);
   }
 }
 
@@ -1266,7 +1229,7 @@ int psync_remove_share(psync_shareid_t shareid, char **err){
   int result;
   char *err1 = NULL;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid)};
-  result = run_command("removeshare", params, err);
+  result = psync_run_command("removeshare", params, err);
   if (result == 2025) {
     result = psync_account_stopshare(shareid, &err1);
     if(result == 2075) {
@@ -1293,7 +1256,7 @@ int psync_modify_share(psync_shareid_t shareid, uint32_t permissions, char **err
   int result;
   char *err1 = NULL;
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("shareid", shareid), P_NUM("permissions", convert_perms(permissions))};
-  result =  run_command("changeshare", params, err);
+  result =  psync_run_command("changeshare", params, err);
   if (result == 2025) {
     result = psync_account_modifyshare(shareid, convert_perms(permissions), &err1);
     if(result == 2075) {
@@ -1875,7 +1838,15 @@ void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t *ret) {
 
 int psync_setlanguage(const char *language, char **err){
   binparam params[]={P_STR("language", language)};
-  return run_command("setlanguage", params, err);
+  return psync_run_command("setlanguage", params, err);
+}
+
+void psync_fs_clean_read_cache(){
+  psync_pagecache_clean_read_cache();
+}
+
+int psync_fs_move_cache(const char *path){
+  return  psync_pagecache_move_cache(path);
 }
 
 char * psync_get_token()

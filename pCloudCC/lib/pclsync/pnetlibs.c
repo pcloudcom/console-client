@@ -2457,3 +2457,39 @@ void psync_netlibs_init(){
   psync_timer_register(psync_netlibs_timer, 1, NULL);
   sem_init(&api_pool_sem, 0, PSYNC_APIPOOL_MAXACTIVE);
 }
+
+int psync_do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  int tries;
+  tries=0;
+  while (1){
+    api=psync_apipool_get();
+    if (unlikely(!api))
+      goto neterr;
+    res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+    if (likely(res)){
+      psync_apipool_release(api);
+      break;
+    }
+    else{
+      psync_apipool_release_bad(api);
+      if (++tries>=5)
+        goto neterr;
+    }
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+    psync_process_api_error(result);
+  }
+  psync_free(res);
+  return (int)result;
+neterr:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
+}

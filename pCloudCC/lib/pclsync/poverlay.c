@@ -38,7 +38,8 @@ int callbacks_running = 1;
 
 #elif defined(P_OS_LINUX)
 
-#include "poverlay_lin.c"
+//#include "poverlay_lin.c"
+#include "poverlay_mac.c"
 
 #elif defined(P_OS_MACOSX)
 
