@@ -3173,6 +3173,12 @@ static void psync_pagecache_upload_to_cache(){
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
+    if (IS_DEBUG) {
+      if (psync_sql_affected_rows())
+        debug(D_NOTICE, "deleted taskid %lu from fstask", (unsigned long)taskid);
+      else
+        debug(D_NOTICE, "no affected rows for deletion of taskid %lu from fstask", (unsigned long)taskid);
+    }
     res=psync_sql_prep_statement("DELETE FROM pagecachetask WHERE id=?");
     psync_sql_bind_uint(res, 1, id);
     psync_sql_run_free(res);
