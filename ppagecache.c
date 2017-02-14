@@ -3146,6 +3146,7 @@ static void psync_pagecache_upload_to_cache(){
   psync_sql_res *res;
   psync_uint_row row;
   uint64_t id, type, taskid, hash, oldhash;
+  uint32_t wake;
   while (1){
     res=psync_sql_query("SELECT id, type, taskid, hash, oldhash FROM pagecachetask ORDER BY id LIMIT 1");
     row=psync_sql_fetch_rowint(res);
@@ -3168,8 +3169,7 @@ static void psync_pagecache_upload_to_cache(){
     res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
-    if (psync_sql_affected_rows())
-      psync_fsupload_wake();
+    wake=psync_sql_affected_rows();
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
@@ -3177,6 +3177,8 @@ static void psync_pagecache_upload_to_cache(){
     psync_sql_bind_uint(res, 1, id);
     psync_sql_run_free(res);
     psync_sql_commit_transaction();
+    if (wake)
+      psync_fsupload_wake();
     psync_pagecache_check_free_space();
   }
 }
