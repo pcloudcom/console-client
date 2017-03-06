@@ -3146,6 +3146,7 @@ static void psync_pagecache_upload_to_cache(){
   psync_sql_res *res;
   psync_uint_row row;
   uint64_t id, type, taskid, hash, oldhash;
+  uint32_t wake;
   while (1){
     res=psync_sql_query("SELECT id, type, taskid, hash, oldhash FROM pagecachetask ORDER BY id LIMIT 1");
     row=psync_sql_fetch_rowint(res);
@@ -3168,15 +3169,22 @@ static void psync_pagecache_upload_to_cache(){
     res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
-    if (psync_sql_affected_rows())
-      psync_fsupload_wake();
+    wake=psync_sql_affected_rows();
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
+    if (IS_DEBUG) {
+      if (psync_sql_affected_rows())
+        debug(D_NOTICE, "deleted taskid %lu from fstask", (unsigned long)taskid);
+      else
+        debug(D_NOTICE, "no affected rows for deletion of taskid %lu from fstask", (unsigned long)taskid);
+    }
     res=psync_sql_prep_statement("DELETE FROM pagecachetask WHERE id=?");
     psync_sql_bind_uint(res, 1, id);
     psync_sql_run_free(res);
     psync_sql_commit_transaction();
+    if (wake)
+      psync_fsupload_wake();
     psync_pagecache_check_free_space();
   }
 }
@@ -3452,13 +3460,23 @@ void clean_cache_del(void *delcache, psync_pstat *st){
 void psync_pagecache_clean_cache(){
   const char *cache_dir;
   cache_dir=psync_setting_get_string(_PS(fscachepath));
-  if (readcache!=INVALID_HANDLE_VALUE){
-    psync_file_seek(readcache, 0, P_SEEK_SET);
-    psync_file_truncate(readcache);
-    psync_list_dir(cache_dir, clean_cache_del, NULL);
+  if (readcache!=INVALID_HANDLE_VALUE) {
+    psync_file_close(readcache);
+    readcache=INVALID_HANDLE_VALUE;
   }
-  else
-    psync_list_dir(cache_dir, clean_cache_del, (void *)1);
+  psync_list_dir(cache_dir, clean_cache_del, (void *)1);
+}
+
+void psync_pagecache_reopen_read_cache(){
+  char *cache_file;
+  const char *cache_dir;
+  psync_stat_t st;
+  cache_dir=psync_setting_get_string(_PS(fscachepath));
+  if (psync_stat(cache_dir, &st))
+    psync_mkdir(cache_dir);
+  cache_file=psync_strcat(cache_dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_READ_CACHE_FILE, NULL);
+  readcache=psync_file_open(cache_file, P_O_RDWR, P_O_CREAT);
+  psync_free(cache_file);
 }
 
 void psync_pagecache_clean_read_cache(){
@@ -3516,6 +3534,15 @@ int psync_pagecache_move_cache(const char *path){
   psync_sql_start_transaction();
   debug(D_NOTICE, "aquired locks");
   if (psync_sql_cellint("SELECT COUNT(*) FROM fstask", 0)!=0){
+    if (IS_DEBUG){
+      psync_variant_row row;
+      debug(D_NOTICE, "the following tasks are preventing the cache move:");
+      res=psync_sql_query_nolock("SELECT id, type, status, folderid, text1 FROM fstask LIMIT 10");
+      while ((row=psync_sql_fetch_row(res)))
+        debug(D_NOTICE, "%u %u %u %u %s", (unsigned)psync_get_number(row[0]), (unsigned)psync_get_number(row[1]),
+                                          (unsigned)psync_get_number(row[2]), (unsigned)psync_get_number(row[3]), psync_get_string(row[4]));
+
+    }
     psync_sql_rollback_transaction();
     pthread_mutex_unlock(&flush_cache_mutex);
     pthread_mutex_unlock(&clean_cache_mutex);
