@@ -5,7 +5,7 @@ RANLIB=ranlib
 USESSL=mbed
 
 #CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2
-CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -fPIC
+CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -fPIC
 #CFLAGS=-O2 -g -pg
 #CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2 -I../../psync32/zlib -I../../psync32/sqlite -m32 -D_FILE_OFFSET_BITS=64
 
