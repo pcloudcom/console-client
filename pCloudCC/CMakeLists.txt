@@ -70,5 +70,6 @@ link_directories(${PCLSYNC_PATH} ${MBEDTLS_PATH}/library ${SQLITE3_PATH} ${OVERL
 #add_dependencies(pcloudcc sqlite3_lib mbedtls pclsync )
 
 install(TARGETS pcloudcc RUNTIME DESTINATION bin)
+install(TARGETS pcloudcc_lib LIBRARY DESTINATION lib)
 
 
