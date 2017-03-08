@@ -174,6 +174,9 @@ static void status_change(pstatus_t* status) {
   std::cout << "Down: " <<  status->downloadstr << "| Up: " << status->uploadstr <<", status is " << status2string(status->status) << std::endl;
   *clib::pclsync_lib::get_lib().status_ = *status;
   if (status->status==PSTATUS_LOGIN_REQUIRED){
+    if (clib::pclsync_lib::get_lib().get_password().empty())
+      clib::pclsync_lib::get_lib().get_pass_from_console();
+//std::cout << "Username: " <<  clib::pclsync_lib::get_lib().get_username().c_str() << "| Password: " << clib::pclsync_lib::get_lib().get_password().c_str() << std::endl;
     psync_set_user_pass(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(), (int) clib::pclsync_lib::get_lib().save_pass_);
     std::cout << "logging in" << std::endl;
   }
