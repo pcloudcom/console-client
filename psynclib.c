@@ -1766,6 +1766,15 @@ int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err
   return do_psync_file_public_link(path, code, err, 0, 0, 0);
 }
 
+int64_t psync_screenshot_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
+  int64_t res = do_psync_file_public_link(path, code, err,  psync_timer_time() + 604800 , 0, 0);
+  if (res == 2261) {
+    psync_free(*err);
+    res =  do_psync_file_public_link(path, code, err, 0, 0, 0);
+  }
+  return do_psync_file_public_link(path, code, err, 0, 0, 0);
+}
+
 int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
   return do_psync_folder_public_link(path, code, err, 0, 0, 0);
 }

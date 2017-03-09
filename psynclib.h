@@ -1132,6 +1132,8 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
 int psync_delete_all_links_folder(psync_folderid_t folderid, char**err);
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
+// Tries to create expiring link and if fails create not expiring one 
+int64_t psync_screenshot_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
 
 /*
  * Publik contacts API functions.
