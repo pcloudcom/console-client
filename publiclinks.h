@@ -30,6 +30,7 @@
 #include "psynclib.h"
 
 int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic);
+int64_t do_psync_screenshot_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
 int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic);
 int64_t do_psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/, 
                                   uint64_t expire, int maxdownloads, int maxtraffic);
