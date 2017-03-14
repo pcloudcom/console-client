@@ -92,13 +92,15 @@ static void modify_screenshot_public_link(void* linkidp) {
 }
 
 int64_t do_psync_screenshot_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
-  int64_t res =  do_psync_file_public_link(path, code, err, 0, 0, 0);
-  psync_run_thread1("Modify link expiration.",modify_screenshot_public_link, &res);
+  int64_t linkid = 0;
+  int64_t res =  do_psync_file_public_link(path, code, err, &linkid, 0, 0, 0);
+  if (!res)
+    psync_run_thread1("Modify link expiration.",modify_screenshot_public_link, &linkid);
   return res;
 }
 
 
-int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic) {
+int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, int64_t* linkid, uint64_t expire, int maxdownloads, int maxtraffic) {
   psync_socket *api;
   binresult *bres;
   uint64_t result;
@@ -113,7 +115,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
       *err = psync_strndup("Connection error.", 17);
-      return -2;
+      return 2;
     }
 
     bres = send_command(api, "getfilepublink", params);
@@ -136,7 +138,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
       *err = psync_strndup("Connection error.", 17);
       psync_free(t);
-      return -2;
+      return 1;
     }
     bres =  do_send_command(api, "getfilepublink", sizeof("getfilepublink") - 1, t, pind, -1, 1);
     psync_free(t);
@@ -149,7 +151,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     psync_apipool_release_bad(api);
     debug(D_WARNING, "Send command returned in valid result.\n");
     *err = psync_strndup("Connection error.", 17);
-    return -2;
+    return 2;
   }
   result=psync_find_result(bres, "result", PARAM_NUM)->num;
   if (unlikely(result)) {
@@ -157,19 +159,14 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     *err = psync_strndup(errorret, strlen(errorret));
     debug(D_WARNING, "command getfilepublink returned error code %u", (unsigned)result);
     psync_process_api_error(result);
-    if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
-      goto free_ret;
-    else {
-      *err = psync_strndup("Connection error.", 17);
-      result = -1;
-      goto free_ret;
-    }
+    psync_handle_api_result(result);
+    goto free_ret;
   }
 
   rescode = psync_find_result(bres, "code", PARAM_STR)->str;
   *code = psync_strndup(rescode, strlen(rescode));
-  result = 0;
-  result = psync_find_result(bres, "linkid", PARAM_NUM)->num;
+  if (linkid)
+    *linkid = psync_find_result(bres, "linkid", PARAM_NUM)->num;
   
 free_ret:
   psync_free(bres);
