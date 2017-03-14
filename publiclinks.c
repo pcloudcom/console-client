@@ -28,6 +28,7 @@
 #include "papi.h"
 #include "pnetlibs.h"
 #include "pfsfolder.h"
+#include "ptimer.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -50,6 +51,50 @@ static void init_param_num(binparam* t, const char *name, uint64_t val) {
   t->opts = 0;
   t->paramname = name;
   t->num = val;
+}
+
+
+static void modify_screenshot_public_link(void* linkidp) {
+  psync_socket *api;
+  binresult *bres;
+  uint64_t result;
+  const char *errorret;
+  int64_t linkid = *((int64_t*)linkidp);
+  
+  binparam params[] = {P_STR("auth", psync_my_auth), P_NUM("linkid", linkid), P_NUM("expire",  psync_timer_time() + 2592000 )};
+  api = psync_apipool_get();
+  if (unlikely(!api)) {
+    debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
+    return;
+  }
+
+  bres = send_command(api, "changepublink", params);
+  
+  if (likely(bres))
+    psync_apipool_release(api);
+  else {
+    psync_apipool_release_bad(api);
+    debug(D_WARNING, "Send command returned in valid result.\n");
+    return;
+  }
+  
+  result=psync_find_result(bres, "result", PARAM_NUM)->num;
+  if (unlikely(result)) {
+    errorret = psync_find_result(bres, "error", PARAM_STR)->str;
+    debug(D_WARNING, "command changepublink returned error code %u msg [%s]", (unsigned)result, errorret);
+    psync_process_api_error(result);
+    psync_handle_api_result(result);
+    if (result == 2261)
+      debug(D_NOTICE, "Unable to set expiration date on screen-shot link. Paid account required.");
+  }
+
+  psync_free(bres);
+}
+
+int64_t do_psync_screenshot_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
+  int64_t res =  do_psync_file_public_link(path, code, err, 0, 0, 0);
+  psync_run_thread1("Modify link expiration.",modify_screenshot_public_link, &res);
+  return res;
 }
 
 
@@ -90,6 +135,7 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     if (unlikely(!api)) {
       debug(D_WARNING, "Can't gat api from the pool. No pool ?\n");
       *err = psync_strndup("Connection error.", 17);
+      psync_free(t);
       return -2;
     }
     bres =  do_send_command(api, "getfilepublink", sizeof("getfilepublink") - 1, t, pind, -1, 1);
@@ -112,23 +158,24 @@ int64_t do_psync_file_public_link(const char *path, char **code /*OUT*/, char **
     debug(D_WARNING, "command getfilepublink returned error code %u", (unsigned)result);
     psync_process_api_error(result);
     if (psync_handle_api_result(result)==PSYNC_NET_TEMPFAIL)
-      return -result;
+      goto free_ret;
     else {
       *err = psync_strndup("Connection error.", 17);
-      return -1;
+      result = -1;
+      goto free_ret;
     }
   }
 
   rescode = psync_find_result(bres, "code", PARAM_STR)->str;
   *code = psync_strndup(rescode, strlen(rescode));
-
   result = 0;
   result = psync_find_result(bres, "linkid", PARAM_NUM)->num;
-
+  
+free_ret:
   psync_free(bres);
-
   return result;
 }
+
 
 int64_t do_psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/, uint64_t expire, int maxdownloads, int maxtraffic) {
   psync_socket *api;
