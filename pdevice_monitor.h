@@ -8,7 +8,8 @@ typedef enum {
   Dev_Types_UsbFixedDisk,
   Dev_Types_CDRomMedia,
   Dev_Types_CameraDevice,
-  Dev_Types_AndroidDevice
+  Dev_Types_AndroidDevice,
+  Dev_Types_Unknown
 } pdevice_types;
 
 typedef enum {

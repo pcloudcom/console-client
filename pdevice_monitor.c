@@ -153,7 +153,8 @@ static pdevice_types dev_decode_type(STORAGE_BUS_TYPE bustype, DWORD drivetype) 
   break;
   case BusTypeMmc:
     return Dev_Types_CameraDevice;
-    break;
+  default:
+    return Dev_Types_Unknown;
   }
 }
 
