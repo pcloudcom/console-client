@@ -211,6 +211,7 @@ int psync_fs_setxattr(const char *path, const char *name, const char *value, siz
   int64_t oid;
   int ret;
   psync_fs_set_thread_name();
+  debug(D_NOTICE, "setting attribute %s of %s", name, path);
   LOCK_AND_LOOKUP();
   if (flags&XATTR_CREATE){
     res=psync_sql_prep_statement("INSERT OR IGNORE INTO fsxattr (objectid, name, value) VALUES (?, ?, ?)");
