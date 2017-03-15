@@ -3479,7 +3479,7 @@ void psync_pagecache_reopen_read_cache(){
   psync_free(cache_file);
 }
 
-void psync_pagecache_clean_read_cache(){
+/*void psync_pagecache_clean_read_cache(){
   uint32_t i, cnt;
   psync_sql_res *res;
   debug(D_NOTICE, "start");
@@ -3509,7 +3509,7 @@ void psync_pagecache_clean_read_cache(){
   pthread_mutex_unlock(&flush_cache_mutex);
   pthread_mutex_unlock(&clean_cache_mutex);
   debug(D_NOTICE, "end");
-}
+}*/
 
 int psync_pagecache_move_cache(const char *path){
   psync_stat_t st;
@@ -3617,7 +3617,7 @@ void psync_pagecache_clean_read_cache(){
   debug(D_NOTICE, "end");
 }
 
-int psync_pagecache_move_cache(const char *path){
+/*int psync_pagecache_move_cache(const char *path){
   psync_stat_t st;
   psync_sql_res *res;
   char *rdpath, *opath;
@@ -3681,4 +3681,4 @@ int psync_pagecache_move_cache(const char *path){
   debug(D_NOTICE, "end");
   return 0;
 }
-
+*/
