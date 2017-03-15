@@ -2922,9 +2922,9 @@ retry:
     return psync_fs_crypto_ftruncate(of, size);
   else{
     if (psync_fs_modfile_check_size_ok(of, size))
-      ret=-EIO;
+      ret=-PRINT_RETURN_CONST(EIO);
     else if (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))
-      ret=-EIO;
+      ret=-PRINT_RETURN_CONST(EIO);
     else{
       ret=0;
       of->currentsize=size;

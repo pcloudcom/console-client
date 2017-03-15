@@ -462,6 +462,7 @@ void psync_unlink(){
   psync_settings_reset();
   psync_cache_clean_all();
   psync_notifications_clean();
+  psync_pagecache_reopen_read_cache();
   psync_diff_unlock();
   psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_CONNECTING);
   psync_set_status(PSTATUS_TYPE_ACCFULL, PSTATUS_ACCFULL_QUOTAOK);
@@ -1763,7 +1764,11 @@ external_status psync_status_folder(const char *path) {
 }
 
 int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
-  return do_psync_file_public_link(path, code, err, 0, 0, 0);
+  return do_psync_file_public_link(path, code, err, 0, 0, 0, 0);
+}
+
+int64_t psync_screenshot_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
+  return do_psync_screenshot_public_link(path, code, err);
 }
 
 int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {

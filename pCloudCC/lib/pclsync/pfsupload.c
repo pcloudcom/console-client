@@ -1610,12 +1610,12 @@ static void pr_del_task(uint64_t taskid){
   psync_sql_run_free(res);
 }
 
-static void pr_set_task_status3(uint64_t taskid){
+/*static void pr_set_task_status3(uint64_t taskid){
   psync_sql_res *res;
   res=psync_sql_prep_statement("UPDATE fstask SET status=3 WHERE id=?");
   psync_sql_bind_uint(res, 1, taskid);
   psync_sql_run_free(res);
-}
+}*/
 
 static void pr_update_folderid(psync_folderid_t newfolderid, psync_fsfolderid_t oldfolderid){
   psync_sql_res *res;
@@ -1669,7 +1669,8 @@ static void psync_fsupload_process_tasks(psync_list *tasks){
         pr_del_dep(task->id);
         if (task->type==PSYNC_FS_TASK_CREAT){
           pr_update_fileid(task->int2, -(psync_fsfileid_t)task->id);
-          pr_set_task_status3(task->id);
+          pr_del_dep(task->id);
+          pr_del_task(task->id);
         }
         else{
           pr_del_task(task->id);
