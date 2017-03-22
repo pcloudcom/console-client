@@ -1,0 +1,3 @@
+[submodule "pCloudCC/lib/prjf"]
+	path = pCloudCC/lib/prjf
+	url = git@gitlab.pcloud.com:ivan.stoev/prjf.git
