@@ -27,6 +27,10 @@ void set_status_callback(status_callback_t c) {
   cc::pclsync_lib::get_lib().set_status_callback(c);
 }
 
+void set_event_callback(pevent_callback_t c) {
+  cc::pclsync_lib::get_lib().set_event_callback(c);
+}
+
 char * get_token(){
   return cc::pclsync_lib::get_lib().get_token();
 }

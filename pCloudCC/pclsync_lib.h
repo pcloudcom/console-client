@@ -58,6 +58,7 @@ namespace console_client {
       void set_newuser(bool p) {newuser_ = p;}
       void set_daemon(bool p) {daemon_ = p;}
       void set_status_callback(status_callback_t p) {status_callback_ = p;}
+      void set_event_callback(pevent_callback_t p) {event_callback_ = p;}
       //Console 
       void get_pass_from_console();
       void get_cryptopass_from_console();
@@ -80,6 +81,7 @@ namespace console_client {
       pstatus_struct_* status_;
       bool newuser_;
       status_callback_t status_callback_;
+      pevent_callback_t event_callback_;
       bool was_init_;
 
     private:

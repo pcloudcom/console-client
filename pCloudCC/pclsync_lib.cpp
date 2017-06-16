@@ -122,6 +122,10 @@ void event_handler(psync_eventtype_t event, psync_eventdata_t eventdata){
                     ", canmodify="<<eventdata.share->canmodify<<", candelete="<<eventdata.share->candelete<<std::endl;
   else
     std::cout <<"event" << event << std::endl;
+
+  if (clib::pclsync_lib::get_lib().event_callback_) {
+    clib::pclsync_lib::get_lib().event_callback_(event, eventdata);    
+  }
 }
 
 static int lib_setup_cripto(){ 
