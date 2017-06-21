@@ -37,7 +37,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
-
+#include <string>
+#include <syslog.h>
 
 namespace cc  = console_client;
 namespace clib  = cc::clibrary;
@@ -171,7 +172,11 @@ static char const * status2string (uint32_t status){
 static void status_change(pstatus_t* status) {
   static int cryptocheck=0;
   static int mount_set=0;
-  std::cout << "Down: " <<  status->downloadstr << "| Up: " << status->uploadstr <<", status is " << status2string(status->status) << std::endl;
+  std::string msg = "Down: " + std::string(status->downloadstr) + "| Up: " + std::string(status->uploadstr) + ", status is " + std::string(status2string(status->status));
+  openlog("pcloud", LOG_PID|LOG_CONS, LOG_USER);
+  syslog(LOG_INFO, msg.c_str());
+  closelog();
+  std::cout << msg << std::endl;
   *clib::pclsync_lib::get_lib().status_ = *status;
   if (status->status==PSTATUS_LOGIN_REQUIRED){
     if (clib::pclsync_lib::get_lib().get_password().empty())
