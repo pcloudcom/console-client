@@ -17,6 +17,7 @@ extern "C" {
   int finalize ();
   char * get_token();
   void set_status_callback(status_callback_t); 
+  void set_event_callback(pevent_callback_t);
   int logout();
   int unlinklib();
   int login(const char* user, const char* pass, int save);

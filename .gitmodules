@@ -1,3 +1,6 @@
 [submodule "pCloudCC/lib/prjf"]
 	path = pCloudCC/lib/prjf
 	url = git@gitlab.pcloud.com:ivan.stoev/prjf.git
+[submodule "pCloudCC/lib/pclsync"]
+	path = pCloudCC/lib/pclsync
+	url = git@gitlab.pcloud.com:pcloud/synclib.git
