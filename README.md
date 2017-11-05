@@ -4,7 +4,7 @@ This is a fork of pcloudcom/console-client commit [618da8aa7d3130cc358b143714d37
 
 This verson will allow non-root user access to the pcloud mount and is several commits ahead of the pcloudcom master (at time of writing).
 
-Many error messages (or deprecated notices) during "Make" have been sqashed.
+Many error messages (or deprecated notices) during "Make" have been squashed.
 
 ## pCloud Console Client
 
