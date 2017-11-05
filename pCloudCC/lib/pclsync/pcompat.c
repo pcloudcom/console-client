@@ -2500,7 +2500,7 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
   if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
     cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
   pst.path=cpath;
-  while (!readdir_r(dh, entry, &de) && de)
+  while (!readdir(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
       psync_strlcpy(cpath+pl, de->d_name, namelen+1);
       if (likely_log(!lstat(cpath, &pst.stat)) && (S_ISREG(pst.stat.st_mode) || S_ISDIR(pst.stat.st_mode))){
@@ -2588,7 +2588,7 @@ int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback,
   memcpy(cpath, path, pl);
   if (!pl || cpath[pl-1]!=PSYNC_DIRECTORY_SEPARATORC)
     cpath[pl++]=PSYNC_DIRECTORY_SEPARATORC;
-  while (!readdir_r(dh, entry, &de) && de)
+  while (!readdir(dh, entry, &de) && de)
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
 #if defined(DT_UNKNOWN) && defined(DT_DIR) && defined(DT_REG)
       pst.name=de->d_name;
@@ -3458,7 +3458,7 @@ char *psync_deviceid(){
   hardware="Desktop";
   dh=opendir("/sys/class/power_supply");
   if (dh){
-    while (!readdir_r(dh, &entry, &de) && de)
+    while (!readdir(dh, &entry, &de) && de)
       if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
         path=psync_strcat("/sys/class/power_supply/", de->d_name, "/type", NULL);
         fd=open(path, O_RDONLY);

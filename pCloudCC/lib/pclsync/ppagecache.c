@@ -3584,7 +3584,7 @@ int psync_pagecache_move_cache(const char *path){
   debug(D_NOTICE, "end");
   return 0;
 }
-
+/*
 void psync_pagecache_clean_read_cache(){
   uint32_t i, cnt;
   psync_sql_res *res;
@@ -3681,4 +3681,4 @@ int psync_pagecache_move_cache(const char *path){
   debug(D_NOTICE, "end");
   return 0;
 }
-
+*/
