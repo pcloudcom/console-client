@@ -3458,7 +3458,7 @@ char *psync_deviceid(){
   hardware="Desktop";
   dh=opendir("/sys/class/power_supply");
   if (dh){
-    while (!readdir_r(dh, entry, &de) && de)
+    while (!readdir_r(dh, &entry, &de) && de)
       if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
         path=psync_strcat("/sys/class/power_supply/", de->d_name, "/type", NULL);
         fd=open(path, O_RDONLY);
