@@ -385,9 +385,9 @@ int64_t do_psync_tree_public_link(const char *linkname, const char *root, char *
 
   if (ids)
     psync_free(ids);
-   if (ids1)
+  if (ids1)
     psync_free(ids1);
-    if (ids2)
+  if (ids2)
     psync_free(ids2);
 
   psync_free(bres);
