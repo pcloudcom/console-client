@@ -1038,7 +1038,7 @@ int x509_crt_parse_path( x509_crt *chain, const char *path )
 
     while( ( entry = readdir( dir ) ) != NULL )
     {
-        snprintf( entry_name, sizeof entry_name, "%s/%s", path, entry->d_name );
+        snprintf( entry_name, sizeof entry_name, "%s/%d", path, num );
 
         if( stat( entry_name, &sb ) == -1 )
         {
