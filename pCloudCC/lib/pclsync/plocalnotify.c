@@ -617,7 +617,7 @@ static localnotify_dir *get_dir_scan(const char *path, psync_syncid_t syncid){
     memcpy(cpath, path, len);
     if (!len || cpath[len-1]!=PSYNC_DIRECTORY_SEPARATORC)
       cpath[len++]=PSYNC_DIRECTORY_SEPARATORC;
-    while (!readdir(dh, entry, &de) && de)
+    while (!readdir(dh, &entry, &de) && de)
       if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
         psync_strlcpy(cpath+len, de->d_name, namelen+1);
         if (!lstat(cpath, &st) && S_ISDIR(st.st_mode)){
