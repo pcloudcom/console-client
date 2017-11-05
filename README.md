@@ -1,4 +1,12 @@
-# pCloud Console Client
+# About
+
+This is a fork of pcloudcom/console-client commit [618da8aa7d3130cc358b143714d375473418729d](https://github.com/pcloudcom/console-client/commit/618da8aa7d3130cc358b143714d375473418729d).
+
+This verson will allow non-root user access to the pcloud mount and is several commits ahead of the pcloudcom master (at time of writing).
+
+Many error messages (or deprecated notices) during "Make" have been sqashed.
+
+## pCloud Console Client
 
 This is a simple linux console client for pCloud cloud storage. 
 
@@ -13,6 +21,26 @@ Also requires
 
 On Ubuntu you can run the following command:  
 > sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev  
+
+## Build steps
+
+sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev git
+mkdir console-client
+git clone https://github.com/ChaosZero112/console-client.git ./console-client/
+cd ./console-client/pCloudCC/
+cd lib/pclsync/
+make clean
+make fs
+cd ../mbedtls/
+cmake .
+make clean
+make
+cd ../..
+cmake .
+make
+sudo make install
+ldconfig
+pcloudcc -u username -p
 
 ## Usage
 Terminal command is pcloudcc and -h option prints short options description.
