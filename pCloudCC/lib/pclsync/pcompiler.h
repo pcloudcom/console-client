@@ -45,15 +45,15 @@
 #endif
 #endif
 
-#ifndef __has_builtin
+#ifndef PSYNC_HAS_BUILTIN
 #if defined(__GNUC__)
-#define __has_builtin(x) 1
+#define PSYNC_HAS_BUILTIN(x) 1
 #else
-#define __has_builtin(x) 0
+#define PSYNC_HAS_BUILTIN(x) 0
 #endif
 #endif
 
-#if __has_builtin(__builtin_expect)
+#if PSYNC_HAS_BUILTIN(__builtin_expect)
 #define likely(expr) __builtin_expect(!!(expr), 1)
 #define unlikely(expr) __builtin_expect(!!(expr), 0)
 #else
@@ -61,7 +61,7 @@
 #define unlikely(expr) (expr)
 #endif
 
-#if __has_builtin(__builtin_prefetch)
+#if PSYNC_HAS_BUILTIN(__builtin_prefetch)
 #define psync_prefetch(expr) __builtin_prefetch(expr)
 #elif defined(_MSC_VER)
 #define psync_prefetch(expr) _mm_prefetch((char *)(expr), _MM_HINT_T0)
