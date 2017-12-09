@@ -34,6 +34,11 @@ On Ubuntu you can run the following command:
 > ldconfig     
 > pcloudcc -u username -p       
 
+## Build with docker
+> ./build-with-docker.sh
+
+After that pcloudcc and libpcloudcc_lib.so are located below pCloudCC.
+
 ## Usage
 Terminal command is pcloudcc and -h option prints short options description.
 > ./pcloudcc -h  
