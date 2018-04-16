@@ -192,7 +192,7 @@ static void process_pipe(){
     debug(D_ERROR, "invalid message type %u", (unsigned int)msg.type);
 }
 
-static void process_notification(localnotify_dir *dir){
+static uint32_t process_notification(localnotify_dir *dir){
   ssize_t rd, off;
   struct inotify_event ev;
   localnotify_watch *wch, **pwch;
@@ -236,21 +236,33 @@ static void process_notification(localnotify_dir *dir){
     off+=offsetof(struct inotify_event, name)+ev.len;
   }
   if (rd>0)
-    psync_wake_localscan();
+    return 1;
+  else
+    return 0;
 }
 
 static void psync_localnotify_thread(){
   struct epoll_event ev;
+  uint32_t ncnt;
+  int cnt;
+  ncnt=0;
   while (psync_do_run){
-    if (epoll_wait(epoll_fd, &ev, 1, -1)!=1){
-      if (errno!=EINTR)
-        debug(D_WARNING, "epoll_wait failed errno %d", errno);
-      continue;
+    if ((cnt=epoll_wait(epoll_fd, &ev, 1, 1000))!=1){
+      if (cnt==-1) {
+        if (errno!=EINTR)
+          debug(D_WARNING, "epoll_wait failed errno %d", errno);
+      }
+      else if (cnt==0 && ncnt) {
+        ncnt=0;
+        psync_wake_localscan();
+      }
     }
-    if (ev.data.ptr)
-      process_notification((localnotify_dir *)ev.data.ptr);
-    else
-      process_pipe();
+    else {
+      if (ev.data.ptr)
+        ncnt+=process_notification((localnotify_dir *)ev.data.ptr);
+      else
+        process_pipe();
+    }
   }
 }
 

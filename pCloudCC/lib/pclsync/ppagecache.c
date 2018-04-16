@@ -1836,8 +1836,10 @@ static int psync_pagecache_read_range_from_sock(psync_request_t *request, psync_
     } while (x);\
   } while (0)
 #define PSYNC_CONSTRUCT_HEADER "X-Range-Next:"
-char *psync_http_construct_range_next_header(psync_request_t *request){
+#define PSYNC_DWLTAG_HEADER "Cookie: dwltag="
+char *psync_http_construct_range_next_header(psync_request_t *request, psync_urls_t *urls){
   char buff[2048];
+  const binresult *dwltag;
   uint64_t nm;
   psync_request_range_t *range;
   psync_list *l;
@@ -1847,6 +1849,16 @@ char *psync_http_construct_range_next_header(psync_request_t *request){
   buff[off--]=0;
   buff[off--]='\012';
   buff[off--]='\015';
+  dwltag=psync_find_result(urls->urls, "dwltag", PARAM_STR);
+  if (dwltag->length<=40 && dwltag->length>0) {
+    off-=dwltag->length-1;
+    memcpy(buff+off, dwltag->str, dwltag->length);
+    off-=sizeof(PSYNC_DWLTAG_HEADER)-1;
+    memcpy(buff+off, PSYNC_DWLTAG_HEADER, sizeof(PSYNC_DWLTAG_HEADER)-1);
+    off--;
+    buff[off--]='\012';
+    buff[off--]='\015';
+  }
   while (l->prev!=&request->ranges){
     range=psync_list_element(l, psync_request_range_t, list);
     nm=range->offset+range->length-1;
@@ -1869,6 +1881,7 @@ static void psync_pagecache_read_unmodified_thread(void *ptr){
   psync_socket *api;
   const char *host;
   const char *path;
+  char cookie[128];
   psync_request_range_t *range;
   const binresult *hosts;
   psync_urls_t *urls;
@@ -1910,6 +1923,7 @@ retry:
     return;
   }
   hosts=psync_find_result(urls->urls, "hosts", PARAM_ARRAY);
+  psync_slprintf(cookie, sizeof(cookie), "Cookie: dwltag=%s\015\012", psync_find_result(urls->urls, "dwltag", PARAM_STR)->str);
   sock=psync_http_connect_multihost_from_cache(hosts, &host);
   if (!sock){
     if ((api=psync_apipool_get_from_cache())){
@@ -1988,13 +2002,13 @@ err_api0:
   psync_list_for_each_element(range, &request->ranges, psync_request_range_t, list){
     debug(D_NOTICE, "sending request for offset %lu, size %lu", (unsigned long)range->offset, (unsigned long)range->length);
     if (psync_list_is_head(&request->ranges, &range->list) && !psync_list_is_tail(&request->ranges, &range->list)){
-      char *range_hdr=psync_http_construct_range_next_header(request);
+      char *range_hdr=psync_http_construct_range_next_header(request, urls);
       debug(D_NOTICE, "sending additional header: %s", range_hdr);
       err=psync_http_request_range_additional(sock, host, path, range->offset, range->offset+range->length-1, range_hdr);
       psync_free(range_hdr);
     }
     else
-      err=psync_http_request(sock, host, path, range->offset, range->offset+range->length-1);
+      err=psync_http_request(sock, host, path, range->offset, range->offset+range->length-1, cookie);
     if (err){
       if (tries++<5){
         psync_http_close(sock);
@@ -2624,6 +2638,18 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
         ret=ap->waiter->error;
     }
     if (ap->parent && !ret){
+#ifdef P_NO_CHECKSUM_CHECK
+#if IS_DEBUG
+      debug(D_NOTICE, "NOT checking chain checksums for pages %lu-%lu tree level %d",
+            (unsigned long)ap->firstpageid, (unsigned long)ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE, (int)offsets.treelevels);
+      psync_fs_lock_file(of);
+      if (likely(of->hash==hash))
+        psync_interval_tree_add(&of->authenticatedints, ap->firstpageid*PSYNC_FS_PAGE_SIZE, (ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE)*PSYNC_FS_PAGE_SIZE);
+      pthread_mutex_unlock(&of->mutex);
+#else
+      abort();
+#endif
+#else
       psync_crypto_sector_auth_t sa;
       psync_crypto_auth_page *p;
       debug(D_NOTICE, "checking chain checksums for pages %lu-%lu tree level %d",
@@ -2653,6 +2679,7 @@ int psync_pagecache_read_unmodified_encrypted_locked(psync_openfile_t *of, char 
           psync_interval_tree_add(&of->authenticatedints, ap->firstpageid*PSYNC_FS_PAGE_SIZE, (ap->firstpageid+ap->size/PSYNC_CRYPTO_AUTH_SIZE)*PSYNC_FS_PAGE_SIZE);
         pthread_mutex_unlock(&of->mutex);
       }
+#endif
     }
     if (dp[i].waiter){
       wait_waiter(dp[i].waiter, hash, "data");
@@ -3146,6 +3173,7 @@ static void psync_pagecache_upload_to_cache(){
   psync_sql_res *res;
   psync_uint_row row;
   uint64_t id, type, taskid, hash, oldhash;
+  uint32_t wake;
   while (1){
     res=psync_sql_query("SELECT id, type, taskid, hash, oldhash FROM pagecachetask ORDER BY id LIMIT 1");
     row=psync_sql_fetch_rowint(res);
@@ -3168,15 +3196,22 @@ static void psync_pagecache_upload_to_cache(){
     res=psync_sql_prep_statement("DELETE FROM fstaskdepend WHERE dependfstaskid=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
-    if (psync_sql_affected_rows())
-      psync_fsupload_wake();
+    wake=psync_sql_affected_rows();
     res=psync_sql_prep_statement("DELETE FROM fstask WHERE id=?");
     psync_sql_bind_uint(res, 1, taskid);
     psync_sql_run_free(res);
+    if (IS_DEBUG) {
+      if (psync_sql_affected_rows())
+        debug(D_NOTICE, "deleted taskid %lu from fstask", (unsigned long)taskid);
+      else
+        debug(D_NOTICE, "no affected rows for deletion of taskid %lu from fstask", (unsigned long)taskid);
+    }
     res=psync_sql_prep_statement("DELETE FROM pagecachetask WHERE id=?");
     psync_sql_bind_uint(res, 1, id);
     psync_sql_run_free(res);
     psync_sql_commit_transaction();
+    if (wake)
+      psync_fsupload_wake();
     psync_pagecache_check_free_space();
   }
 }
@@ -3452,12 +3487,128 @@ void clean_cache_del(void *delcache, psync_pstat *st){
 void psync_pagecache_clean_cache(){
   const char *cache_dir;
   cache_dir=psync_setting_get_string(_PS(fscachepath));
-  if (readcache!=INVALID_HANDLE_VALUE){
-    psync_file_seek(readcache, 0, P_SEEK_SET);
-    psync_file_truncate(readcache);
-    psync_list_dir(cache_dir, clean_cache_del, NULL);
+  if (readcache!=INVALID_HANDLE_VALUE) {
+    psync_file_close(readcache);
+    readcache=INVALID_HANDLE_VALUE;
   }
+  psync_list_dir(cache_dir, clean_cache_del, (void *)1);
+}
+
+void psync_pagecache_reopen_read_cache(){
+  char *cache_file;
+  const char *cache_dir;
+  psync_stat_t st;
+  cache_dir=psync_setting_get_string(_PS(fscachepath));
+  if (psync_stat(cache_dir, &st))
+    psync_mkdir(cache_dir);
+  cache_file=psync_strcat(cache_dir, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_READ_CACHE_FILE, NULL);
+  readcache=psync_file_open(cache_file, P_O_RDWR, P_O_CREAT);
+  psync_free(cache_file);
+}
+
+void psync_pagecache_clean_read_cache(){
+  uint32_t i, cnt;
+  psync_sql_res *res;
+  debug(D_NOTICE, "start");
+  pthread_mutex_lock(&clean_cache_mutex);
+  pthread_mutex_lock(&flush_cache_mutex);
+  psync_sql_start_transaction();
+  debug(D_NOTICE, "aquired locks");
+  db_cache_in_pages=psync_setting_get_uint(_PS(fscachesize))/PSYNC_FS_PAGE_SIZE;
+  if (db_cache_in_pages<2*CACHE_PAGES)
+    cnt=db_cache_in_pages;
   else
-    psync_list_dir(cache_dir, clean_cache_del, (void *)1);
+    cnt=2*CACHE_PAGES;
+  psync_file_seek(readcache, cnt*PSYNC_FS_PAGE_SIZE, P_SEEK_SET);
+  assertw(psync_file_truncate(readcache)==0);
+  debug(D_NOTICE, "truncated cache file");
+  res=psync_sql_prep_statement("DELETE FROM pagecache");
+  psync_sql_run_free(res);
+  debug(D_NOTICE, "deleted entries from pagecache");
+  res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
+  for (i=0; i<cnt; i++)
+    psync_sql_run(res);
+  psync_sql_free_result(res);
+  debug(D_NOTICE, "re-inserted some free pages into database, commiting transaction");
+  free_db_pages=cnt;
+  db_cache_max_page=cnt;
+  psync_sql_commit_transaction();
+  pthread_mutex_unlock(&flush_cache_mutex);
+  pthread_mutex_unlock(&clean_cache_mutex);
+  debug(D_NOTICE, "end");
+}
+
+int psync_pagecache_move_cache(const char *path){
+  psync_stat_t st;
+  psync_sql_res *res;
+  char *rdpath, *opath;
+  psync_file_t newrdcache, ordcache;
+  uint32_t i, cnt;
+  debug(D_NOTICE, "start");
+  rdpath=psync_strcat(path, PSYNC_DIRECTORY_SEPARATOR, PSYNC_DEFAULT_READ_CACHE_FILE, NULL);
+  if (!psync_stat(rdpath, &st)){
+    psync_free(rdpath);
+    return PRINT_RETURN_CONST(PERROR_CACHE_MOVE_NOT_EMPTY);
+  }
+  newrdcache=psync_file_open(rdpath, P_O_RDWR, P_O_CREAT|P_O_EXCL);
+  if (newrdcache==INVALID_HANDLE_VALUE){
+    psync_free(rdpath);
+    return PRINT_RETURN_CONST(PERROR_CACHE_MOVE_NO_WRITE_ACCESS);
+  }
+  opath=psync_strdup(psync_setting_get_string(_PS(fscachepath)));
+  pthread_mutex_lock(&clean_cache_mutex);
+  pthread_mutex_lock(&flush_cache_mutex);
+  psync_sql_start_transaction();
+  debug(D_NOTICE, "aquired locks");
+  if (psync_sql_cellint("SELECT COUNT(*) FROM fstask", 0)!=0){
+    if (IS_DEBUG){
+      psync_variant_row row;
+      debug(D_NOTICE, "the following tasks are preventing the cache move:");
+      res=psync_sql_query_nolock("SELECT id, type, status, folderid, text1 FROM fstask LIMIT 10");
+      while ((row=psync_sql_fetch_row(res)))
+        debug(D_NOTICE, "%u %u %u %u %s", (unsigned)psync_get_number(row[0]), (unsigned)psync_get_number(row[1]),
+                                          (unsigned)psync_get_number(row[2]), (unsigned)psync_get_number(row[3]), psync_get_string(row[4]));
+
+    }
+    psync_sql_rollback_transaction();
+    pthread_mutex_unlock(&flush_cache_mutex);
+    pthread_mutex_unlock(&clean_cache_mutex);
+    psync_file_close(newrdcache);
+    psync_file_delete(rdpath);
+    psync_free(opath);
+    psync_free(rdpath);
+    return PRINT_RETURN_CONST(PERROR_CACHE_MOVE_DRIVE_HAS_TASKS);
+  }
+  ordcache=readcache;
+  readcache=newrdcache;
+  psync_setting_set_string(_PS(fscachepath), path);
+  db_cache_in_pages=psync_setting_get_uint(_PS(fscachesize))/PSYNC_FS_PAGE_SIZE;
+  if (db_cache_in_pages<2*CACHE_PAGES)
+    cnt=db_cache_in_pages;
+  else
+    cnt=2*CACHE_PAGES;
+  psync_file_seek(readcache, cnt*PSYNC_FS_PAGE_SIZE, P_SEEK_SET);
+  assertw(psync_file_truncate(readcache)==0);
+  debug(D_NOTICE, "truncated cache file");
+  res=psync_sql_prep_statement("DELETE FROM pagecache");
+  psync_sql_run_free(res);
+  debug(D_NOTICE, "deleted entries from pagecache");
+  res=psync_sql_prep_statement("INSERT INTO pagecache (type) VALUES ("NTO_STR(PAGE_TYPE_FREE)")");
+  for (i=0; i<cnt; i++)
+    psync_sql_run(res);
+  psync_sql_free_result(res);
+  debug(D_NOTICE, "re-inserted some free pages into database, commiting transaction");
+  free_db_pages=cnt;
+  db_cache_max_page=cnt;
+  psync_sql_commit_transaction();
+  pthread_mutex_unlock(&flush_cache_mutex);
+  pthread_mutex_unlock(&clean_cache_mutex);
+  debug(D_NOTICE, "released locks");
+  psync_file_close(ordcache);
+  psync_list_dir(opath, clean_cache_del, (void *)1);
+  psync_free(opath);
+  psync_free(rdpath);
+  debug(D_NOTICE, "end");
+  return 0;
 }
 

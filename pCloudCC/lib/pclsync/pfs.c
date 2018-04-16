@@ -303,30 +303,6 @@ int psync_fs_rename_openfile_locked(psync_fsfileid_t fileid, psync_fsfolderid_t 
   return 0;
 }
 
-static int psync_fs_relock_fileid(psync_fsfileid_t fileid){
-  psync_openfile_t *fl;
-  psync_tree *tr;
-  int64_t d;
-  psync_sql_rdlock();
-  tr=openfiles;
-  while (tr){
-    d=fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
-    if (d<0)
-      tr=tr->left;
-    else if (d>0)
-      tr=tr->right;
-    else{
-      fl=psync_tree_element(tr, psync_openfile_t, tree);
-      psync_fs_lock_file(fl);
-      pthread_mutex_unlock(&fl->mutex);
-      psync_sql_rdunlock();
-      return 1;
-    }
-  }
-  psync_sql_rdunlock();
-  return 0;
-}
-
 void psync_fs_mark_openfile_deleted(uint64_t taskid){
   psync_sql_res *res;
   psync_openfile_t *fl;
@@ -582,29 +558,52 @@ static int psync_creat_local_to_file_stat(psync_fstask_creat_t *cr, struct FUSE_
   uint64_t size;
   const char *cachepath;
   char *filename;
+  psync_openfile_t *fl;
+  psync_tree *tr;
+  int64_t d;
 //  psync_file_t fd;
   char fileidhex[sizeof(psync_fsfileid_t)*2+2];
   int stret;
   if (unlikely(psync_fs_need_per_folder_refresh_const() && cr->fileid<psync_fake_fileid))
     return psync_creat_stat_fake_file(stbuf);
+  fl=NULL;
   fileid=-cr->fileid;
-  psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
-  fileidhex[sizeof(psync_fsfileid_t)]='d';
-  fileidhex[sizeof(psync_fsfileid_t)+1]=0;
-  cachepath=psync_setting_get_string(_PS(fscachepath));
-  filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
-  stret=psync_stat(filename, &st);
-  if (unlikely_log(stret)){
-    // since files are created out of sql_lock, it is possible that file is not created
-    // we can lookup cr->fileid in openfiles and take of->mutex, once we did it, the file
-    // should exist as we are holding sql_lock
-    debug(D_NOTICE, "could not stat file %s", filename);
-    psync_fs_relock_fileid(cr->fileid);
+  psync_sql_rdlock();
+  tr=openfiles;
+  while (tr){
+    d=cr->fileid-psync_tree_element(tr, psync_openfile_t, tree)->fileid;
+    if (d<0)
+      tr=tr->left;
+    else if (d>0)
+      tr=tr->right;
+    else{
+      fl=psync_tree_element(tr, psync_openfile_t, tree);
+      psync_fs_lock_file(fl);
+      break;
+    }
+  }
+  psync_sql_rdunlock();
+  if (fl && fl->datafile!=INVALID_HANDLE_VALUE){
+    stret=psync_fstat(fl->datafile, &st);
+    pthread_mutex_unlock(&fl->mutex);
+    if (stret)
+      debug(D_NOTICE, "could not stat open file %ld", (long)cr->fileid);
+    else
+      debug(D_NOTICE, "got stat from open file %ld", (long)cr->fileid);
+  }
+  else{
+    if (fl)
+      pthread_mutex_unlock(&fl->mutex);
+    psync_binhex(fileidhex, &fileid, sizeof(psync_fsfileid_t));
+    fileidhex[sizeof(psync_fsfileid_t)]='d';
+    fileidhex[sizeof(psync_fsfileid_t)+1]=0;
+    cachepath=psync_setting_get_string(_PS(fscachepath));
+    filename=psync_strcat(cachepath, PSYNC_DIRECTORY_SEPARATOR, fileidhex, NULL);
     stret=psync_stat(filename, &st);
     if (stret)
-      debug(D_NOTICE, "could not stat file %s even after relocking, error %d", filename, (int)psync_fs_err());
+      debug(D_NOTICE, "could not stat file %s", filename);
+    psync_free(filename);
   }
-  psync_free(filename);
   if (stret)
     return -1;
 /*  if (cr->newfile)
@@ -2923,9 +2922,9 @@ retry:
     return psync_fs_crypto_ftruncate(of, size);
   else{
     if (psync_fs_modfile_check_size_ok(of, size))
-      ret=-EIO;
+      ret=-PRINT_RETURN_CONST(EIO);
     else if (of->currentsize!=size && (psync_file_seek(of->datafile, size, P_SEEK_SET)==-1 || psync_file_truncate(of->datafile)))
-      ret=-EIO;
+      ret=-PRINT_RETURN_CONST(EIO);
     else{
       ret=0;
       of->currentsize=size;

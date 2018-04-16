@@ -526,6 +526,7 @@ static int task_download_file(download_task_t *dt){
   unsigned char serverhashhex[PSYNC_HASH_DIGEST_HEXLEN],
                 localhashhex[PSYNC_HASH_DIGEST_HEXLEN],
                 localhashbin[PSYNC_HASH_DIGEST_LEN];
+  char cookie[128];
   uint32_t i;
   psync_file_t fd, ifd;
   int rd, rt;
@@ -670,6 +671,7 @@ static int task_download_file(download_task_t *dt){
 
   hosts=psync_find_result(res, "hosts", PARAM_ARRAY);
   requestpath=psync_find_result(res, "path", PARAM_STR)->str;
+  psync_slprintf(cookie, sizeof(cookie), "Cookie: dwltag=%s\015\012", psync_find_result(res, "dwltag", PARAM_STR)->str);
   buff=psync_malloc(PSYNC_COPY_BUFFER_SIZE);
   http=NULL;
   psync_hash_init(&hashctx);
@@ -679,7 +681,7 @@ static int task_download_file(download_task_t *dt){
     if (range->type==PSYNC_RANGE_TRANSFER){
       debug(D_NOTICE, "downloading %lu bytes from offset %lu of fileid %lu", (unsigned long)range->len, (unsigned long)range->off, (unsigned long)dt->dwllist.fileid);
       for (i=0; i<hosts->length; i++)
-        if ((http=psync_http_connect(hosts->array[i]->str, requestpath, range->off, (range->len==serversize&&range->off==0)?0:(range->len+range->off-1))))
+        if ((http=psync_http_connect(hosts->array[i]->str, requestpath, range->off, (range->len==serversize&&range->off==0)?0:(range->len+range->off-1), cookie)))
           break;
       if (unlikely_log(!http))
         goto err2;
@@ -825,7 +827,8 @@ static int task_delete_file(psync_syncid_t syncid, psync_fileid_t fileid, const 
       }
       else
         debug(D_NOTICE, "local file %s deleted", name);
-      psync_send_event_by_path(PEVENT_LOCAL_FILE_DELETED, row[1], name, fileid, remotepath);
+//      threre are some reports about crashes here, comment out for now as events are not fully implemented anyway
+//      psync_send_event_by_path(PEVENT_LOCAL_FILE_DELETED, row[1], name, fileid, remotepath);
       psync_free(name);
     }
     stmt=psync_sql_prep_statement("DELETE FROM localfile WHERE id=?");
@@ -1227,7 +1230,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   }
   else {
     psync_run_thread1("download file", task_run_download_file_thread, dt);
-    psync_milisleep(750); // do not run downloads strictly in parallel so we reuse some API connections
+    psync_milisleep(25); // do not run downloads strictly in parallel so we reuse some API connections
   }
   return -1;
 }

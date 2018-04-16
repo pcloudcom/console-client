@@ -66,6 +66,7 @@ void psync_notifications_notify(binresult *res){
 static void psync_notifications_download_thumb(const binresult *thumb, const char *thumbpath){
   const char *path, *filename, *host;
   char *filepath, *tmpfilepath, *buff;
+  char cookie[128];
   psync_http_socket *sock;
   psync_stat_t st;
   psync_file_t fd;
@@ -87,7 +88,8 @@ static void psync_notifications_download_thumb(const binresult *thumb, const cha
   sock=psync_http_connect_multihost(psync_find_result(thumb, "hosts", PARAM_ARRAY), &host);
   if (unlikely_log(!sock))
     goto err2;
-  if (unlikely_log(psync_http_request(sock, host, path, 0, 0)))
+  psync_slprintf(cookie, sizeof(cookie), "Cookie: dwltag=%s\015\012", psync_find_result(thumb, "dwltag", PARAM_STR)->str);
+  if (unlikely_log(psync_http_request(sock, host, path, 0, 0, cookie)))
     goto err3;
   if (unlikely_log(psync_http_next_request(sock)))
     goto err3;
@@ -220,7 +222,7 @@ void psync_notifications_set_callback(pnotification_callback_t notification_call
   pthread_mutex_unlock(&ntf_mutex);
 }
 
-static void fill_actionid(const binresult *ntf, psync_notification_t *pntf){
+static void fill_actionid(const binresult *ntf, psync_notification_t *pntf, psync_list_builder_t *builder){
   const char *action;
   action=psync_find_result(ntf, "action", PARAM_STR)->str;
   if (!strcmp(action, "gotofolder")){
@@ -230,6 +232,11 @@ static void fill_actionid(const binresult *ntf, psync_notification_t *pntf){
   else if (!strcmp(action, "opensharerequest")){
     pntf->actionid=PNOTIFICATION_ACTION_SHARE_REQUEST;
     pntf->actiondata.sharerequestid=psync_find_result(ntf, "sharerequestid", PARAM_NUM)->num;
+  }
+  else if (!strcmp(action, "openurl")){
+    pntf->actionid=PNOTIFICATION_ACTION_GO_TO_URL;
+    pntf->actiondata.url=psync_find_result(ntf, "url", PARAM_STR)->str;
+    psync_list_add_string_offset(builder, offsetof(psync_notification_t, actiondata.url));
   }
   else
     pntf->actionid=PNOTIFICATION_ACTION_NONE;
@@ -351,7 +358,7 @@ psync_notification_list_t *psync_notifications_get(){
       if (pntf->isnew)
         cntnew++;
       pntf->iconid=psync_find_result(ntf, "iconid", PARAM_NUM)->num;
-      fill_actionid(ntf, pntf);
+      fill_actionid(ntf, pntf, builder);
     }
   }
   pthread_mutex_unlock(&ntf_mutex);

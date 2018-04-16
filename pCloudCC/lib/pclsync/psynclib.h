@@ -105,6 +105,7 @@ typedef struct {
 #define PSTATUS_SCANNING               13
 #define PSTATUS_USER_MISMATCH          14
 #define PSTATUS_ACCOUT_EXPIRED         15
+#define PSTATUS_ACCOUT_TFAERR          16
 
 typedef struct pstatus_struct_ {
   const char *downloadstr; /* formatted string with the status of uploads */
@@ -201,6 +202,10 @@ typedef struct pstatus_struct_ {
 #define PERROR_INVALID_SYNCID          12
 #define PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING 13
 #define PERROR_LOCAL_IS_ON_PDRIVE      14
+
+#define PERROR_CACHE_MOVE_NOT_EMPTY       1
+#define PERROR_CACHE_MOVE_NO_WRITE_ACCESS 2
+#define PERROR_CACHE_MOVE_DRIVE_HAS_TASKS 3 // this error is also returned when the path is on pCloudDrive
 
 #define PLIST_FILES   1
 #define PLIST_FOLDERS 2
@@ -431,6 +436,38 @@ typedef struct {
   uint32_t entrycnt;
   link_info_t entries[];
 } plink_info_list_t;
+
+typedef enum {
+  Dev_Types_UsbRemovableDisk = 1,
+  Dev_Types_UsbFixedDisk,
+  Dev_Types_CDRomMedia,
+  Dev_Types_CameraDevice,
+  Dev_Types_AndroidDevice,
+  Dev_Types_Unknown
+} pdevice_types;
+
+typedef enum {
+  Dev_Event_arrival = 1,
+  Dev_Event_removed
+} device_event;
+
+typedef struct {
+  pdevice_types type;
+  const char *device_id;
+  int isextended;
+  const char *filesystem_path;
+  const char *vendor;
+  const char *product;
+  int enabled;
+  int connected;
+} pdevice_item_t;
+
+typedef struct {
+  uint32_t entrycnt;
+  pdevice_item_t entries[];
+} pdevice_item_list_t;
+
+typedef void(*device_event_callback)(device_event event, void * device_info_);
 
 typedef struct {
   const char *name;
@@ -949,9 +986,21 @@ int psync_upload_file_as(const char *remote_path, const char *remote_filename, c
  * psync_fs_get_path_by_folderid() - returns full path (including mountpoint) of a given folderid on the filesystem or
  *                            NULL if it is not mounted or folder could not be found. You are supposed to free the returned
  *                            pointer.
- *  psync_get_path_by_fileid() - returns path (without mountpoint) of a given fileid on the filesystem or
+ * psync_get_path_by_fileid() - returns path (without mountpoint) of a given fileid on the filesystem or
  *                            NULL if it is not mounted or parent folder could not be found. You are supposed to free the returned
  *                            pointer.
+ *
+ * psync_fs_clean_read_cache() - cleans the filesystem read cache. This function does not fail. The general expectation is that the function
+ *                            takes some moderate time to execute - maybe 0.5-2 seconds depending on the system and it's load. In the unlikely
+ *                            case of cache flush or cache garbage collection operations are in progress, it may take more time (~10 seconds maybe)
+ *                            to clean the read cache. During the cleaning almost all library functions and filesystem operations will hang and wait
+ *                            for the process to finish, so please design the UI accordingly.
+ *
+ * psync_fs_move_cache()      - cleans filesystem read cache and moves both read cache and write queue to specified directory. The function has the
+ *                            same overall complexity as psync_fs_clean_read_cache(). Returns 0 on success, PERROR_CACHE_MOVE_NOT_EMPTY if the target
+ *                            directory already has a read cache file in it, PERROR_CACHE_MOVE_NO_WRITE_ACCESS if request to open a file for writing in
+ *                            the provided directory fails or PERROR_CACHE_MOVE_DRIVE_HAS_TASKS if Drive's task queue is not empty. Putting the cache on a
+ *                            remote drive is generally not a good idea.
  *
  */
 
@@ -962,6 +1011,9 @@ char *psync_fs_getmountpoint();
 void psync_fs_register_start_callback(psync_generic_callback_t callback);
 char *psync_fs_get_path_by_folderid(psync_folderid_t folderid);
 char *psync_get_path_by_fileid(psync_fileid_t fileid, size_t *retlen);
+
+void psync_fs_clean_read_cache();
+int psync_fs_move_cache(const char *path);
 
 /* psync_password_quality estimates password quality, returns one of:
  *   0 - weak
@@ -1113,6 +1165,11 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
 int psync_delete_all_links_folder(psync_folderid_t folderid, char**err);
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
+/*
+ * Creates download link for newly uploaded screenshot and the sets expiration to current date plus delay seconds. If hasdelay
+ * equals 0 no expiration is set. If hasdelay and delay is 0 expiration is for one mount 
+ */
+int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t delay, char **code /*OUT*/, char **err /*OUT*/);
 
 /*
  * Publik contacts API functions.
@@ -1182,6 +1239,20 @@ void psync_update_cryptostatus();
 psync_folderid_t psync_check_and_create_folder (const char * path);
 
 char * psync_get_token();
+
+/*Devices monitoring functions 
+ */
+
+//Adds device monitoring callback which is invoked every time a new not disabled device arrives.
+void padd_device_monitor_callback(device_event_callback callback);
+//Lists all stored devices 
+pdevice_item_list_t * psync_list_devices(char **err /*OUT*/);
+//Enables device. This info is stored in the database so will be present after restart.
+void penable_device(const char* device_id);
+//Disable device
+void pdisable_device(const char* device_id);
+//Remove db information about device 
+void premove_device(const char* device_id);
 
 #ifdef __cplusplus
 }

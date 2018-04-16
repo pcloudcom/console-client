@@ -716,6 +716,7 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
   binresult *res;
   psync_sql_res *sql;
   psync_uint_row row;
+  psync_str_row srow;
   psync_full_result_int *fr;
   psync_upload_range_list_t *le, *le2;
   psync_list rlist;
@@ -783,18 +784,64 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
     return -1;
   }
   if (likely(uploadoffset<fsize)){
+    uint64_t fileid, hash;
+    fileid=0;
     sql=psync_sql_query_rdlock("SELECT fileid, hash FROM localfile WHERE id=?");
     psync_sql_bind_uint(sql, 1, localfileid);
     if ((row=psync_sql_fetch_rowint(sql))){
-      uint64_t fileid, hash;
       fileid=row[0];
       hash=row[1];
       psync_sql_free_result(sql);
+      debug(D_NOTICE, "fileid(local)=%lu", (unsigned long)fileid);
       if (fileid && psync_net_scan_file_for_blocks(api, &rlist, fileid, hash, fd)==PSYNC_NET_TEMPFAIL)
         goto err1;
     }
     else
       psync_sql_free_result(sql);
+    if (!fileid) {
+      debug(D_NOTICE, "looking for folderid=%lu and name=%s in file", (unsigned long)folderid, name);
+      sql=psync_sql_query_rdlock("SELECT id, hash FROM file WHERE parentfolderid=? AND name=?");
+      psync_sql_bind_uint(sql, 1, folderid);
+      psync_sql_bind_string(sql, 2, name);
+      if ((row=psync_sql_fetch_rowint(sql))){
+        fileid=row[0];
+        hash=row[1];
+        psync_sql_free_result(sql);
+        debug(D_NOTICE, "fileid(file)=%lu", (unsigned long)fileid);
+        if (fileid && psync_net_scan_file_for_blocks(api, &rlist, fileid, hash, fd)==PSYNC_NET_TEMPFAIL)
+          goto err1;
+      }
+      else
+        psync_sql_free_result(sql);
+
+    }
+    if (!fileid) {
+      sql=psync_sql_query_rdlock("SELECT name FROM localfile WHERE id=?");
+      psync_sql_bind_uint(sql, 1, localfileid);
+      if ((srow=psync_sql_fetch_rowstr(sql))){
+        char *nname=psync_strdup(srow[0]);
+        psync_sql_free_result(sql);
+        debug(D_NOTICE, "looking for folderid=%lu and name=%s in file", (unsigned long)folderid, nname);
+        sql=psync_sql_query_rdlock("SELECT id, hash FROM file WHERE parentfolderid=? AND name=?");
+        psync_sql_bind_uint(sql, 1, folderid);
+        psync_sql_bind_string(sql, 2, nname);
+        if ((row=psync_sql_fetch_rowint(sql))){
+          fileid=row[0];
+          hash=row[1];
+          psync_sql_free_result(sql);
+          debug(D_NOTICE, "fileid(file, local name)=%lu", (unsigned long)fileid);
+          if (fileid && psync_net_scan_file_for_blocks(api, &rlist, fileid, hash, fd)==PSYNC_NET_TEMPFAIL){
+            psync_free(nname);
+            goto err1;
+          }
+        }
+        else
+          psync_sql_free_result(sql);
+        psync_free(nname);
+      }
+      else
+        psync_sql_free_result(sql);
+    }
     sql=psync_sql_query_rdlock("SELECT uploadid FROM localfileupload WHERE localfileid=? ORDER BY uploadid DESC LIMIT 5");
     psync_sql_bind_uint(sql, 1, localfileid);
     fr=psync_sql_fetchall_int(sql);
@@ -807,6 +854,15 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
   }
   rid=0;
   respwait=0;
+  psync_list_for_each_element(le, &rlist, psync_upload_range_list_t, list)
+    if ((le->type==PSYNC_URANGE_COPY_FILE || le->type==PSYNC_URANGE_COPY_UPLOAD) && le->len>PSYNC_MAX_COPY_FROM_REQ) {
+      le2=psync_new(psync_upload_range_list_t);
+      *le2=*le;
+      le->len=PSYNC_MAX_COPY_FROM_REQ;
+      le2->off+=PSYNC_MAX_COPY_FROM_REQ;
+      le2->len-=PSYNC_MAX_COPY_FROM_REQ;
+      psync_list_add_after(&le->list, &le2->list);
+    }
   le=psync_new(psync_upload_range_list_t);
   le->type=PSYNC_URANGE_LAST;
   psync_list_add_tail(&rlist, &le->list);
@@ -821,7 +877,8 @@ static int upload_big_file(const char *localpath, const unsigned char *hashhex, 
       else
         respwait++;
     }
-    while (respwait && (le->type==PSYNC_URANGE_LAST || psync_socket_pendingdata(api) || psync_select_in(&api->sock, 1, 0)!=SOCKET_ERROR)){
+    while (respwait && (le->type==PSYNC_URANGE_LAST || psync_socket_pendingdata(api) ||
+                        psync_select_in(&api->sock, 1, respwait>=PSYNC_MAX_PENDING_UPLOAD_REQS?PSYNC_SOCK_READ_TIMEOUT*1000:0)!=SOCKET_ERROR)){
       res=get_result(api);
       if (unlikely_log(!res))
         goto err1;

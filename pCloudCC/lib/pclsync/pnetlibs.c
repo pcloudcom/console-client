@@ -867,7 +867,7 @@ int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
   return writebytes;
 }
 
-psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to){
+psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr){
   psync_socket *sock;
   psync_http_socket *hsock;
   char *readbuff, *ptr, *end, *key, *val;
@@ -888,18 +888,20 @@ psync_http_socket *psync_http_connect(const char *host, const char *path, uint64
   else
     debug(D_NOTICE, "got connection to %s from cache", host);
   readbuff=psync_malloc(PSYNC_HTTP_RESP_BUFFER);
+  if (!addhdr)
+    addhdr="";
   if (from || to){
     if (to)
       rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"
-                  P_PRI_U64"\015\012Connection: Keep-Alive\015\012\015\012",
-                  path, host, from, to);
+                  P_PRI_U64"\015\012Connection: Keep-Alive\015\012%s\015\012",
+                  path, host, from, to, addhdr);
     else
       rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64
-                  "-\015\012Connection: Keep-Alive\015\012\015\012",
-                  path, host, from);
+                  "-\015\012Connection: Keep-Alive\015\012%s\015\012",
+                  path, host, from, addhdr);
   }
   else
-    rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012\015\012", path, host);
+    rl=snprintf(readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012%s\015\012", path, host, addhdr);
   if (psync_socket_writeall(sock, readbuff, rl)!=rl || (rb=psync_socket_read(sock, readbuff, PSYNC_HTTP_RESP_BUFFER-1))<=0)
     goto err1;
   readbuff[rb]=0;
@@ -1318,29 +1320,31 @@ psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *host
 int psync_http_request_range_additional(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr){
   int rl;
   if (unlikely(!addhdr))
-    return psync_http_request(sock, host, path, from, to);
+    return psync_http_request(sock, host, path, from, to, NULL);
   rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64
                   "\015\012Connection: Keep-Alive\015\012%s\015\012",
                   path, host, from, to, addhdr);
   if (unlikely(rl>=PSYNC_HTTP_RESP_BUFFER-1))
-    return psync_http_request(sock, host, path, from, to);
+    return psync_http_request(sock, host, path, from, to, NULL);
   return psync_socket_writeall(sock->sock, sock->readbuff, rl)==rl?0:-1;
 }
 
-int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to){
+int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr){
   int rl;
+  if (!addhdr)
+    addhdr="";
   if (from || to){
     if (to)
       rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64"-%"P_PRI_U64
-                  "\015\012Connection: Keep-Alive\015\012\015\012",
-                  path, host, from, to);
+                  "\015\012Connection: Keep-Alive\015\012%s\015\012",
+                  path, host, from, to, addhdr);
     else
       rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Range: bytes=%"P_PRI_U64
-                  "-\015\012Connection: Keep-Alive\015\012\015\012",
-                  path, host, from);
+                  "-\015\012Connection: Keep-Alive\015\012%s\015\012",
+                  path, host, from, addhdr);
   }
   else
-    rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012\015\012", path, host);
+    rl=snprintf(sock->readbuff, PSYNC_HTTP_RESP_BUFFER, "GET %s HTTP/1.1\015\012Host: %s\015\012Connection: Keep-Alive\015\012%s\015\012", path, host, addhdr);
   return psync_socket_writeall(sock->sock, sock->readbuff, rl)==rl?0:-1;
 }
 
@@ -1360,8 +1364,10 @@ int psync_http_next_request(psync_http_socket *sock){
     ptr++;
   while (*ptr && isspace(*ptr))
     ptr++;
-  if (unlikely_log(!isdigit(*ptr)))
+  if (unlikely_log(!isdigit(*ptr))) {
+    debug(D_NOTICE, "got %s", sock->readbuff);
     goto err0;
+  }
   rl=atoi(ptr);
   if (unlikely_log(rl/10!=20)){
     if (unlikely_log(rl==0))
@@ -1508,6 +1514,7 @@ static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uin
   psync_block_checksum_header hdr;
   uint64_t result;
   uint32_t i;
+  char cookie[128];
   *checksums=NULL; /* gcc is not smart enough to notice that initialization is not needed */
   if (api)
     res=send_command(api, "getchecksumlink", params);
@@ -1533,9 +1540,10 @@ static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uin
   }
   hosts=psync_find_result(res, "hosts", PARAM_ARRAY);
   requestpath=psync_find_result(res, "path", PARAM_STR)->str;
+  psync_slprintf(cookie, sizeof(cookie), "Cookie: dwltag=%s\015\012", psync_find_result(res, "dwltag", PARAM_STR)->str);
   http=NULL;
   for (i=0; i<hosts->length; i++)
-    if ((http=psync_http_connect(hosts->array[i]->str, requestpath, 0, 0)))
+    if ((http=psync_http_connect(hosts->array[i]->str, requestpath, 0, 0, cookie)))
       break;
   psync_free(res);
   if (unlikely_log(!http))
@@ -1558,6 +1566,7 @@ static int psync_net_get_checksums(psync_socket *api, psync_fileid_t fileid, uin
   psync_http_close(http);
   memset(cs->next, 0, sizeof(uint32_t)*i);
   *checksums=cs;
+  debug(D_NOTICE, "checksums downloaded");
   return PSYNC_NET_OK;
 err1:
   psync_free(cs);
@@ -2026,17 +2035,17 @@ static int check_range_for_blocks(psync_file_checksums *checksums, psync_file_ch
       }
       blockidx=psync_net_hash_has_adler_and_sha1(hash, checksums, adler, sha1bin);
       if (blockidx){
-//        debug(D_NOTICE, "got block, buffoff+outbyteoff=%lu, off=%lu, blockidx=%u", buffoff+outbyteoff, off, (unsigned)(blockidx-1));
+        //debug(D_NOTICE, "got block, buffoff+outbyteoff=%lu, off=%lu, blockidx=%u", buffoff+outbyteoff, off, (unsigned)(blockidx-1));
         if (buffoff+outbyteoff+checksums->blocksize<=len)
           blen=checksums->blocksize;
         else
           blen=len-buffoff-outbyteoff;
-        if (ur && ur->off+ur->len==(blockidx-1)*checksums->blocksize && ur->uploadoffset+ur->len==off+buffoff+outbyteoff)
+        if (ur && ur->off+ur->len==(uint64_t)(blockidx-1)*checksums->blocksize && ur->uploadoffset+ur->len==off+buffoff+outbyteoff)
           ur->len+=blen;
         else{
           ur=psync_new(psync_upload_range_list_t);
           ur->uploadoffset=off+buffoff+outbyteoff;
-          ur->off=(blockidx-1)*checksums->blocksize;
+          ur->off=(uint64_t)(blockidx-1)*checksums->blocksize;
           ur->len=blen;
           psync_list_add_tail(nr, &ur->list);
         }
@@ -2456,4 +2465,40 @@ int psync_send_debug(int thread, const char *file, const char *function, int uns
 void psync_netlibs_init(){
   psync_timer_register(psync_netlibs_timer, 1, NULL);
   sem_init(&api_pool_sem, 0, PSYNC_APIPOOL_MAXACTIVE);
+}
+
+int psync_do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  int tries;
+  tries=0;
+  while (1){
+    api=psync_apipool_get();
+    if (unlikely(!api))
+      goto neterr;
+    res=do_send_command(api, cmd, cmdlen, params, paramscnt, -1, 1);
+    if (likely(res)){
+      psync_apipool_release(api);
+      break;
+    }
+    else{
+      psync_apipool_release_bad(api);
+      if (++tries>=5)
+        goto neterr;
+    }
+  }
+  result=psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "command %s returned code %u", cmd, (unsigned)result);
+    if (err)
+      *err=psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+    psync_process_api_error(result);
+  }
+  psync_free(res);
+  return (int)result;
+neterr:
+  if (err)
+    *err=psync_strdup("Could not connect to the server.");
+  return -1;
 }

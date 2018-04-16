@@ -137,7 +137,7 @@ pcontacts_list_t *do_psync_list_myteams() {
   psync_list_builder_t *builder;
   psync_sql_res *res;
   builder=psync_list_builder_create(sizeof(contact_info_t), offsetof(pcontacts_list_t, entries));
-  res=psync_sql_query_rdlock("select  '' as mail, name , id as teamid, 3 as type from myteams "
+  res=psync_sql_query_rdlock("SELECT  '' AS mail, name , id AS teamid, 3 AS type FROM myteams "
                              "ORDER BY name "
   );
   psync_list_bulder_add_sql(builder, res, create_contact);

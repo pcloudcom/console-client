@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 17
+#define PSYNC_DATABASE_VERSION 18
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -138,6 +138,8 @@ INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
 INSERT OR IGNORE INTO setting (id, value) VALUES ('dbversion', " NTO_STR(PSYNC_DATABASE_VERSION) ");\
 CREATE TABLE IF NOT EXISTS myteams (id INTEGER PRIMARY KEY, name TEXT); \
+CREATE TABLE IF NOT EXISTS devices (id INTEGER PRIMARY KEY, last_path VARCHAR(1024), type INTEGER, vendor VARCHAR(2048), product VARCHAR(2048), device_id VARCHAR(4096),\
+  connected INTEGER, enabled INTEGER); \
 COMMIT;\
 "
 
@@ -265,6 +267,10 @@ COMMIT;",
 "BEGIN;\
 UPDATE setting SET value=17 WHERE id='dbversion'; \
 UPDATE setting SET value=0 WHERE id='diffid'; \
+COMMIT;",
+"BEGIN;\
+CREATE TABLE IF NOT EXISTS devices (id INTEGER PRIMARY KEY, last_path VARCHAR(1024), type INTEGER, vendor VARCHAR(2048), product VARCHAR(2048), device_id VARCHAR(4096),\
+  connected INTEGER, enabled INTEGER); \
 COMMIT;"
 };
 

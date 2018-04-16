@@ -122,7 +122,7 @@ static binresult *get_userinfo_user_digest(psync_socket *sock, const char *usern
                       P_BOOL("getapiserver", 1),
                       P_BOOL("cryptokeyssign", 1),
                       P_NUM("os", P_OS_ID)};
-  return send_command(sock, "userinfo", params);
+  return send_command(sock, "login", params);
 }
 
 static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password, const char *device){
@@ -215,7 +215,7 @@ static psync_socket *get_connected_socket(){
                          P_BOOL("cryptokeyssign", 1),
                          P_BOOL("getapiserver", 1),
                          P_NUM("os", P_OS_ID)};
-      res=send_command(sock, "userinfo", params);
+      res=send_command(sock, "login", params);
       }
     else {
       binparam params[]={P_STR("timeformat", "timestamp"),
@@ -250,6 +250,10 @@ static psync_socket *get_connected_socket(){
       }
       else if (result==4000)
         psync_milisleep(5*60*1000);
+      else if (result == 2297 ){
+        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_TFAERR);
+        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+      }
       else if (result==2205 || result==2229){
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
@@ -2291,6 +2295,17 @@ static void psync_diff_adapter_hash(void *out){
   psync_fast_hash256_ctx ctx;
   psync_interface_list_t *list;
   list=psync_list_ip_adapters();
+/*  if (IS_DEBUG){
+    char buffa[NI_MAXHOST], buffb[NI_MAXHOST], buffn[NI_MAXHOST];
+    size_t i;
+    for (i=0; i<list->interfacecnt; i++) {
+      getnameinfo((struct sockaddr *)&list->interfaces[i].address, list->interfaces[i].addrsize, buffa, sizeof(buffa), NULL, 0, NI_NUMERICHOST);
+      getnameinfo((struct sockaddr *)&list->interfaces[i].broadcast, list->interfaces[i].addrsize, buffb, sizeof(buffb), NULL, 0, NI_NUMERICHOST);
+      getnameinfo((struct sockaddr *)&list->interfaces[i].netmask, list->interfaces[i].addrsize, buffn, sizeof(buffn), NULL, 0, NI_NUMERICHOST);
+      debug(D_NOTICE, "%s %s %s", buffa, buffb, buffn);
+    }
+    debug(D_NOTICE, "list end");
+  } */
   psync_fast_hash256_init(&ctx);
   psync_fast_hash256_update(&ctx, list->interfaces, list->interfacecnt*sizeof(psync_interface_t));
   psync_fast_hash256_final(out, &ctx);
