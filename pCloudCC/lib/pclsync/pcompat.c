@@ -44,6 +44,8 @@
 #if defined(P_OS_MACOSX)
 #include <sys/sysctl.h>
 #include <sys/attr.h>
+#include <Foundation/Foundation.h>
+#include <SystemConfiguration/SystemConfiguration.h>
 #endif
 
 #if defined(P_OS_POSIX)
@@ -1237,6 +1239,21 @@ err:
 
 #endif
 
+#if defined(P_OS_MACOSX) && 0
+
+#define PSYNC_HAS_PROXY_CODE
+
+const void *get_value_cstr(CFDictionaryRef dict, const char *key) {
+  CFStringRef str;
+  const void *ret;
+  str=CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+  ret=CFDictionaryGetValue(dict, str);
+  CFRelease(str);
+  return ret;
+}
+
+#endif
+
 #if defined(PSYNC_HAS_PROXY_CODE)
 static int recent_detect(){
   static time_t lastdetect=0;
@@ -1291,6 +1308,25 @@ ex:
   gfree_ptr(ieconf.lpszProxy);
   gfree_ptr(ieconf.lpszProxyBypass);
   gfree_ptr(ieconf.lpszAutoConfigUrl);
+#elif defined(P_OS_MACOSX)
+/*  CFDictionaryRef proxies;
+  CFStringRef hostr, portr;
+  CFNumberRef enabledr;
+  UInt32 enabled;
+  if (recent_detect())
+    return;
+  proxies=SCDynamicStoreCopyProxies(NULL);
+  enabledr=(CFNumberRef)get_value_cstr(proxies, "HTTPSEnable");
+  if (enabledr!=NULL){
+    if (CFNumberGetValue(enabledr, kCFNumberIntType, &enabled) && enabled){
+      hostr=(CFStringRef)get_value_cstr(proxies, "HTTPSProxy");
+      portr=(CFStringRef)get_value_cstr(proxies, "HTTPSPort");
+      if (hostr!=NULL && portr!=NULL){
+
+      }
+    }
+  }
+  CFRelease(proxies);*/
 #endif
 }
 
@@ -2207,6 +2243,14 @@ int psync_socket_writeall_thread(psync_socket *sock, const void *buff, int num){
     return psync_socket_writeall_plain_thread(sock, buff, num);
 }
 
+static void copy_address(struct sockaddr_storage *dst, const struct sockaddr *src) {
+  dst->ss_family=src->sa_family;
+  if (src->sa_family==AF_INET)
+    memcpy(&((struct sockaddr_in *)dst)->sin_addr, &((const struct sockaddr_in *)src)->sin_addr, sizeof(((struct sockaddr_in *)dst)->sin_addr));
+  else
+    memcpy(&((struct sockaddr_in6 *)dst)->sin6_addr, &((const struct sockaddr_in6 *)src)->sin6_addr, sizeof(((struct sockaddr_in6 *)dst)->sin6_addr));
+}
+
 psync_interface_list_t *psync_list_ip_adapters(){
   psync_interface_list_t *ret;
   size_t cnt;
@@ -2239,13 +2283,9 @@ psync_interface_list_t *psync_list_ip_adapters(){
           sz=sizeof(struct sockaddr_in);
         else
           sz=sizeof(struct sockaddr_in6);
-        memcpy(&ret->interfaces[cnt].address, addr->ifa_addr, sz);
-        memcpy(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr, sz);
-        memcpy(&ret->interfaces[cnt].netmask, addr->ifa_netmask, sz);
-        if (family==AF_INET)
-          ((struct sockaddr_in *)&ret->interfaces[cnt].address)->sin_port=0;
-        else
-          ((struct sockaddr_in6 *)&ret->interfaces[cnt].address)->sin6_port=0;
+        copy_address(&ret->interfaces[cnt].address, addr->ifa_addr);
+        copy_address(&ret->interfaces[cnt].broadcast, addr->ifa_broadaddr);
+        copy_address(&ret->interfaces[cnt].netmask, addr->ifa_netmask);
         ret->interfaces[cnt].addrsize=sz;
         cnt++;
       }
@@ -2997,13 +3037,13 @@ int psync_set_crtime_mtime(const char *path, time_t crtime, time_t mtime){
 #elif defined(P_OS_MACOSX)
   if (crtime){
     struct attrlist attr;
-    struct timespec crtime;
+    struct timespec crtimes;
     memset(&attr, 0, sizeof(attr));
     attr.bitmapcount=ATTR_BIT_MAP_COUNT;
     attr.commonattr=ATTR_CMN_CRTIME;
-    crtime.tv_sec=ctime;
-    crtime.tv_nsec=0;
-    if (setattrlist(path, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW))
+    crtimes.tv_sec=crtime;
+    crtimes.tv_nsec=0;
+    if (setattrlist(path, &attr, &crtimes, sizeof(struct timespec), FSOPT_NOFOLLOW))
       return -1;
   }
   if (mtime){
@@ -3062,13 +3102,13 @@ int psync_set_crtime_mtime_by_fd(psync_file_t fd, const char *path, time_t crtim
 #elif defined(P_OS_MACOSX)
   if (crtime){
     struct attrlist attr;
-    struct timespec crtime;
+    struct timespec crtimes;
     memset(&attr, 0, sizeof(attr));
     attr.bitmapcount=ATTR_BIT_MAP_COUNT;
     attr.commonattr=ATTR_CMN_CRTIME;
-    crtime.tv_sec=ctime;
-    crtime.tv_nsec=0;
-    if (fsetattrlist(fd, &attr, &crtime, sizeof(struct timespec), FSOPT_NOFOLLOW))
+    crtimes.tv_sec=crtime;
+    crtimes.tv_nsec=0;
+    if (fsetattrlist(fd, &attr, &crtimes, sizeof(struct timespec), FSOPT_NOFOLLOW))
       return -1;
   }
   if (mtime){

@@ -491,7 +491,7 @@ char *psync_local_path_for_local_file(psync_fileid_t localfileid, size_t *retlen
   psync_sql_bind_uint(res, 1, localfileid);
   if (unlikely_log(!(row=psync_sql_fetch_row(res)))){
     psync_sql_free_result(res);
-    psync_sql_unlock();
+    psync_sql_rdunlock();
     psync_free_string_list(&folderlist);
     return PSYNC_INVALID_PATH;
   }

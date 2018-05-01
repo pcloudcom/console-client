@@ -40,6 +40,8 @@
 
 #define psync_api_run_command(cmd, params) psync_do_api_run_command(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam))
 
+#define psync_run_command(cmd, params, err) psync_do_run_command_res(cmd, strlen(cmd), params, sizeof(params)/sizeof(binparam), err)
+
 #define PSYNC_NET_OK        0
 #define PSYNC_NET_PERMFAIL -1
 #define PSYNC_NET_TEMPFAIL -2
@@ -124,14 +126,14 @@ int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
 int psync_socket_readall_download_thread(psync_socket *sock, void *buff, int num);
 int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
 
-psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to);
+psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr);
 void psync_http_close(psync_http_socket *http);
 int psync_http_readall(psync_http_socket *http, void *buff, int num);
 void psync_http_connect_and_cache_host(const char *host);
 psync_http_socket *psync_http_connect_multihost(const binresult *hosts, const char **host);
 psync_http_socket *psync_http_connect_multihost_from_cache(const binresult *hosts, const char **host);
 int psync_http_request_range_additional(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr);
-int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to);
+int psync_http_request(psync_http_socket *sock, const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr);
 int psync_http_next_request(psync_http_socket *sock);
 int psync_http_request_readall(psync_http_socket *http, void *buff, int num);
 
@@ -153,5 +155,6 @@ void psync_process_api_error(uint64_t result);
 int psync_send_debug(int thread, const char *file, const char *function, int unsigned line, const char *fmt, ...)
     PSYNC_COLD PSYNC_FORMAT(printf, 5, 6)  PSYNC_NONNULL(5);
 
+int psync_do_run_command_res(const char *cmd, size_t cmdlen, const binparam *params, size_t paramscnt, char **err);
 
 #endif

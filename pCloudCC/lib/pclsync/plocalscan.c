@@ -37,6 +37,7 @@
 #include "pfolder.h"
 #include "pcallbacks.h"
 #include "ppathstatus.h"
+#include "prunratelimit.h"
 #include <string.h>
 
 typedef struct {
@@ -923,13 +924,17 @@ static void scanner_thread(){
   }
 }
 
-void psync_wake_localscan(){
+static void psync_do_wake_localscan(){
   localsleepperfolder=0;
   pthread_mutex_lock(&scan_mutex);
   if (!scan_wakes++)
     pthread_cond_signal(&scan_cond);
   pthread_mutex_unlock(&scan_mutex);
   localsleepperfolder=0;
+}
+
+void psync_wake_localscan(){
+  psync_run_ratelimited("wake localscan", psync_do_wake_localscan, PSYNC_LOCALSCAN_MIN_INTERVAL, 0);
 }
 
 void psync_restart_localscan(){

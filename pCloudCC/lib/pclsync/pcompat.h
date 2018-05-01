@@ -102,6 +102,11 @@
 
 #endif
 
+#ifdef P_ELECTRON
+#undef P_OS_ID
+#define P_OS_ID 9
+#endif
+
 #define _FILE_OFFSET_BITS 64
 
 #include <sys/types.h>

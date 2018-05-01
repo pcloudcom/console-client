@@ -144,7 +144,7 @@ static inline void psync_fs_do_lock_file(psync_openfile_t *of, const char *file,
   if (unlikely(pthread_mutex_trylock(&of->mutex))){
     struct timespec tm;
     psync_nanotime(&tm);
-    tm.tv_sec+=20;
+    tm.tv_sec+=60;
     if (pthread_mutex_timedlock(&of->mutex, &tm)) {
       debug(D_BUG, "could not lock mutex of file %s taken in %s:%lu by thread %s, aborting", of->currentname, of->lockfile, of->lockline, of->lockthread);
       abort();
