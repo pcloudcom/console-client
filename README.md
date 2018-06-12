@@ -1,107 +1,126 @@
 # pCloud Console Client
 
-This is a simple linux console client for pCloud cloud storage. 
+This is a simple linux console client for [pCloud Cloud Storage](https://www.pcloud.com/).
 
-## Required libraries 
-[Zlib](http://zlib.net/)  A Massively Spiffy Yet Delicately Unobtrusive Compression Library.  
-[Boost](http://www.boost.org/) Boost system and boost program options libraries used.  
-[Pthread](http://www.gnu.org/)   
-[Fuse](https://github.com/libfuse/libfuse) Filesystem in Userspace.  
+## Requirements
+
+- [Zlib](http://zlib.net/)  A Massively Spiffy Yet Delicately Unobtrusive Compression Library
+- [Boost](http://www.boost.org/) Boost system and boost program options libraries used
+- [Pthread](http://www.gnu.org/)
+- [Fuse](https://github.com/libfuse/libfuse) Filesystem in Userspace
   
-Also requires   
-[CMake](https://cmake.org/) build system.  
+Also requires [CMake](https://cmake.org/) build system.
 
-On Ubuntu you can run the following command:  
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev  
+On Ubuntu you can run the following command to install them.
+
+```bash
+sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev
+```
 
 ## Build steps
 
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev git  
-> mkdir console-client   
-> git clone https://github.com/pcloudcom/console-client.git ./console-client/  
-> cd ./console-client/pCloudCC/   
-> cd lib/pclsync/        
-> make clean    
-> make fs     
-> cd ../mbedtls/   
-> cmake .      
-> make clean     
-> make       
-> cd ../..      
-> cmake .    
-> make      
-> sudo make install     
-> ldconfig     
-> pcloudcc -u username -p       
+```
+sudo apt-get install git cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev
+mkdir console-client
+git clone https://github.com/pcloudcom/console-client.git ./console-client/
+cd ./console-client/pCloudCC/
+cd lib/pclsync/
+make clean
+make fs
+cd ../mbedtls/
+cmake .
+make clean
+make
+cd ../../
+cmake .
+make
+sudo make install
+ldconfig
+pcloudcc -u username -p
+```
 
 ## Usage
+
 Terminal command is pcloudcc and -h option prints short options description.
-> ./pcloudcc -h  
->  pCloud console client v.2.0.1  
->Allowed options:  
->  -h [ --help ]             produce help message  
->  -u [ --username ] arg     pCloud account name  
->  -p [ --password ]         pCloud account password  
->  -c [ --crypto ] arg       Crypto password  
->  -y [ --passascrypto ] arg Use user password as crypto password also.  
->  -d [ --daemonize ]        Daemonize the process.  
->  -o [ --commands  ]        Parent stays alive and processes commands.   
->  -m [ --mountpoint ] arg   Mount point where drive to be mounted.  
->  -k [ --commands_only ]    Daemon already started pass only commands.  
->  -n [ --newuser ]          Switch if this is a new user to be registered.  
->  -s [ --savepassword ]     Save password in database.  
 
+```
+./pcloudcc -h  
+pCloud console client v.2.0.1
+Allowed options:
+  -h [ --help ]             produce help message
+  -u [ --username ] arg     pCloud account name
+  -p [ --password ]         Ask pCloud account password
+  -c [ --crypto ]           Ask crypto password
+  -y [ --passascrypto ] arg Use user password as crypto password also.
+  -d [ --daemonize ]        Daemonize the process.
+  -o [ --commands  ]        Parent stays alive and processes commands.
+  -m [ --mountpoint ] arg   Mount point where drive to be mounted.
+  -k [ --commands_only ]    Daemon already started pass only commands
+  -n [ --newuser ]          Switch if this is a new user to be registered.
+  -s [ --savepassword ]     Save password in database.
+```
 
-Also there are several commands that the running service can execute. Commands are passed using 
-> pcloudcc -k 
+Also there are several commands that the running service can execute.
+Commands are passed using `pcloudcc -k` or starting the daemon with `-o`.
 
-or  starting the daemon with -o. 
+Available commands are startcrypto <crypto pass>, stopcrypto, finalize, q, quit.
 
-Available commands are : startcrypto <crypto pass>, stopcrypto, finalize, q, quit  
-- startcrypto <crypto pass> - starts cripto using given password.
--  stopcrypto – stops the crypto.
--   finalize – stops the running daemon.
-- quit, q  - exits the current client. Daemon stays alive.
+- startcrypto <crypto pass> - starts cripto using given password
+- stopcrypto – stops the crypto
+- finalize – stops the running daemon
+- quit, q - exits the current client, daemon stays alive
 
+#### Example usage scenario
 
-Example usage scenario:  
-- Start the service manually
+Start the service manually.
 
-> pcloudcc -u example@myemail.com -p -s   
+```
+pcloudcc -u user@example.com -p -s
+```
 
-Enter password and  use -s switch to save the password. 
+Enter password and use `-s` switch to save the password.
 
-- Verify that file system starts and mounts normally. If you don't have existing user use -n switch to register new user:  
+Verify that file system starts and mounts normally. If you don't have existing user use the `-n` switch to register new user.
 
-> pcloudcc -u example@myemail.com -p -s -n
+```
+pcloudcc -u user@example.com -p -s -n
+```
 
-Notice that a new user may take a while to mount. Please, be patient.   
+Notice that a new user may take a while to mount. Please be patient.
 
-- Start the daemon service:
+Start the daemon service.
 
-> pcloudcc -u example@myemail.com -d  
+```
+pcloudcc -u user@example.com -d
+```
 
-- Verify file system is mounted.  
+Verify file system is mounted.
 
-- At that point you can test passing some commands.
+At that point you can test passing some commands.
 
-> pcloudcc -u example@myemail.com -k  
+```
+pcloudcc -u user@example.com -k
+```
 
-Or starting the daemon with -o. Test unlocking and locking crypto if you have subscription for it.   
+Or starting the daemon with `-o`. Test unlocking and locking crypto if you have subscribed for it.
 
-- Quit the client. Congratulations, your pcloud console client works properly.  You can now add “pcloudcc -u example@myemail.com -d” command in you startup scripts  and thous mount the file system on startup.  
+Quit the client. Congratulations, your pcloud console client works properly.
+You can now add `pcloudcc -u user@example.com -d` command in you startup scripts
+and thus mount the file system on startup.
 
+## Debian package
 
-## Debian
-To create a debian package form the source use:  
-> debuild -i -us -uc -b  
+To create a debian package form the source use the following command.
+
+```
+debuild -i -us -uc -b
+```
  
 ## Other distributions
+
 - Binary packages 64 bit
   [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZv1aQ7ZkEd1Vr0gj3hTteoDtujd481o7amk)
 - Ubunutu 17.10 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.17.10.deb](https://my.pcloud.com/publink/show?code=XZFeaQ7ZH1nHUfK4MLzGdeCvmmJywBUFANyy)
 - Ubunutu 14.04 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.14.04.deb](https://my.pcloud.com/publink/show?code=XZSeaQ7ZFPq1g8oowJXyXap7KKzTtSKoACHy)
-
-
