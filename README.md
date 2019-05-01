@@ -37,13 +37,14 @@ On Ubuntu you can run the following command:
 ## Usage
 Terminal command is pcloudcc and -h option prints short options description.
 > ./pcloudcc -h  
->  pCloud console client v.2.0.1  
+>  pCloud console client v.2.1.0
 >Allowed options:  
 >  -h [ --help ]             produce help message  
 >  -u [ --username ] arg     pCloud account name  
 >  -p [ --password ]         pCloud account password  
 >  -c [ --crypto ] arg       Crypto password  
->  -y [ --passascrypto ] arg Use user password as crypto password also.  
+>  -y [ --passascrypto ] arg Use user password as crypto password also.
+>  -t [ --trust ]            Trust this device.
 >  -d [ --daemonize ]        Daemonize the process.  
 >  -o [ --commands  ]        Parent stays alive and processes commands.   
 >  -m [ --mountpoint ] arg   Mount point where drive to be mounted.  

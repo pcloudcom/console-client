@@ -637,6 +637,7 @@ void psync_get_status(pstatus_t *status);
 
 char *psync_get_username();
 void psync_set_user_pass(const char *username, const char *password, int save);
+void psync_set_tfa_pin(const char *tfa_pin);
 void psync_set_pass(const char *password, int save);
 void psync_set_auth(const char *auth, int save);
 void psync_logout();

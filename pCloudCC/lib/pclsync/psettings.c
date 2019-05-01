@@ -68,7 +68,8 @@ static psync_setting_t settings[]={
   {"autostartfs", NULL, NULL, {PSYNC_AUTOSTARTFS_DEFAULT}, PSYNC_TBOOL},
   {"fscachesize", psync_pagecache_resize_cache, NULL, {PSYNC_FS_DEFAULT_CACHE_SIZE}, PSYNC_TNUMBER},
   {"fscachepath", NULL, NULL, {0}, PSYNC_TSTRING},
-  {"sleepstopcrypto", NULL, NULL, {PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP}, PSYNC_TBOOL}
+  {"sleepstopcrypto", NULL, NULL, {PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP}, PSYNC_TBOOL},
+  {"trusted", NULL, NULL, {0}, PSYNC_TBOOL}
 };
 
 void psync_settings_reset(){

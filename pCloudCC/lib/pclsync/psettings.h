@@ -280,6 +280,7 @@ $RECYCLE.BIN;\
 #define PSYNC_SETTING_fscachesize       9
 #define PSYNC_SETTING_fscachepath      10
 #define PSYNC_SETTING_sleepstopcrypto  11
+#define PSYNC_SETTING_trusted          12
 
 typedef int psync_settingid_t;
 
