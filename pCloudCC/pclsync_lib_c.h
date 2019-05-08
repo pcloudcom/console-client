@@ -10,9 +10,9 @@ extern "C" {
   typedef void (*status_callback_t)(int status,  const char * stat_string); 
   
   int init();
-  int statrt_crypto (const char* pass);
-  int stop_crypto ();
-  int finalize ();
+  void statrt_crypto (const char* pass);
+  void stop_crypto ();
+  void finalize ();
   char * get_token();
   void set_status_callback(status_callback_t); 
   int logout();
