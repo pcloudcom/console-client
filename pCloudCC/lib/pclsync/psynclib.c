@@ -334,12 +334,12 @@ void psync_set_auth(const char *auth, int save){
   if (save)
     psync_set_string_value("auth", auth);
   else
-    psync_strlcpy(psync_my_auth, auth, sizeof(psync_my_auth)+1);
+    psync_strlcpy(psync_my_auth, auth, sizeof(psync_my_auth));
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
 void psync_set_tfa_pin(const char *tfa_pin){
-    psync_strlcpy(psync_my_tfa_pin, tfa_pin, sizeof(psync_my_tfa_pin)+1);
+    psync_strlcpy(psync_my_tfa_pin, tfa_pin, sizeof(psync_my_tfa_pin));
     psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
