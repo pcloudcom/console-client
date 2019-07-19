@@ -95,9 +95,17 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 ## Debian
 To create a debian package form the source use:  
 > debuild -i -us -uc -b  
- 
-## Other distributions
-- Binary packages 64 bit
+
+## Pre-built packages
+- Ubuntu 18.04 64 bit
+  [pcloudcc_2.1.1-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZpkPG7ZGl5v14AehRFGBl4Px8KCXmu1lDCy)
+- Debian 9.9 32 bit
+  [pcloudcc_2.1.1-1_i386_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZ17PG7ZOMUWz6Nt2a4vyUTxLSLak8fXL9Rk)
+- Debian 9.9 64 bit
+  [pcloudcc_2.1.1-1_amd64_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZ37PG7Z6cXHbgFIeK744DQwzRCXzQzlSirk)
+
+## Older packages
+- Binary package 64 bit
   [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZv1aQ7ZkEd1Vr0gj3hTteoDtujd481o7amk)
 - Ubunutu 17.10 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.17.10.deb](https://my.pcloud.com/publink/show?code=XZFeaQ7ZH1nHUfK4MLzGdeCvmmJywBUFANyy)
