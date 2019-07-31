@@ -12,11 +12,11 @@ Also requires
 [CMake](https://cmake.org/) build system.  
 
 On Ubuntu you can run the following command:  
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev  
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev
 
 ## Build steps
 
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev git  
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev git  
 > mkdir console-client   
 > git clone https://github.com/pcloudcom/console-client.git ./console-client/  
 > cd ./console-client/pCloudCC/   
