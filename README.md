@@ -98,11 +98,11 @@ To create a debian package form the source use:
 
 ## Pre-built packages
 - Ubunutu 18.04 64 bit
-  [pcloudcc_2.1.0-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZXvIv7ZT14wPqVRxi7NQgRJECtRpkkb5i3k)
+  [pcloudcc_2.1.0-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZHVyi7Z5GL2vklmKPSiRO7Hfng9KX9bPwj7)
 - Debian 9.9 64 bit
-  [pcloudcc_2.1.0-1_amd64_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZ5vIv7ZqlLwH4FTh78MrXllbthDILYX1SW7)
+  [pcloudcc_2.1.0-1_amd64_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZYVyi7ZseHyB89XXK0lVAdyy0AwQYl7osU7)
 - Debian 9.9 32 bit
-  [pcloudcc_2.1.0-1_i386_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZHvIv7Zn98sNaK6TjjuFtWbD9l1OuPGKjE7)
+  [pcloudcc_2.1.0-1_i386_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZuVyi7ZLevxTwQKGrSrxp8uIrQodBwDfX67)
 
 ## Older pre-built packages
 - Binary package 64 bit
