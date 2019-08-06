@@ -146,7 +146,11 @@
 #define PSYNC_DEFAULT_CACHE_FOLDER "Cache"
 #define PSYNC_DEFAULT_READ_CACHE_FILE "cached"
 
+#if defined(P_OS_MACOSX)
+#define PSYNC_DEFAULT_FS_FOLDER "pCloud Drive"
+#else
 #define PSYNC_DEFAULT_FS_FOLDER "pCloudDrive"
+#endif
 
 #define PSYNC_DEFAULT_POSIX_FOLDER_MODE 0755
 #define PSYNC_DEFAULT_POSIX_FILE_MODE 0644
@@ -264,7 +268,7 @@ hiberfil.sys;\
 pagefile.sys;\
 $RECYCLE.BIN;\
 *.part;\
-.pcloud"
+.pcloud;"
 
 #define _PS(s) PSYNC_SETTING_##s
 

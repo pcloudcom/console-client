@@ -28,10 +28,14 @@
 #ifndef _PSYNC_LOCALSCAN_H
 #define _PSYNC_LOCALSCAN_H
 
+#include "psynclib.h"
+
 void psync_localscan_init();
 void psync_wake_localscan();
 void psync_restart_localscan();
 void psync_stop_localscan();
 void psync_resume_localscan();
-
+void psync_restat_sync_folders();
+void psync_restat_sync_folders_del(psync_syncid_t syncid);
+void psync_restat_sync_folders_add(psync_syncid_t syncid, const char *localpath);
 #endif

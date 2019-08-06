@@ -247,7 +247,7 @@ static void psync_notifications_thumb_dir_list(void *ptr, psync_pstat_fast *st){
   psync_thumb_list_t *tl;
   size_t len;
   int cmp;
-  if (st->isfolder)
+  if (psync_stat_fast_isfolder(st))
     return;
   tree=(psync_tree **)ptr;
   tr=*tree;

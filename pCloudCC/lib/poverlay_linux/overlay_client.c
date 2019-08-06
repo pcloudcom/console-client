@@ -37,7 +37,7 @@
 #include "debug.h" 
 #define POVERLAY_BUFSIZE 512 
 
-typedef struct _message {
+typedef struct _message{
 uint32_t type;
 uint64_t length;
 char value[];
@@ -94,14 +94,14 @@ int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , void
   int bytes_writen = 0 ;
   char *curbuf = NULL ;
   char *buf = NULL;
-  uint32_t bufflen=0;
+  uint64_t bufflen=0;
+  uint64_t msg_type;
   char sendbuf[mess_size];
   int bytes_read = 0 ;
   message *rep = NULL ;
-
-
+  
   debug ( D_NOTICE , "SenCall id[%d] path[%s]\n" , id, path);
-
+  
   #if defined(P_OS_MACOS)
   if ( (fd = socket ( AF_INET , SOCK_STREAM , 0 )) == - 1 ) {
     if (errm)
@@ -158,28 +158,22 @@ int SendCall( int id /*IN*/ ,const char * path /*IN*/ , int * ret /*OUT*/ , void
     return - 5 ;
   }
   
-  
-  
-  read_x_bytes(fd, 4, &bufflen);
-  if (bufflen <= 0)
-  {
-    debug ( D_NOTICE , "Message size could not be read![%d]\n" , bufflen);
+  read_x_bytes(fd, sizeof(uint64_t), &msg_type); // Read 2x8 bytes because the message structure is not packed and the members are aligned on a 8-byte boundary
+  read_x_bytes(fd, sizeof(uint64_t), &bufflen);
+  if (bufflen <= 0){
+    debug (D_NOTICE, "Message size could not be read![%lu]\n", bufflen);
     return -6;
   }
-  buf = (char *)malloc(bufflen);
-  rep = ( message *)buf;
-  rep->length = bufflen;
-
-  read_x_bytes(fd, bufflen - 4, buf + 4);
-  
-
-  *ret = rep-> type ;
+  buf=(char *)malloc(bufflen);
+  rep=(message*)buf;
+  rep->length=bufflen;
+  rep->type=msg_type;
+  read_x_bytes(fd, bufflen-2*sizeof(uint64_t), buf+2*sizeof(uint64_t));
+  *ret=rep->type;
   if (out)
-    out = strndup (rep-> value , rep-> length - sizeof ( message ));
-
+    out=strndup(rep->value, rep->length-sizeof(message));
   close(fd);
-
-  return 0 ;
+  return 0;
 }
 
 #ifdef PCLOUD_TESTING

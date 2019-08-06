@@ -14,17 +14,21 @@ int init() {
   else return 0;
 }
 
- int statrt_crypto (const char* pass) {
+int statrt_crypto(const char* pass) {
   cc::pclsync_lib::statrt_crypto (pass, NULL);
 }
- int stop_crypto () {
+ int stop_crypto() {
   cc::pclsync_lib::stop_crypto (NULL, NULL);
 }
- int finalize () { 
+ int finalize() { 
   cc::pclsync_lib::finalize(NULL, NULL);
 }
 void set_status_callback(status_callback_t c) {
   cc::pclsync_lib::get_lib().set_status_callback(c);
+}
+
+void set_event_callback(pevent_callback_t c) {
+  cc::pclsync_lib::get_lib().set_event_callback(c);
 }
 
 char * get_token(){

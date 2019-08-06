@@ -1,5 +1,6 @@
-pcloudcc (2.0.1-1) trusty; urgency=low
+pcloudcc (2.1.0-1) bionic; urgency=low
 
-  * Initial release 
+  * Updated the sync library to v 1.5.0
 
- -- Ivan Stoev <ivan.stoev@pcloud.com>  Tue, 05 Apr 2016 16:58:02 +0300
+ -- Raycho Mukelov <raycho.mukelov@pcloud.com> Thu, 1 Aug 2019 16:53:02 +0300
+
