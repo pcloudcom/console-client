@@ -1825,7 +1825,7 @@ static void psync_fs_crypto_check_file(void *ptr, psync_pstat_fast *st){
   size_t len;
   char *path;
   char ch;
-  if (st->isfolder)
+  if (psync_stat_fast_isfolder(st))
     return;
   len=strlen(st->name);
   if (!len)

@@ -609,3 +609,20 @@ const binresult *psync_do_check_result(const binresult *res, const char *name, u
     }
   return NULL;
 }
+
+const binresult *psync_do_get_result(const binresult *res, const char *name, const char *file, const char *function, int unsigned line){
+  uint32_t i;
+  if (unlikely(!res || res->type!=PARAM_HASH)){
+    if (D_CRITICAL<=DEBUG_LEVEL){
+      const char *nm="NULL";
+      if (res)
+        nm=type_names[res->type];
+      psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
+    }
+    return NULL;
+  }
+  for (i=0; i<res->length; i++)
+    if (!strcmp(res->hash[i].key, name))
+      return res->hash[i].value;
+  return NULL;
+}

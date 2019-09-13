@@ -12,11 +12,11 @@ Also requires
 [CMake](https://cmake.org/) build system.  
 
 On Ubuntu you can run the following command:  
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev  
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev 
 
 ## Build steps
 
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev git  
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev git  
 > mkdir console-client   
 > git clone https://github.com/pcloudcom/console-client.git ./console-client/  
 > cd ./console-client/pCloudCC/   
@@ -95,9 +95,17 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 ## Debian
 To create a debian package form the source use:  
 > debuild -i -us -uc -b  
- 
-## Other distributions
-- Binary packages 64 bit
+
+## Pre-built packages
+- Ubunutu 18.04 64 bit
+  [pcloudcc_2.1.0-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZvLyi7Zsz7t1H0aYIFiawL4LSgN3uxLBUJX)
+- Debian 9.9 64 bit
+  [pcloudcc_2.1.0-1_amd64_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZYVyi7ZseHyB89XXK0lVAdyy0AwQYl7osU7)
+- Debian 9.9 32 bit
+  [pcloudcc_2.1.0-1_i386_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZuVyi7ZLevxTwQKGrSrxp8uIrQodBwDfX67)
+
+## Older pre-built packages
+- Binary package 64 bit
   [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZv1aQ7ZkEd1Vr0gj3hTteoDtujd481o7amk)
 - Ubunutu 17.10 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.17.10.deb](https://my.pcloud.com/publink/show?code=XZFeaQ7ZH1nHUfK4MLzGdeCvmmJywBUFANyy)

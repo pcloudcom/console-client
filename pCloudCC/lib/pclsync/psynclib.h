@@ -104,8 +104,14 @@ typedef struct {
 #define PSTATUS_CONNECTING             12
 #define PSTATUS_SCANNING               13
 #define PSTATUS_USER_MISMATCH          14
-#define PSTATUS_ACCOUT_EXPIRED         15
-#define PSTATUS_ACCOUT_TFAERR          16
+#define PSTATUS_ACCOUNT_EXPIRED        15
+#define PSTATUS_TFA_REQUIRED           16
+#define PSTATUS_BAD_TFA_CODE           17
+#define PSTATUS_VERIFY_REQUIRED        18
+
+
+#define PSTATUS_ACCOUT_TFAERR          PSTATUS_TFA_REQUIRED
+#define PSTATUS_ACCOUT_EXPIRED         PSTATUS_ACCOUNT_EXPIRED
 
 typedef struct pstatus_struct_ {
   const char *downloadstr; /* formatted string with the status of uploads */
@@ -467,7 +473,18 @@ typedef struct {
   pdevice_item_t entries[];
 } pdevice_item_list_t;
 
-typedef void(*device_event_callback)(device_event event, void * device_info_);
+typedef void(*device_event_callback)(device_event event, void *device_info_);
+
+typedef struct {
+  uint32_t type;
+  const char *name;
+} plogged_device_t;
+
+typedef struct {
+  uint32_t entrycnt;
+  plogged_device_t devices[];
+} plogged_device_list_t;
+
 
 typedef struct {
   const char *name;
@@ -592,6 +609,9 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
  * either pass a static string or make a copy of your dynamic string. This function is to
  * be called BEFORE psync_start_sync and it is acceptable to call it even before psync_init().
  *
+ * psync_set_os_string() will set the name and version of the operating system that is passed
+ * to the server during token creation. If not set, it will be autodetected.
+ *
  * psync_set_database_path can set a full path to database file. If it does not exists
  * it will be created. The function should be only called before psync_init. If
  * database path is not set, appropriate location for the given OS will be chosen.
@@ -611,6 +631,7 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
 void psync_set_database_path(const char *databasepath);
 void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call);
 void psync_set_software_string(const char *str);
+void psync_set_os_string(const char *str);
 
 int psync_init();
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
@@ -641,6 +662,42 @@ void psync_set_pass(const char *password, int save);
 void psync_set_auth(const char *auth, int save);
 void psync_logout();
 void psync_unlink();
+
+/* Upon seein a status of PSTATUS_TFA_REQUIRED the application is supposed to let the user know that two factor
+ * authentication is enabled and provide the user with three choices
+ * 1) get code by SMS. After that the application calls psync_tfa_send_sms(), possibly display the returned phone number, wait for code input and call
+ *    psync_tfa_set_code(code, trusted, 0)
+ * 2) get code by notification at any other logged in device. Application calls psync_tfa_send_nofification(), possibly display logged devices list, wait for code input
+ *    and call psync_tfa_set_code(code, trusted, 0)
+ * 3) use recovery code, in this case the user provides the recovery code and application calls psync_tfa_set_code(code, trusted, 1)
+ *
+ * psync_tfa_has_devices() - can be called after PSTATUS_TFA_REQUIRED is received and returns true if the user has other devices logged in
+ *
+ * psync_tfa_type() - can be called after PSTATUS_TFA_REQUIRED is received and returns TFA type.
+ *  1 - msisdn 
+ *  2 - google authenticator
+ *
+ * psync_tfa_send_sms() - sends SMS with two factor authentication code to the phone number on file. If parameters country_code and phone_number are not NULL,
+ *  those are filled with user's phone number (split in two parts). In this case the caller needs to free the returned values. Returns -1 in case of network error or
+ *  one of the positive error codes listed at https://docsqa2.pcloud.com/methods/auth/tfa_sendcodeviasms.html
+ *
+ * psync_tfa_send_nofification() - sends notification with two factor authentication code to all already logged in devices. If devices_list is not null it is filled in
+ *  with list of user's devices. In this case the caller is supposed to free the list with a single call to psync_free(). Returns -1 in case of network error or
+ *  one of the positive error codes listed at https://docsqa2.pcloud.com/methods/auth/tfa_sendcodeviasysnotification.html
+ *
+ * psync_tfa_set_code() - sets the two factor code that is to be used for logging in. If "trusted" is set, this device will be marked trusted and will not require
+ *  two factor authentication in the future. The "is_recovery" parameter is supposed to be set if a recovery code is used and be zero in case of SMS or notification code.
+ *  Note that the function is void. Bad code will be signalled with status change to PSTATUS_BAD_LOGIN_DATA. In that case the login procedure can either be retried from
+ *  the beggining or from sending/providing two factor authentication code.
+ *
+ */
+
+int psync_tfa_has_devices();
+int psync_tfa_type();
+int psync_tfa_send_sms(char **country_code, char **phone_number);
+int psync_tfa_send_nofification(plogged_device_list_t **devices_list);
+plogged_device_list_t *psync_tfa_send_nofification_res();
+void psync_tfa_set_code(const char *code, int trusted, int is_recovery);
 
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,
  * on success syncid is returned, on error PSYNC_INVALID_SYNCID. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
@@ -752,6 +809,22 @@ int psync_register(const char *email, const char *password, int termsaccepted, c
 
 int psync_verify_email(char **err);
 
+/* Upon seeing a status of PSTATUS_VERIFY_REQUIRED an error should appear in the client, showing that
+* access is restricted with "Cancel" and "Verify" options.
+*
+* psync_verify_email_restricted() - Sends verification email to the user.
+* Returns zero on success, -1 if network error occurs or a positive error code from
+* this list:
+* https://docsqa2.pcloud.com/methods/auth/sendverificationemail.html
+* In case of error.
+*
+* If err is not NULL in all cases of non-zero return it will be set to point to a
+* psync_malloc-allocated buffer with English language error text, suitable to display
+* to the user. This buffer must be freed by the application.
+*/
+
+int psync_verify_email_restricted(char **err);
+
 /* Sends email with link to reset password to the user with specified email, return value and err are
  * the same as with registering.
  */
@@ -836,9 +909,14 @@ int psync_set_string_setting(const char *settingname, const char *value);
  * language  (string) - two letter, lowercase ISO 639-1 code of the user's language preference
  * quota (uint) - user's quota in bytes
  * usedquota (uint) - used space of the quota in bytes
+ * freequota (uint) - maximum quota that free user can obtain
  * diffid (uint) - diffid of the user status, see https://docs.pcloud.com/methods/general/diff.html, can be used to detect account changes
  * auth (string) - user's auth token (if the user is logged in and saveauth is true), see https://docs.pcloud.com/methods/intro/authentication.html
- *
+ * plan (uint) - user's plan id
+ * business (bool) - If true the user is part of a business account. Always provided
+ * vivapcloud (bool) - If it's Viva pCloud user it will be true otherwise the parameter won't be provided
+ * premiumlifetime (bool) - If true user's premium is life time. Always provided
+ * owner (bool) - True if the user is owner of a family plan. Presented only for user with family plan.
  */
 
 int psync_has_value(const char *valuename);
@@ -1167,7 +1245,7 @@ int psync_delete_all_links_folder(psync_folderid_t folderid, char**err);
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
 /*
  * Creates download link for newly uploaded screenshot and the sets expiration to current date plus delay seconds. If hasdelay
- * equals 0 no expiration is set. If hasdelay and delay is 0 expiration is for one mount 
+ * equals 0 no expiration is set. If hasdelay and delay is 0 expiration is for one mount
  */
 int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t delay, char **code /*OUT*/, char **err /*OUT*/);
 
@@ -1240,19 +1318,26 @@ psync_folderid_t psync_check_and_create_folder (const char * path);
 
 char * psync_get_token();
 
-/*Devices monitoring functions 
+/*Devices monitoring functions
  */
 
 //Adds device monitoring callback which is invoked every time a new not disabled device arrives.
-void padd_device_monitor_callback(device_event_callback callback);
-//Lists all stored devices 
-pdevice_item_list_t * psync_list_devices(char **err /*OUT*/);
+// void psync_add_device_monitor_callback(device_event_callback callback);
+//Lists all stored devices
+// pdevice_item_list_t * psync_list_devices(char **err /*OUT*/);
 //Enables device. This info is stored in the database so will be present after restart.
-void penable_device(const char* device_id);
+// void penable_device(const char* device_id);
 //Disable device
-void pdisable_device(const char* device_id);
-//Remove db information about device 
-void premove_device(const char* device_id);
+// void pdisable_device(const char* device_id);
+//Remove db information about device
+// void premove_device(const char* device_id);
+
+/* Checks for promotions. 
+ * If url is empty there is no ptomotion.
+ * Returns -1 in case of network error or
+ * one of the positive error codes
+*/
+int psync_get_promo(char **url);
 
 #ifdef __cplusplus
 }

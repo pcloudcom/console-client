@@ -3080,8 +3080,10 @@ void psync_fs_refresh_folder(psync_folderid_t folderid){
   else{
     debug(D_NOTICE, "creating fake file %s", fpath);
     fd=psync_file_open(fpath, P_O_WRONLY, P_O_CREAT);
-    if (fd!=INVALID_HANDLE_VALUE)
+    if (fd!=INVALID_HANDLE_VALUE){
       psync_file_close(fd);
+      psync_file_delete(fpath);
+    }
   }
   psync_free(fpath);
 }

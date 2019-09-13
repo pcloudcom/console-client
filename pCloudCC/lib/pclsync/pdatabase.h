@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 18
+#define PSYNC_DATABASE_VERSION 19
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -271,6 +271,10 @@ COMMIT;",
 "BEGIN;\
 CREATE TABLE IF NOT EXISTS devices (id INTEGER PRIMARY KEY, last_path VARCHAR(1024), type INTEGER, vendor VARCHAR(2048), product VARCHAR(2048), device_id VARCHAR(4096),\
   connected INTEGER, enabled INTEGER); \
+COMMIT;",
+"BEGIN;\
+UPDATE setting SET value=19 WHERE id='dbversion'; \
+UPDATE setting SET value=0 WHERE id='diffid'; \
 COMMIT;"
 };
 

@@ -1,16 +1,22 @@
-#CC=cc
+CC=gcc
 AR=ar rcu
 RANLIB=ranlib
 #USESSL=openssl
 USESSL=mbed
 
+#CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2
+CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -I../sqlite -DP_ELECTRON -fPIC
+
 #CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2
-CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -fPIC
+#CFLAGS=-Wall -Wpointer-arith -O2 -g -fsanitize=address -mtune=core2 -I../sqlite
+#CFLAGS=-Wall -Wpointer-arith -Os -g -mtune=core2 -I../sqlite -pg
+#CFLAGS=-Wall -Wpointer-arith -O2 -g -fno-stack-protector -fomit-frame-pointer -mtune=core2 -I../sqlite/ -fPIC
+#CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2 -I../sqlite -pg -m32 -D_FILE_OFFSET_BITS=64
 #CFLAGS=-O2 -g -pg
 #CFLAGS=-Wall -Wpointer-arith -O2 -g -mtune=core2 -I../../psync32/zlib -I../../psync32/sqlite -m32 -D_FILE_OFFSET_BITS=64
 
-#CMAKE whants lib extension 
-LIB_A=libpsynclib.a 
+LIB_A=psynclib.a
+#LIB_A=libpsynclib.a
 
 
 ifeq ($(OS),Windows_NT)
@@ -23,7 +29,7 @@ else
     UNAME_S := $(shell uname -s)
     UNAME_V := $(shell uname -v)
     ifeq ($(UNAME_S),Linux)
-        CFLAGS += -DP_OS_LINUX -I../sqlite
+        CFLAGS += -DP_OS_LINUX -D_FILE_OFFSET_BITS=64
             ifneq (,$(findstring Debian,$(UNAME_V)))
                 CFLAGS += -DP_OS_DEBIAN
             endif
@@ -71,6 +77,9 @@ $(LIB_A): $(OBJ) $(OBJNOFS)
 fs: $(OBJ) $(OBJFS)
 	$(AR) $(LIB_A) $(OBJ) $(OBJFS)
 	$(RANLIB) $(LIB_A)
+
+debugfs: fs
+	CFLAGS += -DDEBUG_LEVEL=${DEBUG}
 
 cli: fs
 	$(CC) $(CFLAGS) -o cli cli.c $(LIB_A) $(LDFLAGS)
