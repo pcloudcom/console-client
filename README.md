@@ -91,6 +91,32 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 
 - Quit the client. Congratulations, your pcloud console client works properly.  You can now add “pcloudcc -u example@myemail.com -d” command in you startup scripts  and thous mount the file system on startup.  
 
+## Systemd
+> sudo vim /usr/lib/systemd/user/pcloudcc@.service
+
+paste in
+```
+[Unit]
+Description=pCloud %i sync for %u
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=/usr/sbin/pcloudcc -u %i -m %h/pCloudDrive
+Restart=always
+RestartSec=11
+
+[Install]
+WantedBy=default.target
+```
+Then as your own user run:
+> systemctl --user enable pcloudcc@<example@myemail.com>.service
+
+followed by:
+> systemctl --user start pcloudcc@<example@myemail.com>.service
+
+Remember to initialize you account first by running:
+> pcloudcc -u example@myemail.com -p -s
 
 ## Debian
 To create a debian package form the source use:  
