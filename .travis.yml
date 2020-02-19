@@ -1,0 +1,29 @@
+sudo: required
+dist: trusty
+install: true
+env:
+  global:
+    - GOARCH=amd64
+before_install:
+  - sudo apt-get install devscripts debhelper cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev git -y
+
+script:
+  - cd pCloudCC/
+  - cd lib/pclsync/
+  - make clean
+  - make fs
+  - cd ../mbedtls/
+  - cmake .
+  - make clean
+  - make
+  - cd ../..
+  - cmake .
+  - make
+  - sudo make install
+  - sudo ldconfig
+  - pcloudcc -h
+
+notifications:
+  email:
+    on_success: never
+    on_failure: always
