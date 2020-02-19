@@ -1,7 +1,3 @@
-#include "control_tools.h"
-#include "pclsync_lib.h"
-#include "overlay_client.h"
-
 #include <iostream>
 
 #include <sys/types.h>
@@ -15,6 +11,10 @@
 #include <string.h>
 #include <map>
 #include <string>
+
+#include "control_tools.h"
+#include "pclsync_lib.h"
+#include "overlay_client.h"
 
 namespace control_tools{
 

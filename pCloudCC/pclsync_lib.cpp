@@ -39,23 +39,19 @@
 namespace cc  = console_client;
 namespace clib  = cc::clibrary;
 
-#include <boost/shared_ptr.hpp>
 clib::pclsync_lib& clib::pclsync_lib::get_lib(){
   static clib::pclsync_lib g_lib;
-  return g_lib;
-}
+  return g_lib;}
 
-psync_timer_t exit_timer=NULL;
-
-static std::string exec(const char* cmd){
-    boost::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+static std::string exec(const char* cmd) {
     if (!pipe) return "ERROR";
     char buffer[128];
     std::string result = "";
-    while (!feof(pipe.get())) {
-        if (fgets(buffer, 128, pipe.get()) != NULL)
+    while (!feof(pipe)) {
+        if (fgets(buffer, 128, pipe) != NULL)
             result += buffer;
     }
+    pclose(pipe);
     return result;
 }
 
@@ -324,4 +320,5 @@ clib::pclsync_lib::pclsync_lib() : status_(new pstatus_struct_() ), was_init_(fa
 
 clib::pclsync_lib::~pclsync_lib(){
 }
+
 
