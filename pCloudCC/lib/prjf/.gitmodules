@@ -1,0 +1,10 @@
+[submodule "curl"]
+ 	path = lib/curl
+ 	url = https://github.com/curl/curl.git
+
+[submodule "jsmn"]
+        path = lib/jsmn         
+        url = https://github.com/zserge/jsmn.git
+[submodule "lib/jsmn"]
+	path = lib/jsmn
+	url = https://github.com/zserge/jsmn.git

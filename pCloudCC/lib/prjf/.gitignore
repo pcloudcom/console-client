@@ -1,0 +1,5 @@
+*.o
+*.so
+test
+/libs
+.kdev4

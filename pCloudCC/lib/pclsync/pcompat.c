@@ -122,7 +122,8 @@ static char proxy_port[8];
 
 static int psync_page_size;
 
-static const char *psync_software_name="pCloudSync library "PSYNC_LIB_VERSION;
+static const char *psync_software_name=PSYNC_LIB_VERSION;
+static const char *psync_os_name=NULL;
 
 PSYNC_THREAD const char *psync_thread_name="no name";
 static pthread_mutex_t socket_mutex=PTHREAD_MUTEX_INITIALIZER;
@@ -2508,6 +2509,10 @@ int psync_list_dir(const char *path, psync_list_dir_callback callback, void *ptr
     if (de->d_name[0]!='.' || (de->d_name[1]!=0 && (de->d_name[1]!='.' || de->d_name[2]!=0))){
       psync_strlcpy(cpath+pl, de->d_name, namelen+1);
       if (likely_log(!lstat(cpath, &pst.stat)) && (S_ISREG(pst.stat.st_mode) || S_ISDIR(pst.stat.st_mode))){
+#if defined(P_OS_MACOSX)
+        if (pst.stat.st_flags&(UF_HIDDEN|UF_IMMUTABLE|SF_IMMUTABLE))
+          continue;
+#endif
         pst.name=de->d_name;
         callback(ptr, &pst);
       }
@@ -2569,7 +2574,9 @@ err1:
 }
 
 int psync_list_dir_fast(const char *path, psync_list_dir_callback_fast callback, void *ptr){
-#if defined(P_OS_POSIX)
+#if defined(P_OS_MACOSX)
+  return psync_list_dir(path, callback, ptr);
+#elif defined(P_OS_POSIX)
   psync_pstat_fast pst;
   struct stat st;
   DIR *dh;
@@ -3368,12 +3375,12 @@ int64_t psync_file_size(psync_file_t fd){
   else
     return st.st_size;
 #elif defined(P_OS_WINDOWS)
-   ULARGE_INTEGER li;
-   li.LowPart=GetFileSize(fd, &li.HighPart);
-   if (unlikely_log(li.LowPart==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR))
-     return -1;
-   else
-     return li.QuadPart;
+  ULARGE_INTEGER li;
+  li.LowPart=GetFileSize(fd, &li.HighPart);
+  if (unlikely_log(li.LowPart==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR))
+    return -1;
+  else
+    return li.QuadPart;
 #else
 #error "Function not implemented for your operating system"
 #endif
@@ -3381,6 +3388,29 @@ int64_t psync_file_size(psync_file_t fd){
 
 void psync_set_software_name(const char *snm){
   psync_software_name=snm;
+}
+
+void psync_set_os_name(const char *osnm){
+  psync_os_name=osnm;
+}
+
+char *psync_deviceos(){
+  return psync_os_name?psync_strdup(psync_os_name):psync_deviceid();
+}
+
+char *psync_device_string(){
+#if defined(P_OS_LINUX)
+	char *osname=psync_deviceos();
+	char *ret = psync_strcat(osname, ", ", psync_software_name, NULL);
+	free(osname);
+	return ret;
+
+#endif
+  return psync_strcat(psync_deviceid(), ", ", psync_software_name, NULL);
+}
+
+const char *psync_appname(){
+  return psync_software_name;
 }
 
 char *psync_deviceid(){
@@ -3426,7 +3456,7 @@ char *psync_deviceid(){
     psync_slprintf(versbuff, sizeof(versbuff), "%u.%u", (unsigned int)vmajor, (unsigned int)vminor);
     ver=versbuff;
   }
-  device=psync_strcat(hardware, ", Windows ", ver, ", ", psync_software_name, NULL);
+  device=psync_strcat(hardware, ", Windows ", ver, NULL);
 #elif defined(P_OS_MACOSX)
   struct utsname un;
   const char *ver;
@@ -3452,7 +3482,7 @@ char *psync_deviceid(){
   if (sysctlbyname("hw.model", modelname, &len, NULL, 0))
     psync_strlcpy(modelname, "Mac", sizeof(modelname));
   versbuff[sizeof(versbuff)-1]=0;
-  device=psync_strcat(modelname, ", ", ver, ", ", psync_software_name, NULL);
+  device=psync_strcat(modelname, ", ", ver, NULL);
 #elif defined(P_OS_LINUX)
   DIR *dh;
   struct dirent entry, *de;
@@ -3478,9 +3508,9 @@ char *psync_deviceid(){
       }
     closedir(dh);
   }
-  device=psync_strcat(hardware, ", Linux, ", psync_software_name, NULL);
+  device=psync_strcat(hardware, ", Linux", NULL);
 #else
-  device=psync_strcat("Desktop, ", psync_software_name, NULL);
+  device=psync_strcat("Desktop", NULL);
 #endif
   debug(D_NOTICE, "detected device: %s", device);
   return device;

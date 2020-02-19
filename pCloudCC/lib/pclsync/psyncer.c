@@ -256,20 +256,22 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
 
 static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_uint_row row;
+  psync_variant_row row;
   uint64_t folderid;
   psync_synctype_t synctype;
+  char *localpath;
   psync_sql_start_transaction();
-  res=psync_sql_query("SELECT folderid, synctype FROM syncfolder WHERE id=? AND flags=0");
+  res=psync_sql_query("SELECT folderid, synctype, localpath FROM syncfolder WHERE id=? AND flags=0");
   psync_sql_bind_uint(res, 1, syncid);
-  row=psync_sql_fetch_rowint(res);
+  row=psync_sql_fetch_row(res);
   if (unlikely_log(!row)){
     psync_sql_free_result(res);
     psync_sql_rollback_transaction();
     return;
   }
-  folderid=row[0];
-  synctype=row[1];
+  folderid=psync_get_number(row[0]);
+  synctype=psync_get_number(row[1]);
+  localpath=psync_strndup(psync_get_string(row[2]), strlen(psync_get_string(row[2])));
   psync_sql_free_result(res);
   if (synctype&PSYNC_DOWNLOAD_ONLY){
     psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0);
@@ -294,10 +296,12 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
         psync_wake_download();
       }
       psync_localnotify_add_sync(syncid);
+      psync_restat_sync_folders_add(syncid, localpath);
     }
   }
   else
     psync_sql_rollback_transaction();
+  psync_free(localpath);
 }
 
 static void psync_do_sync_thread(void *ptr){

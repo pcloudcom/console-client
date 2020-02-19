@@ -71,7 +71,7 @@ typedef struct {
   uint64_t uploadlinkid;
 } subscribed_ids;
 
-static uint64_t used_quota=0, current_quota=0;
+static uint64_t used_quota=0, current_quota=0, free_quota=0;
 static time_t last_event=0;
 static psync_uint_t needdownload=0;
 static psync_socket_t exceptionsockwrite=INVALID_SOCKET;
@@ -112,12 +112,15 @@ static void delete_cached_crypto_keys(){
 }
 
 static binresult *get_userinfo_user_digest(psync_socket *sock, const char *username, size_t userlen, const char *pwddig, const char *digest, uint32_t diglen,
-                                           const char *device){
+                                           const char *osversion, const char *appversion, const char *deviceid, const char *devicestring){
   binparam params[]={P_STR("timeformat", "timestamp"),
                       P_LSTR("username", username, userlen),
                       P_LSTR("digest", digest, diglen),
                       P_LSTR("passworddigest", pwddig, PSYNC_SHA1_DIGEST_HEXLEN),
-                      P_STR("device", device),
+                      P_STR("osversion", osversion),
+                      P_STR("appversion", appversion),
+                      P_STR("deviceid", deviceid),
+                      P_STR("device", devicestring),
                       P_BOOL("getauth", 1),
                       P_BOOL("getapiserver", 1),
                       P_BOOL("cryptokeyssign", 1),
@@ -125,7 +128,8 @@ static binresult *get_userinfo_user_digest(psync_socket *sock, const char *usern
   return send_command(sock, "login", params);
 }
 
-static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password, const char *device){
+static binresult *get_userinfo_user_pass(psync_socket *sock, const char *username, const char *password, const char *osversion,
+                                         const char *appversion, const char *deviceid, const char *devicestring){
   binparam empty_params[]={P_STR("MS", "sucks")};
   psync_sha1_ctx ctx;
   binresult *res, *ret;
@@ -156,23 +160,43 @@ static binresult *get_userinfo_user_pass(psync_socket *sock, const char *usernam
   psync_sha1_update(&ctx, dig->str, dig->length);
   psync_sha1_final(sha1bin, &ctx);
   psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
-  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length, device);
+  ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length, osversion, appversion, deviceid, devicestring);
   psync_free(res);
   return ret;
 }
 
+char *generate_device_id(){
+  psync_sql_res *q;
+  unsigned char deviceidbin[16];
+  char deviceidhex[32+2];
+  psync_ssl_rand_strong(deviceidbin, sizeof(deviceidbin));
+  psync_binhex(deviceidhex, deviceidbin, sizeof(deviceidbin));
+  deviceidhex[sizeof(deviceidbin)*2]=0;
+  q=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('deviceid', ?)");
+  psync_sql_bind_string(q, 1, deviceidhex);
+  psync_sql_run_free(q);
+  return psync_strdup(deviceidhex);
+}
+
 static psync_socket *get_connected_socket(){
-  char *auth, *user, *pass;
+  char *auth, *user, *pass, *deviceid, *osversion, *devicestring;
+  const char *appversion;
   psync_socket *sock;
   binresult *res;
   const binresult *cres;
   psync_sql_res *q;
-  char *device;
   uint64_t result, userid, luserid;
-  int saveauth, isbusiness, cryptosetup;
-  auth=user=pass=NULL;
-  psync_is_business = 0;
-  int digest = 1;
+  int saveauth, isbusiness, cryptosetup, digest;
+  digest=1;
+  psync_free(psync_my_2fa_token);
+  auth=user=pass=psync_my_2fa_token=NULL;
+  psync_is_business=0;
+  deviceid=psync_sql_cellstr("SELECT value FROM setting WHERE id='deviceid'");
+  if (!deviceid)
+    deviceid=generate_device_id();
+  debug(D_NOTICE, "using deviceid %s", deviceid);
+  appversion=psync_appname();
+  devicestring=psync_device_string();
   while (1){
     psync_free(auth);
     psync_free(user);
@@ -200,34 +224,56 @@ static psync_socket *get_connected_socket(){
       psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
-    device=psync_deviceid();
+    osversion=psync_deviceos();
 
-    if (user && pass && pass[0])
+    if (psync_my_2fa_token && psync_my_2fa_code_type && psync_my_2fa_code[0]){
+      const char *method=psync_my_2fa_code_type==1?"tfa_login":"tfa_loginwithrecoverycode";
+      binparam params[]={P_STR("timeformat", "timestamp"),
+                        P_STR("token", psync_my_2fa_token),
+                        P_STR("code", psync_my_2fa_code),
+                        P_BOOL("trustdevice", psync_my_2fa_trust),
+                        P_STR("osversion", osversion),
+                        P_STR("appversion", appversion),
+                        P_STR("deviceid", deviceid),
+                        P_STR("device", devicestring),
+                        P_BOOL("getauth", 1),
+                        P_BOOL("cryptokeyssign", 1),
+                        P_BOOL("getapiserver", 1),
+                        P_NUM("os", P_OS_ID)};
+      res=send_command(sock, method, params);
+    }
+    else if (user && pass && pass[0]){
       if (digest)
-        res=get_userinfo_user_pass(sock, user, pass, device);
-      else
-      {
+        res=get_userinfo_user_pass(sock, user, pass, osversion, appversion, deviceid, devicestring);
+      else{
         binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("username", user),
                          P_STR("password", pass),
-                         P_STR("device", device),
+                         P_STR("osversion", osversion),
+                         P_STR("appversion", appversion),
+                         P_STR("deviceid", deviceid),
+                         P_STR("device", devicestring),
                          P_BOOL("getauth", 1),
                          P_BOOL("cryptokeyssign", 1),
                          P_BOOL("getapiserver", 1),
                          P_NUM("os", P_OS_ID)};
-      res=send_command(sock, "login", params);
+        res=send_command(sock, "login", params);
       }
+    }
     else {
       binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", auth),
-                         P_STR("device", device),
+                         P_STR("osversion", osversion),
+                         P_STR("appversion", appversion),
+                         P_STR("deviceid", deviceid),
+                         P_STR("device", devicestring),
                          P_BOOL("getauth", 1),
                          P_BOOL("cryptokeyssign", 1),
                          P_BOOL("getapiserver", 1),
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
-    psync_free(device);
+    psync_free(osversion);
     if (unlikely_log(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
@@ -239,36 +285,68 @@ static psync_socket *get_connected_socket(){
     result=psync_find_result(res, "result", PARAM_NUM)->num;
     if (unlikely(result)){
       debug(D_NOTICE, "userinfo returned error %lu %s", (unsigned long)result, psync_find_result(res, "error", PARAM_STR)->str);
+      // here we only handle statuses that need to access the result
+      if (result==2297){
+        psync_socket_close(sock);
+        psync_free(psync_my_2fa_token);
+        psync_my_2fa_token=psync_strdup(psync_find_result(res, "token", PARAM_STR)->str);
+        psync_my_2fa_has_devices=psync_find_result(res, "hasdevices", PARAM_BOOL)->num;
+		psync_my_2fa_type=psync_find_result(res, "tfatype", PARAM_NUM)->num;
+        psync_free(res);
+        psync_my_2fa_code_type=0;
+        psync_my_2fa_code[0]=0;
+        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_TFAREQ);
+        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+        continue;
+      }
+	  if (result == 2306){
+		  psync_socket_close(sock);
+		  psync_free(psync_my_verify_token);
+		  psync_my_verify_token = psync_strdup(psync_find_result(res, "verifytoken", PARAM_STR)->str);
+		  psync_free(res);
+		  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_VERIFYREQ);
+		  psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+		  continue;
+	  }
       psync_socket_close(sock);
       psync_free(res);
-      if (result==2000){
-        if (user && pass)
-          psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
+      if (result==2000 || result==2012 || result==2064 || result==2074){
+        psync_my_2fa_code_type=0;
+        psync_my_2fa_code[0]=0;
+        if (result==2012 || result==2064 || result==2074)
+          psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADCODE);
+		else if (user && pass){
+			//Ugly fix, sorry :(
+			if (!strcmp(user, "pass") && !strcmp(pass, "dummy"))
+			{
+			  debug(D_NOTICE, "got %lu, for user=%s, not rising PSTATUS_AUTH_BADLOGIN", (unsigned long)result, user);
+			  psync_milisleep(1000);
+			  continue;
+			}
+			else
+			  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADLOGIN);
+		}
         else
           psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_BADTOKEN);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
       }
       else if (result==4000)
         psync_milisleep(5*60*1000);
-      else if (result == 2297 ){
-        psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_TFAERR);
-        psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
-      }
       else if (result==2205 || result==2229){
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_EXPIRED);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
-      } else if (result == 2237)
-      {
-        digest = 0;
+      }
+      else if (result==2237) {
+        digest=0;
         continue;
       }
-
       else
         psync_milisleep(PSYNC_SLEEP_BEFORE_RECONNECT);
       continue;
     }
     psync_my_userid=userid=psync_find_result(res, "userid", PARAM_NUM)->num;
     current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
+	free_quota = psync_find_result(res, "freequota", PARAM_NUM)->num;
     luserid=psync_sql_cellint("SELECT value FROM setting WHERE id='userid'", 0);
     psync_is_business=psync_find_result(res, "business", PARAM_BOOL)->num;
     psync_sql_start_transaction();
@@ -298,6 +376,9 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_string(q, 1, "quota");
       psync_sql_bind_uint(q, 2, current_quota);
       psync_sql_run(q);
+	  psync_sql_bind_string(q, 1, "freequota");
+	  psync_sql_bind_uint(q, 2, free_quota);
+	  psync_sql_run(q);
       psync_sql_bind_string(q, 1, "usedquota");
       psync_sql_bind_uint(q, 2, 0);
       psync_sql_run(q);
@@ -324,6 +405,24 @@ static psync_socket *get_connected_socket(){
       psync_sql_bind_string(q, 1, "language");
       psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
       psync_sql_run(q);
+	  psync_sql_bind_string(q, 1, "plan");
+	  psync_sql_bind_uint(q, 2, psync_find_result(res, "plan", PARAM_NUM)->num);
+	  psync_sql_run(q);
+	  psync_sql_bind_string(q, 1, "business");
+	  psync_sql_bind_uint(q, 2, psync_find_result(res, "business", PARAM_BOOL)->num);
+	  psync_sql_run(q);
+	  psync_sql_bind_string(q, 1, "premiumlifetime");
+	  psync_sql_bind_uint(q, 2, psync_find_result(res, "premiumlifetime", PARAM_BOOL)->num);
+	  psync_sql_run(q);
+	  psync_sql_bind_string(q, 1, "vivapcloud");
+	  psync_sql_bind_uint(q, 2, psync_find_result(res, "vivapcloud", PARAM_BOOL)->num);
+	  psync_sql_run(q);
+	  cres = psync_check_result(res, "family", PARAM_HASH);
+	  if (cres){
+		psync_sql_bind_string(q, 1, "owner");
+		psync_sql_bind_uint(q, 2, psync_find_result(cres, "owner", PARAM_BOOL)->num);
+		psync_sql_run(q);
+	  }
       if (saveauth){
         psync_sql_bind_string(q, 1, "auth");
         psync_sql_bind_string(q, 2, psync_my_auth);
@@ -420,10 +519,17 @@ static psync_socket *get_connected_socket(){
       else
         debug(D_WARNING, "account_info returned %lu, continuing without business info", (unsigned long)result);
       psync_free(res);
+      psync_sql_sync();
     }
     psync_free(auth);
     psync_free(user);
     psync_free(pass);
+    psync_free(psync_my_2fa_token);
+    psync_my_2fa_token=NULL;
+    psync_my_2fa_code_type=0;
+    psync_my_2fa_code[0]=0;
+    psync_free(deviceid);
+    psync_free(devicestring);
     psync_sql_sync();
     return sock;
   }
@@ -1230,6 +1336,10 @@ static void process_modifyuserinfo(const binresult *entry){
   current_quota=psync_find_result(res, "quota", PARAM_NUM)->num;
   psync_sql_bind_uint(q, 2, current_quota);
   psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "freequota");
+  free_quota = psync_find_result(res, "freequota", PARAM_NUM)->num;
+  psync_sql_bind_uint(q, 2, free_quota);
+  psync_sql_run(q);
   u=psync_find_result(res, "premium", PARAM_BOOL)->num;
   psync_sql_bind_string(q, 1, "premium");
   psync_sql_bind_uint(q, 2, u);
@@ -1250,6 +1360,24 @@ static void process_modifyuserinfo(const binresult *entry){
   psync_sql_bind_string(q, 1, "language");
   psync_sql_bind_string(q, 2, psync_find_result(res, "language", PARAM_STR)->str);
   psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "plan");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "plan", PARAM_NUM)->num);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "business");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "business", PARAM_BOOL)->num);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "premiumlifetime");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "premiumlifetime", PARAM_BOOL)->num);
+  psync_sql_run(q);
+  psync_sql_bind_string(q, 1, "vivapcloud");
+  psync_sql_bind_uint(q, 2, psync_find_result(res, "vivapcloud", PARAM_BOOL)->num);
+  psync_sql_run(q);
+  cres = psync_check_result(res, "family", PARAM_HASH);
+  if (cres){
+	psync_sql_bind_string(q, 1, "owner");
+	psync_sql_bind_uint(q, 2, psync_find_result(cres, "owner", PARAM_BOOL)->num);
+	psync_sql_run(q);
+  }
   u=psync_find_result(res, "cryptosetup", PARAM_BOOL)->num;
   psync_sql_bind_string(q, 1, "cryptosetup");
   psync_sql_bind_uint(q, 2, u);

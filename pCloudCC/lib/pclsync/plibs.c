@@ -108,7 +108,8 @@ static char normalize_table[256];
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
-char psync_my_auth[64]="", *psync_my_user=NULL, *psync_my_pass=NULL;
+char psync_my_auth[64]="", psync_my_2fa_code[32], *psync_my_user=NULL, *psync_my_pass=NULL, *psync_my_2fa_token=NULL, *psync_my_verify_token=NULL;
+int psync_my_2fa_code_type=0, psync_my_2fa_trust=0, psync_my_2fa_has_devices=0, psync_my_2fa_type=1;
 uint64_t psync_my_userid=0;
 pthread_mutex_t psync_my_auth_mutex=PTHREAD_MUTEX_INITIALIZER;
 

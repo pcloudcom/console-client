@@ -92,7 +92,9 @@
 
 #define P_OS_ID 7
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #else
 
@@ -177,6 +179,12 @@ typedef unsigned long psync_uint_t;
 #define psync_stat_device(s) ((s)->st_dev>>24)
 #else
 #define psync_stat_device(s) ((s)->st_dev)
+#endif
+#define psync_stat_device_full(s) ((s)->st_dev)
+#if defined(P_OS_MACOSX)
+#define psync_deviceid_short(deviceid) (deviceid>>24)
+#else
+#define psync_deviceid_short(deviceid) (deviceid)
 #endif
 
 typedef struct stat psync_stat_t;
@@ -282,6 +290,8 @@ int psync_stat(const char *path, psync_stat_t *st);
 #define psync_mtime_native_to_mtime(n) psync_filetime64_to_timet(n)
 #define psync_stat_inode(s) psync_32to64((s)->nFileIndexHigh, (s)->nFileIndexLow)
 #define psync_stat_device(s) ((s)->dwVolumeSerialNumber)
+#define psync_stat_device_full(s) psync_stat_device(s)
+#define psync_deviceid_short(deviceid) (deviceid)
 
 #define psync_sock_err() WSAGetLastError()
 #define psync_sock_set_err(e) WSASetLastError(e)
@@ -365,10 +375,16 @@ typedef struct {
   psync_stat_t stat;
 } psync_pstat;
 
+#if defined(P_OS_MACOSX)
+typedef psync_pstat psync_pstat_fast;
+#define psync_stat_fast_isfolder(a) psync_stat_isfolder(&(a)->stat)
+#else
 typedef struct {
   const char *name;
   uint8_t isfolder;
 } psync_pstat_fast;
+#define psync_stat_fast_isfolder(a) ((a)->isfolder)
+#endif
 
 typedef struct {
   struct sockaddr_storage address;
@@ -509,6 +525,10 @@ int psync_file_truncate(psync_file_t fd);
 int64_t psync_file_size(psync_file_t fd);
 
 void psync_set_software_name(const char *snm);
+void psync_set_os_name(const char *osnm);
+char *psync_deviceos();
+const char *psync_appname();
+char *psync_device_string();
 char *psync_deviceid();
 
 #if defined(P_OS_WINDOWS) && !defined(gmtime_r)

@@ -6,8 +6,7 @@ namespace po = boost::program_options;
 #include "control_tools.h"
 namespace ct = control_tools;
 
-static std::string version = "2.0.1";
-
+static std::string version = "2.1.0";
 int main(int argc, char **argv) {
   std::cout << "pCloud console client v."<< version << std::endl;
   std::string username;
@@ -49,11 +48,12 @@ int main(int argc, char **argv) {
       memset(argv[i],0,strlen(argv[i]));
     if (daemon){
       strncpy(argv[0], "pCloudDriveDeamon", strlen(argv[0]));
-    } else {
+    }
+    else{
       strncpy(argv[0], "pCloudDrive", strlen(argv[0]));
     }
     
-    if (vm.count("help")) {
+    if (vm.count("help")){
       std::cout << desc << "\n";
       return 0;
     }
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     }
     console_client::clibrary::pclsync_lib::get_lib().set_username(username);
     
-    if (passwordsw) {
+    if (passwordsw){
       console_client::clibrary::pclsync_lib::get_lib().get_pass_from_console();
     }
     
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         std::cout << "Enter crypto password."  << "\n";
         console_client::clibrary::pclsync_lib::get_lib().get_cryptopass_from_console();
       }
-    } else 
+    } else
        console_client::clibrary::pclsync_lib::get_lib().setup_crypto_ = false;
     
     if (vm.count("mountpoint"))
@@ -93,16 +93,15 @@ int main(int argc, char **argv) {
   catch(...) {
     std::cerr << "Exception of unknown type!\n";
   }
-
   
-    if (daemon)
-      ct::daemonize(commands);
-    else {
-      if (commands)
-        std::cout << "Option commnads/o  ignored."  << "\n";
-      if (!console_client::clibrary::pclsync_lib::get_lib().init())
-        sleep(360000);
-    }
+  if (daemon)
+    ct::daemonize(commands);
+  else {
+    if (commands)
+      std::cout << "Option commnads/o  ignored."  << "\n";
+    if (!console_client::clibrary::pclsync_lib::get_lib().init())
+      sleep(360000);
+  }
   
   return 0;
 }

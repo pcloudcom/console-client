@@ -28,44 +28,49 @@ enum command_ids_ {
   ADDSYNC,
   STOPSYNC
 };
-
   
-int start_crypto(const char * pass) {
+int start_crypto(const char * pass){
   int ret;
-  char* errm;
-  if (SendCall(STARTCRYPTO, pass, &ret, &errm))
-    std::cout << "Start Crypto failed. return is " << ret<< " and message is "<<errm << std::endl;
+  char* errm=NULL;
+  if(SendCall(STARTCRYPTO, pass, &ret, &errm))
+    std::cout << "Start Crypto failed. return is " << ret << " and message is "<<errm << std::endl;
   else 
     std::cout << "Crypto started. "<< std::endl;
-  free(errm);  
+  if(errm)
+    free(errm);
 }
+
 int stop_crypto(){
   int ret;
-  char* errm;
+  char* errm=NULL;
   if (SendCall(STOPCRYPTO, "", &ret, &errm))
-    std::cout << "Stop Crypto failed. return is " << ret<< " and message is "<<errm << std::endl;
+    std::cout << "Stop Crypto failed. return is " << ret << " and message is "<< errm << std::endl;
   else 
     std::cout << "Crypto Stopped. "<< std::endl;
-  free(errm);  
+  if (errm)
+    free(errm);  
 }
+
 int finalize(){
    int ret;
-  char* errm;
+  char* errm=NULL;
   if (SendCall(FINALIZE, "", &ret, &errm))
-    std::cout << "Finalize failed. return is " << ret<< " and message is "<<errm << std::endl;
+    std::cout << "Finalize failed. return is " << ret<< " and message is "<< errm << std::endl;
   else 
     std::cout << "Exiting ..."<< std::endl;
-  
-  free(errm);  
+  if (errm)
+    free(errm);  
 }
+
 void process_commands()
 {
   std::cout<< "Supported commands are:" << std::endl << "startcrypto <crypto pass>, stopcrypto, finalize, q, quit" << std::endl;
   std::cout<< "> " ;
   for (std::string line; std::getline(std::cin, line);) {
-    if (!line.compare("finalize")) {
+    if (!line.compare("finalize")){
       finalize();
-      break;}
+      break;
+    }
     else if (!line.compare("stopcrypto"))
        stop_crypto();
     else if (!line.compare(0,11,"startcrypto",0,11) && (line.length() > 12))
@@ -81,11 +86,11 @@ int daemonize(bool do_commands) {
   pid_t pid, sid;
 
   pid = fork();
-  if (pid < 0) 
+  if (pid<0) 
     exit(EXIT_FAILURE);
-  if (pid > 0) {
+  if (pid>0){
     std::cout << "Daemon process created. Process id is: " << pid << std::endl;
-    if (do_commands) {
+    if (do_commands){
       process_commands();
     }
     else 
@@ -94,10 +99,9 @@ int daemonize(bool do_commands) {
   }  
   umask(0);
   /* Open any logs here */        
-  sid = setsid();
+  sid=setsid();
   if (sid < 0)
     exit(EXIT_FAILURE);
-  
   if ((chdir("/")) < 0)
     exit(EXIT_FAILURE);
   close(STDIN_FILENO);
@@ -106,10 +110,9 @@ int daemonize(bool do_commands) {
   
   if (console_client::clibrary::pclsync_lib::get_lib().init())
      exit(EXIT_FAILURE);
-  while (1) {
+  while (1){
     sleep(10);
   }
-  
 }
   
 }

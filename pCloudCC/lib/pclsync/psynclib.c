@@ -61,7 +61,7 @@
 #include "poverlay.h"
 #include "pasyncnet.h"
 #include "ppathstatus.h"
-//#include "pdevice_monitor.h"
+#include "pdevice_monitor.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -161,6 +161,11 @@ void psync_set_software_string(const char *str){
   psync_set_software_name(str);
 }
 
+void psync_set_os_string(const char *str){
+  debug(D_NOTICE, "setting os name to %s", str);
+  psync_set_os_name(str);
+}
+
 static void psync_stop_crypto_on_sleep(){
   if (psync_setting_get_bool(_PS(sleepstopcrypto)) && psync_crypto_isstarted()){
     psync_cloud_crypto_stop();
@@ -218,7 +223,6 @@ int psync_init(){
 
   psync_run_thread("Overlay main thread", overlay_main_loop);
   init_overlay_callbacks();
-  //psync_run_thread("Device monitor main thread", pinit_device_monitor);
 
   return 0;
 }
@@ -254,6 +258,7 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_p2p_init();
   if (psync_setting_get_bool(_PS(autostartfs)))
     psync_fs_start();
+  psync_devmon_init();    
 }
 
 void psync_set_notification_callback(pnotification_callback_t notification_callback, const char *thumbsize){
@@ -378,7 +383,10 @@ void psync_logout(){
 }
 
 void psync_unlink(){
+  psync_sql_res *res;
+  char *deviceid;
   int ret;
+  deviceid=psync_sql_cellstr("SELECT value FROM setting WHERE id='deviceid'");
   debug(D_NOTICE, "unlink");
   psync_diff_lock();
   psync_stop_all_download();
@@ -400,11 +408,18 @@ void psync_unlink(){
   ret=psync_sql_close();
   psync_file_delete(psync_database);
   if (ret){
+    psync_free(deviceid);
     debug(D_ERROR, "failed to close database, exiting");
     exit(1);
   }
   psync_pagecache_clean_cache();
   psync_sql_connect(psync_database);
+  if (deviceid){
+    res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('deviceid', ?)");
+    psync_sql_bind_string(res, 1, deviceid);
+    psync_sql_run_free(res);
+    psync_free(deviceid);
+  }
   /*
     psync_sql_res *res;
     psync_variant_row row;
@@ -470,6 +485,133 @@ void psync_unlink(){
   psync_resume_localscan();
   if (psync_fs_need_per_folder_refresh())
     psync_fs_refresh_folder(0);
+}
+
+int psync_tfa_has_devices() {
+  return psync_my_2fa_has_devices;
+}
+
+int psync_tfa_type() {
+	return psync_my_2fa_type;
+}
+
+static void check_tfa_result(uint64_t result){
+  if (result==2064){
+    if (psync_status_get(PSTATUS_TYPE_AUTH)==PSTATUS_AUTH_TFAREQ){
+      psync_free(psync_my_2fa_token);
+      psync_my_2fa_token=NULL;
+      psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+    }
+  }
+}
+
+static char *binresult_to_str(const binresult *res){
+  if (!res)
+    return psync_strdup("field not found");
+  if (res->type==PARAM_STR)
+    return psync_strdup(res->str);
+  else if (res->type==PARAM_NUM){
+    char buff[32], *ptr;
+    uint64_t n;
+    ptr=buff+sizeof(buff);
+    *--ptr=0;
+    n=res->num;
+    do {
+      *--ptr='0'+n%10;
+      n/=10;
+    } while (n);
+    return psync_strdup(ptr);
+  }
+  else{
+    return psync_strdup("bad field type");
+  }
+}
+
+int psync_tfa_send_sms(char **country_code, char **phone_number){
+  if (country_code)
+    *country_code=NULL;
+  if (phone_number)
+    *phone_number=NULL;
+  if (!psync_my_2fa_token){
+    return -2;
+  }
+  else{
+    binresult *res;
+    uint64_t code;
+    binparam params[]={P_STR("token", psync_my_2fa_token)};
+    res=psync_api_run_command("tfa_sendcodeviasms", params);
+    if (!res)
+      return -1;
+    code=psync_find_result(res, "result", PARAM_NUM)->num;
+    if (code){
+      free(res);
+      check_tfa_result(code);
+      return code;
+    }
+    if (country_code || phone_number) {
+      const binresult *cres=psync_find_result(res, "phonedata", PARAM_HASH);
+      if (country_code)
+        *country_code=binresult_to_str(psync_get_result(cres, "countrycode"));
+      if (phone_number)
+        *phone_number=binresult_to_str(psync_get_result(cres, "msisdn"));
+    }
+    free(res);
+    return 0;
+  }
+}
+
+int psync_tfa_send_nofification(plogged_device_list_t **devices_list){
+  if (devices_list)
+    *devices_list=NULL;
+  if (!psync_my_2fa_token){
+    return -2;
+  }
+  else{
+    binresult *res;
+    uint64_t code;
+    binparam params[]={P_STR("token", psync_my_2fa_token)};
+    res=psync_api_run_command("tfa_sendcodeviasysnotification", params);
+    if (!res)
+      return -1;
+    code=psync_find_result(res, "result", PARAM_NUM)->num;
+    if (code){
+      free(res);
+      check_tfa_result(code);
+      return code;
+    }
+    if (devices_list){
+      const binresult *cres=psync_find_result(res, "devices", PARAM_ARRAY);
+      psync_list_builder_t *builder;
+      uint32_t i;
+      builder=psync_list_builder_create(sizeof(plogged_device_t), offsetof(plogged_device_list_t, devices));
+      for (i=0; i<cres->length; i++){
+        plogged_device_t *dev=(plogged_device_t *)psync_list_bulder_add_element(builder);
+        const binresult *str=psync_find_result(cres->array[i], "name", PARAM_STR);
+        dev->type=psync_find_result(cres->array[i], "type", PARAM_NUM)->num;
+        dev->name=str->str;
+        psync_list_add_lstring_offset(builder, offsetof(plogged_device_t, name), str->length);
+      }
+      *devices_list=(plogged_device_list_t *)psync_list_builder_finalize(builder);
+    }
+    free(res);
+    return 0;
+  }
+}
+
+plogged_device_list_t *psync_tfa_send_nofification_res(){
+  plogged_device_list_t *devices_list;
+  if (psync_tfa_send_nofification(&devices_list))
+    return NULL;
+  else
+    return devices_list;
+}
+
+void psync_tfa_set_code(const char *code, int trusted, int is_recovery){
+  strncpy(psync_my_2fa_code, code, sizeof(psync_my_2fa_code));
+  psync_my_2fa_code[sizeof(psync_my_2fa_code)-1]=0;
+  psync_my_2fa_trust=trusted;
+  psync_my_2fa_code_type=is_recovery?2:1;
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype){
@@ -670,6 +812,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   psync_path_status_sync_delete(syncid);
   psync_sql_commit_transaction();
   psync_localnotify_del_sync(syncid);
+  psync_restat_sync_folders_del(syncid);
   psync_stop_sync_download(syncid);
   psync_stop_sync_upload(syncid);
   psync_sql_sync();
@@ -726,6 +869,7 @@ int psync_delete_sync(psync_syncid_t syncid){
     psync_stop_sync_download(syncid);
     psync_stop_sync_upload(syncid);
     psync_localnotify_del_sync(syncid);
+    psync_restat_sync_folders_del(syncid);
     psync_restart_localscan();
     psync_sql_sync();
     psync_path_status_sync_delete(syncid);
@@ -891,6 +1035,11 @@ int psync_register(const char *email, const char *password, int termsaccepted, c
 int psync_verify_email(char **err){
   binparam params[]={P_STR("auth", psync_my_auth)};
   return psync_run_command("sendverificationemail", params, err);
+}
+
+int psync_verify_email_restricted(char **err){
+	binparam params[] = { P_STR("verifytoken", psync_my_verify_token) };
+	return psync_run_command("sendverificationemail", params, err);
 }
 
 int psync_lost_password(const char *email, char **err){
@@ -1369,7 +1518,7 @@ static void psync_del_all_except(void *ptr, psync_pstat_fast *st){
   const char **nmarr;
   char *fp;
   nmarr=(const char **)ptr;
-  if (!psync_filename_cmp(st->name, nmarr[1]) || st->isfolder)
+  if (!psync_filename_cmp(st->name, nmarr[1]) || psync_stat_fast_isfolder(st))
     return;
   fp=psync_strcat(nmarr[0], PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
   debug(D_NOTICE, "deleting old update file %s", fp);
@@ -1862,4 +2011,29 @@ char * psync_get_token()
   if (psync_my_auth[0])
     return psync_strdup(psync_my_auth);
   else return NULL;
+}
+
+int psync_get_promo(char **url)
+{
+  uint64_t result;
+  binresult *res;
+  binparam params[]={ P_STR("auth", psync_my_auth), P_NUM("os", P_OS_ID) };
+  *url = 0;
+  res = psync_api_run_command("getpromourl", params);
+  if (unlikely_log(!res)){
+	return -1;
+  }
+  result = psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+    debug(D_WARNING, "getpromourl returned %d", (int)result);
+    psync_free(res);
+    return result;
+  }
+  if (!psync_find_result(res, "haspromo", PARAM_BOOL)->num){
+  	psync_free(res);
+  	return result;
+  }
+  *url=psync_strdup(psync_find_result(res, "url", PARAM_STR)->str);
+  psync_free(res);
+  return 0;
 }
