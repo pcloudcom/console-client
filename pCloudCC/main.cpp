@@ -6,7 +6,7 @@ namespace po = boost::program_options;
 #include "control_tools.h"
 namespace ct = control_tools;
 
-static std::string version = "2.0.1";
+static std::string version = "2.1.0";
 
 int main(int argc, char **argv) {
   std::cout << "pCloud console client v."<< version << std::endl;
@@ -19,7 +19,8 @@ int main(int argc, char **argv) {
   bool passwordsw = false;
   bool save_pass = false;
   bool crypto = false;
-  
+  bool trusted_device = false;
+
   try {
     po::options_description desc("Allowed options");
     desc.add_options()
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
         ("password,p", po::bool_switch(&passwordsw), "Ask pCloud account password")
         ("crypto,c",  po::bool_switch(&crypto), "Ask crypto password")
         ("passascrypto,y", po::value<std::string>(), "Use user password as crypto password also.")
+        ("trusted_device,t", po::bool_switch(&trusted_device), "Trust this device.")
         ("daemonize,d", po::bool_switch(&daemon), "Daemonize the process.")
         ("commands ,o", po::bool_switch(&commands), "Parent stays alive and processes commands. ")
         ("mountpoint,m", po::value<std::string>(), "Mount point where drive to be mounted.")
@@ -85,6 +87,7 @@ int main(int argc, char **argv) {
     console_client::clibrary::pclsync_lib::get_lib().newuser_ = newuser;
     console_client::clibrary::pclsync_lib::get_lib().set_savepass(save_pass);
     console_client::clibrary::pclsync_lib::get_lib().set_daemon(daemon);
+    console_client::clibrary::pclsync_lib::get_lib().set_trusted_device(trusted_device);
   }
   catch(std::exception& e) {
     std::cerr << "error: " << e.what() << "\n";

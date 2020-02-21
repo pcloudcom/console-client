@@ -108,7 +108,7 @@ static char normalize_table[256];
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
-char psync_my_auth[64]="", *psync_my_user=NULL, *psync_my_pass=NULL;
+char psync_my_auth[64]="", *psync_my_user=NULL, *psync_my_pass=NULL, psync_my_tfa_pin[8]="";
 uint64_t psync_my_userid=0;
 pthread_mutex_t psync_my_auth_mutex=PTHREAD_MUTEX_INITIALIZER;
 

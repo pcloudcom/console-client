@@ -188,7 +188,7 @@ typedef void (*psync_transaction_callback_t)(void *);
 extern int psync_do_run;
 extern int psync_recache_contacts;
 extern pstatus_t psync_status;
-extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
+extern char psync_my_auth[64], psync_my_tfa_pin[8], *psync_my_user, *psync_my_pass;
 extern uint64_t psync_my_userid;
 extern pthread_mutex_t psync_my_auth_mutex;
 extern PSYNC_THREAD uint32_t psync_error;

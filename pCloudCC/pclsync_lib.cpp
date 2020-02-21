@@ -73,6 +73,11 @@ void clib::pclsync_lib::get_cryptopass_from_console()
   do_get_pass_from_console(crypto_pass_);
 }
 
+void clib::pclsync_lib::get_tfa_pin_from_console()
+{
+  do_get_pass_from_console(tfa_pin_);
+}
+
 void clib::pclsync_lib::do_get_pass_from_console(std::string& password)
 {
   if (daemon_) {
@@ -163,7 +168,8 @@ static char const * status2string (uint32_t status){
     case PSTATUS_SCANNING: return "SCANNING";
     case PSTATUS_USER_MISMATCH: return "USER_MISMATCH";
     case PSTATUS_ACCOUT_EXPIRED: return "ACCOUT_EXPIRED";
-    default :return "Unrecognized status";
+    case PSTATUS_ACCOUT_TFAERR: return "TFA_ERROR";
+    default :return "UNRECOGNIZED_STATUS";
   }
 }
 
@@ -185,17 +191,24 @@ static void status_change(pstatus_t* status) {
       psync_set_user_pass(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(), (int) clib::pclsync_lib::get_lib().save_pass_);
     }
     else {
-    std::cout << "registering" << std::endl;
-    if (psync_register(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(),1, NULL)){
-      std::cout << "both login and registration failed" << std::endl;
-      exit(1);
+      std::cout << "registering" << std::endl;
+      if (psync_register(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(),1, NULL)){
+        std::cout << "both login and registration failed" << std::endl;
+        exit(1);
+      }
+      else{
+        std::cout << "registered, logging in" << std::endl;
+        psync_set_user_pass(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(), (int) clib::pclsync_lib::get_lib().save_pass_);
+      }
     }
-    else{
-      std::cout << "registered, logging in" << std::endl;
-      psync_set_user_pass(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(), (int) clib::pclsync_lib::get_lib().save_pass_);
-    }
-      
-    }
+  } else if (status->status==PSTATUS_BAD_LOGIN_TOKEN){
+    clib::pclsync_lib::get_lib().get_pass_from_console();
+    psync_set_user_pass(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(), (int) clib::pclsync_lib::get_lib().save_pass_);
+  } else if (status->status==PSTATUS_ACCOUT_TFAERR){
+    std::cout << "two factor authentication - ";
+    clib::pclsync_lib::get_lib().get_tfa_pin_from_console();
+    psync_set_bool_setting("trusted", clib::pclsync_lib::get_lib().trusted_device_);
+    psync_set_tfa_pin(clib::pclsync_lib::get_lib().get_tfa_pin().c_str());
   }
   if (status->status==PSTATUS_READY || status->status==PSTATUS_UPLOADING || status->status==PSTATUS_DOWNLOADING || status->status==PSTATUS_DOWNLOADINGANDUPLOADING){
     if (!cryptocheck){
@@ -218,6 +231,7 @@ int clib::pclsync_lib::statrt_crypto (const char* pass, void * rep) {
 int clib::pclsync_lib::stop_crypto (const char* path, void * rep) {
   psync_crypto_stop();
   get_lib().crypto_on_ = false;
+  return 0;
 }
 int clib::pclsync_lib::finalize (const char* path, void * rep) {
   psync_destroy();
@@ -227,17 +241,16 @@ int clib::pclsync_lib::list_sync_folders (const char* path, void * rep) {
   psync_folder_list_t * folders = psync_get_sync_list();
   rep =psync_malloc(sizeof(folders));
   memcpy(rep, folders, sizeof(folders));
-  
+  return 0;
 }
-static const std::string client_name = " Console Client v.2.0.1";
+static const std::string client_name = "Console Client v.2.1.0";
 int clib::pclsync_lib::init()//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto, int usesrypto_userpass)
 {
-  std::string software_string = exec("lsb_release -ds");
-  psync_set_software_string(software_string.append(client_name).c_str());
+  std::string software_string = exec("hostname -f");
+  psync_set_software_string(software_string.append("(").append(client_name).append(")").c_str());
   if (setup_crypto_ && crypto_pass_.empty() )
     return 3;
- 
-  
+
   if (psync_init()){
     std::cout <<"init failed\n"; 
     return 1;

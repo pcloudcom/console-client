@@ -46,6 +46,7 @@ namespace console_client {
       //Getters 
       const std::string& get_username() {return username_;}
       const std::string& get_password() {return password_;}
+      const std::string& get_tfa_pin() {return tfa_pin_;}
       const std::string& get_crypto_pass() {return crypto_pass_;};
       const std::string& get_mount() {return mount_;}
       //Setters
@@ -57,10 +58,12 @@ namespace console_client {
       void setupsetup_crypto(bool p) {setup_crypto_ = p;}
       void set_newuser(bool p) {newuser_ = p;}
       void set_daemon(bool p) {daemon_ = p;}
+      void set_trusted_device(bool p) {trusted_device_ = p;}
       void set_status_callback(status_callback_t p) {status_callback_ = p;}
       //Console 
       void get_pass_from_console();
       void get_cryptopass_from_console();
+      void get_tfa_pin_from_console();
       //API calls
       int init();//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto = 1, int usesrypto_userpass = 0);
       static int statrt_crypto (const char* pass, void * rep);
@@ -76,6 +79,7 @@ namespace console_client {
       
       bool crypto_on_;
       bool save_pass_;
+      bool trusted_device_;
       bool setup_crypto_;
       pstatus_struct_* status_;
       bool newuser_;
@@ -85,6 +89,7 @@ namespace console_client {
     private:
       std::string username_;
       std::string password_;
+      std::string tfa_pin_;
       std::string crypto_pass_;
       std::string mount_;
        

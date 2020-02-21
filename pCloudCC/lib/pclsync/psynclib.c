@@ -338,6 +338,10 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
+void psync_set_tfa_pin(const char *tfa_pin){
+    psync_strlcpy(psync_my_tfa_pin, tfa_pin, sizeof(psync_my_tfa_pin));
+    psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+}
 
 int psync_mark_notificaitons_read(uint32_t notificationid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("notificationid", notificationid)};

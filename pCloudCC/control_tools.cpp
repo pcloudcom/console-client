@@ -30,16 +30,16 @@ enum command_ids_ {
 };
 
   
-int start_crypto(const char * pass) {
+void start_crypto(const char * pass) {
   int ret;
   char* errm;
   if (SendCall(STARTCRYPTO, pass, &ret, &errm))
     std::cout << "Start Crypto failed. return is " << ret<< " and message is "<<errm << std::endl;
   else 
     std::cout << "Crypto started. "<< std::endl;
-  free(errm);  
+  free(errm);
 }
-int stop_crypto(){
+void stop_crypto(){
   int ret;
   char* errm;
   if (SendCall(STOPCRYPTO, "", &ret, &errm))
@@ -48,7 +48,7 @@ int stop_crypto(){
     std::cout << "Crypto Stopped. "<< std::endl;
   free(errm);  
 }
-int finalize(){
+void finalize(){
    int ret;
   char* errm;
   if (SendCall(FINALIZE, "", &ret, &errm))
@@ -77,7 +77,7 @@ void process_commands()
   }
 }
 
-int daemonize(bool do_commands) {
+void daemonize(bool do_commands) {
   pid_t pid, sid;
 
   pid = fork();

@@ -3380,7 +3380,7 @@ int64_t psync_file_size(psync_file_t fd){
 }
 
 void psync_set_software_name(const char *snm){
-  psync_software_name=snm;
+  psync_software_name=psync_strcat(snm, NULL);
 }
 
 char *psync_deviceid(){
