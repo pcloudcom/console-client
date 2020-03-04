@@ -91,6 +91,10 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 
 - Quit the client. Congratulations, your pcloud console client works properly.  You can now add “pcloudcc -u example@myemail.com -d” command in you startup scripts  and thous mount the file system on startup.  
 
+**Notice that stopping daemon will break pending background transfers!**
+
+Current version of `pcloudcc` doesn't support command to check if threre are pending transfers.
+Locally cached files are located under `~/.pcloud/Cache` dir. When there is only one file `~/.pcloud/Cache/cached` (ususally big sized) this mean that transfers are completed.
 
 ## Debian
 To create a debian package form the source use:  
