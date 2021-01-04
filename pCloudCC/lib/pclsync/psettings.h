@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include "pcompiler.h"
 #include "pcompat.h"
+#include <stdio.h>
 
 #define PSYNC_LIB_VERSION "1.5.0"
 
@@ -40,11 +41,11 @@
 #define PSYNC_API_PORT_SSL 8399
 */
 
-#define PSYNC_API_HOST     "binapi.pcloud.com"
+#define PSYNC_API_HOST     getenv("PCLOUD_REGION_EU") ?  "bineapi.pcloud.com" :  "binapi.pcloud.com"
 #define PSYNC_API_PORT     80
 #define PSYNC_API_PORT_SSL 443
 
-#define PSYNC_API_AHOST     "api.pcloud.com"
+#define PSYNC_API_AHOST     getenv("PCLOUD_REGION_EU") ?  "eapi.pcloud.com" :  "api.pcloud.com"
 #define PSYNC_API_APORT     8398
 #define PSYNC_API_APORT_SSL 8399
 
