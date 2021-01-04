@@ -91,6 +91,13 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 
 - Quit the client. Congratulations, your pcloud console client works properly.  You can now add “pcloudcc -u example@myemail.com -d” command in you startup scripts  and thous mount the file system on startup.  
 
+### EU region users
+
+In order to connect to the EU region api server the environment variable `PCLOUD_REGION_EU` has to be set, e.g. like this:
+
+>  PCLOUD_REGION_EU=true pcloudcc -u example@myemail.com -p -s -n
+
+Users with accounts in the EU region will get an login failed error when connection to the US server and vice versa.
 
 ## Debian
 To create a debian package form the source use:  

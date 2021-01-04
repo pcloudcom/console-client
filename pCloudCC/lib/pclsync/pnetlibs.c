@@ -99,8 +99,8 @@ static struct time_bytes download_bytes_sec[PSYNC_SPEED_CALC_AVERAGE_SEC], uploa
 
 static sem_t api_pool_sem;
 
-char apiserver[64]=PSYNC_API_HOST;
-static char apikey[68]="API:"PSYNC_API_HOST;
+char apiserver[64]="";
+static char apikey[68]="";
 
 static uint32_t hash_func(const char *key){
   uint32_t c, hash;
@@ -2463,6 +2463,9 @@ int psync_send_debug(int thread, const char *file, const char *function, int uns
 }
 
 void psync_netlibs_init(){
+  sprintf(apiserver, "%s", PSYNC_API_HOST);
+  sprintf(apikey, "API:%s", apiserver);
+
   psync_timer_register(psync_netlibs_timer, 1, NULL);
   sem_init(&api_pool_sem, 0, PSYNC_APIPOOL_MAXACTIVE);
 }
