@@ -12,7 +12,7 @@ Also requires
 [CMake](https://cmake.org/) build system.  
 
 On Ubuntu you can run the following command:  
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev 
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev fuse build-essential
 
 ## Build steps
 
@@ -31,7 +31,7 @@ On Ubuntu you can run the following command:
 > cmake .    
 > make      
 > sudo make install     
-> ldconfig     
+> sudo ldconfig     
 > pcloudcc -u username -p       
 
 ## Usage
@@ -96,7 +96,7 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 To create a debian package form the source use:  
 > debuild -i -us -uc -b  
 
-## Pre-built packages
+## Pre-built packages for US
 - Ubunutu 18.04 64 bit
   [pcloudcc_2.1.0-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZvLyi7Zsz7t1H0aYIFiawL4LSgN3uxLBUJX)
 - Debian 9.9 64 bit
@@ -104,7 +104,7 @@ To create a debian package form the source use:
 - Debian 9.9 32 bit
   [pcloudcc_2.1.0-1_i386_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZuVyi7ZLevxTwQKGrSrxp8uIrQodBwDfX67)
 
-## Older pre-built packages
+## Older pre-built packages for US
 - Binary package 64 bit
   [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZv1aQ7ZkEd1Vr0gj3hTteoDtujd481o7amk)
 - Ubunutu 17.10 64 bit
@@ -112,4 +112,10 @@ To create a debian package form the source use:
 - Ubunutu 14.04 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.14.04.deb](https://my.pcloud.com/publink/show?code=XZSeaQ7ZFPq1g8oowJXyXap7KKzTtSKoACHy)
 
-
+## Remark
+- Change from US to European Region with edit pCloudCC/lib/pclsync/psettings.h
+  - Change 
+    `#define PSYNC_API_HOST "binapi.pcloud.com"` 
+    to 
+    `#define PSYNC_API_HOST "bineapi.pcloud.com"`
+- make clean and rebuild sources
