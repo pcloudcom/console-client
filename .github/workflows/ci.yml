@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - 'feature/**'
+      - 'fix/**'
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+  pull_request:
+    branches:
+      - master
+
+  schedule:
+    - cron: '0 11 * * *'
+      #      | | | | |
+      #      | | | | |____ day of the week (0 - 6 or SUN-SAT)
+      #      | | | |____ month (1 - 12 or JAN-DEC)
+      #      | | |____ day of the month (1 - 31)
+      #      | |____ hour (0 - 23)
+      #      |____ minute (0 - 59)
+
+jobs:
+  simple_build:
+    # To prevent build a particular commit use
+    #     git commit -m "......... [ci skip]"
+    if: "!contains(github.event.head_commit.message, '[ci skip]')"
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+
+        include:
+          - name: linux-gcc-debug
+            build-type: Debug
+            os: ubuntu-20.04
+            ssl: mbedtls
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 5
+
+      - name: Setup Common Prerequisites
+        run: |
+          case ${{ runner.os }} in
+            Linux*)
+              echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections
+              sudo apt-get update --quiet --yes 1>/dev/null
+
+              # Install build deps
+              sudo apt-get install --no-install-recommends -q -y \
+                 build-essential \
+                 cmake \
+                 gcc \
+                 fuse \
+                 libboost-program-options-dev \
+                 libboost-system-dev \
+                 libfuse-dev \
+                 libpthread-stubs0-dev \
+                 libudev-dev \
+                 zlib1g-dev
+              ;;
+          esac
+
+      - name: Build pclsync
+        working-directory: pCloudCC/lib/pclsync
+        run: make clean fs
+
+      - name: Configure mbedtls
+        if: matrix.ssl == 'mbedtls'
+        working-directory: pCloudCC/lib/mbedtls
+        run: >-
+          cmake
+          -S .
+          -B .
+          -DCMAKE_C_STANDARD=99
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+
+      - name: Build mbedtls
+        if: matrix.ssl == 'mbedtls'
+        working-directory: pCloudCC/lib/mbedtls
+        run: make clean all
+
+      - name: Configure client
+        working-directory: pCloudCC
+        run: >-
+          cmake
+          -S .
+          -B .build
+          -DCMAKE_CXX_STANDARD=11
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+
+      - name: Build client
+        working-directory: pCloudCC
+        run: cmake --build .build --config ${{ matrix.build-type }}
+
+      - name: Install client
+        working-directory: pCloudCC/.build
+        run: |
+          sudo make install
+          sudo ldconfig
+
+      - name: Minimal Load Test
+        run: pcloudcc --help
+
+      - name: Success Reporting
+        if: success()
+        run: git log --format=fuller -5
