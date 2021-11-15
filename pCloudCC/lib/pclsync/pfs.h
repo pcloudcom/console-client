@@ -71,6 +71,7 @@ typedef struct {
   int error;
   unsigned char ready;
   unsigned char kill;
+  unsigned char finalizelog;
 } psync_enc_file_extender_t;
 
 typedef struct {
@@ -125,7 +126,7 @@ typedef struct {
   psync_fast_hash256_ctx loghashctx;
   psync_enc_file_extender_t *extender;
   psync_file_t logfile;
-  uint32_t logoffset;
+  uint32_t logoffset; 
 } psync_openfile_t;
 
 typedef struct {

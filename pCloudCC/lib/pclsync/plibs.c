@@ -108,7 +108,8 @@ static char normalize_table[256];
 
 const static char *psync_typenames[]={"[invalid type]", "[number]", "[string]", "[float]", "[null]", "[bool]"};
 
-char psync_my_auth[64]="", *psync_my_user=NULL, *psync_my_pass=NULL;
+char psync_my_auth[64]="", psync_my_2fa_code[32], *psync_my_user=NULL, *psync_my_pass=NULL, *psync_my_2fa_token=NULL, *psync_my_verify_token=NULL;
+int psync_my_2fa_code_type=0, psync_my_2fa_trust=0, psync_my_2fa_has_devices=0, psync_my_2fa_type=1;
 uint64_t psync_my_userid=0;
 pthread_mutex_t psync_my_auth_mutex=PTHREAD_MUTEX_INITIALIZER;
 
@@ -124,7 +125,6 @@ static pthread_mutex_t psync_db_checkpoint_mutex;
 static int in_transaction=0;
 static int transaction_failed=0;
 static psync_list tran_callbacks;
-
 
 char *psync_strdup(const char *str){
   size_t len;
@@ -302,7 +302,7 @@ unsigned char *psync_base64_decode(const unsigned char *str, size_t length, size
     if (ch==-1)
      continue;
     else if (ch==-2) {
-      psync_free(result);
+       psync_free(result);
       return NULL;
     }
     switch(i%4) {
@@ -1192,6 +1192,7 @@ psync_sql_res *psync_sql_query(const char *sql){
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     ret->locked=SQL_WRITE_LOCK;
+    ret->sql=sql;
 #if IS_DEBUG
     psync_sql_do_lock(file, line);
 #else
@@ -1252,6 +1253,7 @@ psync_sql_res *psync_sql_query_rdlock(const char *sql){
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     ret->locked=SQL_READ_LOCK;
+    ret->sql=sql;
 #if IS_DEBUG
     psync_sql_do_rdlock(file, line);
 #else
@@ -1315,6 +1317,7 @@ psync_sql_res *psync_sql_query_nolock(const char *sql){
   if (ret){
 //    debug(D_NOTICE, "got query %s from cache", sql);
     ret->locked=SQL_NO_LOCK;
+    ret->sql=sql;
     return ret;
   }
   else

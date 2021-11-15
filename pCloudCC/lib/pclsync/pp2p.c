@@ -626,7 +626,8 @@ static int psync_p2p_download(psync_socket_t sock, psync_fileid_t fileid, const 
   }
   ekey=psync_ssl_alloc_encrypted_symmetric_key(keylen);
   if (unlikely_log(socket_read_all(sock, ekey->data, keylen)) ||
-      unlikely_log((key=psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_private, ekey))==PSYNC_INVALID_SYM_KEY)){
+    unlikely_log((key = psync_ssl_rsa_decrypt_symm_key_lock(psync_rsa_private, ekey)) == PSYNC_INVALID_SYM_KEY)) {
+      //unlikely_log((key=psync_ssl_rsa_decrypt_symmetric_key(psync_rsa_private, ekey))==PSYNC_INVALID_SYM_KEY)){
     psync_free(ekey);
     return PSYNC_NET_TEMPFAIL;
   }

@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include "paccountevents.h"
+#include "ptools.h"
 
 typedef uint64_t psync_folderid_t;
 typedef uint64_t psync_fileid_t;
@@ -89,6 +90,37 @@ typedef struct {
   psuggested_folder_t entries[];
 } psuggested_folders_t;
 
+typedef struct {
+	const char *label;
+	const char *api;
+	const char *binapi;
+	uint32_t locationid;
+}apiserver_info_t;
+
+typedef struct {
+	size_t serverscnt;
+	apiserver_info_t entries[];
+}apiservers_list_t;
+
+//Backend API errors constants
+#define BEAPI_ERR_F_NOT_EXISTS       2005 // folder does not exist, skip
+#define BEAPI_ERR_MOVE_ROOT          2042 // moving root, should not happen
+#define BEAPI_ERR_ACCESS_DENIED      2003 // access denied, skip
+#define BEAPI_ERR_INVALID_NAME       2001 // invalid name, should not happen
+#define BEAPI_ERR_OVERQUOTA          2008 // overquota
+#define BEAPI_ERR_MOVE_IN_SHARED_F   2023 // moving into shared folder
+#define BEAPI_ERR_MOVE_INTO_SELF     2043 // into itself or child
+#define BEAPI_ERR_NO_SHARE_IN_PUB    2282 // public folder can't contain shared folder
+#define BEAPI_ERR_NO_UP_LINK_IN_PUB  2283 // public folder can't contain upload link
+#define BEAPI_ERR_NO_DL_LINK_IN_PUB  2284 // public folder can't contain download link
+#define BEAPI_ERR_NO_PUB_F_IN_SHARE  2285 // shared folder can't contain public folder
+#define BEAPI_ERR_NO_PUB_F_IN_BUP    2340 // backup folders can't contain shared folders
+#define BEAPI_ERR_NO_UPLINK_IN_BUP   2342 // backup folders can't contain upload links
+#define BEAPI_ERR_NO_DL_LINK_IN_BUP  2343 // backup folders can't contain download links
+#define BEAPI_ERR_NOT_ALLOWED_IN_BUP 2346 // you can't place this item in backup folder
+#define BEAPI_ERR_DEST_F_EXISTS      2004 // destination folder already exists
+#define BEAPI_ERR_MV_TOO_MANY_IN_SHA 2352 //Too many objects moved at once in shared folder
+
 #define PSTATUS_READY                   0
 #define PSTATUS_DOWNLOADING             1
 #define PSTATUS_UPLOADING               2
@@ -104,8 +136,16 @@ typedef struct {
 #define PSTATUS_CONNECTING             12
 #define PSTATUS_SCANNING               13
 #define PSTATUS_USER_MISMATCH          14
-#define PSTATUS_ACCOUT_EXPIRED         15
-#define PSTATUS_ACCOUT_TFAERR          16
+#define PSTATUS_ACCOUNT_EXPIRED        15
+#define PSTATUS_TFA_REQUIRED           16
+#define PSTATUS_BAD_TFA_CODE           17
+#define PSTATUS_VERIFY_REQUIRED        18
+#define PSTATUS_RELOCATION             19
+#define PSTATUS_RELOCATED              20
+
+
+#define PSTATUS_ACCOUT_TFAERR          PSTATUS_TFA_REQUIRED
+#define PSTATUS_ACCOUT_EXPIRED         PSTATUS_ACCOUNT_EXPIRED
 
 typedef struct pstatus_struct_ {
   const char *downloadstr; /* formatted string with the status of uploads */
@@ -146,6 +186,7 @@ typedef struct pstatus_struct_ {
 
 #define PEVENT_FIRST_USER_EVENT      (1<<30)
 #define PEVENT_FIRST_SHARE_EVENT     (PEVENT_FIRST_USER_EVENT+200)
+#define PEVENT_FIRST_BACKUP_EVENT    (PEVENT_FIRST_SHARE_EVENT+200)
 
 #define PEVENT_LOCAL_FOLDER_CREATED   (PEVENT_TYPE_LOCAL+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
 #define PEVENT_REMOTE_FOLDER_CREATED  (PEVENT_TYPE_REMOTE+PEVENT_TYPE_FOLDER+PEVENT_TYPE_CREATE)
@@ -177,16 +218,33 @@ typedef struct pstatus_struct_ {
 #define PEVENT_SHARE_MODIFYIN    (PEVENT_FIRST_SHARE_EVENT+10)
 #define PEVENT_SHARE_MODIFYOUT   (PEVENT_FIRST_SHARE_EVENT+11)
 
+#define PEVENT_SHARE_RENAME_F    (PEVENT_FIRST_SHARE_EVENT+12)
+
+#define PEVENT_BACKUP_STOP            PEVENT_FIRST_BACKUP_EVENT
+#define PEVENT_BKUP_F_DEL_SYNCED      (PEVENT_FIRST_BACKUP_EVENT+1)
+#define PEVENT_BKUP_F_DEL_NOTSYNCED   (PEVENT_FIRST_BACKUP_EVENT+2)
+#define PEVENT_BKUP_F_DEL_DRIVE       (PEVENT_FIRST_BACKUP_EVENT+3)
+
 #define PNOTIFICATION_ACTION_NONE          0
 #define PNOTIFICATION_ACTION_GO_TO_FOLDER  1
 #define PNOTIFICATION_ACTION_GO_TO_URL     2
 #define PNOTIFICATION_ACTION_SHARE_REQUEST 3
 
+//Sync constants
 #define PSYNC_DOWNLOAD_ONLY  1
 #define PSYNC_UPLOAD_ONLY    2
 #define PSYNC_FULL           3
+#define PSYNC_BACKUPS        7
+
+#define PSYNC_STR_DOWNLOAD_ONLY  "1"
+#define PSYNC_STR_UPLOAD_ONLY    "2"
+#define PSYNC_STR_FULL           "3"
+#define PSYNC_STR_ALLSYNCS       "1,2,3"
+#define PSYNC_STR_BACKUPS        "7"
+
 #define PSYNC_SYNCTYPE_MIN   1
-#define PSYNC_SYNCTYPE_MAX   3
+#define PSYNC_SYNCTYPE_MAX   7
+//Sync constants end
 
 #define PERROR_LOCAL_FOLDER_NOT_FOUND   1
 #define PERROR_REMOTE_FOLDER_NOT_FOUND  2
@@ -202,6 +260,9 @@ typedef struct pstatus_struct_ {
 #define PERROR_INVALID_SYNCID          12
 #define PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING 13
 #define PERROR_LOCAL_IS_ON_PDRIVE      14
+#define PERROR_NO_MEMORY               15
+#define PERROR_NET_ERROR               16
+#define PERROR_PARENT_IS_IGNORED       17
 
 #define PERROR_CACHE_MOVE_NOT_EMPTY       1
 #define PERROR_CACHE_MOVE_NO_WRITE_ACCESS 2
@@ -266,14 +327,18 @@ typedef struct pstatus_struct_ {
 #define PSYNC_CRYPTO_CANT_CONNECT          -6
 #define PSYNC_CRYPTO_FOLDER_NOT_ENCRYPTED  -7
 #define PSYNC_CRYPTO_INTERNAL_ERROR        -8
+#define PSYNC_CRYPTO_BAD_PASSPHRASE        -9
+#define PSYNC_CRYPTO_BAD_KEY               -10
 
-#define PSYNC_CRYPTO_STATUS_NEW 1
-#define PSYNC_CRYPTO_STATUS_TRIAL 2
-#define PSYNC_CRYPTO_STATUS_EXPIRED 3
-#define PSYNC_CRYPTO_STATUS_ACTIVE 4
-#define PSYNC_CRYPTO_STATUS_SETUP 5
+#define PSYNC_CRYPTO_STATUS_NEW 			1
+#define PSYNC_CRYPTO_STATUS_TRIAL 			2
+#define PSYNC_CRYPTO_STATUS_EXPIRED 		3
+#define PSYNC_CRYPTO_STATUS_ACTIVE 			4
+#define PSYNC_CRYPTO_STATUS_SETUP 			5
 
 #define PSYNC_CRYPTO_INVALID_FOLDERID      ((psync_folderid_t)-1)
+
+#define PSYNC_CRYPTO_FLAG_TEMP_PASS			1
 
 #ifndef DEFAULT_FUSE_VOLUME_NAME
 #define DEFAULT_FUSE_VOLUME_NAME "pCloud Drive"
@@ -283,6 +348,14 @@ typedef struct pstatus_struct_ {
 #define DEFAULT_FUSE_MOUNT_POINT "pCloud"
 #endif
 
+// Lib error codes
+
+//Backup errors
+#define PSYNC_BACKUP_PATH_EMPTY_ERR 11001
+#define PSYNC_BACKUP_PATH_EMPTY_MSG "Cannot backup an empty path."
+//Backup errors end
+
+// Lib error codes end
 typedef struct {
   const char *localname;
   const char *localpath;
@@ -421,6 +494,7 @@ typedef struct {
   const char *name;
   const char *code;
   const char *comment;
+  const char *fulllink;
   uint64_t traffic;
   uint64_t maxspace;
   uint64_t downloads;
@@ -430,6 +504,13 @@ typedef struct {
   uint8_t isfolder;
   uint8_t isupload;
   uint8_t icon;
+  uint64_t parentfolderid;
+  uint8_t haspassword;
+  uint8_t type;
+  uint64_t views;
+  uint64_t expire;
+  uint8_t enableuploadforeveryone;
+  uint8_t enableuploadforchosenusers;
 } link_info_t;
 
 typedef struct {
@@ -467,7 +548,17 @@ typedef struct {
   pdevice_item_t entries[];
 } pdevice_item_list_t;
 
-typedef void(*device_event_callback)(device_event event, void * device_info_);
+typedef void(*device_event_callback)(device_event event, void *device_info_);
+
+typedef struct {
+  uint32_t type;
+  const char *name;
+} plogged_device_t;
+
+typedef struct {
+  uint32_t entrycnt;
+  plogged_device_t devices[];
+} plogged_device_list_t;
 
 typedef struct {
   const char *name;
@@ -490,11 +581,61 @@ typedef struct {
   uint32_t type;
 } contact_info_t;
 
-
 typedef struct {
   size_t entrycnt;
   contact_info_t entries[];
 } pcontacts_list_t;
+
+typedef struct {
+  uint64_t recieverid;
+  const char *mail;
+} reciever_info_t;
+
+typedef struct {
+  size_t entrycnt;
+  reciever_info_t entries[];
+} preciever_list_t;
+
+typedef struct {
+  const char* link;
+  const char* name;
+  const char* code;
+  const char* description;
+  uint64_t created;
+  uint8_t locationid;
+} bookmark_info_t;
+
+typedef struct {
+  size_t entrycnt;
+  bookmark_info_t entries[];
+} bookmarks_list_t;
+
+typedef struct {
+  const char* email;
+  const char* currency;
+  const char* language;
+  uint8_t cryptosetup;
+  uint8_t cryptosubscription;
+  uint8_t cryptolifetime;
+  uint8_t efh;//optional
+  uint8_t emailverified;
+  uint8_t usedpublinkbranding;
+  uint8_t haspassword;
+  uint8_t premium;
+  uint8_t premiumlifetime;
+  uint8_t business;
+  uint8_t haspaidrelocation;
+  uint32_t trashrevretentiondays;
+  uint32_t plan;
+  uint32_t result;
+  uint64_t premiumexpires;//optional
+  uint64_t publiclinkquota;
+  uint64_t userid;
+  uint64_t quota;
+  uint64_t usedquota;
+  uint64_t freequota;
+  uint64_t registered;
+}userinfo_t;
 
 #define PSYNC_INVALID_SYNCID (psync_syncid_t)-1
 
@@ -592,6 +733,9 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
  * either pass a static string or make a copy of your dynamic string. This function is to
  * be called BEFORE psync_start_sync and it is acceptable to call it even before psync_init().
  *
+ * psync_set_os_string() will set the name and version of the operating system that is passed
+ * to the server during token creation. If not set, it will be autodetected.
+ *
  * psync_set_database_path can set a full path to database file. If it does not exists
  * it will be created. The function should be only called before psync_init. If
  * database path is not set, appropriate location for the given OS will be chosen.
@@ -611,6 +755,7 @@ typedef void (*pnotification_callback_t)(uint32_t notificationcnt, uint32_t newn
 void psync_set_database_path(const char *databasepath);
 void psync_set_alloc(psync_malloc_t malloc_call, psync_realloc_t realloc_call, psync_free_t free_call);
 void psync_set_software_string(const char *str);
+void psync_set_os_string(const char *str);
 
 int psync_init();
 void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback_t event_callback);
@@ -641,6 +786,42 @@ void psync_set_pass(const char *password, int save);
 void psync_set_auth(const char *auth, int save);
 void psync_logout();
 void psync_unlink();
+
+/* Upon seein a status of PSTATUS_TFA_REQUIRED the application is supposed to let the user know that two factor
+ * authentication is enabled and provide the user with three choices
+ * 1) get code by SMS. After that the application calls psync_tfa_send_sms(), possibly display the returned phone number, wait for code input and call
+ *    psync_tfa_set_code(code, trusted, 0)
+ * 2) get code by notification at any other logged in device. Application calls psync_tfa_send_nofification(), possibly display logged devices list, wait for code input
+ *    and call psync_tfa_set_code(code, trusted, 0)
+ * 3) use recovery code, in this case the user provides the recovery code and application calls psync_tfa_set_code(code, trusted, 1)
+ *
+ * psync_tfa_has_devices() - can be called after PSTATUS_TFA_REQUIRED is received and returns true if the user has other devices logged in
+ *
+ * psync_tfa_type() - can be called after PSTATUS_TFA_REQUIRED is received and returns TFA type.
+ *  1 - msisdn
+ *  2 - google authenticator
+ *
+ * psync_tfa_send_sms() - sends SMS with two factor authentication code to the phone number on file. If parameters country_code and phone_number are not NULL,
+ *  those are filled with user's phone number (split in two parts). In this case the caller needs to free the returned values. Returns -1 in case of network error or
+ *  one of the positive error codes listed at https://docsqa2.pcloud.com/methods/auth/tfa_sendcodeviasms.html
+ *
+ * psync_tfa_send_nofification() - sends notification with two factor authentication code to all already logged in devices. If devices_list is not null it is filled in
+ *  with list of user's devices. In this case the caller is supposed to free the list with a single call to psync_free(). Returns -1 in case of network error or
+ *  one of the positive error codes listed at https://docsqa2.pcloud.com/methods/auth/tfa_sendcodeviasysnotification.html
+ *
+ * psync_tfa_set_code() - sets the two factor code that is to be used for logging in. If "trusted" is set, this device will be marked trusted and will not require
+ *  two factor authentication in the future. The "is_recovery" parameter is supposed to be set if a recovery code is used and be zero in case of SMS or notification code.
+ *  Note that the function is void. Bad code will be signalled with status change to PSTATUS_BAD_LOGIN_DATA. In that case the login procedure can either be retried from
+ *  the beggining or from sending/providing two factor authentication code.
+ *
+ */
+
+int psync_tfa_has_devices();
+int psync_tfa_type();
+int psync_tfa_send_sms(char **country_code, char **phone_number);
+int psync_tfa_send_nofification(plogged_device_list_t **devices_list);
+plogged_device_list_t *psync_tfa_send_nofification_res();
+void psync_tfa_set_code(const char *code, int trusted, int is_recovery);
 
 /* psync_add_sync_by_path and psync_add_sync_by_folderid are to be used to add a folder to be synced,
  * on success syncid is returned, on error PSYNC_INVALID_SYNCID. The value of synctype should always be one of PSYNC_DOWNLOAD_ONLY,
@@ -676,6 +857,41 @@ psync_folder_list_t *psync_get_sync_list();
 
 psuggested_folders_t *psync_get_sync_suggestions();
 
+//Backups
+int psync_is_folder_syncable(char* localPath, char** errMsg);
+
+// Gets a list of local syncs, based on their type. Type empty string means all. Accepts comma separated list of types example: 1,2,3
+psync_folder_list_t* psync_get_syncs_bytype(const char* syncType);
+
+//Create a backup for the local folder defined by path parameter.
+int psync_create_backup(char* path, char** err);
+
+//Deletes a local sync with the id passed in syncId. Stops the backup in the backen with the coresponding folderId.
+int psync_delete_backup(psync_syncid_t syncId, char** errMsg);
+
+//Stop all the backups of the device. Passing 0 for folderId stops the current device.
+void psync_stop_device(psync_folderid_t folderId, char** errMsg);
+
+//Returns the local machine name.
+char* get_pc_name();
+
+//Returns the name of the root backup folder of the machine.
+char* get_backup_root_name();
+
+//Asynchronous delete of local sync in thred, if a local sync with the folder id passed in fId parameter exists in the local DB
+int psync_delete_sync_by_folderid(psync_folderid_t fId);
+
+//Called when stop device is exceuted in the web, will delete the localy stored device id in order to create new one if backup is started again.
+int psync_delete_backup_device(psync_folderid_t fId);
+
+//Backup events
+void psync_send_backup_del_event(psync_fileorfolderid_t remoteFId);
+
+//Send async event
+void psync_async_ui_callback(void* ptr);
+
+//Backups
+
 /* Use the following functions to list local or remote folders.
  * For local folders fileid and folderid will be set to a value that
  * should in general uniquely identify the entry (e.g. inode number).
@@ -698,6 +914,8 @@ pfolder_list_t *psync_list_local_folder_by_path(const char *localpath, psync_lis
 pfolder_list_t *psync_list_remote_folder_by_path(const char *remotepath, psync_listtype_t listtype);
 pfolder_list_t *psync_list_remote_folder_by_folderid(psync_folderid_t folderid, psync_listtype_t listtype);
 pentry_t *psync_stat_path(const char *remotepath);
+psync_folderid_t psync_get_fsfolderid_by_path(const char *path, uint32_t *pflags, uint32_t *pPerm);
+uint32_t psync_get_fsfolderflags_by_id(psync_folderid_t folderid, uint32_t *pPerm);
 int psync_is_lname_to_ignore(const char *name, size_t namelen);
 int psync_is_name_to_ignore(const char *name);
 
@@ -734,6 +952,9 @@ void psync_run_localscan();
  * twice. The termsaccepted field should only be set to true if the user actually
  * indicated acceptance of pCloud terms and conditions.
  *
+ * binapi is the binapi selected in the registration form and locationid is the one
+ * coresponding to that binapi.
+ *
  * Returns zero on success, -1 if network error occurs or a positive error code from
  * this list:
  * https://docs.pcloud.com/methods/auth/register.html
@@ -745,12 +966,28 @@ void psync_run_localscan();
  *
  */
 
-int psync_register(const char *email, const char *password, int termsaccepted, char **err);
+int psync_register(const char *email, const char *password, int termsaccepted, const char* binapi, unsigned int locationid, char **err);
 
 /* Sends email verification mail to the user, return value and err are the same as with registering.
  */
 
 int psync_verify_email(char **err);
+
+/* Upon seeing a status of PSTATUS_VERIFY_REQUIRED an error should appear in the client, showing that
+* access is restricted with "Cancel" and "Verify" options.
+*
+* psync_verify_email_restricted() - Sends verification email to the user.
+* Returns zero on success, -1 if network error occurs or a positive error code from
+* this list:
+* https://docsqa2.pcloud.com/methods/auth/sendverificationemail.html
+* In case of error.
+*
+* If err is not NULL in all cases of non-zero return it will be set to point to a
+* psync_malloc-allocated buffer with English language error text, suitable to display
+* to the user. This buffer must be freed by the application.
+*/
+
+int psync_verify_email_restricted(char **err);
 
 /* Sends email with link to reset password to the user with specified email, return value and err are
  * the same as with registering.
@@ -799,6 +1036,8 @@ const char *psync_get_auth_string();
  * psync_get_string_setting returns empty string on failure (type mismatch or non-existing setting), all other psync_get_*_setting
  * return zero on failure.
  *
+ * psync_reset_setting resets setting to default value. Returns 0 on success and -1 on error. Currently only "ignorepatterns" and "ignorepaths" are supported.
+ *
  * All settings are reset to default values on unlink.
  *
  * int and uint are interchangeable and are considered same type.
@@ -813,6 +1052,7 @@ uint64_t psync_get_uint_setting(const char *settingname);
 int psync_set_uint_setting(const char *settingname, uint64_t value);
 const char *psync_get_string_setting(const char *settingname);
 int psync_set_string_setting(const char *settingname, const char *value);
+int psync_reset_setting(const char *settingname);
 
 /*
  * Values are like settings, except that you can store and retrieve any key-value pair you want. There are some library-polpulated
@@ -836,9 +1076,15 @@ int psync_set_string_setting(const char *settingname, const char *value);
  * language  (string) - two letter, lowercase ISO 639-1 code of the user's language preference
  * quota (uint) - user's quota in bytes
  * usedquota (uint) - used space of the quota in bytes
+ * freequota (uint) - maximum quota that free user can obtain
  * diffid (uint) - diffid of the user status, see https://docs.pcloud.com/methods/general/diff.html, can be used to detect account changes
  * auth (string) - user's auth token (if the user is logged in and saveauth is true), see https://docs.pcloud.com/methods/intro/authentication.html
- *
+ * plan (uint) - user's plan id
+ * business (bool) - If true the user is part of a business account. Always provided
+ * vivapcloud (bool) - If it's Viva pCloud user it will be true otherwise the parameter won't be provided
+ * premiumlifetime (bool) - If true user's premium is life time. Always provided
+ * owner (bool) - True if the user is owner of a family plan. Presented only for user with family plan.
+ * hasactivesubscription (bool) - True if the user has active subscription.
  */
 
 int psync_has_value(const char *valuename);
@@ -887,6 +1133,21 @@ psync_share_list_t *psync_list_shares(int incoming);
 
 int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err);
 
+/* psync_crypto_share_folder shares a crypto folder with the user "mail". The "permissions" parameter is bitwise or of
+ * PSYNC_PERM_READ, PSYNC_PERM_CREATE, PSYNC_PERM_MODIFY and PSYNC_PERM_DELETE (PSYNC_PERM_READ is actually
+ * ignored and always set). The "temppass" parameter is used to create a temporary crypto pass for the provided user if the user doesn't
+ * have activated crypto an if left empty no attempt to create a temporary pass is made by the function.
+ *
+ * On success returns 0, otherwise returns API error number (or -1 on network error) and sets err to a string
+ * error message if it is not NULL. This string should be freed if the return value is not 0 and err is not NULL.
+ * The function can also return PSYNC_CRYPTO_NOT_STARTED or PERROR_NO_MEMORY errors.
+ *
+ * It is NOT guaranteed that upon successful return psync_list_sharerequests(0) will return the newly created
+ * share request. Windows showing list of sharerequests/shares are supposed to requery shares/request upon receiving of
+ * PEVENT_SHARE_* event. That is true for all share management functions.
+ *
+ */
+int psync_crypto_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char *hint, char *temppass,  char **err);
 
 /* Cancels a share request (this is to be called for outgoing requests).
  *
@@ -1069,8 +1330,19 @@ char *psync_derive_password_from_passphrase(const char *username, const char *pa
  *                        PSYNC_CRYPTO_INVALID_FOLDERID.
  * psync_crypto_folderids() - returns array of the ids of all encrypted folders (but not their subfolders). Last element of the array is
  *                        always PSYNC_CRYPTO_INVALID_FOLDERID. You need to free the memory returned by this function.
- *
- *
+ * int psync_crypto_crypto_send_change_user_private() - Request sending of code for changing the private key password. Possible erroe codes are:
+ *                        PSYNC_CRYPTO_SETUP_CANT_CONNECT, PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR.
+ * psync_crypto_change_crypto_pass() - Re-encodes the private key with the new pasword provided and makes an API call to upload it.
+ *                        On success returns PSYNC_CRYPTO_SETUP_SUCCESS. Possible errors are PSYNC_CRYPTO_BAD_PASSPHRASE, PERROR_NET_ERROR,
+ *                        PERROR_NO_MEMORY, PSYNC_CRYPTO_BAD_KEY, PSYNC_CRYPTO_SETUP_CANT_CONNECT and PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR.
+ *                        This function does not care whether the crypto is locked or unlocked.
+ *                        Note: This function doesn't care if we are authenticated.
+ * psync_crypto_change_crypto_pass_unlocked() - Re-encodes the private key loaded in the memory with the new pasword provided and makes an
+ *                        API call to upload it. On success returns PSYNC_CRYPTO_SETUP_SUCCESS. Possible errors are PSYNC_CRYPTO_NOT_STARTED,
+ *                        PSYNC_CRYPTO_BAD_PASSPHRASE, PERROR_NET_ERROR, PERROR_NO_MEMORY, PSYNC_CRYPTO_BAD_KEY and PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR.
+ *                        In order to work, this function requires the crypto to be unlocked.
+ * psync_crypto_priv_key_flags() - Read private key flags from the DB. The only possible flag for the moment is PSYNC_CRYPTO_FLAG_TEMP_PASS
+
  */
 
 int psync_crypto_setup(const char *password, const char *hint);
@@ -1086,7 +1358,10 @@ time_t psync_crypto_expires();
 int psync_crypto_reset();
 psync_folderid_t psync_crypto_folderid();
 psync_folderid_t *psync_crypto_folderids();
-
+int psync_crypto_crypto_send_change_user_private();
+int psync_crypto_change_crypto_pass(const char *oldpass, const char *newpass, const char *hint, const char *code);
+int psync_crypto_change_crypto_pass_unlocked(const char *newpass, const char *hint, const char *code);
+uint64_t psync_crypto_priv_key_flags();
 /*
  * Status functions.
  *
@@ -1108,27 +1383,23 @@ external_status psync_status_folder(const char *path);
  *
  * psync_file_public_link() creates public link for a file. Returns link id or negative error number.
  *  The path parameter is pcloud drive path.
- *  The code is pointer where generated code is returned.
+ *  The link is pointer where generated link is returned.
  *  The err is parameter where printable text of api error if any is returned.
  *
- *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
  *
  *
- * psync_folder_public_link() creates public link for a folder. Returns link id or negative error number.
- *  The path parameter is pcloud drive path.
- *  The code is pointer where generated code is returned.
+ * psync_folder_updownlink_link() creates upload and download public link for a folder. Returns link id or negative error number.
+ *  The folderid is id of the folder that is shared.
  *  The err is parameter where printable text of api error if any is returned.
  *
- *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
  *
  * psync_tree_public_link() creates public link for a tree. Tree is define by root folder and arrays of folders and file paths. Each entry in the arrays
  *  describes a path to file or folder. Number of entries in the arrays is passed separately. The API constructs a virtual folder of this files and folders
  *  and if root is passed it will serve as root folder for this virtual folder so name is mandatory. you can omit any of the other parameters.
  *  Returns link id or negative error number.
- *  The code is pointer where generated code is returned.
+ *  The link is pointer where generated link is returned.
  *  The err is parameter where printable text of api error if any is returned.
  *
- *  The code you obtained that way have to be concatenated to "https://my.pcloud.com/#page=publink&code=" constant string to acquire the full link.
  *
  * psync_delete_link() Deletes a public link by linkid or returns negative number and upon API failure a string representation of the error.
  *
@@ -1153,23 +1424,65 @@ external_status psync_status_folder(const char *path);
  *
  */
 
-int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
-int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/);
-int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/);
+int64_t psync_file_public_link(const char *path, char **link /*OUT*/, char **err /*OUT*/);
+int64_t psync_folder_public_link(const char *path, char **link /*OUT*/, char **err /*OUT*/);
+int64_t psync_folder_public_link_full(const char *path, char **link /*OUT*/, char **err /*OUT*/, unsigned long long expire, int maxdownloads, int maxtraffic, const char* password);
+int64_t psync_folder_updownlink_link(int canupload, unsigned long long folderid, const char* mail, char **err /*OUT*/);
+int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **link /*OUT*/, char **err /*OUT*/);
 plink_info_list_t *psync_list_links(char **err /*OUT*/);
-plink_contents_t *psync_show_link(const char *code, char **err /*OUT*/);
+plink_contents_t *psync_show_link(const char *link, char **err /*OUT*/);
 int psync_delete_link(int64_t linkid, char **err /*OUT*/);
-
-int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/);
+int psync_change_link(unsigned long long linkid, unsigned long long expire, int delete_expire,
+  const char* linkpassword, int delete_password, unsigned long long maxtraffic, unsigned long long maxdownloads,
+  int enableuploadforeveryone, int enableuploadforchosenusers, int disableupload, char** err);
+int64_t psync_upload_link(const char *path, const char *comment, char **link /*OUT*/, char **err /*OUT*/);
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/);
 
 int psync_delete_all_links_folder(psync_folderid_t folderid, char**err);
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err);
+
+void psync_cache_links_all();
 /*
- * Creates download link for newly uploaded screenshot and the sets expiration to current date plus delay seconds. If hasdelay
- * equals 0 no expiration is set. If hasdelay and delay is 0 expiration is for one mount 
+ * Creates download link for newly uploaded screenshot and sets the expiration to current date plus delay seconds. If hasdelay
+ * equals 0 no expiration is set. If hasdelay and delay is 0 expiration is for one mount
  */
-int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t delay, char **code /*OUT*/, char **err /*OUT*/);
+int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t delay, char **link /*OUT*/, char **err /*OUT*/);
+
+/*
+ * psync_list_email_with_access List email and recieverid for each user who can upload to the speciefied link.
+ * linkid the id of the link for which the users with upload rights are listed.
+ *
+ * psync_link_add_access Add upload access to link specified by linkid
+ * psync_link_remove_access Remove upload access of user specified by recieverid to link specified by linkid
+ * psync_psync_change_link Changes settings of download link
+ *
+ * psync_cache_bookmarks Returns list of bookmarked links.
+ * psync_remove_bookmark Removes bookmark be given code and locationid of the link.
+ *
+ * psync_change_link_expire Change expire date of link. Delete expire date if expire equals 0.
+ * psync_change_link_password Change password of link. Delete password date if password equals NULL.
+ * psync_change_link_enable_upload Allows upload to a download link. If enableuploadforchosenusers is
+ *   more than 0 upload is allowed for specified mails. If enableuploadforchosenusers is 0 and enableuploadforeveryone
+ *   is more than 0 upload is allowed for everyone. If enableuploadforchosenusers and enableuploadforeveryone are 0
+ *   upload for the link is disabled.
+ */
+preciever_list_t* psync_list_email_with_access(unsigned long long linkid, char** err);
+
+int psync_link_add_access(unsigned long long linkid, const char* mail, char** err);
+
+int psync_link_remove_access(unsigned long long linkid, unsigned long long receiverid, char** err);
+
+bookmarks_list_t* psync_cache_bookmarks(char** err);
+int psync_remove_bookmark(const char* code, int locationid, char** err);
+int psync_change_bookmark(const char* code, int locationid, const char* name, const char* description, char** err);
+
+int psync_psync_change_link(unsigned long long linkid, unsigned long long expire, int delete_expire,
+  const char* linkpassword, int delete_password, unsigned long long maxtraffic, unsigned long long maxdownloads,
+  int enableuploadforeveryone, int enableuploadforchosenusers, int disableupload, char** err);
+
+int psync_change_link_expire(unsigned long long linkid, unsigned long long expire, char** err);
+int psync_change_link_password(unsigned long long linkid, const char* password, char** err);
+int psync_change_link_enable_upload(unsigned long long linkid, int enableuploadforeveryone, int enableuploadforchosenusers, char** err);
 
 /*
  * Publik contacts API functions.
@@ -1179,7 +1492,6 @@ int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t del
  * psync_list_myteams() Lists cached teams that you are member of. Returns same structure like psync_list_contacts
  * only type 3 records filled.
  * */
-
 
 pcontacts_list_t *psync_list_contacts();
 
@@ -1200,13 +1512,28 @@ pcontacts_list_t *psync_list_myteams();
 
 int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char **err);
 
-
+/* account_teamshare shares a folder with business account team a. The "permissions" parameter is bitwise or of
+ * PSYNC_PERM_READ, PSYNC_PERM_CREATE, PSYNC_PERM_MODIFY and PSYNC_PERM_DELETE (PSYNC_PERM_READ is actually
+ * ignored and always set) and PSYNC_PERM_MANAGE. The "temppass" parameter is used to create a temporary crypto pass for the users
+ * in team without activated crypto if left empty no attempt to create a temporary pass is made by the function.
+ *
+ * On success returns 0, otherwise returns API error number (or -1 on network error) and sets err to a string
+ * error message if it is not NULL. This string should be freed if the return value is not 0 and err is not NULL.
+ *
+ * It is NOT guaranteed that upon successful return psync_list_sharerequests(0) will return the newly created
+ * share request. Windows showing list of sharerequests/shares are supposed to requery shares/request upon receiving of
+ * PEVENT_SHARE_* event. That is true for all share management functions.
+ *
+ */
+int psync_crypto_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char* hint, char *temppass, char **err);
 
 /* psync_register_account_events_callback Registers a callback to be notified upon invalidation of the account cache information.
  * Different notifications are:
  * Links, team, team users emails, contacts or all.
  */
 void psync_register_account_events_callback(paccount_cache_callback_t callback);
+
+void psync_register_backup_events_callback(pevent_callback_t callback);
 
 void psync_get_current_userid(psync_userid_t* /*OUT*/ ret);
 void psync_get_folder_ownerid(psync_folderid_t folderid, psync_userid_t* /*OUT*/ ret);
@@ -1240,20 +1567,61 @@ psync_folderid_t psync_check_and_create_folder (const char * path);
 
 char * psync_get_token();
 
-/*Devices monitoring functions 
+/*Devices monitoring functions
  */
 
 //Adds device monitoring callback which is invoked every time a new not disabled device arrives.
-void padd_device_monitor_callback(device_event_callback callback);
-//Lists all stored devices 
-pdevice_item_list_t * psync_list_devices(char **err /*OUT*/);
+// void psync_add_device_monitor_callback(device_event_callback callback);
+//Lists all stored devices
+// pdevice_item_list_t * psync_list_devices(char **err /*OUT*/);
 //Enables device. This info is stored in the database so will be present after restart.
-void penable_device(const char* device_id);
+// void penable_device(const char* device_id);
 //Disable device
-void pdisable_device(const char* device_id);
-//Remove db information about device 
-void premove_device(const char* device_id);
+// void pdisable_device(const char* device_id);
+//Remove db information about device
+// void premove_device(const char* device_id);
 
+/* Checks for promotions.
+ * If url is empty there is no ptomotion.
+ * Returns -1 in case of network error or
+ * one of the positive error codes
+*/
+int psync_get_promo(char **url, uint64_t *width, uint64_t *height);
+/*
+ * Checks if the user has any crypto folders.
+ */
+int psync_has_crypto_folders();
+void set_tfa_flag(int value);
+/*
+*
+*/
+apiservers_list_t *psync_get_apiservers(char **err /*OUT*/);
+void psync_set_apiserver(const char* binapi, uint32_t locationid);
+
+/*send_publink send a download link via email
+* code - code of the downloadlink to be send
+* mail - email of the recipient of the download link
+* message - optional message for the recipient
+* err - out parameter. Returns the error message if any.
+*/
+int psync_send_publink(const char *code, const char *mail, const char *message, char **err /*OUT*/);
+
+userinfo_t* psync_get_userinfo();
+
+/*
+* category - string representing category of the event
+* action - string representing action of the event
+* label - string representing label of the event
+* eventParams - list of binparams(optional)
+*/
+int psync_create_backend_event(const char* category, const char* action, const char* label, eventParams params, char* err);
+
+
+/*
+*
+* ptr - pointer to the data event handling function.
+*/
+void psync_init_data_event_handler(void* ptr);
 #ifdef __cplusplus
 }
 #endif

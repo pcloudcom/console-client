@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2014 Anton Titov.
  * Copyright (c) 2013-2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -105,14 +105,14 @@ static void dir_scan(void *ptr, psync_pstat_fast *st){
   for (i=0; i<ARRAY_SIZE(ignore_patters); i++)
     if (psync_match_pattern(st->name, ignore_patters[i].str, ignore_patters[i].len))
       return;
-  if (st->isfolder){
+  if (psync_stat_fast_isfolder(st)){
     scan_folder *nf;
     char *path;
     size_t l, o;
     l=strlen(st->name);
     o=f->pathlen;
     nf=(scan_folder *)psync_malloc(sizeof(scan_folder)+o+l+2);
-    psync_list_init(&nf->subfolders); 
+    psync_list_init(&nf->subfolders);
     path=(char *)(nf+1);
     memcpy(path, f->path, o);
     path[o++]=PSYNC_DIRECTORY_SEPARATORC;
@@ -194,7 +194,7 @@ psuggested_folders_t *psync_scanner_scan_folder(const char *path){
   char buff[256];
   uint32_t scnt[PSYNC_SCAN_TYPES_CNT][2];
   f=psync_new(scan_folder);
-  psync_list_init(&f->nextfolder); 
+  psync_list_init(&f->nextfolder);
   psync_list_init(&f->subfolders);
   f->path=path;
   f->pathlen=strlen(path);

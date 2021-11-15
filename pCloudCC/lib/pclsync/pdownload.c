@@ -1181,7 +1181,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
     dt->localexists=1;
   else
     dt->localexists=0;
-  if (hastargetchecksum && dt->localexists && size==csize && !memcmp(dt->checksum, targetchecksum, PSYNC_HASH_DIGEST_HEXLEN)){
+  if (hastargetchecksum && dt->localexists && size==dt->localsize && !memcmp(dt->checksum, targetchecksum, PSYNC_HASH_DIGEST_HEXLEN)){
     debug(D_NOTICE, "file %s already exists and has correct checksum, not downloading", localname);
     ret=stat_and_create_local(dt->dwllist.syncid, dt->dwllist.fileid, dt->localfolderid, dt->filename, dt->localname, targetchecksum, size, hash);
     free_download_task(dt);
@@ -1218,7 +1218,7 @@ static int task_run_download_file(uint64_t taskid, psync_syncid_t syncid, psync_
   set_task_inprogress(taskid, 1);
   if (size<=PSYNC_MAX_SIZE_FOR_ASYNC_DOWNLOAD){
     if (dt->localexists)
-      ret=psync_async_download_file_if_changed(fileid, dt->tmpname, csize, dt->checksum, finish_async_download_existing, dt);
+      ret=psync_async_download_file_if_changed(fileid, dt->tmpname, dt->localsize, dt->checksum, finish_async_download_existing, dt);
     else
       ret=psync_async_download_file(fileid, dt->tmpname, finish_async_download, dt);
     if (ret){

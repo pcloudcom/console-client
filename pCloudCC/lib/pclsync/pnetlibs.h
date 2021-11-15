@@ -100,6 +100,7 @@ extern char apiserver[64];
 void psync_netlibs_init();
 
 void psync_apipool_set_server(const char *binapi);
+void psync_apiserver_init();
 
 psync_socket *psync_apipool_get();
 psync_socket *psync_apipool_get_from_cache();
@@ -124,7 +125,7 @@ int psync_set_default_sendbuf(psync_socket *sock);
 void psync_account_downloaded_bytes(int unsigned bytes);
 int psync_socket_readall_download(psync_socket *sock, void *buff, int num);
 int psync_socket_readall_download_thread(psync_socket *sock, void *buff, int num);
-int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
+psync_int_t psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num);
 
 psync_http_socket *psync_http_connect(const char *host, const char *path, uint64_t from, uint64_t to, const char *addhdr);
 void psync_http_close(psync_http_socket *http);

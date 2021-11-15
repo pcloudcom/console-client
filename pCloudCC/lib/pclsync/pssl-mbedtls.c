@@ -40,6 +40,7 @@
 #include <polarssl/entropy.h>
 #include <polarssl/ssl.h>
 #include <polarssl/pkcs5.h>
+#include <polarssl/debug.h>
 
 #if defined(PSYNC_AES_HW_MSC)
 #include <intrin.h>
@@ -84,6 +85,18 @@ PSYNC_THREAD int psync_ssl_errno;
 #if defined(PSYNC_AES_HW)
 int psync_ssl_hw_aes;
 #endif
+
+static psync_ssl_debug_callback_t debug_cb=NULL;
+static void *debug_ctx=NULL;
+
+void psync_ssl_set_log_threshold(int threshold){
+  debug_set_threshold(threshold);
+}
+
+void psync_ssl_set_debug_callback(psync_ssl_debug_callback_t cb, void *ctx){
+  debug_cb=cb;
+  debug_ctx=ctx;
+}
 
 int ctr_drbg_random_locked(void *p_rng, unsigned char *output, size_t output_len){
   ctr_drbg_context_locked *rng;
@@ -269,6 +282,7 @@ int psync_ssl_connect(psync_socket_t sock, void **sslconn, const char *hostname)
     goto err0;
   conn->sock=sock;
   ssl_set_endpoint(&conn->ssl, SSL_IS_CLIENT);
+  ssl_set_dbg(&conn->ssl, debug_cb, debug_ctx);
   ssl_set_authmode(&conn->ssl, SSL_VERIFY_REQUIRED);
   ssl_set_min_version(&conn->ssl, SSL_MAJOR_VERSION_3, SSL_MINOR_VERSION_3);
   ssl_set_ca_chain(&conn->ssl, &psync_mbed_trusted_certs_x509, NULL, hostname);
@@ -622,6 +636,24 @@ void psync_ssl_aes256_free_decoder(psync_aes256_encoder aes){
   psync_free(aes);
 }
 
+psync_rsa_signature_t psync_ssl_rsa_sign_sha256_hash(psync_rsa_privatekey_t rsa, const unsigned char *data){
+  psync_rsa_signature_t ret;
+  int padding, hash_id;
+  ret=(psync_rsa_signature_t)psync_malloc(offsetof(psync_symmetric_key_struct_t, key)+rsa->len);
+  if (!ret)
+    return (psync_rsa_signature_t)(void *)PERROR_NO_MEMORY;
+  ret->datalen=rsa->len;
+  padding=rsa->padding;
+  hash_id=rsa->hash_id;
+  rsa_set_padding(rsa, RSA_PKCS_V21, POLARSSL_MD_SHA256);
+  if (rsa_rsassa_pss_sign(rsa, ctr_drbg_random_locked, &psync_mbed_rng, RSA_PRIVATE, POLARSSL_MD_SHA256, PSYNC_SHA256_DIGEST_LEN, data, ret->data)){
+    free(ret);
+    rsa_set_padding(rsa, padding, hash_id);
+    return (psync_rsa_signature_t)(void *)PSYNC_CRYPTO_NOT_STARTED;
+  }
+  rsa_set_padding(rsa, padding, hash_id);
+  return ret;
+}
 
 #if defined(PSYNC_AES_HW_GCC)
 

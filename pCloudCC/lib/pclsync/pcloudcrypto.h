@@ -43,7 +43,7 @@
 #define PSYNC_CRYPTO_LOADING_SECTOR_ENCODER  ((psync_crypto_aes256_sector_encoder_decoder_t)(PSYNC_CRYPTO_MAX_ERROR+2))
 #define PSYNC_CRYPTO_FAILED_SECTOR_ENCODER   ((psync_crypto_aes256_sector_encoder_decoder_t)(PSYNC_CRYPTO_MAX_ERROR+3))
 
-void psync_cloud_crypto_clean_cache();
+void psync_cloud_crypto_clean_cachef();
 
 int psync_cloud_crypto_setup(const char *password, const char *hint);
 int psync_cloud_crypto_get_hint(char **hint);
@@ -52,6 +52,7 @@ int psync_cloud_crypto_stop();
 int psync_cloud_crypto_isstarted();
 int psync_cloud_crypto_reset();
 int psync_cloud_crypto_mkdir(psync_folderid_t folderid, const char *name, const char **err, psync_folderid_t *newfolderid);
+void psync_cloud_crypto_clean_cache();
 
 psync_crypto_aes256_text_decoder_t psync_cloud_crypto_get_folder_decoder(psync_fsfolderid_t folderid);
 void psync_cloud_crypto_release_folder_decoder(psync_fsfolderid_t folderid, psync_crypto_aes256_text_decoder_t decoder);
@@ -77,5 +78,7 @@ static inline int psync_crypto_to_error(const void *ptr){
   return -((int)(uintptr_t)ptr);
 }
 
+int psync_crypto_change_passphrase(const char* oldpassphrase, const char* newpassphrase, uint32_t flags, char** privenc, char** sign);
+int psync_crypto_change_passphrase_unlocked(const char *newpassphrase, uint32_t flags, char **privenc, char **sign);
 
 #endif

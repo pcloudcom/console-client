@@ -32,29 +32,28 @@
 #include "pcompiler.h"
 #include "pcompat.h"
 
-#define PSYNC_LIB_VERSION "1.5.0"
+#define PSYNC_LIB_VERSION "1.5.1"
 
-/*
-#define PSYNC_API_HOST     "api74.pcloud.com"
-#define PSYNC_API_PORT     8398
-#define PSYNC_API_PORT_SSL 8399
-*/
+ /*
+ #define PSYNC_API_HOST     "api74.pcloud.com"
+ #define PSYNC_API_PORT     8398
+ #define PSYNC_API_PORT_SSL 8399
+ */
 
-#define PSYNC_API_HOST     "binapi.pcloud.com"
+//#define PSYNC_API_HOST     "ebinapi71.pcloud.com"
+//#define PSYNC_API_AHOST    "eapi71.pcloud.com"
+
+//#define PSYNC_API_HOST     "ebinapi69.pcloud.com"
+//#define PSYNC_API_AHOST    "eapi69.pcloud.com"
+
+#define PSYNC_API_HOST     "bineapi.pcloud.com"
 #define PSYNC_API_PORT     80
 #define PSYNC_API_PORT_SSL 443
 
-#define PSYNC_API_AHOST     "api.pcloud.com"
+#define PSYNC_API_AHOST     "eapi.pcloud.com"
 #define PSYNC_API_APORT     8398
 #define PSYNC_API_APORT_SSL 8399
 
-// #define PSYNC_API_HOST     "binapi69.pcloud.com"
-// #define PSYNC_API_PORT     80
-// #define PSYNC_API_PORT_SSL 443
-//
-// #define PSYNC_API_AHOST     "api69.pcloud.com"
-// #define PSYNC_API_APORT     8398
-// #define PSYNC_API_APORT_SSL 8399
 
 #define PSYNC_P2P_PORT 42420
 
@@ -121,6 +120,7 @@
 #define PSYNC_MIN_INTERVAL_RECALC_DOWNLOAD      2
 #define PSYNC_MIN_INTERVAL_RECALC_UPLOAD        5
 #define PSYNC_UPLOAD_NOWRITE_TIMER              30
+#define PSYNC_LINKS_REFRESH_INTERVAL            10
 
 #define PSYNC_APIPOOL_MAXIDLE    24
 #define PSYNC_APIPOOL_MAXACTIVE  36
@@ -146,7 +146,11 @@
 #define PSYNC_DEFAULT_CACHE_FOLDER "Cache"
 #define PSYNC_DEFAULT_READ_CACHE_FILE "cached"
 
+#if defined(P_OS_MACOSX)
+#define PSYNC_DEFAULT_FS_FOLDER "pCloud Drive"
+#else
 #define PSYNC_DEFAULT_FS_FOLDER "pCloudDrive"
+#endif
 
 #define PSYNC_DEFAULT_POSIX_FOLDER_MODE 0755
 #define PSYNC_DEFAULT_POSIX_FILE_MODE 0644
@@ -248,6 +252,7 @@
 #define PSYNC_MIN_LOCAL_FREE_SPACE ((uint64_t)2048*1024*1024)
 #define PSYNC_P2P_SYNC_DEFAULT 1
 #define PSYNC_AUTOSTARTFS_DEFAULT 1
+#define PSYNC_LOCATIONID_DEFAULT 2
 #define PSYNC_IGNORE_PATTERNS_DEFAULT ".DS_Store;\
 .DS_Store?;\
 .AppleDouble;\
@@ -264,7 +269,28 @@ hiberfil.sys;\
 pagefile.sys;\
 $RECYCLE.BIN;\
 *.part;\
-.pcloud"
+.pcloud;"
+
+#if defined (P_OS_WINDOWS)
+#define PSYNC_IGNORE_PATHS_DEFAULT "C:\\$Recycle.Bin;C:\\$WinREAgent;C:\\Windows;C:\\Program Files;C:\\Program Files (x86);"
+#endif
+
+#if defined (P_OS_MACOSX)
+#define PSYNC_IGNORE_PATHS_DEFAULT "/Applications;/Library;/private;/System;/bin;/etc;/sbin;/usr;"
+#endif
+
+#if defined (P_OS_LINUX)
+#define PSYNC_IGNORE_PATHS_DEFAULT "/Applications;/Library;/private;/System;/bin;/dev;/etc;/net;/sbin;/usr;/Developer;"
+#endif
+
+/* Defaults for business account settings */
+#define PSYNC_BACC_COMPANYNAME      "Not set"
+#define PSYNC_BACC_OWNERUSERID      0
+#define PSYNC_BACC_OWNERFIRSTNAME   "Not set"
+#define PSYNC_BACC_OWNERLASTNAME    "Not set"
+#define PSYNC_BACC_OWNEREMAIL       "Not set"
+#define PSYNC_BACC_OWNER_CRYPTOSETUP 0
+#define PSYNC_BACC_V2               0
 
 #define _PS(s) PSYNC_SETTING_##s
 
@@ -280,6 +306,17 @@ $RECYCLE.BIN;\
 #define PSYNC_SETTING_fscachesize       9
 #define PSYNC_SETTING_fscachepath      10
 #define PSYNC_SETTING_sleepstopcrypto  11
+#define PSYNC_SETTING_companyname      12
+#define PSYNC_SETTING_owneruserid      13
+#define PSYNC_SETTING_ownerfirstname   14
+#define PSYNC_SETTING_ownerlastname    15
+#define PSYNC_SETTING_owneremail       16
+#define PSYNC_SETTING_owner_cryptosetup 17
+#define PSYNC_SETTING_cryptov2isactive 18
+#define PSYNC_SETTING_hasactivesubscription 19
+#define PSYNC_SETTING_api_server        20
+#define PSYNC_SETTING_location_id        21
+#define PSYNC_SETTING_ignorepaths        22
 
 typedef int psync_settingid_t;
 
@@ -289,7 +326,7 @@ void psync_settings_init();
 
 void psync_settings_reset();
 
-psync_settingid_t psync_setting_getid(const char *name) PSYNC_CONST PSYNC_NONNULL(1);
+psync_settingid_t psync_setting_getid(const char* name) PSYNC_CONST PSYNC_NONNULL(1);
 
 int psync_setting_get_bool(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_bool(psync_settingid_t settingid, int value);
@@ -297,7 +334,8 @@ int64_t psync_setting_get_int(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_int(psync_settingid_t settingid, int64_t value);
 uint64_t psync_setting_get_uint(psync_settingid_t settingid) PSYNC_PURE;
 int psync_setting_set_uint(psync_settingid_t settingid, uint64_t value);
-const char *psync_setting_get_string(psync_settingid_t settingid) PSYNC_PURE;
-int psync_setting_set_string(psync_settingid_t settingid, const char *value);
+const char* psync_setting_get_string(psync_settingid_t settingid) PSYNC_PURE;
+int psync_setting_set_string(psync_settingid_t settingid, const char* value);
+int psync_setting_reset(psync_settingid_t settingid);
 
 #endif

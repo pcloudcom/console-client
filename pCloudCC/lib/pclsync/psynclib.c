@@ -61,11 +61,17 @@
 #include "poverlay.h"
 #include "pasyncnet.h"
 #include "ppathstatus.h"
-//#include "pdevice_monitor.h"
-
+#include "pdevice_monitor.h"
+#include "pfsfolder.h"
 #include <string.h>
 #include <ctype.h>
 #include <stddef.h>
+#include "ptools.h"
+#include "papi.h"
+
+//Variable containing UNIX time of the last backup file deleted event 
+time_t lastBupDelEventTime = 0;
+time_t bupNotifDelay = 300;
 
 typedef struct {
   psync_list list;
@@ -80,6 +86,10 @@ const char *psync_database=NULL;
 
 static int psync_libstate=0;
 static pthread_mutex_t psync_libstate_mutex=PTHREAD_MUTEX_INITIALIZER;
+static time_t links_last_refresh_time;
+
+extern int unlinked;
+extern int tfa;
 
 #define return_error(err) do {psync_error=err; return -1;} while (0)
 #define return_isyncid(err) do {psync_error=err; return PSYNC_INVALID_SYNCID;} while (0)
@@ -161,10 +171,47 @@ void psync_set_software_string(const char *str){
   psync_set_software_name(str);
 }
 
+void psync_set_os_string(const char *str){
+  debug(D_NOTICE, "setting os name to %s", str);
+  psync_set_os_name(str);
+}
+
 static void psync_stop_crypto_on_sleep(){
   if (psync_setting_get_bool(_PS(sleepstopcrypto)) && psync_crypto_isstarted()){
     psync_cloud_crypto_stop();
     debug(D_NOTICE, "stopped crypto due to sleep");
+  }
+}
+
+static void ssl_debug_cb(void *ctx, int level, const char *msg){
+  debug(D_NOTICE, "%s", msg);
+}
+
+void psync_set_ssl_debug_callback(psync_ssl_debug_callback_t cb){
+  if (cb){
+    psync_ssl_set_log_threshold(PSYNC_SSL_DEBUG_LEVEL);
+    psync_ssl_set_debug_callback(cb, NULL);
+  }
+  else{
+    psync_ssl_set_log_threshold(0);
+    psync_ssl_set_debug_callback(NULL, NULL);
+  }
+}
+
+void psync_set_apiserver(const char* binapi, uint32_t locationid)
+{
+  if (binapi)
+  {
+  	psync_apipool_set_server(binapi);
+  	psync_set_string_setting("api_server", binapi);
+  	psync_set_int_setting("location_id", locationid);
+  }
+}
+
+void psync_apiserver_init(){
+  if (psync_setting_get_bool(_PS(saveauth)))
+  {
+    psync_set_apiserver(psync_setting_get_string(_PS(api_server)), psync_setting_get_uint(_PS(location_id)));
   }
 }
 
@@ -218,7 +265,8 @@ int psync_init(){
 
   psync_run_thread("Overlay main thread", overlay_main_loop);
   init_overlay_callbacks();
-  //psync_run_thread("Device monitor main thread", pinit_device_monitor);
+  if (PSYNC_SSL_DEBUG_LEVEL)
+    psync_set_ssl_debug_callback(ssl_debug_cb);
 
   return 0;
 }
@@ -241,6 +289,7 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
       psync_libstate=2;
     pthread_mutex_unlock(&psync_libstate_mutex);
   }
+  psync_apiserver_init();
   if (status_callback)
     psync_set_status_callback(status_callback);
   if (event_callback)
@@ -254,6 +303,7 @@ void psync_start_sync(pstatus_change_callback_t status_callback, pevent_callback
   psync_p2p_init();
   if (psync_setting_get_bool(_PS(autostartfs)))
     psync_fs_start();
+  psync_devmon_init();
 }
 
 void psync_set_notification_callback(pnotification_callback_t notification_callback, const char *thumbsize){
@@ -338,7 +388,6 @@ void psync_set_auth(const char *auth, int save){
   psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
 }
 
-
 int psync_mark_notificaitons_read(uint32_t notificationid){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("notificationid", notificationid)};
   return psync_run_command("readnotifications", params, NULL)?-1:0;
@@ -350,6 +399,7 @@ static void psync_invalidate_auth(const char *auth){
 }
 
 void psync_logout2(uint32_t auth_status, int doinvauth){
+  tfa=0;
   debug(D_NOTICE, "logout");
   psync_sql_statement("DELETE FROM setting WHERE id IN ('pass', 'auth', 'saveauth')");
   if (doinvauth)
@@ -367,6 +417,7 @@ void psync_logout2(uint32_t auth_status, int doinvauth){
   psync_stop_all_upload();
   psync_async_stop();
   psync_cache_clean_all();
+  psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
   psync_restart_localscan();
   psync_timer_notify_exception();
   if (psync_fs_need_per_folder_refresh())
@@ -377,16 +428,97 @@ void psync_logout(){
   psync_logout2(PSTATUS_AUTH_REQUIRED, 1);
 }
 
+apiservers_list_t *psync_get_apiservers(char **err)
+{
+	psync_socket *api;
+	binresult *bres;
+	psync_list_builder_t *builder;
+	const binresult *locations = 0, *location, *br;
+	const char *errorret;
+	apiservers_list_t *ret;
+	apiserver_info_t *plocation;
+	uint64_t result;
+	int i, locationscnt, usessl;
+	binparam params[] = { P_STR("timeformat", "timestamp") };
+	usessl = psync_setting_get_bool(_PS(usessl));
+	api = psync_socket_connect(PSYNC_API_HOST, usessl ? PSYNC_API_PORT_SSL : PSYNC_API_PORT, usessl);
+
+	if (unlikely(!api)) {
+		debug(D_WARNING, "Can't get api from the pool. No pool ?\n");
+		*err = psync_strndup("Can't get api from the pool.", 29);
+		return NULL;
+	}
+	bres = send_command(api, "getlocationapi", params);
+	if (likely(bres))
+		psync_apipool_release(api);
+	else {
+		psync_apipool_release_bad(api);
+		debug(D_WARNING, "Send command returned invalid result.\n");
+		*err = psync_strndup("Connection error.", 17);
+		return NULL;
+	}
+	result = psync_find_result(bres, "result", PARAM_NUM)->num;
+	if (unlikely(result)) {
+		errorret = psync_find_result(bres, "error", PARAM_STR)->str;
+		*err = psync_strndup(errorret, strlen(errorret));
+		debug(D_WARNING, "command getlocationapi returned error code %u", (unsigned)result);
+		return NULL;
+	}
+
+	locations = psync_find_result(bres, "locations", PARAM_ARRAY);
+	locationscnt = locations->length;
+	if (!locationscnt){
+		psync_free(bres);
+		return NULL;
+	}
+	builder = psync_list_builder_create(sizeof(apiserver_info_t), offsetof(apiservers_list_t, entries));
+
+	for (i = 0; i < locationscnt; ++i) {
+		location = locations->array[i];
+		plocation = (apiserver_info_t *)psync_list_bulder_add_element(builder);
+		br = psync_find_result(location, "label", PARAM_STR);
+		plocation->label = br->str;
+		psync_list_add_lstring_offset(builder, offsetof(apiserver_info_t, label), br->length);
+		br = psync_find_result(location, "api", PARAM_STR);
+		plocation->api = br->str;
+		psync_list_add_lstring_offset(builder, offsetof(apiserver_info_t, api), br->length);
+		br = psync_find_result(location, "binapi", PARAM_STR);
+		plocation->binapi = br->str;
+		psync_list_add_lstring_offset(builder, offsetof(apiserver_info_t, binapi), br->length);
+		plocation->locationid = psync_find_result(location, "id", PARAM_NUM)->num;
+	}
+	ret = (apiservers_list_t *)psync_list_builder_finalize(builder);
+	ret->serverscnt = locationscnt;
+	return ret;
+}
+
+void psync_reset_apiserver()
+{
+  psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
+}
+
 void psync_unlink(){
+  psync_sql_res *res;
+  char *deviceid;
   int ret;
+  char* errMsg;
+
+  deviceid=psync_sql_cellstr("SELECT value FROM setting WHERE id='deviceid'");
   debug(D_NOTICE, "unlink");
+
   psync_diff_lock();
+  unlinked=1;
+  tfa=0;
   psync_stop_all_download();
   psync_stop_all_upload();
+  //Stop the root backup folder before unlinking the database. 0 means fetch the deviceid from local DB.
+  psync_stop_device(0, &errMsg);
+
   psync_status_recalc_to_download();
   psync_status_recalc_to_upload();
   psync_invalidate_auth(psync_my_auth);
   psync_cloud_crypto_stop();
+  psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
   psync_milisleep(20);
   psync_stop_localscan();
   psync_sql_checkpoint_lock();
@@ -400,11 +532,18 @@ void psync_unlink(){
   ret=psync_sql_close();
   psync_file_delete(psync_database);
   if (ret){
+    psync_free(deviceid);
     debug(D_ERROR, "failed to close database, exiting");
     exit(1);
   }
   psync_pagecache_clean_cache();
   psync_sql_connect(psync_database);
+  if (deviceid){
+    res=psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('deviceid', ?)");
+    psync_sql_bind_string(res, 1, deviceid);
+    psync_sql_run_free(res);
+    psync_free(deviceid);
+  }
   /*
     psync_sql_res *res;
     psync_variant_row row;
@@ -472,6 +611,133 @@ void psync_unlink(){
     psync_fs_refresh_folder(0);
 }
 
+int psync_tfa_has_devices() {
+  return psync_my_2fa_has_devices;
+}
+
+int psync_tfa_type() {
+	return psync_my_2fa_type;
+}
+
+static void check_tfa_result(uint64_t result){
+  if (result==2064){
+    if (psync_status_get(PSTATUS_TYPE_AUTH)==PSTATUS_AUTH_TFAREQ){
+      psync_free(psync_my_2fa_token);
+      psync_my_2fa_token=NULL;
+      psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+    }
+  }
+}
+
+static char *binresult_to_str(const binresult *res){
+  if (!res)
+    return psync_strdup("field not found");
+  if (res->type==PARAM_STR)
+    return psync_strdup(res->str);
+  else if (res->type==PARAM_NUM){
+    char buff[32], *ptr;
+    uint64_t n;
+    ptr=buff+sizeof(buff);
+    *--ptr=0;
+    n=res->num;
+    do {
+      *--ptr='0'+n%10;
+      n/=10;
+    } while (n);
+    return psync_strdup(ptr);
+  }
+  else{
+    return psync_strdup("bad field type");
+  }
+}
+
+int psync_tfa_send_sms(char **country_code, char **phone_number){
+  if (country_code)
+    *country_code=NULL;
+  if (phone_number)
+    *phone_number=NULL;
+  if (!psync_my_2fa_token){
+    return -2;
+  }
+  else{
+    binresult *res;
+    uint64_t code;
+    binparam params[]={P_STR("token", psync_my_2fa_token)};
+    res=psync_api_run_command("tfa_sendcodeviasms", params);
+    if (!res)
+      return -1;
+    code=psync_find_result(res, "result", PARAM_NUM)->num;
+    if (code){
+      free(res);
+      check_tfa_result(code);
+      return code;
+    }
+    if (country_code || phone_number) {
+      const binresult *cres=psync_find_result(res, "phonedata", PARAM_HASH);
+      if (country_code)
+        *country_code=binresult_to_str(psync_get_result(cres, "countrycode"));
+      if (phone_number)
+        *phone_number=binresult_to_str(psync_get_result(cres, "msisdn"));
+    }
+    free(res);
+    return 0;
+  }
+}
+
+int psync_tfa_send_nofification(plogged_device_list_t **devices_list){
+  if (devices_list)
+    *devices_list=NULL;
+  if (!psync_my_2fa_token){
+    return -2;
+  }
+  else{
+    binresult *res;
+    uint64_t code;
+    binparam params[]={P_STR("token", psync_my_2fa_token)};
+    res=psync_api_run_command("tfa_sendcodeviasysnotification", params);
+    if (!res)
+      return -1;
+    code=psync_find_result(res, "result", PARAM_NUM)->num;
+    if (code){
+      free(res);
+      check_tfa_result(code);
+      return code;
+    }
+    if (devices_list){
+      const binresult *cres=psync_find_result(res, "devices", PARAM_ARRAY);
+      psync_list_builder_t *builder;
+      uint32_t i;
+      builder=psync_list_builder_create(sizeof(plogged_device_t), offsetof(plogged_device_list_t, devices));
+      for (i=0; i<cres->length; i++){
+        plogged_device_t *dev=(plogged_device_t *)psync_list_bulder_add_element(builder);
+        const binresult *str=psync_find_result(cres->array[i], "name", PARAM_STR);
+        dev->type=psync_find_result(cres->array[i], "type", PARAM_NUM)->num;
+        dev->name=str->str;
+        psync_list_add_lstring_offset(builder, offsetof(plogged_device_t, name), str->length);
+      }
+      *devices_list=(plogged_device_list_t *)psync_list_builder_finalize(builder);
+    }
+    free(res);
+    return 0;
+  }
+}
+
+plogged_device_list_t *psync_tfa_send_nofification_res(){
+  plogged_device_list_t *devices_list;
+  if (psync_tfa_send_nofification(&devices_list))
+    return NULL;
+  else
+    return devices_list;
+}
+
+void psync_tfa_set_code(const char *code, int trusted, int is_recovery){
+  strncpy(psync_my_2fa_code, code, sizeof(psync_my_2fa_code));
+  psync_my_2fa_code[sizeof(psync_my_2fa_code)-1]=0;
+  psync_my_2fa_trust=trusted;
+  psync_my_2fa_code_type=is_recovery?2:1;
+  psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+}
+
 psync_syncid_t psync_add_sync_by_path(const char *localpath, const char *remotepath, psync_synctype_t synctype){
   psync_folderid_t folderid=psync_get_folderid_by_path(remotepath);
   if (likely_log(folderid!=PSYNC_INVALID_FOLDERID))
@@ -489,6 +755,9 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   psync_stat_t st;
   psync_syncid_t ret;
   int unsigned md;
+
+  debug(D_NOTICE, "Add sync by folder id localpath: [%s]", localpath);
+
   if (unlikely_log(synctype<PSYNC_SYNCTYPE_MIN || synctype>PSYNC_SYNCTYPE_MAX))
     return_isyncid(PERROR_INVALID_SYNCTYPE);
   if (unlikely_log(psync_stat(localpath, &st)) || unlikely_log(!psync_stat_isfolder(&st)))
@@ -503,7 +772,6 @@ psync_syncid_t psync_add_sync_by_folderid(const char *localpath, psync_folderid_
   if (syncmp){
     size_t len=strlen(syncmp);
     if (!psync_filename_cmpn(syncmp, localpath, len) && (localpath[len]==0 || localpath[len]=='/' || localpath[len]=='\\')){
-      debug(D_NOTICE, "local path %s is on pCloudDrive mounted as %s, rejecting sync", localpath, syncmp);
       psync_free(syncmp);
       return_isyncid(PERROR_LOCAL_IS_ON_PDRIVE);
     }
@@ -670,6 +938,7 @@ int psync_change_synctype(psync_syncid_t syncid, psync_synctype_t synctype){
   psync_path_status_sync_delete(syncid);
   psync_sql_commit_transaction();
   psync_localnotify_del_sync(syncid);
+  psync_restat_sync_folders_del(syncid);
   psync_stop_sync_download(syncid);
   psync_stop_sync_upload(syncid);
   psync_sql_sync();
@@ -705,37 +974,30 @@ static void psync_delete_local_recursive(psync_syncid_t syncid, psync_folderid_t
 int psync_delete_sync(psync_syncid_t syncid){
   psync_sql_res *res;
   psync_sql_start_transaction();
-/* this is slow and unneeded:
-  psync_uint_row row;
-  res=psync_sql_query("SELECT type, itemid, localitemid FROM task WHERE syncid=?");
-  psync_sql_bind_uint(res, 1, syncid);
-  while ((row=psync_sql_fetch_rowint(res)))
-    if (row[0]==PSYNC_DOWNLOAD_FILE)
-      psync_stop_file_download(row[1], syncid);
-    else if (row[0]==PSYNC_UPLOAD_FILE)
-      psync_delete_upload_tasks_for_file(row[2]);
-  psync_sql_free_result(res);
-  */
+
   psync_delete_local_recursive(syncid, 0);
   res=psync_sql_prep_statement("DELETE FROM syncfolder WHERE id=?");
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
+
   if (psync_sql_commit_transaction())
     return -1;
   else{
     psync_stop_sync_download(syncid);
     psync_stop_sync_upload(syncid);
     psync_localnotify_del_sync(syncid);
+    psync_restat_sync_folders_del(syncid);
     psync_restart_localscan();
     psync_sql_sync();
     psync_path_status_sync_delete(syncid);
     psync_path_status_reload_syncs();
+
     return 0;
   }
 }
 
 psync_folder_list_t *psync_get_sync_list(){
-  return psync_list_get_list();
+  return psync_list_get_list(PSYNC_STR_ALLSYNCS);
 }
 
 psuggested_folders_t *psync_get_sync_suggestions(){
@@ -883,14 +1145,54 @@ neterr:
   return -1;
 }
 
-int psync_register(const char *email, const char *password, int termsaccepted, char **err){
+int psync_register(const char *email, const char *password, int termsaccepted, const char* binapi, unsigned int locationid, char **err){
+  binresult *res;
+  psync_socket *sock;
+  uint64_t result;
   binparam params[]={P_STR("mail", email), P_STR("password", password), P_STR("termsaccepted", termsaccepted?"yes":"0"), P_NUM("os", P_OS_ID)};
-  return psync_run_command("register", params, err);
+  if (binapi)
+    psync_set_apiserver(binapi, locationid);
+  else {
+    if (err)
+      *err = psync_strdup("Could not connect to the server.");
+	psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
+    return -1;
+  }
+  sock = psync_api_connect(binapi, psync_setting_get_bool(_PS(usessl)));
+  if (unlikely_log(!sock)){
+	  if (err)
+		  *err = psync_strdup("Could not connect to the server.");
+	  psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
+	  return -1;
+  }
+  res = send_command(sock, "register", params);
+  if (unlikely_log(!res)){
+	psync_socket_close(sock);
+	if (err)
+	  *err = psync_strdup("Could not connect to the server.");
+	psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
+	return -1;
+  }
+  result = psync_find_result(res, "result", PARAM_NUM)->num;
+  if (result){
+	debug(D_WARNING, "command register returned code %u", (unsigned)result);
+    if (err)
+	  *err = psync_strdup(psync_find_result(res, "error", PARAM_STR)->str);
+	psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
+  }
+  psync_socket_close(sock);
+  psync_free(res);
+  return result;
 }
 
 int psync_verify_email(char **err){
   binparam params[]={P_STR("auth", psync_my_auth)};
   return psync_run_command("sendverificationemail", params, err);
+}
+
+int psync_verify_email_restricted(char **err){
+	binparam params[] = { P_STR("verifytoken", psync_my_verify_token) };
+	return psync_run_command("sendverificationemail", params, err);
 }
 
 int psync_lost_password(const char *email, char **err){
@@ -973,6 +1275,10 @@ const char *psync_get_string_setting(const char *settingname){
 
 int psync_set_string_setting(const char *settingname, const char *value){
   return psync_setting_set_string(psync_setting_getid(settingname), value);
+}
+
+int psync_reset_setting(const char *settingname){
+  return psync_setting_reset(psync_setting_getid(settingname));
 }
 
 int psync_has_value(const char *valuename){
@@ -1150,7 +1456,7 @@ psync_share_list_t *psync_list_shares(int incoming){
   builder=psync_list_builder_create(sizeof(psync_share_t), offsetof(psync_share_list_t, shares));
   incoming=!!incoming;
   if (incoming) {
-    res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, ifnull(mail, ''), ifnull(mail, '') as frommail,name, ifnull(bsharedfolderid, 0), 0 FROM sharedfolder WHERE isincoming=1 AND id >= 0 "
+    res=psync_sql_query_rdlock("SELECT id, folderid, ctime, permissions, userid, ifnull(mail, ''), ifnull(mail, '') as frommail, name, ifnull(bsharedfolderid, 0), 0 FROM sharedfolder WHERE isincoming=1 AND id >= 0 "
                                 " UNION ALL "
                                 " select id, folderid, ctime, permissions, fromuserid as userid , "
                                 " case when isteam = 1 then (select name from baccountteam where id = toteamid) "
@@ -1159,7 +1465,6 @@ psync_share_list_t *psync_list_shares(int incoming){
                                 " name, id as bsharedfolderid, 0 from bsharedfolder where isincoming = 1 "
                                 " ORDER BY name;");
   psync_list_bulder_add_sql(builder, res, create_share);
-
   } else {
     res=psync_sql_query_rdlock("SELECT sf.id, sf.folderid, sf.ctime, sf.permissions, sf.userid, ifnull(sf.mail, ''), ifnull(sf.mail, '') as frommail, f.name as fname, ifnull(sf.bsharedfolderid, 0), 0 "
                                 " FROM sharedfolder sf, folder f WHERE sf.isincoming=0 AND sf.id >= 0 and sf.folderid = f.id "
@@ -1169,7 +1474,7 @@ psync_share_list_t *psync_list_shares(int incoming){
                                 " case when bsf.isincoming = 0 and bsf.isteam = 1 then (select name from baccountteam where id = bsf.toteamid) "
                                 " else (select mail from baccountemail where id = bsf.touserid) end as mail, "
                                 " (select mail from baccountemail where id = bsf.fromuserid) as frommail, "
-                                " f.name as fname, bsf.id, bsf.isteam from bsharedfolder bsf, folder f where bsf.isincoming = 0 "
+                                " bsf.name as fname, bsf.id, bsf.isteam from bsharedfolder bsf, folder f where bsf.isincoming = 0 "
                                 " and bsf.folderid = f.id ORDER BY fname ");
     psync_list_bulder_add_sql(builder, res, create_share);
   }
@@ -1187,14 +1492,58 @@ static uint32_t convert_perms(uint32_t permissions){
 
 int psync_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_STR("mail", mail),
-                     P_STR("message", message), P_NUM("permissions", convert_perms(permissions))};
+	  P_STR("message", message), P_NUM("permissions", convert_perms(permissions)), P_NUM("strictmode", 1)};
   return psync_run_command("sharefolder", params, err);
+}
+
+int psync_crypto_share_folder(psync_folderid_t folderid, const char *name, const char *mail, const char *message, uint32_t permissions, char *hint, char *temppass,  char **err){
+  char *priv_key=NULL;
+  char *signature=NULL;
+  int change_err;
+
+  if (!temppass){
+  	binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_STR("mail", mail),
+  		P_STR("message", message), P_NUM("permissions", convert_perms(permissions)), P_STR("hint", hint), P_NUM("strictmode", 1) };
+  	return psync_run_command("sharefolder", params, err);
+  }
+  if ((change_err = psync_crypto_change_passphrase_unlocked(temppass, PSYNC_CRYPTO_FLAG_TEMP_PASS, &priv_key, &signature))){
+	  return change_err;
+  }
+  {
+    binparam params[] = { P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_STR("mail", mail),
+      P_STR("message", message), P_NUM("permissions", convert_perms(permissions)), P_STR("hint", hint), P_STR("privatekey", priv_key),
+      P_STR("signature", signature), P_NUM("strictmode", 1) };
+    return psync_run_command("sharefolder", params, err);
+  }
 }
 
 int psync_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char **err){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("teamid", teamid),
                      P_STR("message", message), P_NUM("permissions", convert_perms(permissions))};
   return psync_run_command("account_teamshare", params, err);
+}
+
+int psync_crypto_account_teamshare(psync_folderid_t folderid, const char *name, psync_teamid_t teamid, const char *message, uint32_t permissions, char* hint, char *temppass, char **err){
+	char *priv_key=NULL;
+	char *signature=NULL;
+	int change_err;
+
+    if (!temppass){
+		binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("teamid", teamid),
+											 P_STR("message", message), P_NUM("permissions", convert_perms(permissions)), P_STR("hint", hint)};
+		return psync_run_command("account_teamshare", params, err);
+	}
+
+	if ((change_err = psync_crypto_change_passphrase_unlocked(temppass, PSYNC_CRYPTO_FLAG_TEMP_PASS, &priv_key, &signature))){
+	  return change_err;
+	}
+
+	{
+		binparam params[] = { P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_STR("name", name), P_NUM("teamid", teamid),
+			P_STR("message", message), P_NUM("permissions", convert_perms(permissions)), P_STR("hint", hint),
+			P_STR("privatekey", priv_key), P_STR("signature", signature) };
+		return psync_run_command("account_teamshare", params, err);
+	}
 }
 
 int psync_cancel_share_request(psync_sharerequestid_t requestid, char **err){
@@ -1346,12 +1695,43 @@ static psync_new_version_t *psync_res_to_ver(const binresult *res, char *localpa
   return ver;
 }
 
+int check_new_version_on_us_socket(binresult **pres, const char *os, unsigned long currentversion){
+	binparam params[] = { P_STR("os", os), P_NUM("version", currentversion) };
+	psync_socket *api;
+	binresult *res;
+	int usessl;
+	uint64_t result;
+
+	usessl = psync_setting_get_bool(_PS(usessl));
+	api = psync_socket_connect("binapi.pcloud.com", usessl ? PSYNC_API_PORT_SSL : PSYNC_API_PORT, usessl);
+	if (unlikely(!api)) {
+		return -1;
+	}
+	res = send_command(api, "getlastversion", params);
+	if (likely(res))
+		psync_apipool_release(api);
+	else {
+		psync_apipool_release_bad(api);
+		return -1;
+	}
+	result = psync_find_result(res, "result", PARAM_NUM)->num;
+	if (result){
+		debug(D_WARNING, "command %s returned code %u", "getlastversion", (unsigned)result);
+		psync_process_api_error(result);
+	}
+	if (result)
+		psync_free(res);
+	else
+		*pres = res;
+	return (int)result;
+}
+
 psync_new_version_t *psync_check_new_version(const char *os, unsigned long currentversion){
   binparam params[]={P_STR("os", os), P_NUM("version", currentversion)};
   psync_new_version_t *ver;
   binresult *res;
   int ret;
-  ret=run_command_get_res("getlastversion", params, NULL, &res);
+  ret = check_new_version_on_us_socket(&res,os,currentversion);
   if (ret){
     debug(D_WARNING, "getlastversion returned %d", ret);
     return NULL;
@@ -1369,7 +1749,7 @@ static void psync_del_all_except(void *ptr, psync_pstat_fast *st){
   const char **nmarr;
   char *fp;
   nmarr=(const char **)ptr;
-  if (!psync_filename_cmp(st->name, nmarr[1]) || st->isfolder)
+  if (!psync_filename_cmp(st->name, nmarr[1]) || psync_stat_fast_isfolder(st))
     return;
   fp=psync_strcat(nmarr[0], PSYNC_DIRECTORY_SEPARATOR, st->name, NULL);
   debug(D_NOTICE, "deleting old update file %s", fp);
@@ -1458,17 +1838,16 @@ psync_new_version_t *psync_check_new_version_download_str(const char *os, const 
 }
 
 psync_new_version_t *psync_check_new_version_download(const char *os, unsigned long currentversion){
-  binparam params[]={P_STR("os", os), P_NUM("version", currentversion)};
   psync_new_version_t *ver;
   binresult *res;
   char *lfilename;
   int ret;
-  ret=run_command_get_res("getlastversion", params, NULL, &res);
+  ret = check_new_version_on_us_socket(&res, os, currentversion);
   if (unlikely(ret==-1))
     do{
       debug(D_WARNING, "could not connect to server, sleeping");
       psync_milisleep(10000);
-      ret=run_command_get_res("getlastversion", params, NULL, &res);
+	  ret = check_new_version_on_us_socket(&res, os, currentversion);
     } while (ret==-1);
   if (ret){
     debug(D_WARNING, "getlastversion returned %d", ret);
@@ -1617,7 +1996,6 @@ int psync_upload_file_as(const char *remote_path, const char *remote_filename, c
   return ret;
 }
 
-
 int psync_password_quality(const char *password){
   uint64_t score=psync_password_score(password);
   if (score<(uint64_t)1<<30)
@@ -1741,7 +2119,116 @@ psync_folderid_t *psync_crypto_folderids(){
   return ret;
 }
 
-external_status psync_filesystem_status(const char *path) {
+int psync_crypto_change_crypto_pass(const char *oldpass, const char *newpass, const char *hint, const char *code){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  int tries=0, err;
+  char *priv_key=NULL;
+  char *signature=NULL;
+
+  if ((err = psync_crypto_change_passphrase(oldpass, newpass, 0, &priv_key, &signature))){
+    return err;
+  }
+  {
+    binparam params[] = { P_STR("auth", psync_my_auth), P_STR("privatekey", priv_key), P_STR("signature", signature), P_STR("hint", hint), P_STR("code", code) };
+    debug(D_NOTICE, "uploading re-encoded private key");
+    while (1){
+    	api = psync_apipool_get();
+    	if (!api)
+    	  return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
+    	res = send_command(api, "crypto_changeuserprivate", params);
+    	if (unlikely_log(!res)){
+    	  psync_apipool_release_bad(api);
+    	  if (++tries > 5)
+    	  	return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
+    	}
+    	else{
+    	  psync_apipool_release(api);
+    	  break;
+    	}
+    }
+    result = psync_find_result(res, "result", PARAM_NUM)->num;
+    psync_free(res);
+    if (result != 0)
+    	debug(D_WARNING, "crypto_changeuserprivate returned %u", (unsigned)result);
+    if (result == 0){
+    	psync_delete_cached_crypto_keys();
+    	return PSYNC_CRYPTO_SETUP_SUCCESS;
+    }
+    return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR);
+  }
+}
+
+int psync_crypto_change_crypto_pass_unlocked(const char *newpass, const char *hint, const char *code){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+  int tries = 0, err;
+  char *priv_key = NULL;
+  char *signature = NULL;
+
+
+  if ((err = psync_crypto_change_passphrase_unlocked(newpass, 0, &priv_key, &signature))){
+  	return err;
+  }
+  {
+	binparam params[] = { P_STR("auth", psync_my_auth), P_STR("privatekey", priv_key), P_STR("signature", signature), P_STR("hint", hint), P_STR("code", code) };
+	debug(D_NOTICE, "uploading re-encoded private key");
+	while (1){
+	  api = psync_apipool_get();
+	  if (!api)
+	  	return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
+	  res = send_command(api, "crypto_changeuserprivate", params);
+	  if (unlikely_log(!res)){
+	  	psync_apipool_release_bad(api);
+	  	if (++tries > 5)
+	  	  return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
+	  }
+	  else{
+	  	psync_apipool_release(api);
+	  	break;
+	  }
+	}
+	result = psync_find_result(res, "result", PARAM_NUM)->num;
+	psync_free(res);
+	if (result != 0)
+		debug(D_WARNING, "crypto_changeuserprivate returned %u", (unsigned)result);
+	if (result == 0){
+		psync_delete_cached_crypto_keys();
+		return PSYNC_CRYPTO_SETUP_SUCCESS;
+	}
+	return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR);
+  }
+}
+
+int psync_crypto_crypto_send_change_user_private(){
+  psync_socket *api;
+  binresult *res;
+  uint64_t result;
+	binparam params[] = { P_STR("auth", psync_my_auth) };
+	debug(D_NOTICE, "Requesting code for changing the private key password");
+	api=psync_apipool_get();
+	if (!api)
+		return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
+	res=send_command(api, "crypto_sendchangeuserprivate", params);
+	if (unlikely_log(!res)){
+		psync_apipool_release_bad(api);
+		return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_CANT_CONNECT);
+	}
+	else{
+		psync_apipool_release(api);
+	}
+	result=psync_find_result(res, "result", PARAM_NUM)->num;
+	psync_free(res);
+	if (result!=0)
+		debug(D_WARNING, "crypto_sendchangeuserprivate returned %u", (unsigned)result);
+	if (result==0)
+		return PSYNC_CRYPTO_SETUP_SUCCESS;
+	return PRINT_RETURN_CONST(PSYNC_CRYPTO_SETUP_UNKNOWN_ERROR);
+}
+
+external_status psync_filesystem_status(const char *path){
   switch (psync_path_status_get_status(psync_path_status_get(path))) {
     case PSYNC_PATH_STATUS_IN_SYNC:
       return INSYNC;
@@ -1764,22 +2251,39 @@ external_status psync_status_folder(const char *path) {
   return psync_filesystem_status(path);
 }
 
-int64_t psync_file_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
+int64_t psync_file_public_link(const char *path, char **link /*OUT*/, char **err /*OUT*/) {
   int64_t ret = 0;
-  do_psync_file_public_link(path, &ret, code, err, 0, 0, 0);
+  do_psync_file_public_link(path, &ret, link, err, 0, 0, 0);
   return ret;
 }
 
-int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t delay, char **code /*OUT*/, char **err /*OUT*/) {
-  return do_psync_screenshot_public_link(path, hasdelay, delay, code, err);
+int64_t psync_screenshot_public_link(const char *path, int hasdelay, int64_t delay, char **link /*OUT*/, char **err /*OUT*/) {
+  return do_psync_screenshot_public_link(path, hasdelay, delay, link, err);
 }
 
-int64_t psync_folder_public_link(const char *path, char **code /*OUT*/, char **err /*OUT*/) {
-  return do_psync_folder_public_link(path, code, err, 0, 0, 0);
+int64_t psync_folder_public_link(const char *path, char **link /*OUT*/, char **err /*OUT*/) {
+  return do_psync_folder_public_link(path, link, err, 0, 0, 0);
 }
 
-int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **code /*OUT*/, char **err /*OUT*/) {
-  return do_psync_tree_public_link(linkname, root, folders, numfolders, files, numfiles, code, err,  0, 0, 0);
+int64_t psync_folder_public_link_full(const char *path, char **link /*OUT*/, char **err /*OUT*/,unsigned long long expire, int maxdownloads, int maxtraffic, const char* password) {
+	return do_psync_folder_public_link_full(path, link, err, expire, maxdownloads, maxtraffic, password);
+}
+
+int psync_change_link(unsigned long long linkid, unsigned long long expire, int delete_expire,
+  const char* linkpassword, int delete_password, unsigned long long maxtraffic, unsigned long long maxdownloads,
+  int enableuploadforeveryone, int enableuploadforchosenusers, int disableupload, char** err)
+{
+	return do_psync_change_link(linkid,expire,delete_expire,
+    linkpassword,delete_password,maxtraffic,maxdownloads,
+    enableuploadforeveryone,enableuploadforchosenusers,disableupload,err);
+}
+
+int64_t psync_folder_updownlink_link(int canupload, unsigned long long folderid, const char* mail, char **err /*OUT*/) {
+	return do_psync_folder_updownlink_link(canupload, folderid, mail, err);
+}
+
+int64_t psync_tree_public_link(const char *linkname, const char *root, char **folders, int numfolders, char **files, int numfiles, char **link /*OUT*/, char **err /*OUT*/) {
+  return do_psync_tree_public_link(linkname, root, folders, numfolders, files, numfiles, link, err,  0, 0, 0);
 }
 
 plink_info_list_t *psync_list_links(char **err /*OUT*/) {
@@ -1794,8 +2298,8 @@ int psync_delete_link(int64_t linkid, char **err /*OUT*/) {
   return do_psync_delete_link(linkid, err);
 }
 
-int64_t psync_upload_link(const char *path, const char *comment, char **code /*OUT*/, char **err /*OUT*/) {
-  return do_psync_upload_link(path, comment, code, err, 0, 0, 0);
+int64_t psync_upload_link(const char *path, const char *comment, char **link /*OUT*/, char **err /*OUT*/) {
+  return do_psync_upload_link(path, comment, link, err, 0, 0, 0);
 }
 
 int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
@@ -1805,10 +2309,72 @@ int psync_delete_upload_link(int64_t uploadlinkid, char **err /*OUT*/) {
 int psync_delete_all_links_folder(psync_folderid_t folderid, char**err) {
   return do_delete_all_folder_links(folderid, err);
 }
+
 int psync_delete_all_links_file(psync_fileid_t fileid, char**err){
   return do_delete_all_file_links(fileid, err);
 }
 
+void psync_cache_links_all()
+{
+	if (psync_current_time - links_last_refresh_time >= PSYNC_LINKS_REFRESH_INTERVAL){
+	  links_last_refresh_time=psync_current_time;
+	  cache_links_all();
+	}
+	else
+		debug(D_WARNING, "refreshing link too early %u", (unsigned)psync_current_time - links_last_refresh_time);
+}
+
+preciever_list_t* psync_list_email_with_access(unsigned long long linkid, char** err)
+{
+  return do_list_email_with_access(linkid, err);
+}
+
+int psync_link_add_access(unsigned long long linkid, const char* mail, char** err)
+{
+  return do_link_add_access(linkid, mail, err);
+}
+
+int psync_link_remove_access(unsigned long long linkid, unsigned long long receiverid, char** err)
+{
+  return do_link_remove_access(linkid, receiverid, err);
+}
+
+bookmarks_list_t* psync_cache_bookmarks(char** err)
+{
+  return do_cache_bookmarks(err);
+}
+
+int psync_remove_bookmark(const char* code, int locationid, char** err)
+{
+  return do_remove_bookmark(code, locationid, err);
+}
+
+int psync_change_bookmark(const char* code, int locationid, const char* name, const char* description, char** err)
+{
+  return do_change_bookmark(code, locationid, name, description, err);
+}
+
+int psync_psync_change_link(unsigned long long linkid, unsigned long long expire, int delete_expire,
+  const char* linkpassword, int delete_password, unsigned long long maxtraffic, unsigned long long maxdownloads,
+  int enableuploadforeveryone, int enableuploadforchosenusers, int disableupload, char** err)
+{
+  return do_psync_change_link(linkid, expire, delete_expire, linkpassword, delete_password,
+    maxtraffic, maxdownloads, enableuploadforeveryone, enableuploadforchosenusers, disableupload, err);
+}
+int psync_change_link_expire(unsigned long long linkid, unsigned long long expire, char** err)
+{
+  return do_change_link_expire(linkid, expire, err);
+}
+
+int psync_change_link_password(unsigned long long linkid, const char* password, char** err)
+{
+  return do_change_link_password(linkid, password, err);
+}
+
+int psync_change_link_enable_upload(unsigned long long linkid, int enableuploadforeveryone, int enableuploadforchosenusers, char** err)
+{
+  return do_change_link_enable_upload(linkid, enableuploadforeveryone, enableuploadforchosenusers, err);
+}
 
 pcontacts_list_t *psync_list_contacts() {
   return do_psync_list_contacts();
@@ -1818,8 +2384,7 @@ pcontacts_list_t *psync_list_myteams() {
   return do_psync_list_myteams();
 }
 
-void psync_register_account_events_callback(paccount_cache_callback_t callback)
-{
+void psync_register_account_events_callback(paccount_cache_callback_t callback){
   do_register_account_events_callback(callback);
 }
 
@@ -1857,9 +2422,624 @@ int psync_fs_move_cache(const char *path){
   return  psync_pagecache_move_cache(path);
 }
 
-char * psync_get_token()
-{
+char * psync_get_token(){
   if (psync_my_auth[0])
     return psync_strdup(psync_my_auth);
   else return NULL;
 }
+
+int psync_get_promo(char **url, uint64_t *width, uint64_t *height) {
+  uint64_t result;
+  binresult *res;
+  binparam params[]={ P_STR("auth", psync_my_auth), P_NUM("os", P_OS_ID) };
+  *url = 0;
+
+  res = psync_api_run_command("getpromourl", params);
+
+  if (unlikely_log(!res)){
+	  return -1;
+  }
+
+  result = psync_find_result(res, "result", PARAM_NUM)->num;
+
+  if (result){
+    debug(D_WARNING, "getpromourl returned %d", (int)result);
+    psync_free(res);
+    return result;
+  }
+
+  if (!psync_find_result(res, "haspromo", PARAM_BOOL)->num) {
+    psync_free(res);
+
+    return result;
+  }
+
+  *url = psync_strdup(psync_find_result(res, "url", PARAM_STR)->str);
+
+  if (!psync_find_result(res, "width", PARAM_NUM)->num) {
+    debug(D_NOTICE, "Parameter width not found.");
+
+    psync_free(res);
+    return result;
+  }
+
+  *width = psync_find_result(res, "width", PARAM_NUM)->num;
+  debug(D_NOTICE, "Promo window Width: [%llu]", *width);
+
+
+  if (!psync_find_result(res, "height", PARAM_NUM)->num) {
+    debug(D_NOTICE, "Parameter height not found.");
+
+    psync_free(res);
+    return result;
+  }
+
+  *height = psync_find_result(res, "height", PARAM_NUM)->num;
+  debug(D_NOTICE, "Promo window Height: [%llu]", *height);
+
+  psync_free(res);
+
+  return 0;
+}
+
+psync_folderid_t psync_get_fsfolderid_by_path(const char *path, uint32_t *pflags, uint32_t *pPerm){
+	return psync_fsfolderidperm_by_path(path, pflags, pPerm);
+}
+
+uint32_t psync_get_fsfolderflags_by_id(psync_folderid_t folderid, uint32_t *pPerm){
+	return psync_fsfolderflags_by_id(folderid, pPerm);
+}
+
+uint64_t psync_crypto_priv_key_flags(){
+  psync_sql_res *res;
+  psync_uint_row row;
+  uint64_t ret=0;
+  res=psync_sql_query_rdlock_nocache("SELECT value FROM setting WHERE id='crypto_private_flags'");
+  if((row=psync_sql_fetch_rowint(res))){
+  	ret=row[0];
+  	psync_sql_free_result(res);
+  	return ret;
+  }
+  else
+  	debug(D_NOTICE, "Can't read private key flags from the DB");
+  psync_sql_free_result(res);
+  return ret;
+}
+
+int psync_has_crypto_folders(){
+  psync_sql_res *res;
+  psync_uint_row row;
+  uint64_t cnt=0;
+  res=psync_sql_query_rdlock_nocache("SELECT count(*) FROM folder WHERE flags&"NTO_STR(PSYNC_FOLDER_FLAG_ENCRYPTED)"");
+  if((row=psync_sql_fetch_rowint(res))){
+  	cnt=row[0];
+  }
+  else
+  	debug(D_NOTICE, "There are no crypto folders in the DB");
+  psync_sql_free_result(res);
+  return cnt>0;
+}
+
+void set_tfa_flag(int value){
+  debug(D_NOTICE, "set tfa %u", value);
+  tfa=value;
+}
+
+int psync_send_publink(const char *code, const char *mail, const char *message, char **err){
+	binparam params[] = { P_STR("auth", psync_my_auth), P_STR("code", code), P_STR("mails", mail), P_STR("message", message), P_NUM("source", 1) };
+	return psync_run_command("sendpublink", params, err);
+}
+/***********************************************************************************************************************************************/
+int psync_is_folder_syncable(char*  localPath, 
+                             char** errMsg) {
+  psync_sql_res* sql;
+  psync_str_row  srow;
+  folderPath     folders;
+
+  char* syncmp;
+  const char* ignorePaths;
+
+  int i;
+
+  debug(D_NOTICE, "Check if folder is already synced. LocalPath [%s]", localPath);
+
+  sql = psync_sql_query("SELECT localpath FROM syncfolder");
+
+  if (unlikely_log(!sql)) {
+    return_isyncid(PERROR_DATABASE_ERROR);
+  }
+
+  while ((srow = psync_sql_fetch_rowstr(sql))) {
+    if (psync_str_is_prefix(srow[0], localPath)) {
+      psync_sql_free_result(sql);
+
+      *errMsg = psync_strdup("There is already an active sync or backup for a parent of this folder.");
+      return PERROR_PARENT_OR_SUBFOLDER_ALREADY_SYNCING;
+    }
+    else if (!psync_filename_cmp(srow[0], localPath)) {
+      psync_sql_free_result(sql);
+
+      *errMsg = psync_strdup("There is already an active sync or backup for this folder.");
+      return PERROR_FOLDER_ALREADY_SYNCING;
+    }
+  }
+  psync_sql_free_result(sql);
+
+  debug(D_NOTICE, "Check if folder is not on the Drive.");
+
+  syncmp = psync_fs_getmountpoint();
+
+  debug(D_NOTICE, "Mount point: [%s].", syncmp);
+  if (syncmp) {
+    size_t len = strlen(syncmp);
+
+    debug(D_NOTICE, "Do check.");
+    if (!psync_filename_cmpn(syncmp, localPath, len) && (localPath[len] == 0 || localPath[len] == '/' || localPath[len] == '\\')) {
+      psync_free(syncmp);
+
+      *errMsg = psync_strdup("Folder is located on pCloud drive.");
+      return PERROR_LOCAL_IS_ON_PDRIVE;
+    }
+    psync_free(syncmp);
+  }
+
+  //Check if folder is not a child of an igrnored folder
+  ignorePaths = psync_setting_get_string(_PS(ignorepaths));
+  parse_os_path(ignorePaths, &folders, DELIM_SEMICOLON, 0);
+
+  for (i = 0; i < folders.cnt; i++) {
+    debug(D_NOTICE, "Check ignored folder: [%s]=[%s]", folders.folders[i], localPath);
+
+    if (psync_left_str_is_prefix(folders.folders[i], localPath)) {
+      *errMsg = psync_strdup("This folder is a child  of a folder in your ignore folders list.");
+      return PERROR_PARENT_IS_IGNORED;
+    }
+  }
+
+  return 0;
+}
+/***********************************************************************************************************************************************/
+psync_folder_list_t* psync_get_syncs_bytype(const char* syncType) {
+  debug(D_NOTICE, "Get syncs type: [%s]", syncType);
+
+  return psync_list_get_list(syncType);
+}
+/***********************************************************************************************************************************************/
+psync_folderid_t create_bup_mach_folder(char** msgErr) {
+  binresult* rootFolIdObj;
+  binresult* retData;
+
+  psync_sql_res* sql;
+
+  char  bRootFoName[64];
+  char* tmpBuff;
+  int   res = 0;
+
+  tmpBuff = get_pc_name();
+  psync_strlcpy(bRootFoName, tmpBuff, 64);
+
+  free(tmpBuff);
+
+  eventParams requiredParams = {
+    3, //Number of parameters we are passing below.
+    {
+      P_STR("auth", psync_my_auth),
+      P_STR("name", bRootFoName),
+      P_NUM("os", P_OS_ID)
+    }
+  };
+
+  eventParams optionalParams = {
+    0
+  };
+
+  debug(D_NOTICE, "Call backend [backup/createdevice].");
+  res = backend_call(apiserver,
+                     "backup/createdevice",
+                     FOLDER_META,
+                     &requiredParams,
+                     &optionalParams,
+                     &retData,
+                     msgErr);
+
+  if (res == 0) {
+    rootFolIdObj = psync_find_result(retData, "folderid", PARAM_NUM);
+
+    //Store the root folder id in the local DB
+    sql = psync_sql_prep_statement("REPLACE INTO setting (id, value) VALUES ('BackupRootFoId', ?)");
+    psync_sql_bind_uint(sql, 1, rootFolIdObj->num);
+    psync_sql_run_free(sql);
+
+    free(retData);
+  }
+
+  return rootFolIdObj->num;
+}
+/***********************************************************************************************************************************************/
+int psync_create_backup(char*  path, 
+                        char** errMsg) {
+  psync_folderid_t bFId;
+  psync_syncid_t   syncFId;
+  binresult*       folId;
+  binresult*       retData;
+  folderPath       folders;
+
+  char*            optFolName;
+  int   res = 0, oParCnt = 0;
+
+  if (path[0] == 0) {
+    *errMsg = strdup(PSYNC_BACKUP_PATH_EMPTY_MSG);
+
+    return PSYNC_BACKUP_PATH_EMPTY_ERR;
+  }
+
+  res = psync_is_folder_syncable(path, errMsg);
+
+  if (res != 0) {
+    return res;
+  }
+
+  bFId = psync_sql_cellint("SELECT value FROM setting WHERE id='BackupRootFoId'", 0);
+
+  if (bFId == 0) {
+    retryRootCrt:
+    bFId = create_bup_mach_folder(errMsg);
+  }
+
+  parse_os_path(path, &folders, DELIM_DIR, 1);
+
+  if (folders.cnt > 1) {
+    oParCnt = 1;
+    optFolName = psync_strdup(folders.folders[folders.cnt - 2]);
+  }
+  else {
+    oParCnt = 0;
+    optFolName = psync_strdup("");
+  }
+
+  eventParams reqPar = {
+    4, //Number of parameters we are passing below.
+    {
+      P_STR("auth", psync_my_auth),
+      P_STR("name", folders.folders[folders.cnt - 1]),
+      P_NUM("folderid", bFId),
+      P_STR("timeformat", "timestamp")
+    }
+  };
+
+  eventParams optPar = {
+    oParCnt,
+    {
+      P_STR(PARENT_FOLDER_NAME, optFolName)
+    }
+  };
+
+  debug(D_NOTICE, "Call backend [backup/createbackup].");
+
+  res = backend_call(apiserver,
+                     "backup/createbackup",
+                     FOLDER_META,
+                     &reqPar,
+                     &optPar,
+                     &retData,
+                     errMsg);
+
+  if (res == 0) {
+    psync_diff_update_folder(retData);
+
+    folId = psync_find_result(retData, FOLDER_ID, PARAM_NUM);
+
+    syncFId = psync_add_sync_by_folderid(path, folId->num, PSYNC_BACKUPS);
+
+    free(retData);
+
+    if (syncFId < 0) {
+      *errMsg = psync_strdup("Error creating backup.");
+      return syncFId;
+    }
+
+    debug(D_NOTICE, "Created sync with id[%d].", syncFId);
+  }
+  else if(res == 2002) {
+  // The backup folder for the machine was deleted for wathever reason. Delete the id stored in DB and create the new one.
+    debug(D_NOTICE, "Backup folder id is not valid. Delete it and create a new one.");
+
+    psync_sql_start_transaction();
+    psync_sql_statement("DELETE FROM setting WHERE id='BackupRootFoId'");
+    psync_sql_commit_transaction();
+
+    goto retryRootCrt;
+  }
+
+  return res;
+}
+/***********************************************************************************************************************************************/
+int psync_delete_backup(psync_syncid_t syncId,
+                        char** errMsg) {
+  binresult* retData;
+  psync_sql_res* sqlRes;
+  psync_uint_row row;
+  psync_folderid_t folderId;
+
+  int   res = 0;
+
+  sqlRes = psync_sql_query_rdlock("SELECT folderid FROM syncfolder WHERE id = ?");
+
+  psync_sql_bind_uint(sqlRes, 1, syncId);
+  row = psync_sql_fetch_rowint(sqlRes);
+
+  if (unlikely(!row)) {
+    debug(D_ERROR, "Failed to find folder id for syncId: [%lld]", syncId);
+    psync_sql_free_result(sqlRes);
+
+    res = -1;
+  }
+  else{
+    folderId = row[0];
+
+    psync_sql_free_result(sqlRes);
+  }
+ 
+  if(res == 0) {
+    eventParams reqPar = {
+      2, //Number of parameters we are passing below.
+      {
+        P_STR("auth", psync_my_auth),
+        P_NUM("folderid", folderId)
+      }
+    };
+
+    eventParams optPar = {
+      0
+    };
+
+    debug(D_NOTICE, "Call backend [backup/stopbackup].");
+
+    res = backend_call(apiserver,
+                       "backup/stopbackup",
+                       NO_PAYLOAD,
+                       &reqPar,
+                       &optPar,
+                       &retData,
+                       errMsg);
+
+    if (res == 0) {
+      res = psync_delete_sync(syncId);
+    }
+  }
+
+  debug(D_NOTICE, "Stop sync result: [%d].", res);
+  
+  return res;
+}
+/***********************************************************************************************************************************************/
+void psync_stop_device(psync_folderid_t folderId,
+                      char**           errMsg) {
+  binresult* retData;
+  psync_folderid_t bFId;
+  int   res = 0;
+
+  if (folderId == 0) {
+    bFId = psync_sql_cellint("SELECT value FROM setting WHERE id='BackupRootFoId'", 0);
+  }
+  else {
+    bFId = folderId;
+  }
+
+  if(bFId > 0) {
+    eventParams reqPar = {
+      2, //Number of parameters we are passing below.
+      {
+        P_STR("auth", psync_my_auth),
+        P_NUM("folderid", bFId)
+      }
+    };
+
+    eventParams optPar = {
+      0
+    };
+
+    debug(D_NOTICE, "Call backend [backup/stopdevice].");
+
+    res = backend_call(apiserver,
+                       "backup/stopdevice",
+                       NO_PAYLOAD,
+                       &reqPar,
+                       &optPar,
+                       &retData,
+                       errMsg);
+
+    if (res != 0) {
+      debug(D_ERROR, "Failed to stop device in the backend Message: [%s].", *errMsg);
+    }
+  }
+  else {
+    debug(D_ERROR, "Can't find device id in local DB.");
+  }
+}
+/***********************************************************************************************************************************************/
+char* get_backup_root_name() {
+  return psync_sql_cellstr("SELECT name FROM setting s JOIN folder f ON s.value = f.id AND s.id = 'BackupRootFoId'");
+}
+/***********************************************************************************************************************************************/
+char* get_pc_name() {
+  return get_machine_name();
+}
+/***********************************************************************************************************************************************/
+void psync_async_delete_sync(void* ptr) {
+  psync_syncid_t syncId = (psync_syncid_t*)ptr;
+  int res;
+
+  res = psync_delete_sync(syncId);
+
+  debug(D_NOTICE, "Backup stopped on the Web.");
+
+  if (res == 0) {
+    psync_send_eventid(PEVENT_BACKUP_STOP);
+  }
+}
+/***********************************************************************************************************************************************/
+void psync_async_ui_callback(void* ptr) {
+  int eventId = (int*)ptr;
+  time_t currTime = psync_time();
+
+  if (((currTime - lastBupDelEventTime) > bupNotifDelay) || (lastBupDelEventTime == 0)) {
+    debug(D_NOTICE, "Send event to UI. Event id: [%d]", eventId);
+
+    psync_send_eventid(eventId);
+
+    lastBupDelEventTime = currTime;
+  }
+}
+/***********************************************************************************************************************************************/
+int psync_delete_sync_by_folderid(psync_folderid_t fId) {
+  psync_sql_res* sqlRes;
+  psync_uint_row row;
+
+  psync_syncid_t* syncId;
+  psync_syncid_t* syncIdT;
+
+  sqlRes = psync_sql_query_nolock("SELECT id FROM syncfolder WHERE folderid = ?");
+  psync_sql_bind_uint(sqlRes, 1, fId);
+  row = psync_sql_fetch_rowint(sqlRes);
+
+  if (unlikely(!row)) {
+    debug(D_ERROR, "Sync to delete not found!");
+    psync_sql_free_result(sqlRes);
+
+    return -1;
+  }
+
+  syncId = row[0];
+  
+  psync_sql_free_result(sqlRes);
+
+  syncIdT = psync_new(psync_syncid_t);
+  syncIdT = syncId;
+
+  psync_run_thread1("psync_async_sync_delete", psync_async_delete_sync, syncIdT);
+
+  return 0;
+}
+/***********************************************************************************************************************************************/
+int psync_delete_backup_device(psync_folderid_t fId) {
+  psync_folderid_t bFId;
+
+  debug(D_NOTICE, "Check if the local device was stopped. Id: [%lld]", fId);
+
+  bFId = psync_sql_cellint("SELECT value FROM setting WHERE id='BackupRootFoId'", 0);
+
+  if (bFId == fId) {
+    psync_sql_start_transaction();
+
+    psync_sql_statement("DELETE FROM setting WHERE id='BackupRootFoId'");
+
+    psync_sql_commit_transaction();
+  }
+  else {
+    debug(D_NOTICE, "Stop for different device. Id: [%lld]", bFId);
+  }
+
+  return 1;
+}
+/***********************************************************************************************************************************************/
+void psync_send_backup_del_event(psync_fileorfolderid_t remoteFId) {
+  time_t currTime = psync_time();
+  
+  if (((currTime - lastBupDelEventTime) > bupNotifDelay) || (lastBupDelEventTime == 0)) {
+    if (remoteFId == 0) {
+      psync_send_eventid(PEVENT_BKUP_F_DEL_NOTSYNCED);
+    }
+    else {
+      psync_send_eventid(PEVENT_BKUP_F_DEL_SYNCED);
+    }
+
+    lastBupDelEventTime = currTime;
+  }
+}
+/***********************************************************************************************************************************************/
+userinfo_t* psync_get_userinfo()
+{
+  if (psync_my_auth[0]) {
+    size_t lemail, lcurrency, llanguage;
+    const char* email, * currency, * language;
+    const binresult* cres;
+    char* ptr;
+    binresult* res;
+    uint64_t err;
+    userinfo_t *info;
+    binparam params[] = { P_STR("auth", psync_my_auth), P_STR("timeformat", "timestamp") };
+    res = psync_api_run_command("userinfo", params);
+    if (!res) {
+      psync_free(res);
+      return NULL;
+    }
+    err = psync_find_result(res, "result", PARAM_NUM)->num;
+    if (err)
+    {
+      psync_free(res);
+      return NULL;
+    }
+
+    cres = psync_find_result(res, "email", PARAM_STR);
+    email = cres->str;
+    lemail = (cres->length + sizeof(void*)) / sizeof(void*) * sizeof(void*);
+    cres = psync_find_result(res, "currency", PARAM_STR);
+    currency = cres->str;
+    lcurrency = (cres->length + sizeof(void*)) / sizeof(void*) * sizeof(void*);
+    cres = psync_find_result(res, "language", PARAM_STR);
+    language = cres->str;
+    llanguage = (cres->length + sizeof(void*)) / sizeof(void*) * sizeof(void*);
+    info = (userinfo_t*)psync_malloc(sizeof(userinfo_t) + lemail + lcurrency + llanguage);
+    ptr = (char*)(info + 1);
+    memcpy(ptr, email, lemail);
+    info->email = ptr;
+    ptr += lemail;
+    memcpy(ptr, currency, lcurrency);
+    info->currency = ptr;
+    ptr += lcurrency;
+    memcpy(ptr, language, llanguage);
+    info->language = ptr;
+
+    info->cryptosetup = psync_find_result(res, "cryptosetup", PARAM_BOOL)->num;
+    info->cryptosubscription = psync_find_result(res, "cryptosubscription", PARAM_BOOL)->num;
+    info->cryptolifetime = psync_find_result(res, "cryptolifetime", PARAM_BOOL)->num;
+    info->emailverified = psync_find_result(res, "emailverified", PARAM_BOOL)->num;
+    info->usedpublinkbranding = psync_find_result(res, "usedpublinkbranding", PARAM_BOOL)->num;
+    info->haspassword = psync_find_result(res, "haspassword", PARAM_BOOL)->num;
+    info->premium = psync_find_result(res, "premium", PARAM_BOOL)->num;
+    info->premiumlifetime = psync_find_result(res, "premiumlifetime", PARAM_BOOL)->num;
+    info->business = psync_find_result(res, "business", PARAM_BOOL)->num;
+    info->haspaidrelocation = psync_find_result(res, "haspaidrelocation", PARAM_BOOL)->num;
+    cres = psync_check_result(res, "efh", PARAM_BOOL);
+    if (cres) info->efh = cres->num;
+    else info->efh = 0;
+    cres = psync_check_result(res, "premiumexpires", PARAM_NUM);
+    if (cres) info->premiumexpires = cres->num;
+    else info->premiumexpires = 0;
+    info->trashrevretentiondays = psync_find_result(res, "trashrevretentiondays", PARAM_NUM)->num;
+    info->plan = psync_find_result(res, "plan", PARAM_NUM)->num;
+    info->publiclinkquota = psync_find_result(res, "publiclinkquota", PARAM_NUM)->num;
+    info->userid = psync_find_result(res, "userid", PARAM_NUM)->num;
+    info->quota = psync_find_result(res, "quota", PARAM_NUM)->num;
+    info->usedquota = psync_find_result(res, "usedquota", PARAM_NUM)->num;
+    info->freequota = psync_find_result(res, "freequota", PARAM_NUM)->num;
+    info->registered = psync_find_result(res, "registered", PARAM_NUM)->num;
+    psync_free(res);
+    return info;
+  }
+
+  return NULL;
+}
+
+int psync_create_backend_event(const char* category, const char* action, const char* label, eventParams params, char *err)
+{
+  time_t rawtime;
+  time(&rawtime);
+  return create_backend_event(apiserver, category, action, label, psync_my_auth, P_OS_ID, rawtime, &params, &err);
+}
+/******************************************************************************************************************/
+void psync_init_data_event_handler(void* ptr) {
+  psync_init_data_event(ptr);
+}
+/******************************************************************************************************************/
