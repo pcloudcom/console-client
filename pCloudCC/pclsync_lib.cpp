@@ -170,6 +170,10 @@ static char const * status2string (uint32_t status){
 static void status_change(pstatus_t* status) {
   static int cryptocheck=0;
   static int mount_set=0;
+  
+  char *err;
+  err = (char*)malloc(1024);
+  
   std::cout << "Down: " <<  status->downloadstr << "| Up: " << status->uploadstr <<", status is " << status2string(status->status) << std::endl;
   *clib::pclsync_lib::get_lib().status_ = *status;
   if (status->status==PSTATUS_LOGIN_REQUIRED){
@@ -186,7 +190,13 @@ static void status_change(pstatus_t* status) {
     }
     else {
     std::cout << "registering" << std::endl;
-    if (psync_register(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(),1, NULL)){
+    if (psync_register(clib::pclsync_lib::get_lib().get_username().c_str(),
+                       clib::pclsync_lib::get_lib().get_password().c_str(),
+                       1,
+                       "bineapi.pcloud.com",
+                       2,
+                       &err)
+    ){
       std::cout << "both login and registration failed" << std::endl;
       exit(1);
     }
@@ -229,11 +239,14 @@ int clib::pclsync_lib::list_sync_folders (const char* path, void * rep) {
   memcpy(rep, folders, sizeof(folders));
   
 }
-static const std::string client_name = " Console Client v.2.0.1";
+static const std::string client_name = "pCloud CC v3.0.0";
 int clib::pclsync_lib::init()//std::string& username, std::string& password, std::string* crypto_pass, int setup_crypto, int usesrypto_userpass)
 {
-  std::string software_string = exec("lsb_release -ds");
-  psync_set_software_string(software_string.append(client_name).c_str());
+  std::string software_string;
+  //std::string software_string = exec("lsb_release -ds");
+
+  psync_set_software_string(client_name.c_str());
+
   if (setup_crypto_ && crypto_pass_.empty() )
     return 3;
  

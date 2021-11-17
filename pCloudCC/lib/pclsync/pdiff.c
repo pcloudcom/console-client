@@ -261,6 +261,8 @@ static psync_socket *get_connected_socket(){
   debug(D_NOTICE, "using deviceid %s", deviceid);
   appversion=psync_appname();
   devicestring=psync_device_string();
+  
+  debug(D_NOTICE, "BOBO: AppVersion: [%s]", appversion);
 
   while (1){
     psync_free(auth);
@@ -319,27 +321,37 @@ static psync_socket *get_connected_socket(){
     osversion=psync_deviceos();
 
     if (psync_my_2fa_token && psync_my_2fa_code_type && psync_my_2fa_code[0]){
+      debug(D_NOTICE, "BOBO: 2fa.");
+      
       const char *method=psync_my_2fa_code_type==1?"tfa_login":"tfa_loginwithrecoverycode";
       binparam params[]={P_STR("timeformat", "timestamp"),
-                        P_STR("token", psync_my_2fa_token),
-                        P_STR("code", psync_my_2fa_code),
-                        P_BOOL("trustdevice", psync_my_2fa_trust),
-                        P_STR("osversion", osversion),
-                        P_STR("appversion", appversion),
-                        P_STR("deviceid", deviceid),
-                        P_STR("device", devicestring),
-                        P_BOOL("getauth", 1),
-                        P_BOOL("cryptokeyssign", 1),
-                        P_BOOL("getapiserver", 1),
-						            P_BOOL("getlastsubscription", 1),
-                        P_NUM("os", P_OS_ID)};
+                         P_STR("token", psync_my_2fa_token),
+                         P_STR("code", psync_my_2fa_code),
+                         P_BOOL("trustdevice", psync_my_2fa_trust),
+                         P_STR("osversion", osversion),
+                         P_STR("appversion", appversion),
+                         P_STR("deviceid", deviceid),
+                         P_STR("device", devicestring),
+                         P_BOOL("getauth", 1),
+                         P_BOOL("cryptokeyssign", 1),
+                         P_BOOL("getapiserver", 1),
+			 P_BOOL("getlastsubscription", 1),
+                         P_NUM("os", P_OS_ID)};
       res=send_command(sock, method, params);
     }
     else if (user && pass && pass[0]){
-      if (digest)
+      debug(D_NOTICE, "BOBO: Got user [%s], pass [%s]!", user, pass);
+      if (digest){
+	debug(D_NOTICE, "BOBO: Digest. ApiServer: [%s]", apiserver);
+	debug(D_NOTICE, "BOBO: Osversion: [%s], AppVersion: [%s], DeviceId: [%s], DeviceString: [%s]", osversion, appversion, deviceid, devicestring);
         res=get_userinfo_user_pass(sock, user, pass, osversion, appversion, deviceid, devicestring);
+      }
       else{
-        binparam params[]={P_STR("timeformat", "timestamp"),
+	debug(D_NOTICE, "BOBO: Send login. user:[%s], pass:[%s]", user, pass);
+	debug(D_NOTICE, "BOBO: Send login. OSversion:[%s], AppVersion:[%s]", osversion, appversion);
+	debug(D_NOTICE, "BOBO: Send login. deviceid:[%s], devicestring:[%s]", deviceid, devicestring);
+
+	binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("username", user),
                          P_STR("password", pass),
                          P_STR("osversion", osversion),
@@ -355,6 +367,8 @@ static psync_socket *get_connected_socket(){
       }
     }
     else {
+      debug(D_NOTICE, "BOBO: Userinfo.");
+
       binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", auth),
                          P_STR("osversion", osversion),
@@ -364,11 +378,12 @@ static psync_socket *get_connected_socket(){
                          P_BOOL("getauth", 1),
                          P_BOOL("cryptokeyssign", 1),
                          P_BOOL("getapiserver", 1),
-						 P_BOOL("getlastsubscription", 1),
+			 P_BOOL("getlastsubscription", 1),
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
     psync_free(osversion);
+  
     if (unlikely_log(!res)){
       psync_socket_close(sock);
       psync_set_status(PSTATUS_TYPE_ONLINE, PSTATUS_ONLINE_OFFLINE);
@@ -376,8 +391,12 @@ static psync_socket *get_connected_socket(){
       psync_api_conn_fail_inc();
       continue;
     }
+
+    debug(D_NOTICE, "BOBO: Reset API connection.");
+
     psync_api_conn_fail_reset();
     result=psync_find_result(res, "result", PARAM_NUM)->num;
+
     if (unlikely(result)){
       debug(D_NOTICE, "userinfo returned error %lu %s", (unsigned long)result, psync_find_result(res, "error", PARAM_STR)->str);
       // here we only handle statuses that need to access the result
@@ -407,7 +426,10 @@ static psync_socket *get_connected_socket(){
 		cres=psync_check_result(res, "location", PARAM_HASH);
 		if (cres){
 		  binapi=psync_strdup(psync_find_result(cres, "binapi", PARAM_STR)->str);
-          locationid=psync_find_result(cres, "id", PARAM_NUM)->num;
+		  
+		  debug(D_NOTICE, "BOBO: Wring server. Suggested server: [%s]", binapi);
+		  
+                  locationid=psync_find_result(cres, "id", PARAM_NUM)->num;
 		  psync_set_apiserver(binapi,locationid);
 		}
 		psync_socket_close(sock);
