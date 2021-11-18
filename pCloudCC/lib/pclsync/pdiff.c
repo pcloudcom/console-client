@@ -146,19 +146,27 @@ static binresult *get_userinfo_user_pass(psync_socket *sock, const char *usernam
   size_t ul, i;
   unsigned char sha1bin[PSYNC_SHA1_DIGEST_LEN];
   char sha1hex[PSYNC_SHA1_DIGEST_HEXLEN];
+
   res=send_command(sock, "getdigest", empty_params);
+
   if (!res)
     return res;
+
   if (psync_find_result(res, "result", PARAM_NUM)->num!=0){
     psync_free(res);
     return NULL;
   }
+
   dig=psync_find_result(res, "digest", PARAM_STR);
+
   debug(D_NOTICE, "got digest %s", dig->str);
+
   ul=strlen(username);
   uc=psync_new_cnt(unsigned char, ul);
+
   for (i=0; i<ul; i++)
     uc[i]=tolower(username[i]);
+
   psync_sha1(uc, ul, sha1bin);
   psync_free(uc);
   psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
@@ -168,7 +176,9 @@ static binresult *get_userinfo_user_pass(psync_socket *sock, const char *usernam
   psync_sha1_update(&ctx, dig->str, dig->length);
   psync_sha1_final(sha1bin, &ctx);
   psync_binhex(sha1hex, sha1bin, PSYNC_SHA1_DIGEST_LEN);
+
   ret=get_userinfo_user_digest(sock, username, ul, sha1hex, dig->str, dig->length, osversion, appversion, deviceid, devicestring);
+
   psync_free(res);
   return ret;
 }
@@ -261,8 +271,6 @@ static psync_socket *get_connected_socket(){
   debug(D_NOTICE, "using deviceid %s", deviceid);
   appversion=psync_appname();
   devicestring=psync_device_string();
-  
-  debug(D_NOTICE, "BOBO: AppVersion: [%s]", appversion);
 
   while (1){
     psync_free(auth);
@@ -321,8 +329,6 @@ static psync_socket *get_connected_socket(){
     osversion=psync_deviceos();
 
     if (psync_my_2fa_token && psync_my_2fa_code_type && psync_my_2fa_code[0]){
-      debug(D_NOTICE, "BOBO: 2fa.");
-      
       const char *method=psync_my_2fa_code_type==1?"tfa_login":"tfa_loginwithrecoverycode";
       binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("token", psync_my_2fa_token),
@@ -340,17 +346,10 @@ static psync_socket *get_connected_socket(){
       res=send_command(sock, method, params);
     }
     else if (user && pass && pass[0]){
-      debug(D_NOTICE, "BOBO: Got user [%s], pass [%s]!", user, pass);
       if (digest){
-	debug(D_NOTICE, "BOBO: Digest. ApiServer: [%s]", apiserver);
-	debug(D_NOTICE, "BOBO: Osversion: [%s], AppVersion: [%s], DeviceId: [%s], DeviceString: [%s]", osversion, appversion, deviceid, devicestring);
         res=get_userinfo_user_pass(sock, user, pass, osversion, appversion, deviceid, devicestring);
       }
       else{
-	debug(D_NOTICE, "BOBO: Send login. user:[%s], pass:[%s]", user, pass);
-	debug(D_NOTICE, "BOBO: Send login. OSversion:[%s], AppVersion:[%s]", osversion, appversion);
-	debug(D_NOTICE, "BOBO: Send login. deviceid:[%s], devicestring:[%s]", deviceid, devicestring);
-
 	binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("username", user),
                          P_STR("password", pass),
@@ -361,14 +360,12 @@ static psync_socket *get_connected_socket(){
                          P_BOOL("getauth", 1),
                          P_BOOL("cryptokeyssign", 1),
                          P_BOOL("getapiserver", 1),
-						 P_BOOL("getlastsubscription", 1),
+			 P_BOOL("getlastsubscription", 1),
                          P_NUM("os", P_OS_ID)};
         res=send_command(sock, "login", params);
       }
     }
     else {
-      debug(D_NOTICE, "BOBO: Userinfo.");
-
       binparam params[]={P_STR("timeformat", "timestamp"),
                          P_STR("auth", auth),
                          P_STR("osversion", osversion),
@@ -382,6 +379,7 @@ static psync_socket *get_connected_socket(){
                          P_NUM("os", P_OS_ID)};
       res=send_command(sock, "userinfo", params);
     }
+
     psync_free(osversion);
   
     if (unlikely_log(!res)){
@@ -391,8 +389,6 @@ static psync_socket *get_connected_socket(){
       psync_api_conn_fail_inc();
       continue;
     }
-
-    debug(D_NOTICE, "BOBO: Reset API connection.");
 
     psync_api_conn_fail_reset();
     result=psync_find_result(res, "result", PARAM_NUM)->num;
@@ -404,38 +400,40 @@ static psync_socket *get_connected_socket(){
         psync_free(psync_my_2fa_token);
         psync_my_2fa_token=psync_strdup(psync_find_result(res, "token", PARAM_STR)->str);
         psync_my_2fa_has_devices=psync_find_result(res, "hasdevices", PARAM_BOOL)->num;
-		psync_my_2fa_type=psync_find_result(res, "tfatype", PARAM_NUM)->num;
+	psync_my_2fa_type=psync_find_result(res, "tfatype", PARAM_NUM)->num;
         psync_my_2fa_code_type=0;
         psync_my_2fa_code[0]=0;
         psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_TFAREQ);
         psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
-		psync_socket_close(sock);
-		psync_free(res);
+	psync_socket_close(sock);
+	psync_free(res);
         continue;
       }
-	  if (result==2306){
-		psync_free(psync_my_verify_token);
-		psync_my_verify_token = psync_strdup(psync_find_result(res, "verifytoken", PARAM_STR)->str);
-		psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_VERIFYREQ);
-		psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
-		psync_socket_close(sock);
-		psync_free(res);
-		continue;
-	  }
-	  if (result==2321){
-		cres=psync_check_result(res, "location", PARAM_HASH);
-		if (cres){
-		  binapi=psync_strdup(psync_find_result(cres, "binapi", PARAM_STR)->str);
-		  
-		  debug(D_NOTICE, "BOBO: Wring server. Suggested server: [%s]", binapi);
-		  
-                  locationid=psync_find_result(cres, "id", PARAM_NUM)->num;
-		  psync_set_apiserver(binapi,locationid);
-		}
-		psync_socket_close(sock);
-		psync_free(res);
-		continue;
-	  }
+
+      if (result==2306){
+	psync_free(psync_my_verify_token);
+	psync_my_verify_token = psync_strdup(psync_find_result(res, "verifytoken", PARAM_STR)->str);
+	psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_VERIFYREQ);
+	psync_wait_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_PROVIDED);
+	psync_socket_close(sock);
+	psync_free(res);
+	continue;
+      }
+
+      if (result==2321){
+	cres=psync_check_result(res, "location", PARAM_HASH);
+	if (cres){
+	  binapi=psync_strdup(psync_find_result(cres, "binapi", PARAM_STR)->str);
+  
+          locationid=psync_find_result(cres, "id", PARAM_NUM)->num;
+	  psync_set_apiserver(binapi,locationid);
+	}
+
+	psync_socket_close(sock);
+	psync_free(res);
+	continue;
+    }
+
     if(result==2330){
 	    psync_set_apiserver(PSYNC_API_HOST, PSYNC_LOCATIONID_DEFAULT);
       psync_set_status(PSTATUS_TYPE_AUTH, PSTATUS_AUTH_RELOCATING);
@@ -444,8 +442,10 @@ static psync_socket *get_connected_socket(){
 	    psync_free(res);
       continue;
     }
-	psync_socket_close(sock);
-	psync_free(res);
+
+    psync_socket_close(sock);
+    psync_free(res);
+
     if (result==2000 || result==2012 || result==2064 || result==2074 || result==2092){
       psync_my_2fa_code_type=0;
       psync_my_2fa_code[0]=0;
