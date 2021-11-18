@@ -41,6 +41,7 @@
 #include "plocalscan.h"
 #include "pfileops.h"
 #include "ppathstatus.h"
+#include "ptools.h"
 
 typedef struct {
   psync_list list;
@@ -57,6 +58,14 @@ typedef struct {
   upload_list_t upllist;
   char filename[];
 } upload_task_t;
+
+typedef struct {
+  psync_folderid_t folderid;
+  psync_folderid_t newparentfolderid;
+  char* newName;
+  char* err_msg;
+  uint64_t err;
+} sync_err_struct;
 
 static pthread_mutex_t upload_mutex=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t upload_cond=PTHREAD_COND_INITIALIZER;
@@ -89,7 +98,6 @@ void psync_upload_dec_uploads(){
   pthread_mutex_unlock(&upload_mutex);
   psync_send_status_update();
 }
-
 void psync_upload_dec_uploads_cnt(uint32_t cnt){
   pthread_mutex_lock(&upload_mutex);
   psync_status.filesuploading-=cnt;
@@ -249,6 +257,7 @@ static int task_renamefile(uint64_t taskid, psync_syncid_t syncid, psync_fileid_
   psync_uint_row row;
   psync_fileid_t fileid;
   psync_folderid_t folderid;
+
   if (task_wait_no_uploads(taskid))
     return -1;
   res=psync_sql_query_rdlock("SELECT fileid FROM localfile WHERE id=?");
@@ -271,32 +280,112 @@ static int task_renamefile(uint64_t taskid, psync_syncid_t syncid, psync_fileid_
   else
     return task_renameremotefile(fileid, folderid, newname);
 }
+/****************************************************************************/
+int handle_api_errors(sync_err_struct *err_struct) {
+  int ret = -1;
+  event_data_struct *event_data;
+  psync_syncid_t syncId;
+  char* syncFolder;
+  char* folder;
 
+  debug(D_NOTICE, "Process error.");
+
+  if(err_struct->err) {
+    debug(D_NOTICE, "Eror code: [%lu]", err_struct->err);
+  }
+  
+  if (err_struct->folderid) {
+    debug(D_NOTICE, "Folder Id: [%lu]", err_struct->folderid);
+  }
+  
+  if (err_struct->newparentfolderid) {
+    debug(D_NOTICE, "New Parent Folder Id: [%lu]", err_struct->newparentfolderid);
+  }
+  
+  if (err_struct->newName) {
+    debug(D_NOTICE, "New folder name: [%s]", err_struct->newName);
+  }
+
+  if (err_struct->err_msg) {
+    debug(D_NOTICE, "Error message: [%s]", err_struct->err_msg);
+  }
+
+  switch (err_struct->err) {
+    case BEAPI_ERR_MV_TOO_MANY_IN_SHA:
+      debug(D_NOTICE, "Critical sync error. Stopping the sync.");
+
+      syncId = get_sync_id_from_fid(err_struct->folderid);
+      syncFolder = get_sync_folder_by_syncid(syncId);
+      folder = get_folder_name_from_path(syncFolder);
+
+      debug(D_NOTICE, "Got sync path: [%s] Sync folder: [%s]", syncFolder, folder);
+
+      event_data = psync_new(event_data_struct);
+      event_data->eventid = PEVENT_SYNC_RENAME_F;
+      event_data->str1 = strdup(err_struct->newName);
+      event_data->str2 = folder;
+      event_data->uint1 = err_struct->folderid;
+      event_data->uint2 = err_struct->newparentfolderid;
+
+      psync_delete_sync(syncId);
+      
+      psync_send_data_event(event_data);
+
+      psync_free(event_data);
+      break;
+
+    default: ret = -1;
+  }
+  
+  return ret;
+}
+/******************************************************************************/
 static int task_renameremotefolder(psync_folderid_t folderid, psync_folderid_t newparentfolderid, const char *newname){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("folderid", folderid), P_NUM("tofolderid", newparentfolderid), P_STR("toname", newname),
                      P_STR("timeformat", "timestamp")};
   binresult *res;
   uint64_t result;
+  sync_err_struct err_struct = {0, 0,  "", "", 0,};
   int ret;
+
+  //err_struct = (sync_err_struct*)(sizeof(sync_err_struct));
+
   res=psync_api_run_command("renamefolder", params);
+
   if (unlikely(!res))
     return -1;
+
   result=psync_find_result(res, "result", PARAM_NUM)->num;
+
   if (likely(!result)){
     ret=0;
+
     debug(D_NOTICE, "remote folderid %lu moved/renamed to (%lu)/%s", (long unsigned)folderid, (long unsigned)newparentfolderid, newname);
+
     if (!psync_sql_start_transaction()){
       psync_ops_update_folder_in_db(psync_find_result(res, "metadata", PARAM_HASH));
       psync_sql_commit_transaction();
     }
+
     psync_diff_wake();
   }
   else{
+    /*
     ret=-1;
     psync_process_api_error(result);
     debug(D_NOTICE, "command renamefolder returned %lu: %s", (unsigned long)result, psync_find_result(res, "error", PARAM_STR)->str);
+    */
+    err_struct.newName = strdup(newname);
+    err_struct.err     = result;
+    err_struct.err_msg = psync_find_result(res, "error", PARAM_STR)->str;
+    err_struct.folderid = folderid;
+    err_struct.newparentfolderid = newparentfolderid;
+
+    ret = handle_api_errors(&err_struct);
   }
+
   psync_free(res);
+
   return ret;
 }
 
@@ -392,7 +481,7 @@ static int copy_file(psync_fileid_t fileid, uint64_t hash, psync_folderid_t fold
   return 1;
 }
 
-static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid){
+static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid, psync_stat_t* st){
   psync_sql_res *res;
   psync_uint_row row;
   psync_fileid_t fileid;
@@ -411,6 +500,9 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
       if (filesize==fsize && !memcmp(hashhex, shashhex, PSYNC_HASH_DIGEST_HEXLEN)){
         debug(D_NOTICE, "file %lu/%s already exists and matches local checksum, not doing anything", (unsigned long)folderid, name);
         set_local_file_remote_id(localfileid, fileid, hash);
+
+        set_be_file_dates(fileid, psync_stat_ctime(st), psync_stat_mtime(st));
+
         return 1;
       }
       else
@@ -425,8 +517,7 @@ static int check_file_if_exists(const unsigned char *hashhex, uint64_t fsize, ps
   return 0;
 }
 
-static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid,
-                               psync_stat_t *st){
+static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psync_folderid_t folderid, const char *name, psync_fileid_t localfileid, psync_stat_t *st){
   binparam params[]={P_STR("auth", psync_my_auth), P_NUM("size", fsize), P_LSTR(PSYNC_CHECKSUM, hashhex, PSYNC_HASH_DIGEST_HEXLEN), P_STR("timeformat", "timestamp")};
   binresult *res;
   const binresult *metas, *meta;
@@ -449,10 +540,15 @@ static int copy_file_if_exists(const unsigned char *hashhex, uint64_t fsize, psy
   }
   meta=metas->array[0];
   ret=copy_file(psync_find_result(meta, "fileid", PARAM_NUM)->num, psync_find_result(meta, "hash", PARAM_NUM)->num, folderid, name, localfileid, st);
-  if (ret==1)
+
+  if (ret==1){
     debug(D_NOTICE, "file %lu/%s copied to %lu/%s instead of uploading due to matching checksum",
           (long unsigned)psync_find_result(meta, "parentfolderid", PARAM_NUM)->num, psync_find_result(meta, "name", PARAM_STR)->str,
           (long unsigned)folderid, name);
+  }
+
+
+
   psync_free(res);
   return ret;
 }
@@ -1170,12 +1266,13 @@ static int task_uploadfile(psync_syncid_t syncid, psync_folderid_t localfileid, 
     }
     psync_sql_free_result(res);
   }
-  ret=check_file_if_exists(hashhex, fsize, folderid, name, localfileid);
+  ret=check_file_if_exists(hashhex, fsize, folderid, name, localfileid, &st);
   /* PSYNC_MIN_SIZE_FOR_EXISTS_CHECK should be low enough not to waste bandwidth and high enough
    * not to waste a roundtrip to the server. Few kilos should be fine
    */
   if (ret==0 && fsize>=PSYNC_MIN_SIZE_FOR_EXISTS_CHECK)
     ret=copy_file_if_exists(hashhex, fsize, folderid, name, localfileid, &st);
+
   if (ret==1 || ret==-1){
     psync_unlock_file(lock);
     psync_free(nname);
@@ -1460,14 +1557,18 @@ void psync_delete_upload_tasks_for_file(psync_fileid_t localfileid){
 void psync_stop_sync_upload(psync_syncid_t syncid){
   upload_list_t *upl;
   psync_sql_res *res;
+
   res=psync_sql_prep_statement("DELETE FROM task WHERE syncid=? AND type&"NTO_STR(PSYNC_TASK_DWLUPL_MASK)"="NTO_STR(PSYNC_TASK_UPLOAD));
   psync_sql_bind_uint(res, 1, syncid);
   psync_sql_run_free(res);
+
   pthread_mutex_lock(&current_uploads_mutex);
   psync_list_for_each_element(upl, &uploads, upload_list_t, list)
     if (upl->syncid==syncid)
       upl->stop=1;
+
   pthread_mutex_unlock(&current_uploads_mutex);
+
   psync_status_recalc_to_upload_async();
 }
 

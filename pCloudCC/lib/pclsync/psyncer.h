@@ -46,4 +46,6 @@ int psync_is_folder_in_downloadlist(psync_folderid_t folderid);
 int psync_str_is_prefix(const char *str1, const char *str2);
 void psync_syncer_check_delayed_syncs();
 
+int psync_left_str_is_prefix(const char* str1, const char* str2);
+
 #endif

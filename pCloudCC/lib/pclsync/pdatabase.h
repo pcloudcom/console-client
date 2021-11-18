@@ -43,7 +43,7 @@
 #define PSYNC_TEXT_COL "COLLATE NOCASE"
 #endif
 
-#define PSYNC_DATABASE_VERSION 18
+#define PSYNC_DATABASE_VERSION 22
 
 #define PSYNC_DATABASE_CONFIG \
 "\
@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS baccountemail (id INTEGER PRIMARY KEY, mail TEXT, fir
 CREATE TABLE IF NOT EXISTS baccountteam (id INTEGER PRIMARY KEY, name TEXT); \
 CREATE TABLE IF NOT EXISTS links ( \
 id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxspace INTEGER, \
-downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER, icon INTEGER); \
+downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER, icon INTEGER, fulllink VARCHAR(2048), \
+parentfolderid INTEGER, haspassword INTEGER, type INTEGER, views INTEGER, expire INTEGER, enableuploadforchosenusers INTEGER, enableuploadforeveryone INTEGER); \
 CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY, mail varchar(2048), name TEXT); \
 INSERT OR IGNORE INTO folder (id, name) VALUES (0, '');\
 INSERT OR IGNORE INTO localfolder (id) VALUES (0);\
@@ -271,6 +272,29 @@ COMMIT;",
 "BEGIN;\
 CREATE TABLE IF NOT EXISTS devices (id INTEGER PRIMARY KEY, last_path VARCHAR(1024), type INTEGER, vendor VARCHAR(2048), product VARCHAR(2048), device_id VARCHAR(4096),\
   connected INTEGER, enabled INTEGER); \
+COMMIT;",
+"BEGIN;\
+UPDATE setting SET value=19 WHERE id='dbversion'; \
+UPDATE setting SET value=0 WHERE id='diffid'; \
+COMMIT;",
+"BEGIN;\
+ALTER TABLE links ADD fulllink VARCHAR(2048); \
+UPDATE setting SET value=20 WHERE id='dbversion'; \
+COMMIT;",
+"BEGIN;\
+ALTER TABLE links ADD parentfolderid INTEGER; \
+ALTER TABLE links ADD haspassword INTEGER; \
+ALTER TABLE links ADD type INTEGER; \
+ALTER TABLE links ADD views INTEGER; \
+UPDATE setting SET value=21 WHERE id='dbversion'; \
+COMMIT;",
+"BEGIN;\
+DROP TABLE links; \
+CREATE TABLE IF NOT EXISTS links ( \
+id INTEGER PRIMARY KEY, code VARCHAR(2048), comment TEXT, traffic INTEGER, maxspace INTEGER, \
+downloads INTEGER, created INTEGER, modified INTEGER, name VARCHAR(2048),  isfolder INTEGER, folderid INTEGER, fileid INTEGER, isincomming INTEGER, icon INTEGER, fulllink VARCHAR(2048), \
+parentfolderid INTEGER, haspassword INTEGER, type INTEGER, views INTEGER, expire INTEGER, enableuploadforchosenusers INTEGER, enableuploadforeveryone INTEGER); \
+UPDATE setting SET value=22 WHERE id='dbversion'; \
 COMMIT;"
 };
 

@@ -215,6 +215,7 @@ binresult *psync_do_api_run_command(const char *command, size_t cmdlen, const bi
   binresult *ret;
   int tries;
   tries=0;
+
   do {
     api=psync_apipool_get();
     if (unlikely(!api))
@@ -229,7 +230,9 @@ binresult *psync_do_api_run_command(const char *command, size_t cmdlen, const bi
     }
     psync_apipool_release_bad(api);
   } while (++tries<=PSYNC_RETRY_REQUEST);
+
   psync_timer_notify_exception();
+
   return NULL;
 }
 
@@ -808,7 +811,7 @@ int psync_set_default_sendbuf(psync_socket *sock){
   return 0;
 }
 
-int psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
+psync_int_t psync_socket_writeall_upload(psync_socket *sock, const void *buff, int num){
   psync_int_t uplspeed, writebytes, wr, wwr;
   psync_uint_t thissec;
   uplspeed=psync_setting_get_int(_PS(maxuploadspeed));

@@ -12,11 +12,11 @@ Also requires
 [CMake](https://cmake.org/) build system.  
 
 On Ubuntu you can run the following command:  
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev 
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev
 
 ## Build steps
 
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev git  
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev fuse build-essential git
 > mkdir console-client   
 > git clone https://github.com/pcloudcom/console-client.git ./console-client/  
 > cd ./console-client/pCloudCC/   
@@ -31,7 +31,7 @@ On Ubuntu you can run the following command:
 > cmake .    
 > make      
 > sudo make install     
-> ldconfig     
+> sudo ldconfig     
 > pcloudcc -u username -p       
 
 ## Usage
@@ -91,13 +91,17 @@ Or starting the daemon with -o. Test unlocking and locking crypto if you have su
 
 - Quit the client. Congratulations, your pcloud console client works properly.  You can now add “pcloudcc -u example@myemail.com -d” command in you startup scripts  and thous mount the file system on startup.  
 
+**Notice that stopping daemon will break pending background transfers!**
+
+Current version of `pcloudcc` doesn't support command to check if threre are pending transfers.
+Locally cached files are located under `~/.pcloud/Cache` dir. When there is only one file `~/.pcloud/Cache/cached` (ususally big sized) this mean that transfers are completed.
 
 ## Debian
 To create a debian package form the source use:  
 > debuild -i -us -uc -b  
 
 ## Pre-built packages
-- Ubunutu 18.04 64 bit
+- Ubuntu 18.04 64 bit
   [pcloudcc_2.1.0-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZvLyi7Zsz7t1H0aYIFiawL4LSgN3uxLBUJX)
 - Debian 9.9 64 bit
   [pcloudcc_2.1.0-1_amd64_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZYVyi7ZseHyB89XXK0lVAdyy0AwQYl7osU7)
@@ -107,9 +111,9 @@ To create a debian package form the source use:
 ## Older pre-built packages
 - Binary package 64 bit
   [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZv1aQ7ZkEd1Vr0gj3hTteoDtujd481o7amk)
-- Ubunutu 17.10 64 bit
+- Ubuntu 17.10 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.17.10.deb](https://my.pcloud.com/publink/show?code=XZFeaQ7ZH1nHUfK4MLzGdeCvmmJywBUFANyy)
-- Ubunutu 14.04 64 bit
+- Ubuntu 14.04 64 bit
   [pcloudcc_2.0.1-1_amd64_ubuntu.14.04.deb](https://my.pcloud.com/publink/show?code=XZSeaQ7ZFPq1g8oowJXyXap7KKzTtSKoACHy)
 
 

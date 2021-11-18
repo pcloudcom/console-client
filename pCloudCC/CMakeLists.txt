@@ -54,7 +54,7 @@ target_link_libraries(sqlite3 z dl)
 
 add_library(pcloudcc_lib SHARED pclsync_lib_c.cpp pclsync_lib.cpp control_tools.cpp ${OVERLAY_CLENT_PATH}/overlay_client.c ${OVERLAY_CLENT_PATH}/debug.c )
 
-target_link_libraries(pcloudcc_lib ${PCLSYNC_PATH}/libpsynclib.a  ${MBEDTLS_PATH}/library/libmbedtls.a fuse pthread sqlite3
+target_link_libraries(pcloudcc_lib ${PCLSYNC_PATH}/psynclib.a  ${MBEDTLS_PATH}/library/libmbedtls.a fuse pthread sqlite3 udev
 )
 
 add_executable(pcloudcc main.cpp)

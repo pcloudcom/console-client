@@ -1,7 +1,7 @@
 /* Copyright (c) 2014 Anton Titov.
  * Copyright (c) 2014 pCloud Ltd.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of pCloud Ltd nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,10 +28,14 @@
 #ifndef _PSYNC_LOCALSCAN_H
 #define _PSYNC_LOCALSCAN_H
 
+#include "psynclib.h"
+
 void psync_localscan_init();
 void psync_wake_localscan();
 void psync_restart_localscan();
 void psync_stop_localscan();
 void psync_resume_localscan();
-
+void psync_restat_sync_folders();
+void psync_restat_sync_folders_del(psync_syncid_t syncid);
+void psync_restat_sync_folders_add(psync_syncid_t syncid, const char *localpath);
 #endif

@@ -31,6 +31,7 @@
 #include "pp2p.h"
 #include "pfs.h"
 #include "ppagecache.h"
+#include "plocalscan.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -56,6 +57,9 @@ static void fsroot_change(){
   psync_fs_remount();
 }
 
+#define PSYNC_SETTING_owneremail       16
+#define PSYNC_SETTING_cryptosetup      17
+
 static psync_setting_t settings[]={
   {"usessl", psync_timer_do_notify_exception, NULL, {PSYNC_USE_SSL_DEFAULT}, PSYNC_TBOOL},
   {"saveauth", NULL, NULL, {1}, PSYNC_TBOOL},
@@ -68,7 +72,18 @@ static psync_setting_t settings[]={
   {"autostartfs", NULL, NULL, {PSYNC_AUTOSTARTFS_DEFAULT}, PSYNC_TBOOL},
   {"fscachesize", psync_pagecache_resize_cache, NULL, {PSYNC_FS_DEFAULT_CACHE_SIZE}, PSYNC_TNUMBER},
   {"fscachepath", NULL, NULL, {0}, PSYNC_TSTRING},
-  {"sleepstopcrypto", NULL, NULL, {PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP}, PSYNC_TBOOL}
+  {"sleepstopcrypto", NULL, NULL, {PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP}, PSYNC_TBOOL},
+  {"companyname", NULL, NULL, {0}, PSYNC_TSTRING},
+  {"owneruserid", NULL, NULL, {PSYNC_BACC_OWNERUSERID}, PSYNC_TNUMBER},
+  {"ownerfirstname", NULL, NULL, {0}, PSYNC_TSTRING},
+  {"ownerlastname", NULL, NULL, {0}, PSYNC_TSTRING},
+  {"owneremail", NULL, NULL, {0}, PSYNC_TSTRING},
+  {"owner_cryptosetup", NULL, NULL, {PSYNC_BACC_OWNER_CRYPTOSETUP}, PSYNC_TBOOL},
+  {"cryptov2isactive", NULL, NULL, {PSYNC_BACC_V2}, PSYNC_TBOOL},
+  {"hasactivesubscription", NULL, NULL, {0}, PSYNC_TBOOL},
+  {"api_server", NULL, NULL, {0}, PSYNC_TSTRING},
+  {"location_id", NULL, NULL, {PSYNC_LOCATIONID_DEFAULT}, PSYNC_TNUMBER},
+  {"ignorepaths", psync_wake_localscan, NULL, {0}, PSYNC_TSTRING}
 };
 
 void psync_settings_reset(){
@@ -94,6 +109,17 @@ void psync_settings_reset(){
   settings[_PS(fscachesize)].num=PSYNC_FS_DEFAULT_CACHE_SIZE;
   settings[_PS(fscachepath)].str=defaultcache;
   settings[_PS(sleepstopcrypto)].num=PSYNC_CRYPTO_DEFAULT_STOP_ON_SLEEP;
+  settings[_PS(companyname)].str=PSYNC_BACC_COMPANYNAME;
+  settings[_PS(owneruserid)].num=PSYNC_BACC_OWNERUSERID;
+  settings[_PS(ownerfirstname)].str=PSYNC_BACC_OWNERFIRSTNAME;
+  settings[_PS(ownerlastname)].str=PSYNC_BACC_OWNERLASTNAME;
+  settings[_PS(owneremail)].str=PSYNC_BACC_OWNEREMAIL;
+  settings[_PS(owner_cryptosetup)].num=PSYNC_BACC_OWNER_CRYPTOSETUP;
+  settings[_PS(cryptov2isactive)].num=PSYNC_BACC_V2;
+  settings[_PS(hasactivesubscription)].boolean=0;
+  settings[_PS(api_server)].str=PSYNC_API_HOST;
+  settings[_PS(location_id)].num=PSYNC_LOCATIONID_DEFAULT;
+  settings[_PS(ignorepaths)].str=PSYNC_IGNORE_PATHS_DEFAULT;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);
@@ -126,6 +152,17 @@ void psync_settings_init(){
   settings[_PS(ignorepatterns)].str=PSYNC_IGNORE_PATTERNS_DEFAULT;
   settings[_PS(fsroot)].str=defaultfs;
   settings[_PS(fscachepath)].str=defaultcache;
+  settings[_PS(companyname)].str=PSYNC_BACC_COMPANYNAME;
+  settings[_PS(owneruserid)].num=PSYNC_BACC_OWNERUSERID;
+  settings[_PS(ownerfirstname)].str=PSYNC_BACC_OWNERFIRSTNAME;
+  settings[_PS(ownerlastname)].str=PSYNC_BACC_OWNERLASTNAME;
+  settings[_PS(owneremail)].str=PSYNC_BACC_OWNEREMAIL;
+  settings[_PS(owner_cryptosetup)].num=PSYNC_BACC_OWNER_CRYPTOSETUP;
+  settings[_PS(cryptov2isactive)].num=PSYNC_BACC_V2;
+  settings[_PS(hasactivesubscription)].boolean=0;
+  settings[_PS(api_server)].str=PSYNC_API_HOST;
+  settings[_PS(location_id)].num=PSYNC_LOCATIONID_DEFAULT;
+  settings[_PS(ignorepaths)].str=PSYNC_IGNORE_PATHS_DEFAULT;
   for (i=0; i<ARRAY_SIZE(settings); i++){
     if (settings[i].type==PSYNC_TSTRING){
       settings[i].str=psync_strdup(settings[i].str);
@@ -275,6 +312,18 @@ int psync_setting_set_string(psync_settingid_t settingid, const char *value){
   if (settings[settingid].change_callback)
     settings[settingid].change_callback();
   psync_free_after_sec(oldval, 600);
+  return 0;
+}
+
+int psync_setting_reset(psync_settingid_t settingid){
+  switch (settingid) {
+    case _PS(ignorepatterns):
+      return psync_setting_set_string(_PS(ignorepatterns), PSYNC_IGNORE_PATTERNS_DEFAULT);
+    case _PS(ignorepaths):
+      return psync_setting_set_string(_PS(ignorepaths), PSYNC_IGNORE_PATHS_DEFAULT);
+    default:
+      return -1;
+  }
   return 0;
 }
 

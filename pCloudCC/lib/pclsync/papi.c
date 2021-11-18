@@ -105,20 +105,21 @@ static uint32_t connfailures=0;
 psync_socket *psync_api_connect(const char *hostname, int usessl){
   static time_t notuntil=0;
   psync_socket *ret;
-  if (psync_timer_time()>notuntil){
-    ret=psync_socket_connect(hostname, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+  const char *userapi = psync_setting_get_string(_PS(api_server));
+  if (psync_timer_time()>notuntil || !userapi){
+    ret = psync_socket_connect(hostname, usessl ? PSYNC_API_PORT_SSL : PSYNC_API_PORT, usessl);
     if (ret)
       return ret;
-    if (!strcmp(hostname, PSYNC_API_HOST))
+    if (!userapi || !strcmp(hostname, userapi))
       return NULL;
-    ret=psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+    ret=psync_socket_connect(userapi, usessl ? PSYNC_API_PORT_SSL : PSYNC_API_PORT, usessl);
     if (ret) {
-      debug(D_NOTICE, "failed to connect to %s, but was able to connect to %s", hostname, PSYNC_API_HOST);
-      notuntil=psync_timer_time()+1800;
+      debug(D_NOTICE, "failed to connect to %s, but was able to connect to %s", hostname, userapi);
+      notuntil = psync_timer_time() + 1800;
     }
     return ret;
   }
-  return psync_socket_connect(PSYNC_API_HOST, usessl?PSYNC_API_PORT_SSL:PSYNC_API_PORT, usessl);
+  return psync_socket_connect(userapi, usessl ? PSYNC_API_PORT_SSL : PSYNC_API_PORT, usessl);
 }
 
 void psync_api_conn_fail_inc(){
@@ -383,15 +384,21 @@ binresult *get_result(psync_socket *sock){
   unsigned char *data;
   binresult *res;
   uint32_t ressize;
-  if (unlikely_log(psync_socket_readall(sock, &ressize, sizeof(uint32_t))!=sizeof(uint32_t)))
+  
+  if (unlikely_log(psync_socket_readall(sock, &ressize, sizeof(uint32_t)) != sizeof(uint32_t))) {
     return NULL;
+  }
+  
   data=(unsigned char *)psync_malloc(ressize);
+  
   if (unlikely_log(psync_socket_readall(sock, data, ressize)!=ressize)){
     psync_free(data);
     return NULL;
   }
+  
   res=parse_result(data, ressize);
   psync_free(data);
+  
   return res;
 }
 
@@ -464,13 +471,18 @@ unsigned char *do_prepare_command(const char *command, size_t cmdlen, const binp
   plen=cmdlen+2;
   if (datalen!=-1)
     plen+=sizeof(uint64_t);
-  for (i=0; i<paramcnt; i++)
-    if (params[i].paramtype==PARAM_STR)
-      plen+=params[i].paramnamelen+params[i].opts+5; /* 1byte type+paramnamelen, nbytes paramnamelen, 4byte strlen, nbytes str */
-    else if (params[i].paramtype==PARAM_NUM)
-      plen+=params[i].paramnamelen+1+sizeof(uint64_t);
-    else if (params[i].paramtype==PARAM_BOOL)
-      plen+=params[i].paramnamelen+2;
+
+  for (i = 0; i < paramcnt; i++) {
+    if (params[i].paramtype == PARAM_STR) {
+      plen += params[i].paramnamelen + params[i].opts + 5; /* 1byte type+paramnamelen, nbytes paramnamelen, 4byte strlen, nbytes str */
+    }
+    else if (params[i].paramtype == PARAM_NUM) {
+      plen += params[i].paramnamelen + 1 + sizeof(uint64_t);
+    } 
+    else if (params[i].paramtype == PARAM_BOOL) {
+      plen += params[i].paramnamelen + 2;
+    }
+  }
   if (unlikely_log(plen>0xffff))
     return NULL;
   sdata=data=(unsigned char *)psync_malloc(plen+2+additionalalloc);
@@ -511,9 +523,13 @@ unsigned char *do_prepare_command(const char *command, size_t cmdlen, const binp
 binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdlen, const binparam *params, size_t paramcnt, int64_t datalen, int readres){
   unsigned char *sdata;
   size_t plen;
+
   sdata=do_prepare_command(command, cmdlen, params, paramcnt, datalen, 0, &plen);
-  if (!sdata)
+
+  if (!sdata) {
     return NULL;
+  }
+
   if (readres&2){
     if (unlikely_log(psync_socket_writeall_thread(sock, sdata, plen)!=plen)){
       psync_free(sdata);
@@ -527,36 +543,15 @@ binresult *do_send_command(psync_socket *sock, const char *command, size_t cmdle
     }
   }
   psync_free(sdata);
-  if (readres&1)
+  if (readres&1){
     return get_result(sock);
-  else
+  } else {
     return PTR_OK;
+  }
 }
 
-const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
+void psync_do_dump_binresult(const binresult *res, const char *file, const char *function, int unsigned line){
   uint32_t i;
-  if (unlikely(!res || res->type!=PARAM_HASH)){
-    if (D_CRITICAL<=DEBUG_LEVEL){
-      const char *nm="NULL";
-      if (res)
-        nm=type_names[res->type];
-      psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
-    }
-    return empty_types[type];
-  }
-  for (i=0; i<res->length; i++)
-    if (!strcmp(res->hash[i].key, name)){
-      if (likely(res->hash[i].value->type==type))
-        return res->hash[i].value;
-      else{
-        if (D_CRITICAL<=DEBUG_LEVEL)
-          psync_debug(file, function, line, D_CRITICAL, "type error for key %s, expected %s got %s", name, type_names[type], type_names[res->hash[i].value->type]);
-        return empty_types[type];
-      }
-    }
-  if (D_CRITICAL<=DEBUG_LEVEL)
-    psync_debug(file, function, line, D_CRITICAL, "could not find key %s", name);
-#if IS_DEBUG
   psync_debug(file, function, line, D_NOTICE, "dumping existing fields of the hash");
   for (i=0; i<res->length; i++)
     switch (res->hash[i].value->type){
@@ -582,6 +577,34 @@ const binresult *psync_do_find_result(const binresult *res, const char *name, ui
         psync_debug(file, function, line, D_NOTICE, "  %s=!unknown type %u", res->hash[i].key, (unsigned)res->hash[i].value->type);
         break;
     }
+}
+
+const binresult *psync_do_find_result(const binresult *res, const char *name, uint32_t type, const char *file, const char *function, int unsigned line){
+  uint32_t i;
+  if (unlikely(!res || res->type!=PARAM_HASH)){
+    if (D_CRITICAL<=DEBUG_LEVEL){
+      const char *nm="NULL";
+      if (res){
+        nm=type_names[res->type];
+      }
+      psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
+    }
+    return empty_types[type];
+  }
+  for (i=0; i<res->length; i++)
+    if (!strcmp(res->hash[i].key, name)){
+      if (likely(res->hash[i].value->type==type))
+        return res->hash[i].value;
+      else{
+        if (D_CRITICAL<=DEBUG_LEVEL)
+          psync_debug(file, function, line, D_CRITICAL, "type error for key %s, expected %s got %s", name, type_names[type], type_names[res->hash[i].value->type]);
+        return empty_types[type];
+      }
+    }
+  if (D_CRITICAL<=DEBUG_LEVEL)
+    psync_debug(file, function, line, D_CRITICAL, "could not find key %s", name);
+#if IS_DEBUG
+  psync_do_dump_binresult(res, file, function, line);
 #endif
   return empty_types[type];
 }
@@ -607,5 +630,22 @@ const binresult *psync_do_check_result(const binresult *res, const char *name, u
         return NULL;
       }
     }
+  return NULL;
+}
+
+const binresult *psync_do_get_result(const binresult *res, const char *name, const char *file, const char *function, int unsigned line){
+  uint32_t i;
+  if (unlikely(!res || res->type!=PARAM_HASH)){
+    if (D_CRITICAL<=DEBUG_LEVEL){
+      const char *nm="NULL";
+      if (res)
+        nm=type_names[res->type];
+      psync_debug(file, function, line, D_CRITICAL, "expecting hash as first parameter, got %s", nm);
+    }
+    return NULL;
+  }
+  for (i=0; i<res->length; i++)
+    if (!strcmp(res->hash[i].key, name))
+      return res->hash[i].value;
   return NULL;
 }

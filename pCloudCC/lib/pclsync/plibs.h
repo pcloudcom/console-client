@@ -62,6 +62,8 @@
 #undef assert
 #endif
 
+#define PSYNC_SSL_DEBUG_LEVEL 0 /* Please make sure this setting is always set to 0 for release builds !!! Possible values are in the range [0, 5] */
+
 #define debug(level, ...) do {if (level<=DEBUG_LEVEL) psync_debug(__FILE__, __FUNCTION__, __LINE__, level, __VA_ARGS__);} while (0)
 #define assert(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion %s failed, aborting", TO_STR(cond)); abort();}} while (0)
 #define assertw(cond) do {if (D_WARNING<=DEBUG_LEVEL && unlikely(!(cond))) { debug(D_WARNING, "assertion %s failed", TO_STR(cond));}} while (0)
@@ -188,7 +190,8 @@ typedef void (*psync_transaction_callback_t)(void *);
 extern int psync_do_run;
 extern int psync_recache_contacts;
 extern pstatus_t psync_status;
-extern char psync_my_auth[64], *psync_my_user, *psync_my_pass;
+extern char psync_my_auth[64], psync_my_2fa_code[32], *psync_my_user, *psync_my_pass, *psync_my_2fa_token, *psync_my_verify_token;
+extern int psync_my_2fa_code_type, psync_my_2fa_trust, psync_my_2fa_has_devices, psync_my_2fa_type;
 extern uint64_t psync_my_userid;
 extern pthread_mutex_t psync_my_auth_mutex;
 extern PSYNC_THREAD uint32_t psync_error;
@@ -385,5 +388,4 @@ static inline size_t psync_strlcpy(char *dst, const char *src, size_t size){
   else
     return 0;
 }
-
 #endif

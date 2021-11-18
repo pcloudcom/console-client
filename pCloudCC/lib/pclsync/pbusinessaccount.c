@@ -66,8 +66,6 @@ static void init_param_num(binparam* t, const char *name, uint64_t val) {
 static int handle_result(const binresult *bres, uint64_t result, char **err)
 {
   const char *errorret = 0;
-
-
   errorret = psync_find_result(bres, "error", PARAM_STR)->str;
   if(strlen(errorret) == 0)
     errorret = psync_find_result(bres, "message", PARAM_STR)->str;

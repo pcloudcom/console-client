@@ -28,6 +28,7 @@
 #define FUSE_USE_VERSION 26
 #define _FILE_OFFSET_BITS 64
 
+#include <stdlib.h>
 #include <pthread.h>
 #include <fuse.h>
 #include <errno.h>
@@ -123,6 +124,8 @@ static int waitingforlogin=0;
 
 static uid_t myuid=0;
 static gid_t mygid=0;
+
+extern int errno;
 
 static psync_tree *openfiles=PSYNC_TREE_EMPTY;
 
@@ -1199,6 +1202,12 @@ static int psync_fs_open(const char *path, struct fuse_file_info *fi){
     psync_free(fpath);
     return -EACCES;
   }
+  // even if there are existing files there, just don't allow opening those
+  if (fpath->flags&(PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE)){
+    psync_sql_unlock();
+    psync_free(fpath);
+    return -EACCES;
+  }
   folder=psync_fstask_get_or_create_folder_tasks_locked(fpath->folderid);
   row=NULL;
   if ((cr=psync_fstask_find_creat(folder, fpath->name, 0))){
@@ -1502,7 +1511,7 @@ static int psync_fs_creat(const char *path, mode_t mode, struct fuse_file_info *
   }
   if (unlikely(psync_fs_need_per_folder_refresh_const() && !strncmp(psync_fake_prefix, fpath->name, psync_fake_prefix_len)))
     return psync_fs_creat_fake_locked(fpath, fi);
-  if (!(fpath->permissions&PSYNC_PERM_CREATE)){
+  if (!(fpath->permissions&PSYNC_PERM_CREATE) || (fpath->flags&(PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE))){
     psync_sql_unlock();
     psync_free(fpath);
     return -EACCES;
@@ -2338,6 +2347,8 @@ static int psync_fs_mkdir(const char *path, mode_t mode){
     ret=-ENOENT;
   else if (!(fpath->permissions&PSYNC_PERM_CREATE))
     ret=-EACCES;
+  else if (fpath->flags&(PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE))
+    ret=-EACCES;
   else if (fpath->flags&PSYNC_FOLDER_FLAG_ENCRYPTED && psync_crypto_isexpired())
     ret=-PSYNC_FS_ERR_CRYPTO_EXPIRED;
   else
@@ -2425,6 +2436,13 @@ static int psync_fs_unlink(const char *path){
   else
     ret=psync_fstask_unlink(fpath->folderid, fpath->name);
   psync_sql_unlock();
+
+  if ((fpath->flags & PSYNC_FOLDER_FLAG_BACKUP) && ret == 0) {
+    //Send async event to UI to notify the user that he is deleting a backedup file.
+    debug(D_NOTICE, "Backedup file deleted in P drive. Send event. Flags: [%d]", fpath->flags);
+    psync_run_thread1("psync_async_sync_delete", psync_async_ui_callback, PEVENT_BKUP_F_DEL_DRIVE);
+  }
+
   psync_free(fpath);
   debug(D_NOTICE, "unlink %s=%d", path, ret);
   return ret;
@@ -2593,32 +2611,45 @@ static int psync_fs_is_folder_nonempty(psync_fsfolderid_t folderid){
   return 0;
 }
 
-static int psync_fs_is_nonempty_folder(psync_fsfolderid_t folderid, const char *name){
+static int psync_fs_is_nonempty_folder(psync_fsfolderid_t parent_folderid, const char *name){
   psync_fstask_folder_t *folder;
   psync_fstask_mkdir_t *mk;
   psync_sql_res *res;
   psync_uint_row row;
   int ret;
-  folder=psync_fstask_get_folder_tasks_locked(folderid);
+
+  folder=psync_fstask_get_folder_tasks_locked(parent_folderid);
+
   if (folder){
-    if ((mk=psync_fstask_find_mkdir(folder, name, 0)))
-      ret=psync_fs_is_folder_nonempty(mk->folderid)+1;
-    else if (psync_fstask_find_rmdir(folder, name, 0))
-      ret=1;
-    else
-      ret=0;
+    if ((mk = psync_fstask_find_mkdir(folder, name, 0))) {
+      ret = psync_fs_is_folder_nonempty(mk->folderid) + 1;
+    }
+    else if (psync_fstask_find_rmdir(folder, name, 0)) {
+      ret = 1;
+    }
+    else {
+      ret = 0;
+    }
+
     psync_fstask_release_folder_tasks_locked(folder);
+
     if (ret)
       return ret-1;
   }
+
   res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
-  psync_sql_bind_uint(res, 1, folderid);
+  psync_sql_bind_uint(res, 1, parent_folderid);
   psync_sql_bind_string(res, 2, name);
-  if ((row=psync_sql_fetch_rowint(res)))
-    ret=psync_fs_is_folder_nonempty(row[0]);
-  else
+  
+  if ((row = psync_sql_fetch_rowint(res))) {
+    ret = psync_fs_is_folder_nonempty(row[0]);
+  }
+  else{
     ret=0;
+  }
+
   psync_sql_free_result(res);
+
   return ret;
 }
 
@@ -2630,7 +2661,12 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   psync_fstask_creat_t *creat;
   psync_uint_row row;
   psync_fileorfolderid_t fid;
+  uint64_t flags;
+
+  psync_fsfolderid_t new_fid, old_fid;
+
   int ret;
+
   psync_fs_set_thread_name();
   debug(D_NOTICE, "rename %s to %s", old_path, new_path);
   folder=NULL;
@@ -2638,22 +2674,38 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
   CHECK_LOGIN_LOCKED();
   fold_path=psync_fsfolder_resolve_path(old_path);
   fnew_path=psync_fsfolder_resolve_path(new_path);
+
   if (!fold_path || !fnew_path)
     goto err_enoent;
+  
   if ((fold_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)!=(fnew_path->flags&PSYNC_FOLDER_FLAG_ENCRYPTED)){
     ret=-PSYNC_FS_ERR_MOVE_ACROSS_CRYPTO;
     goto finish;
   }
+  
+  if (fold_path->folderid!=fnew_path->folderid && ((fold_path->flags|fnew_path->flags)&(PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE))){
+    ret=-EACCES;
+    goto finish;
+  }
+  
   folder=psync_fstask_get_folder_tasks_locked(fold_path->folderid);
+
+  new_fid = psync_get_folderid(fnew_path->folderid, fnew_path->name);
+  old_fid = psync_get_folderid(fold_path->folderid, fold_path->name);
+
   if (folder){
     if ((mkdir=psync_fstask_find_mkdir(folder, fold_path->name, 0))){
-      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
+      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name)){
         ret=-ENOTDIR;
-      else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name))
-        ret=-ENOTEMPTY;
-      else
-        ret=psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions,
-                                   fnew_path->folderid, fnew_path->name, fnew_path->permissions, fnew_path->flags, fold_path->shareid==fnew_path->shareid);
+      }
+      else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name) && (new_fid != old_fid)) {
+        ret = -ENOTEMPTY;
+      }
+      else {
+        ret = psync_fs_rename_folder(mkdir->folderid, fold_path->folderid, fold_path->name, fold_path->permissions,
+          fnew_path->folderid, fnew_path->name, fnew_path->permissions, fnew_path->flags, fold_path->shareid == fnew_path->shareid);
+      }
+
       goto finish;
     }
     else if ((creat=psync_fstask_find_creat(folder, fold_path->name, 0))){
@@ -2667,17 +2719,24 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
       goto finish;
     }
   }
+
   if (!folder || !psync_fstask_find_rmdir(folder, fold_path->name, 0)){
-    res=psync_sql_query("SELECT id FROM folder WHERE parentfolderid=? AND name=?");
+    res=psync_sql_query("SELECT id, flags FROM folder WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fold_path->folderid);
     psync_sql_bind_string(res, 2, fold_path->name);
+
     if ((row=psync_sql_fetch_rowint(res))){
       fid=row[0];
+      flags=row[1];
       psync_sql_free_result(res);
-      if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
+
+      if (fold_path->folderid!=fnew_path->folderid && (flags&(PSYNC_FOLDER_FLAG_PUBLIC_ROOT|PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE|PSYNC_FOLDER_FLAG_BACKUP_ROOT)))
+        ret=-EPERM;
+      else if (psync_fs_is_file(fnew_path->folderid, fnew_path->name))
         ret=-ENOTDIR;
-      else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name))
+      else if (psync_fs_is_nonempty_folder(fnew_path->folderid, fnew_path->name) && (new_fid != old_fid)){
         ret=-ENOTEMPTY;
+      }
       else
         ret=psync_fs_rename_folder(fid, fold_path->folderid, fold_path->name, fold_path->permissions,
                                    fnew_path->folderid, fnew_path->name, fnew_path->permissions, fnew_path->flags, fold_path->shareid==fnew_path->shareid);
@@ -2685,6 +2744,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
     }
     psync_sql_free_result(res);
   }
+
   if (!folder || !psync_fstask_find_unlink(folder, fold_path->name, 0)){
     res=psync_sql_query("SELECT id FROM file WHERE parentfolderid=? AND name=?");
     psync_sql_bind_uint(res, 1, fold_path->folderid);
@@ -2701,6 +2761,7 @@ static int psync_fs_rename(const char *old_path, const char *new_path){
     }
     psync_sql_free_result(res);
   }
+
   goto err_enoent;
 finish:
   if (folder)
@@ -3362,6 +3423,7 @@ static int psync_fs_do_start(){
   fuse_opt_add_arg(&args, "-ohard_remove");
 //  fuse_opt_add_arg(&args, "-d");
 #endif
+
 #if defined(P_OS_MACOSX)
   fuse_opt_add_arg(&args, "argv");
   fuse_opt_add_arg(&args, "-ovolname="DEFAULT_FUSE_VOLUME_NAME);
@@ -3519,4 +3581,3 @@ int psync_fs_remount(){
   else
     return 0;
 }
-

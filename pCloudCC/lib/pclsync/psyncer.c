@@ -256,20 +256,22 @@ void psync_add_folder_for_downloadsync(psync_syncid_t syncid, psync_synctype_t s
 
 static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
   psync_sql_res *res;
-  psync_uint_row row;
+  psync_variant_row row;
   uint64_t folderid;
   psync_synctype_t synctype;
+  char *localpath;
   psync_sql_start_transaction();
-  res=psync_sql_query("SELECT folderid, synctype FROM syncfolder WHERE id=? AND flags=0");
+  res=psync_sql_query("SELECT folderid, synctype, localpath FROM syncfolder WHERE id=? AND flags=0");
   psync_sql_bind_uint(res, 1, syncid);
-  row=psync_sql_fetch_rowint(res);
+  row=psync_sql_fetch_row(res);
   if (unlikely_log(!row)){
     psync_sql_free_result(res);
     psync_sql_rollback_transaction();
     return;
   }
-  folderid=row[0];
-  synctype=row[1];
+  folderid=psync_get_number(row[0]);
+  synctype=psync_get_number(row[1]);
+  localpath=psync_strndup(psync_get_string(row[2]), strlen(psync_get_string(row[2])));
   psync_sql_free_result(res);
   if (synctype&PSYNC_DOWNLOAD_ONLY){
     psync_add_folder_for_downloadsync(syncid, synctype, folderid, 0);
@@ -294,10 +296,12 @@ static void psync_sync_newsyncedfolder(psync_syncid_t syncid){
         psync_wake_download();
       }
       psync_localnotify_add_sync(syncid);
+      psync_restat_sync_folders_add(syncid, localpath);
     }
   }
   else
     psync_sql_rollback_transaction();
+  psync_free(localpath);
 }
 
 static void psync_do_sync_thread(void *ptr){
@@ -327,11 +331,15 @@ static void delete_delayed_sync(uint64_t id){
   psync_sql_bind_uint(res, 1, id);
   psync_sql_run_free(res);
 }
-
+/*********************************************************************************************/
 int psync_str_is_prefix(const char *str1, const char *str2){
   size_t len1, len2;
   len1=strlen(str1);
   len2=strlen(str2);
+
+  while (len1 > 1 && (str1[len1 - 1] == '/' || str1[len1 - 1] == PSYNC_DIRECTORY_SEPARATORC))
+    len1--;
+
   if (len2<len1){
     if (str1[len2]!='/' && str1[len2]!=PSYNC_DIRECTORY_SEPARATORC)
       return 0;
@@ -343,7 +351,25 @@ int psync_str_is_prefix(const char *str1, const char *str2){
   }
   return !psync_filename_cmpn(str1, str2, len1);
 }
+/*********************************************************************************************/
+int psync_left_str_is_prefix(const char* str1, const char* str2) {
+  size_t len1, len2;
+  len1 = strlen(str1);
+  len2 = strlen(str2);
 
+  while (len1 > 1 && (str1[len1 - 1] == '/' || str1[len1 - 1] == PSYNC_DIRECTORY_SEPARATORC))
+    len1--;
+
+  while (len2 > 1 && (str2[len2 - 1] == '/' || str1[len2 - 1] == PSYNC_DIRECTORY_SEPARATORC))
+    len2--;
+
+  if (len2 < len1) {
+     return 0;
+  }
+
+  return !psync_filename_cmpn(str1, str2, len1);
+}
+/*********************************************************************************************/
 void psync_syncer_check_delayed_syncs(){
   psync_stat_t st;
   psync_sql_res *res, *res2, *stmt;

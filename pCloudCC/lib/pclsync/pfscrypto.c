@@ -552,7 +552,7 @@ static int psync_fs_crypto_switch_sectors(psync_openfile_t *of, psync_crypto_sec
         sz=PSYNC_CRYPTO_SECTOR_SIZE;
       }
       assert(hdr.offset+sz<=offsets->masterauthoff+PSYNC_CRYPTO_AUTH_SIZE);
-//      debug(D_NOTICE, "writing level %u signatures to offset %lu size %u", level, hdr.offset, sz);
+//      debug(D_NOTICE, "writing level %u signatures to offset %I64u size %u", level, hdr.offset, sz);
       hdr.length=sz;
       psync_crypto_sign_auth_sector(of->encoder, (unsigned char *)&autharr[level], sz, autharr[level+1][oldsecn]);
       wrt=psync_file_pwrite(of->logfile, &hdr, sizeof(hdr), of->logoffset);
@@ -1116,6 +1116,7 @@ static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const c
   uint64_t off2, offdiff;
   psync_crypto_sectorid_t sectorid;
   int ret, wrt;
+  ret=0;
   assert(of->encrypted);
   assert(of->encoder);
 //  debug(D_NOTICE, "write to %s size %lu, offset %lu, currentsize %lu", of->currentname, (unsigned long)size, (unsigned long)offset, (unsigned long)of->currentsize);
@@ -1176,13 +1177,15 @@ static int psync_fs_crypto_write_newfile_locked_nu(psync_openfile_t *of, const c
     if (of->currentsize<offset+size)
       of->currentsize=offset+size;
   }
-  if (of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE){
-    ret=psync_fs_crypto_finalize_log(of, 0);
-    if (ret)
-      return ret;
+  if (of->extender){
+    if (of->extender->finalizelog && of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE)
+      ret=psync_fs_crypto_finalize_log(of, 0);
   }
+  else if (of->logoffset>=PSYNC_CRYPTO_MAX_LOG_SIZE)
+    ret=psync_fs_crypto_finalize_log(of, 0);
+  if (ret)
+    return ret;
   return wrt;
-
 }
 
 int psync_fs_crypto_write_newfile_locked(psync_openfile_t *of, const char *buf, uint64_t size, uint64_t offset){
@@ -1579,6 +1582,7 @@ static void psync_fs_extender_thread(void *ptr){
   assert(of->extender);
   ext=of->extender;
   while (!ext->kill && ext->extendedto<ext->extendto){
+    ext->finalizelog=0;
     if (ext->extendto-ext->extendedto>PSYNC_CRYPTO_EXTENDER_STEP){
       cs=PSYNC_CRYPTO_EXTENDER_STEP;
       if (ext->extendedto%PSYNC_CRYPTO_SECTOR_SIZE)
@@ -1593,9 +1597,11 @@ static void psync_fs_extender_thread(void *ptr){
     if (ret){
       ext->error=ret;
       of->currentsize=ext->extendedto;
+      ext->finalizelog=1;
       break;
     }
     ext->extendedto+=cs;
+    ext->finalizelog=1;
     pthread_mutex_unlock(&of->mutex);
     debug(D_NOTICE, "extender at %lu of %lu", (unsigned long)ext->extendedto, (unsigned long)ext->extendto);
     psync_yield_cpu();
@@ -1650,6 +1656,7 @@ static int psync_fs_crypto_run_extender(psync_openfile_t *of, uint64_t size){
   ext->error=0;
   ext->ready=0;
   ext->kill=0;
+  ext->finalizelog=1;
   of->extender=ext;
   psync_fs_inc_of_refcnt_locked(of);
   psync_run_thread1("extender", psync_fs_extender_thread, of);
@@ -1825,7 +1832,7 @@ static void psync_fs_crypto_check_file(void *ptr, psync_pstat_fast *st){
   size_t len;
   char *path;
   char ch;
-  if (st->isfolder)
+  if (psync_stat_fast_isfolder(st))
     return;
   len=strlen(st->name);
   if (!len)

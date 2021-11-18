@@ -35,7 +35,10 @@
 #include "papi.h"
 #include "pcloudcrypto.h"
 #include "pdiff.h"
-
+#include "pfsfolder.h"
+#ifdef P_OS_WINDOWS
+#include "Shlobj.h"
+#endif
 #define INITIAL_NAME_BUFF 2000
 #define INITIAL_ENTRY_CNT 128
 
@@ -122,7 +125,11 @@ static psync_folderid_t wait_folder_id_in_db(psync_folderid_t folderid){
   }
   return PSYNC_INVALID_FOLDERID;
 }
-
+/**********************************************************************************************************/
+psync_folderid_t psync_wait_folder_in_local_db(psync_folderid_t folderid) {
+  return wait_folder_id_in_db(folderid);
+}
+/**********************************************************************************************************/
 psync_folderid_t psync_get_folderid_by_path_or_create(const char *path){
   psync_folderid_t cfolderid;
   const char *sl;
@@ -695,20 +702,47 @@ pfolder_list_t *psync_list_remote_folder(psync_folderid_t folderid, psync_listty
   psync_variant_row row;
   size_t namelen;
   pentry_t entry;
-  uint64_t perms;
+  uint64_t perms, flags;
   list=folder_list_init();
+  char *tmp;
+  int parentencrypted=0;
   if (listtype&PLIST_FOLDERS){
+    res=psync_sql_query_rdlock("SELECT flags FROM folder WHERE id=?");
+    psync_sql_bind_uint(res, 1, folderid);
+    if ((row=psync_sql_fetch_row(res))){
+      parentencrypted=(psync_get_number(row[0])&PSYNC_FOLDER_FLAG_ENCRYPTED)?1:0;
+    }
+    else{
+      debug(D_ERROR, "Can't find folder with id %I64u", folderid);
+      psync_sql_free_result(res);
+      return NULL;
+    }
+    psync_sql_free_result(res);
     res=psync_sql_query_rdlock("SELECT id, permissions, name, userid, flags FROM folder WHERE parentfolderid=? ORDER BY name");
     psync_sql_bind_uint(res, 1, folderid);
     while ((row=psync_sql_fetch_row(res))){
       entry.folder.folderid=psync_get_number(row[0]);
       perms=psync_get_number(row[1]);
-      entry.folder.cansyncup=((perms&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE);
-      entry.folder.cansyncdown=((perms&PSYNC_PERM_READ)==PSYNC_PERM_READ);
+      flags=psync_get_number(row[4]);
+      entry.folder.cansyncup=((perms&PSYNC_PERM_WRITE)==PSYNC_PERM_WRITE) &&
+                             ((flags&(PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE|PSYNC_FOLDER_FLAG_BACKUP_ROOT|PSYNC_FOLDER_FLAG_BACKUP))==0);
+      entry.folder.cansyncdown=((perms&PSYNC_PERM_READ)==PSYNC_PERM_READ) &&
+                             ((flags&(PSYNC_FOLDER_FLAG_BACKUP_DEVICE_LIST|PSYNC_FOLDER_FLAG_BACKUP_DEVICE|PSYNC_FOLDER_FLAG_BACKUP_ROOT|PSYNC_FOLDER_FLAG_BACKUP))==0);
       entry.folder.canshare=(psync_my_userid==psync_get_number(row[3]));
       entry.folder.isencrypted=(psync_get_number(row[4])&PSYNC_FOLDER_FLAG_ENCRYPTED)?1:0;
-      entry.name=psync_get_lstring(row[2], &namelen);
-      entry.namelen=namelen;
+      if (parentencrypted&&psync_crypto_isstarted()){
+        tmp=psync_get_lstring(row[2], &namelen);
+        entry.name=get_decname_for_folder(folderid, tmp, namelen);
+        if (!entry.name){
+          debug(D_BUG, "Can't decrypt folder name for folderid: %I64u, parent folfderid: %I64u, cryptoerr: %d, encrypted name: %s. Skippping ...", entry.folder.folderid, folderid, psync_fsfolder_crypto_error(), tmp);
+          continue;
+        }
+        entry.namelen=strlen(entry.name);
+      }
+      else{
+        entry.name=psync_get_lstring(row[2], &namelen);
+        entry.namelen=namelen;
+      }
       entry.isfolder=1;
       folder_list_add(list, &entry);
     }
@@ -845,7 +879,7 @@ typedef struct {
   psync_synctype_t synctype;
 } psync_tmp_folder_t;
 
-psync_folder_list_t *psync_list_get_list(){
+psync_folder_list_t *psync_list_get_list(char* syncTypes){
   psync_sql_res *res;
   psync_variant_row row;
   psync_tmp_folder_t *folders;
@@ -855,10 +889,23 @@ psync_folder_list_t *psync_list_get_list(){
   size_t strlens, l;
   psync_folderid_t folderid;
   uint32_t alloced, lastfolder, i;
+
+  char sql[1024];
+  int sqlLen;
+
   folders=NULL;
   alloced=lastfolder=0;
   strlens=0;
-  res=psync_sql_query_rdlock("SELECT id, folderid, localpath, synctype FROM syncfolder WHERE folderid IS NOT NULL");
+
+  if (strlen(syncTypes) > 0) {
+    sqlLen = psync_slprintf(sql, 1024, "SELECT id, folderid, localpath, synctype FROM syncfolder WHERE folderid IS NOT NULL AND synctype IN (%s)", syncTypes);
+  }
+  else {
+    sqlLen = psync_slprintf(sql, 1024, "SELECT id, folderid, localpath, synctype FROM syncfolder WHERE folderid IS NOT NULL");
+  }
+
+  res = psync_sql_query_rdlock(sql);
+
   while ((row=psync_sql_fetch_row(res))){
     if (alloced==lastfolder){
       alloced=(alloced+32)*2;
@@ -868,6 +915,7 @@ psync_folder_list_t *psync_list_get_list(){
     l++;
     str=(char *)psync_malloc(l);
     memcpy(str, cstr, l);
+
     strlens+=l;
     folders[lastfolder].localpath=str;
     folders[lastfolder].locallen=l;
@@ -891,34 +939,92 @@ psync_folder_list_t *psync_list_get_list(){
   ret=(psync_folder_list_t *)psync_malloc(l+strlens);
   str=((char *)ret)+l;
   ret->foldercnt=lastfolder;
+
   for (i=0; i<lastfolder; i++){
     l=folders[i].locallen;
     memcpy(str, folders[i].localpath, l);
     psync_free(folders[i].localpath);
     ret->folders[i].localpath=str;
     l--;
+
     while (l && str[l]!=PSYNC_DIRECTORY_SEPARATORC && str[l]!='/')
       l--;
+
     if ((str[l]==PSYNC_DIRECTORY_SEPARATORC || str[l]=='/') && str[l+1])
       l++;
+
     ret->folders[i].localname=str+l;
     str+=folders[i].locallen;
+
     l=folders[i].remotelen;
     memcpy(str, folders[i].remotepath, l);
     psync_free(folders[i].remotepath);
     ret->folders[i].remotepath=str;
+
     if (l)
       l--;
+
     while (l && str[l]!='/')
       l--;
+
     if (str[l]=='/')
       l++;
+
     ret->folders[i].remotename=str+l;
     str+=folders[i].remotelen;
     ret->folders[i].folderid=folders[i].folderid;
     ret->folders[i].syncid=folders[i].syncid;
     ret->folders[i].synctype=folders[i].synctype;
   }
+
   psync_free(folders);
+
   return ret;
 }
+
+#ifdef P_OS_WINDOWS
+void psync_fsfolder_refresh_path(char *folderpath){
+  LPITEMIDLIST pidl;
+  LPSHELLFOLDER pdesktopfolder;
+  OLECHAR olepath[MAX_PATH];
+  ULONG cheaten;
+  ULONG attributes;
+  HRESULT hr;
+  DWORD lasterror;
+  debug(D_NOTICE, "Trying to refresh the Windows Explorer windows with open path: %s", folderpath);
+  if (likely(SUCCEEDED(SHGetDesktopFolder(&pdesktopfolder)))){
+    MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, folderpath, -1, olepath, MAX_PATH);
+    SetLastError(0);
+    hr=pdesktopfolder->lpVtbl->ParseDisplayName(pdesktopfolder, NULL, NULL, olepath, &cheaten, &pidl, &attributes);
+    lasterror=GetLastError();
+    if (unlikely(FAILED(hr))){
+      debug(D_NOTICE, "Failed to get directory ITEMIDLIST for path: %s, LastError: %d", folderpath, lasterror);
+    }
+    else{
+      // pidl now contains a pointer to an ITEMIDLIST.
+      // This ITEMIDLIST needs to be freed using the IMalloc allocator
+      // returned from SHGetMalloc() or by calling the CoTaskMemFree() function
+      SetLastError(0);
+      SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_IDLIST|SHCNF_FLUSHNOWAIT, pidl, NULL);  // Refresh all Windows Explorer windows with open folderpath
+      if ((lasterror=GetLastError()))
+       debug(D_NOTICE, "Failed to send SHCNE_UPDATEDIR event, last error: %d", lasterror);
+      else
+       debug(D_NOTICE, "Successufly sent SHCNE_UPDATEDIR event for %s", folderpath);
+      CoTaskMemFree(pidl);
+    }
+    pdesktopfolder->lpVtbl->Release(pdesktopfolder);
+  }
+}
+
+void psync_refresh_explorer_crypto_folder(){
+  const char* cfname="\\Crypto Folder\\";
+  char *cfolderpath=NULL;
+  cfolderpath=psync_fs_getmountpoint();
+  if (cfolderpath){
+    cfolderpath=(char*)realloc(cfolderpath, strlen(cfolderpath)+strlen(cfname)+1);
+    strcat(cfolderpath, cfname);
+    psync_fsfolder_refresh_path(cfolderpath);
+    psync_free(cfolderpath);
+  }
+}
+#endif

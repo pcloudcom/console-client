@@ -30,6 +30,7 @@
 
 #include "plibs.h"
 #include <polarssl/sha1.h>
+#include <polarssl/sha256.h>
 #include <polarssl/sha512.h>
 #include <polarssl/rsa.h>
 #include <polarssl/aes.h>
@@ -45,6 +46,15 @@
 #define psync_sha1_init(pctx) sha1_starts(pctx)
 #define psync_sha1_update(pctx, data, datalen) sha1_update(pctx, (const unsigned char *)data, datalen)
 #define psync_sha1_final(checksum, pctx) sha1_finish(pctx, checksum)
+
+#define PSYNC_SHA256_BLOCK_LEN 64
+#define PSYNC_SHA256_DIGEST_LEN 32
+#define PSYNC_SHA256_DIGEST_HEXLEN 64
+#define psync_sha256_ctx sha256_context
+#define psync_sha256(data, datalen, checksum) sha256(data, datalen, checksum, 0)
+#define psync_sha256_init(pctx) sha256_starts(pctx, 0)
+#define psync_sha256_update(pctx, data, datalen) sha256_update(pctx, (const unsigned char *)data, datalen)
+#define psync_sha256_final(checksum, pctx) sha256_finish(pctx, checksum)
 
 #define PSYNC_SHA512_BLOCK_LEN 128
 #define PSYNC_SHA512_DIGEST_LEN 64
@@ -67,6 +77,9 @@ typedef struct {
 typedef aes_context *psync_aes256_encoder;
 typedef aes_context *psync_aes256_decoder;
 
+typedef void (*psync_ssl_debug_callback_t)(void *ctx, int level, const char *message);
+void psync_ssl_set_log_threshold(int threshold);
+void psync_ssl_set_debug_callback(psync_ssl_debug_callback_t cb, void *ctx);
 
 #if defined(__GNUC__) && (defined(__amd64__) || defined(__x86_64__) || defined(__i386__))
 #define PSYNC_AES_HW
