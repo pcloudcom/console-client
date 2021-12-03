@@ -100,20 +100,10 @@ Locally cached files are located under `~/.pcloud/Cache` dir. When there is only
 To create a debian package form the source use:  
 > debuild -i -us -uc -b  
 
-## Pre-built packages
+## Older pre-built packages (no EU server supprt)
 - Ubuntu 18.04 64 bit
   [pcloudcc_2.1.0-1_amd64_ubuntu.18.04.deb](https://my.pcloud.com/publink/show?code=XZvLyi7Zsz7t1H0aYIFiawL4LSgN3uxLBUJX)
 - Debian 9.9 64 bit
   [pcloudcc_2.1.0-1_amd64_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZYVyi7ZseHyB89XXK0lVAdyy0AwQYl7osU7)
 - Debian 9.9 32 bit
   [pcloudcc_2.1.0-1_i386_debian.9.9.deb](https://my.pcloud.com/publink/show?code=XZuVyi7ZLevxTwQKGrSrxp8uIrQodBwDfX67)
-
-## Older pre-built packages
-- Binary package 64 bit
-  [pcloudcc_2.0.1-1_amd64.deb](https://my.pcloud.com/publink/show?code=XZv1aQ7ZkEd1Vr0gj3hTteoDtujd481o7amk)
-- Ubuntu 17.10 64 bit
-  [pcloudcc_2.0.1-1_amd64_ubuntu.17.10.deb](https://my.pcloud.com/publink/show?code=XZFeaQ7ZH1nHUfK4MLzGdeCvmmJywBUFANyy)
-- Ubuntu 14.04 64 bit
-  [pcloudcc_2.0.1-1_amd64_ubuntu.14.04.deb](https://my.pcloud.com/publink/show?code=XZSeaQ7ZFPq1g8oowJXyXap7KKzTtSKoACHy)
-
-
