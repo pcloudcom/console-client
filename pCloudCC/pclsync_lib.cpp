@@ -163,6 +163,8 @@ static char const * status2string (uint32_t status){
     case PSTATUS_SCANNING: return "SCANNING";
     case PSTATUS_USER_MISMATCH: return "USER_MISMATCH";
     case PSTATUS_ACCOUT_EXPIRED: return "ACCOUT_EXPIRED";
+    case PSTATUS_TFA_REQUIRED: return "TFA_REQUIRED";
+    case PSTATUS_BAD_TFA_CODE: return "BAD_TFA_CODE";
     default :return "Unrecognized status";
   }
 }
@@ -182,6 +184,11 @@ static void status_change(pstatus_t* status) {
 //std::cout << "Username: " <<  clib::pclsync_lib::get_lib().get_username().c_str() << "| Password: " << clib::pclsync_lib::get_lib().get_password().c_str() << std::endl;
     psync_set_user_pass(clib::pclsync_lib::get_lib().get_username().c_str(), clib::pclsync_lib::get_lib().get_password().c_str(), (int) clib::pclsync_lib::get_lib().save_pass_);
     std::cout << "logging in" << std::endl;
+  }
+  else if (status->status == PSTATUS_TFA_REQUIRED)
+  {
+      std::cout<< "tfa code set"<<std::endl;
+      psync_tfa_set_code(clib::pclsync_lib::get_lib().get_tfa_code().c_str(), 1, 0);
   }
   else if (status->status==PSTATUS_BAD_LOGIN_DATA){
     if (!clib::pclsync_lib::get_lib().newuser_) {

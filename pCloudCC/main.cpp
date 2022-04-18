@@ -12,6 +12,7 @@ int main(int argc, char **argv) {
   std::cout << "pCloud console client v."<< version << std::endl;
   std::string username;
   std::string password;
+  std::string tfa_code;
   bool daemon = false;
   bool commands = false;
   bool commands_only = false;
@@ -26,6 +27,7 @@ int main(int argc, char **argv) {
         ("help,h", "produce help message")
         ("username,u", po::value<std::string>(&username), "pCloud account name")
         ("password,p", po::bool_switch(&passwordsw), "Ask pCloud account password")
+        ("tfa_code,t", po::value(&tfa_code), "pCloud tfa code")
         ("crypto,c",  po::bool_switch(&crypto), "Ask crypto password")
         ("passascrypto,y", po::value<std::string>(), "Use user password as crypto password also.")
         ("daemonize,d", po::bool_switch(&daemon), "Daemonize the process.")
@@ -63,7 +65,7 @@ int main(int argc, char **argv) {
       return 1;
     }
     console_client::clibrary::pclsync_lib::get_lib().set_username(username);
-    
+    console_client::clibrary::pclsync_lib::get_lib().set_tfa_code(tfa_code);
     if (passwordsw) {
       console_client::clibrary::pclsync_lib::get_lib().get_pass_from_console();
     }

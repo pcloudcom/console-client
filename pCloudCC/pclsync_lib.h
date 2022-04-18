@@ -46,9 +46,11 @@ namespace console_client {
       //Getters 
       const std::string& get_username() {return username_;}
       const std::string& get_password() {return password_;}
+      const std::string& get_tfa_code() { return tfa_code_;}
       const std::string& get_crypto_pass() {return crypto_pass_;};
       const std::string& get_mount() {return mount_;}
       //Setters
+      void set_tfa_code(const std::string& arg) { tfa_code_ = arg;}
       void set_username(const std::string& arg) { username_ = arg;}
       void set_password(const std::string& arg) { password_ = arg;}
       void set_crypto_pass(const std::string& arg) { crypto_pass_ = arg;};
@@ -85,6 +87,7 @@ namespace console_client {
     private:
       std::string username_;
       std::string password_;
+      std::string tfa_code_;
       std::string crypto_pass_;
       std::string mount_;
        
