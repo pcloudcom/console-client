@@ -68,6 +68,11 @@ void clib::pclsync_lib::get_pass_from_console()
   do_get_pass_from_console(password_);
 }
 
+void clib::pclsync_lib::get_tfa_code_from_console()
+{
+    do_get_pass_from_console(tfa_code_);
+}
+
 void clib::pclsync_lib::get_cryptopass_from_console()
 {
   do_get_pass_from_console(crypto_pass_);
@@ -187,8 +192,9 @@ static void status_change(pstatus_t* status) {
   }
   else if (status->status == PSTATUS_TFA_REQUIRED)
   {
-      std::cout<< "tfa code set"<<std::endl;
-      psync_tfa_set_code(clib::pclsync_lib::get_lib().get_tfa_code().c_str(), 1, 0);
+    if (clib::pclsync_lib::get_lib().get_tfa_code().empty())
+      clib::pclsync_lib::get_lib().get_tfa_code_from_console();
+    psync_tfa_set_code(clib::pclsync_lib::get_lib().get_tfa_code().c_str(), clib::pclsync_lib::get_lib().get_trusted_device(), 0);
   }
   else if (status->status==PSTATUS_BAD_LOGIN_DATA){
     if (!clib::pclsync_lib::get_lib().newuser_) {
