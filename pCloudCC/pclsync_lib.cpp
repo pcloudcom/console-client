@@ -70,7 +70,12 @@ void clib::pclsync_lib::get_pass_from_console()
 
 void clib::pclsync_lib::get_tfa_code_from_console()
 {
-    do_get_pass_from_console(tfa_code_);
+  if (daemon_) {
+     std::cout << "Not able to read 2fa code when started as daemon." << std::endl;
+     exit(1);
+  }
+  std::cout << "Please enter 2fa code" << std::endl;
+  getline(std::cin, tfa_code_);
 }
 
 void clib::pclsync_lib::get_cryptopass_from_console()
