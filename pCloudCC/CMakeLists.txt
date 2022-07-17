@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 2.6)
 project(pcloudcc)
 
+# Set version for packaging
+set(VERSION "2.0.1")
+
 #INCLUDE(CPack)
 
-set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 unset(Boost_INCLUDE_DIR CACHE)
 unset(Boost_LIBRARY_DIRS CACHE)
@@ -72,4 +75,18 @@ link_directories(${PCLSYNC_PATH} ${MBEDTLS_PATH}/library ${SQLITE3_PATH} ${OVERL
 install(TARGETS pcloudcc RUNTIME DESTINATION bin)
 install(TARGETS pcloudcc_lib LIBRARY DESTINATION lib)
 
+# RPM parmeters
+set(CPACK_PACKAGE_VERSION ${VERSION})
+set(CPACK_GENERATOR "RPM")
+set(CPACK_PACKAGE_NAME "pcloudcc")
+set(CPACK_PACKAGE_RELEASE 1)
+set(CPACK_PACKAGE_CONTACT "pCloud.com")
+set(CPACK_PACKAGE_VENDOR "pCloud.com")
+set(CPACK_PACKAGING_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE}.${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_RPM_PACKAGE_AUTOREQ 1)
+set(CPACK_RPM_PACKAGE_GROUP "System")
+set(CPACK_RPM_PACKAGE_DESCRIPTION "pCloud.com command line client")
+set(CPACK_RPM_PACKAGE_GROUP "system")
+include(CPack)
 
