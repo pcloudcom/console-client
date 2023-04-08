@@ -25,12 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 31
 #define _FILE_OFFSET_BITS 64
 
 #include <stdlib.h>
 #include <pthread.h>
-#include <fuse.h>
+#include <fuse3/fuse.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -108,7 +108,6 @@ typedef off_t fuse_off_t;
 #define PSYNC_FS_ERR_MOVE_ACROSS_CRYPTO EXDEV
 #endif
 
-static struct fuse_chan *psync_fuse_channel=NULL;
 static struct fuse *psync_fuse=NULL;
 static char *psync_current_mountpoint=NULL;
 static psync_generic_callback_t psync_start_callback=NULL;
@@ -818,12 +817,12 @@ static int filler_decoded(psync_crypto_aes256_text_decoder_t dec, fuse_fill_dir_
     namedec=psync_cloud_crypto_decode_filename(dec, name);
     if (!namedec)
       return 0;
-    ret=filler(buf, namedec, st, off);
+    ret=filler(buf, namedec, st, off, FUSE_FILL_DIR_PLUS);
     psync_free(namedec);
     return ret;
   }
   else
-    return filler(buf, name, st, off);
+    return filler(buf, name, st, off, FUSE_FILL_DIR_PLUS);
 }
 
 static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, fuse_off_t offset, struct fuse_file_info *fi){
@@ -858,9 +857,9 @@ static int psync_fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   }
   else
     dec=NULL;
-  filler(buf, ".", NULL, 0);
+  filler(buf, ".", NULL, 0, FUSE_FILL_DIR_PLUS);
   if (folderid!=0)
-    filler(buf, "..", NULL, 0);
+    filler(buf, "..", NULL, 0, FUSE_FILL_DIR_PLUS);
   folder=psync_fstask_get_folder_tasks_rdlocked(folderid);
   if (folderid>=0){
     res=psync_sql_query_nolock("SELECT id, permissions, ctime, mtime, subdircnt, name FROM folder WHERE parentfolderid=?");
@@ -3267,9 +3266,7 @@ static void psync_fs_do_stop(void){
 #endif
 
 #if defined(P_OS_LINUX)
-	char *mp;
-	mp = psync_fuse_get_mountpoint();
-	fuse_unmount(mp, psync_fuse_channel);
+	fuse_unmount(psync_fuse);
 #endif
 
     debug(D_NOTICE, "running fuse_exit");
@@ -3365,7 +3362,7 @@ static void psync_fuse_thread(){
   }
   pthread_mutex_unlock(&start_mutex);
   debug(D_NOTICE, "running fuse_loop_mt");
-  fr=fuse_loop_mt(psync_fuse);
+  fr=fuse_loop_mt(psync_fuse,0);
   debug(D_NOTICE, "fuse_loop_mt exited with code %d, running fuse_destroy", fr);
   pthread_mutex_lock(&start_mutex);
   fuse_destroy(psync_fuse);
@@ -3408,19 +3405,18 @@ static int psync_fs_do_start(){
   char *mp;
   struct fuse_operations psync_oper;
   struct fuse_args args=FUSE_ARGS_INIT(0, NULL);
-
 // it seems that fuse option parser ignores the first argument
 // it is ignored as it's like in the exec() parameters, argv[0] is the program
 
 #if defined(P_OS_LINUX)
   fuse_opt_add_arg(&args, "argv");
-  fuse_opt_add_arg(&args, "-oauto_unmount");
+//  fuse_opt_add_arg(&args, "-oauto_unmount");
 //  fuse_opt_add_arg(&args, "-ouse_ino");
   fuse_opt_add_arg(&args, "-ofsname="DEFAULT_FUSE_MOUNT_POINT".fs");
   if (!is_fuse3_installed_on_system()) {
     fuse_opt_add_arg(&args, "-ononempty");
   }
-  fuse_opt_add_arg(&args, "-ohard_remove");
+  //  fuse_opt_add_arg(&args, "-ohard_remove");
 //  fuse_opt_add_arg(&args, "-d");
 #endif
 
@@ -3456,7 +3452,7 @@ static int psync_fs_do_start(){
   psync_oper.chmod    = psync_fs_chmod;
   psync_oper.chown    = psync_fs_chown;
   psync_oper.utimens  = psync_fs_utimens;
-  psync_oper.ftruncate= psync_fs_ftruncate;
+  //  psync_oper.ftruncate= psync_fs_ftruncate;
   psync_oper.truncate = psync_fs_truncate;
 
   psync_oper.setxattr = psync_fs_setxattr;
@@ -3485,13 +3481,10 @@ static int psync_fs_do_start(){
 #if defined(P_OS_MACOSX)
   unmount(mp, MNT_FORCE);
 #endif
-
-  psync_fuse_channel=fuse_mount(mp, &args);
-  if (unlikely_log(!psync_fuse_channel))
-    goto err0;
-  psync_fuse=fuse_new(psync_fuse_channel, &args, &psync_oper, sizeof(psync_oper), NULL);
+  psync_fuse=fuse_new(&args, &psync_oper, sizeof(psync_oper), NULL);
   if (unlikely_log(!psync_fuse))
     goto err1;
+  fuse_mount(psync_fuse,mp);
   psync_current_mountpoint=mp;
   started=1;
   pthread_mutex_unlock(&start_mutex);
@@ -3499,9 +3492,6 @@ static int psync_fs_do_start(){
   psync_run_thread("fuse", psync_fuse_thread);
   return 0;
 err1:
-  fuse_unmount(mp, psync_fuse_channel);
-err0:
-  psync_free(mp);
 err00:
   pthread_mutex_unlock(&start_mutex);
   fuse_opt_free_args(&args);
