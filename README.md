@@ -12,7 +12,7 @@ Also requires
 [CMake](https://cmake.org/) build system.  
 
 On Ubuntu you can run the following command:  
-> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev
+> sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse3-dev libudev-dev
 
 ## Build steps
 
