@@ -17,7 +17,6 @@ On Ubuntu you can run the following command:
 ## Build steps
 
 > sudo apt-get install cmake zlib1g-dev libboost-system-dev libboost-program-options-dev libpthread-stubs0-dev libfuse-dev libudev-dev fuse build-essential git
-> mkdir console-client   
 > git clone https://github.com/pcloudcom/console-client.git ./console-client/  
 > cd ./console-client/pCloudCC/   
 > cd lib/pclsync/        
