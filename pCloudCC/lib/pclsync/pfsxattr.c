@@ -1,11 +1,11 @@
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 31
 #define _FILE_OFFSET_BITS 64
 
 #include "pfsxattr.h"
 #include "plibs.h"
 #include "pfsfolder.h"
 #include "pfstasks.h"
-#include <fuse.h>
+#include <fuse3/fuse.h>
 #include <errno.h>
 #include <string.h>
 

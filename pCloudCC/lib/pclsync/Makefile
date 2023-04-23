@@ -83,7 +83,7 @@ debugfs: fs
 
 cli: fs
 	$(CC) $(CFLAGS) -o cli cli.c $(LIB_A) $(LDFLAGS)
-	
+
 overlay_client:
 	cd ./lib/poverlay_linux && make
 
