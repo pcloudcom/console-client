@@ -58,6 +58,7 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
 #include <net/if.h>
 #include <utime.h>
 #include <limits.h>
@@ -1401,9 +1402,12 @@ static psync_socket_t connect_socket_direct(const char *host, const char *port){
 #elif defined(P_OS_WINDOWS)
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&sock_opt, sizeof(sock_opt));
     setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (char *)&sock_opt, sizeof(sock_opt));
-#elif defined(P_OS_MACOSX) || defined(P_OS_BSD)
+#elif defined(P_OS_MACOSX)
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char  *)&sock_opt, sizeof(sock_opt));
     setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
+#elif defined(P_OS_BSD)
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char  *)&sock_opt, sizeof(sock_opt));
+    setsockopt(sock, IPPROTO_TCP, SO_KEEPALIVE, (char*)&sock_opt, sizeof(sock_opt));
 #endif
 #if defined(SOL_TCP)
 #if defined(TCP_KEEPCNT)

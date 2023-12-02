@@ -16,10 +16,10 @@
 #endif
 
 // Do we have this in Win?
-#if !defined(P_OS_WINDOWS)
+#if !defined(P_OS_WINDOWS) && !defined(P_OS_BSD)
 #include <sys/xattr.h>
 #else
-// No xattr in win.
+// No xattr in win and freebsd (freebsd has extattr. though).
 // Value get from standard xattr.h
 enum
 {
