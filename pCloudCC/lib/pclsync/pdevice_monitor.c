@@ -263,7 +263,7 @@ void psync_devmon_init(){
 }
 #endif //P_OS_MACOSX
 
-#ifdef P_OS_LINUX
+#if defined (P_OS_LINUX) || defined (P_OS_BSD)
 #include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>

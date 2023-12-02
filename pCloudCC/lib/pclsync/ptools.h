@@ -43,13 +43,8 @@
 
 #if defined(P_OS_WINDOWS)
 #define DELIM_DIR   '\\'
-#endif
 
-#if defined(P_OS_LINUX)
-#define DELIM_DIR  '/'
-#endif
-
-#if defined(P_OS_MACOSX)
+#elif defined(P_OS_LINUX) || defined(P_OS_MACOSX) || defined(P_OS_BSD)
 #define DELIM_DIR  '/'
 #endif
 

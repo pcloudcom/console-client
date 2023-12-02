@@ -38,6 +38,7 @@
 #include "pcrypto.h"
 #include "pfolder.h"
 #include <string.h>
+#include <netinet/in.h>
 
 #define P2P_ENCTYPE_RSA_AES 0
 

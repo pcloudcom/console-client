@@ -33,13 +33,17 @@ else
             ifneq (,$(findstring Debian,$(UNAME_V)))
                 CFLAGS += -DP_OS_DEBIAN
             endif
-	LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3 -lzlib
+        LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3 -lzlib
     endif
     ifeq ($(UNAME_S),Darwin)
         CFLAGS += -DP_OS_MACOSX -I/usr/local/ssl/include/
         CFLAGS += -DP_OS_MACOSX -I/usr/local/include/osxfuse/
-	LDFLAGS += -lssl -lcrypto -losxfuse -lsqlite3 -framework Cocoa -L/usr/local/ssl/lib
+        LDFLAGS += -lssl -lcrypto -losxfuse -lsqlite3 -framework Cocoa -L/usr/local/ssl/lib
         #USESSL=securetransport
+    endif
+    ifeq ($(UNAME_S),FreeBSD)
+        CFLAGS += -DP_OS_BSD
+        LDFLAGS += -lssl -lcrypto -lfuse -lpthread -lsqlite3 -lzlib
     endif
 endif
 

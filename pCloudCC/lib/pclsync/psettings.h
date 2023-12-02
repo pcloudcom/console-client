@@ -279,8 +279,8 @@ $RECYCLE.BIN;\
 #define PSYNC_IGNORE_PATHS_DEFAULT "/Applications;/Library;/private;/System;/bin;/etc;/sbin;/usr;"
 #endif
 
-#if defined (P_OS_LINUX)
-#define PSYNC_IGNORE_PATHS_DEFAULT "/Applications;/Library;/private;/System;/bin;/dev;/etc;/net;/sbin;/usr;/Developer;"
+#if defined (P_OS_LINUX) || defined (P_OS_BSD)
+#define PSYNC_IGNORE_PATHS_DEFAULT "/bin;/dev;/etc;/net;/sbin;/usr;"
 #endif
 
 /* Defaults for business account settings */
